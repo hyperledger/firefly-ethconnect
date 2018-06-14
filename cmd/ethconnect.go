@@ -36,7 +36,7 @@ func initLogging(debugLevel int) {
 		log.SetLevel(log.DebugLevel)
 		break
 	}
-	log.Debug("Debug level ", debugLevel)
+	log.Debugf("Log level set to %d", debugLevel)
 }
 
 var kafkaBridge kldkafka.KafkaBridge
@@ -50,25 +50,16 @@ var rootCmd = &cobra.Command{
 	Short: "Connectivity Bridge for Ethereum permissioned chains\n" +
 		"Copyright (C) 2018 Kaleido, a ConsenSys business\n" +
 		"Licensed under the Apache License, Version 2.0",
+	TraverseChildren: true,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		initLogging(rootConfig.DebugLevel)
+	},
 }
 
 func init() {
 
 	rootCmd.Flags().IntVarP(&rootConfig.DebugLevel, "debug", "d", 1, "0=error, 1=info, 2=debug")
-
-	var kafkaBridgeCmd = &cobra.Command{
-		Use:   "kafka",
-		Short: "Kafka bridge to Ethereum",
-		Run: func(cmd *cobra.Command, args []string) {
-			initLogging(rootConfig.DebugLevel)
-			if err := kafkaBridge.Start(); err != nil {
-				log.Error("Kafka Bridge Start: ", err)
-				os.Exit(1)
-			}
-		},
-	}
-
-	rootCmd.AddCommand(kafkaBridgeCmd)
+	rootCmd.AddCommand(kafkaBridge.CobraInit())
 }
 
 // Execute is called by the main method of the package

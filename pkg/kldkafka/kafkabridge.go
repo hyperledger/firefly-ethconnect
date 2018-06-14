@@ -15,11 +15,29 @@
 package kldkafka
 
 import (
+	"os"
+
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 )
 
 // KafkaBridge is the Kaleido go-ethereum exerciser
 type KafkaBridge struct {
+}
+
+// CobraInit retruns a cobra command to configure this Kafka
+func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
+	cmd = &cobra.Command{
+		Use:   "kafka",
+		Short: "Kafka bridge to Ethereum",
+		Run: func(cmd *cobra.Command, args []string) {
+			if err := k.Start(); err != nil {
+				log.Error("Kafka Bridge Start: ", err)
+				os.Exit(1)
+			}
+		},
+	}
+	return
 }
 
 // Start kicks off the bridge

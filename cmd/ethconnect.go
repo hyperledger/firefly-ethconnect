@@ -50,15 +50,13 @@ var rootCmd = &cobra.Command{
 	Short: "Connectivity Bridge for Ethereum permissioned chains\n" +
 		"Copyright (C) 2018 Kaleido, a ConsenSys business\n" +
 		"Licensed under the Apache License, Version 2.0",
-	TraverseChildren: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		initLogging(rootConfig.DebugLevel)
 	},
 }
 
 func init() {
-
-	rootCmd.Flags().IntVarP(&rootConfig.DebugLevel, "debug", "d", 1, "0=error, 1=info, 2=debug")
+	rootCmd.PersistentFlags().IntVarP(&rootConfig.DebugLevel, "debug", "d", 1, "0=error, 1=info, 2=debug")
 	rootCmd.AddCommand(kafkaBridge.CobraInit())
 }
 

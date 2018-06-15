@@ -23,6 +23,7 @@ deps:
 		$(GOGET) github.com/ethereum/go-ethereum
 		$(GOGET) github.com/sirupsen/logrus
 		$(GOGET) github.com/spf13/cobra
+		$(GOGET) github.com/Shopify/sarama
 
 build-linux:
 		GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINARY_UNIX) -v

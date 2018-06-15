@@ -17,12 +17,18 @@ package kldkafka
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Shopify/sarama"
+	cluster "github.com/bsm/sarama-cluster"
+	uuid "github.com/nu7hatch/gouuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -31,16 +37,22 @@ import (
 type KafkaBridge struct {
 	Conf struct {
 		Brokers            []string
+		ClientID           string
+		ConsumerGroup      string
 		InsecureSkipVerify bool
+		TopicIn            string
+		TopicOut           string
 		TLS                struct {
 			ClientCertsFile string
 			CACertsFile     string
 			Enabled         bool
 			PrivateKeyFile  string
 		}
-		Topic string
 	}
-	Client sarama.Client
+	Client       *cluster.Client
+	Consumer     *cluster.Consumer
+	Producer     sarama.AsyncProducer
+	SaramaLogger saramaLogger
 }
 
 // CobraInit retruns a cobra command to configure this Kafka
@@ -56,21 +68,25 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 		},
 	}
 	defBrokerList := strings.Split(os.Getenv("KAFKA_BROKERS"), ",")
-	defTLS, _ := strconv.ParseBool(os.Getenv("KAFKA_TLS"))
-	cmd.Flags().StringArrayVarP(&k.Conf.Brokers, "brokers", "b", defBrokerList, "Comma-separated list of brokers")
-	cmd.Flags().StringVarP(&k.Conf.TLS.ClientCertsFile, "clientcerts", "c", os.Getenv("KAFKA_TLS_CLIENT_CERT"), "A client certificate file, for mutual TLS auth")
-	cmd.Flags().StringVarP(&k.Conf.TLS.PrivateKeyFile, "clientkey", "k", os.Getenv("KAFKA_TLS_CLIENT_KEY"), "A client private key file, for mutual TLS auth")
-	cmd.Flags().StringVarP(&k.Conf.TLS.CACertsFile, "cacerts", "C", os.Getenv("KAFKA_TLS_CA_CERTS"), "CA certificates file (or host CAs will be used)")
-	cmd.Flags().BoolVarP(&k.Conf.TLS.Enabled, "tls", "t", defTLS, "Enable TLS (SSL) on the connection")
-	cmd.Flags().BoolVarP(&k.Conf.InsecureSkipVerify, "insecure", "z", defTLS, "Disable verification of TLS certificate chain")
-	cmd.Flags().StringVarP(&k.Conf.Topic, "topic-in", "i", os.Getenv("KAFKA_TOPIC_IN"), "Topic to listen to")
+	defTLSenabled, _ := strconv.ParseBool(os.Getenv("KAFKA_TLS_ENABLED"))
+	defTLSinsecure, _ := strconv.ParseBool(os.Getenv("KAFKA_TLS_INSECURE"))
+	cmd.Flags().StringArrayVarP(&k.Conf.Brokers, "brokers", "b", defBrokerList, "Comma-separated list of bootstrap brokers")
+	cmd.Flags().StringVarP(&k.Conf.ClientID, "clientid", "i", os.Getenv("KAFKA_CLIENT_ID"), "Client ID (or generated UUID)")
+	cmd.Flags().StringVarP(&k.Conf.ConsumerGroup, "consumer-group", "g", os.Getenv("KAFKA_CONSUMER_GROUP"), "Client ID (or generated UUID)")
+	cmd.Flags().StringVarP(&k.Conf.TopicIn, "topic-in", "t", os.Getenv("KAFKA_TOPIC_IN"), "Topic to listen to")
+	cmd.Flags().StringVarP(&k.Conf.TopicOut, "topic-out", "T", os.Getenv("KAFKA_TOPIC_OUT"), "Topic to send events to")
+	cmd.Flags().StringVarP(&k.Conf.TLS.ClientCertsFile, "tls-clientcerts", "c", os.Getenv("KAFKA_TLS_CLIENT_CERT"), "A client certificate file, for mutual TLS auth")
+	cmd.Flags().StringVarP(&k.Conf.TLS.PrivateKeyFile, "tls-clientkey", "k", os.Getenv("KAFKA_TLS_CLIENT_KEY"), "A client private key file, for mutual TLS auth")
+	cmd.Flags().StringVarP(&k.Conf.TLS.CACertsFile, "tls-cacerts", "C", os.Getenv("KAFKA_TLS_CA_CERTS"), "CA certificates file (or host CAs will be used)")
+	cmd.Flags().BoolVarP(&k.Conf.TLS.Enabled, "tls-enabled", "e", defTLSenabled, "Encrypt network connection with TLS (SSL)")
+	cmd.Flags().BoolVarP(&k.Conf.InsecureSkipVerify, "tls-insecure", "z", defTLSinsecure, "Disable verification of TLS certificate chain")
 	return
 }
 
 func (k *KafkaBridge) createTLSConfiguration() (t *tls.Config, err error) {
 
 	mutualAuth := k.Conf.TLS.ClientCertsFile != "" && k.Conf.TLS.PrivateKeyFile != ""
-	log.Debugf("TLS Enabled=%t Insecure=%t MutualAuth=%t ClientCertsFile=%s PrivateKeyFile=%s CACertsFile=%s",
+	log.Debugf("Kafka TLS Enabled=%t Insecure=%t MutualAuth=%t ClientCertsFile=%s PrivateKeyFile=%s CACertsFile=%s",
 		k.Conf.TLS.Enabled, k.Conf.InsecureSkipVerify, mutualAuth, k.Conf.TLS.ClientCertsFile, k.Conf.TLS.PrivateKeyFile, k.Conf.TLS.CACertsFile)
 	if !k.Conf.TLS.Enabled {
 		return
@@ -105,22 +121,168 @@ func (k *KafkaBridge) createTLSConfiguration() (t *tls.Config, err error) {
 	return
 }
 
+type saramaLogger struct {
+}
+
+func (s saramaLogger) Print(v ...interface{}) {
+	v = append([]interface{}{"[sarama] "}, v...)
+	log.Debug(v...)
+}
+
+func (s saramaLogger) Printf(format string, v ...interface{}) {
+	log.Debugf("[sarama] "+format, v...)
+}
+
+func (s saramaLogger) Println(v ...interface{}) {
+	v = append([]interface{}{"[sarama] "}, v...)
+	log.Debug(v...)
+}
+
 func (k *KafkaBridge) connect() (err error) {
+
+	if k.Conf.TopicOut == "" {
+		return fmt.Errorf("No output topic specified for bridge to send events to")
+	}
+	if k.Conf.TopicIn == "" {
+		return fmt.Errorf("No input topic specified for bridge to listen to")
+	}
+	if k.Conf.ConsumerGroup == "" {
+		return fmt.Errorf("No consumer group specified")
+	}
+
 	var tlsConfig *tls.Config
 	if tlsConfig, err = k.createTLSConfiguration(); err != nil {
 		return
 	}
 
-	clientConf := sarama.NewConfig()
+	sarama.Logger = k.SaramaLogger
+	clientConf := cluster.NewConfig()
+	clientConf.Producer.Return.Successes = true
+	clientConf.Producer.Return.Errors = true
+	clientConf.Producer.RequiredAcks = sarama.WaitForLocal
+	clientConf.Producer.Flush.Frequency = 500 * time.Millisecond
+	clientConf.Consumer.Return.Errors = true
+	clientConf.Group.Return.Notifications = true
 	clientConf.Net.TLS.Enable = (tlsConfig != nil)
 	clientConf.Net.TLS.Config = tlsConfig
+	clientConf.ClientID = k.Conf.ClientID
+	if clientConf.ClientID == "" {
+		var uuidV4 *uuid.UUID
+		if uuidV4, err = uuid.NewV4(); err != nil {
+			log.Errorf("Failed to generate UUID for ClientID: %s", err)
+			return
+		}
+		clientConf.ClientID = uuidV4.String()
+	}
+	log.Debugf("Kafka ClientID: %s", clientConf.ClientID)
 
-	log.Debugf("Kafka brokers: %s", k.Conf.Brokers)
-	if k.Client, err = sarama.NewClient(k.Conf.Brokers, clientConf); err != nil {
+	log.Debugf("Kafka Bootstrap brokers: %s", k.Conf.Brokers)
+	if k.Client, err = cluster.NewClient(k.Conf.Brokers, clientConf); err != nil {
 		log.Errorf("Failed to create Kafka client: %s", err)
 		return
 	}
+	var brokers []string
+	for _, broker := range k.Client.Brokers() {
+		brokers = append(brokers, broker.Addr())
+	}
+	log.Infof("Kafka Connected: %s", brokers)
 
+	return
+}
+
+type testMessage struct {
+	MsgID string `json:"msgId"`
+	Text  string `json:"text"`
+
+	encoded []byte
+	err     error
+}
+
+func (m *testMessage) ensureEncoded() {
+	if m.encoded == nil && m.err == nil {
+		m.encoded, m.err = json.Marshal(m)
+	}
+}
+
+func (m *testMessage) Length() int {
+	m.ensureEncoded()
+	return len(m.encoded)
+}
+
+func (m *testMessage) Encode() ([]byte, error) {
+	m.ensureEncoded()
+	return m.encoded, m.err
+}
+
+func (k *KafkaBridge) startProducer() (err error) {
+
+	// syncProducer, err := sarama.NewSyncProducerFromClient(k.Client.Client)
+	// if err != nil {
+	// 	log.Errorf("Failed to creator producer: %s", err)
+	// 	return
+	// }
+
+	log.Debugf("Kafka Producer Topic=%s", k.Conf.TopicOut)
+	if k.Producer, err = sarama.NewAsyncProducerFromClient(k.Client.Client); err != nil {
+		log.Errorf("Failed to create Kafka producer: %s", err)
+		return
+	}
+
+	go func() {
+		for err := range k.Producer.Errors() {
+			log.Error("Kafka producer failed:", err)
+		}
+	}()
+	go func() {
+		for msg := range k.Producer.Successes() {
+			log.Debugf("Kafka producer sent message. Partition=%d Offset=%d", msg.Partition, msg.Offset)
+		}
+	}()
+
+	msgID, _ := uuid.NewV4()
+	testMessage := &testMessage{
+		MsgID: msgID.String(),
+		Text:  "Testing",
+	}
+	k.Producer.Input() <- &sarama.ProducerMessage{
+		Topic: k.Conf.TopicOut,
+		Key:   sarama.StringEncoder(testMessage.MsgID),
+		Value: testMessage,
+	}
+	if err != nil {
+		log.Errorf("Failed to send message: %s", err)
+		return
+	}
+
+	log.Infof("Kafka Created producer")
+	return
+}
+
+func (k *KafkaBridge) startConsumer() (err error) {
+
+	log.Debugf("Kafka Consumer Topic=%s ConsumerGroup=%s", k.Conf.TopicIn, k.Conf.ConsumerGroup)
+	if k.Consumer, err = cluster.NewConsumerFromClient(k.Client, k.Conf.ConsumerGroup, []string{k.Conf.TopicIn}); err != nil {
+		log.Errorf("Failed to create Kafka consumer: %s", err)
+		return
+	}
+
+	go func() {
+		for err := range k.Consumer.Errors() {
+			log.Error("Kafka consumer failed:", err)
+		}
+	}()
+	go func() {
+		for ntf := range k.Consumer.Notifications() {
+			log.Debugf("Kafka consumer rebalanced. Current=%+v\n", ntf.Current)
+		}
+	}()
+	go func() {
+		for msg := range k.Consumer.Messages() {
+			log.Debugf("Kafka consumer received message: %s", msg)
+		}
+	}()
+
+	log.Infof("Kafka Created consumer.")
 	return
 }
 
@@ -130,8 +292,23 @@ func (k *KafkaBridge) Start() (err error) {
 	if err = k.connect(); err != nil {
 		return
 	}
+	if err = k.startConsumer(); err != nil {
+		return
+	}
+	if err = k.startProducer(); err != nil {
+		return
+	}
 
-	log.Infof("KafkaBridge started")
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt)
+	for {
+		select {
+		case <-signals:
+			k.Producer.Close()
+			k.Consumer.Close()
 
-	return
+			log.Infof("Kafka Bridge complete")
+			return
+		}
+	}
 }

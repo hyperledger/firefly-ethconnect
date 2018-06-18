@@ -28,6 +28,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
+	"github.com/kaleido-io/ethconnect/pkg/kldutils"
 	uuid "github.com/nu7hatch/gouuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -42,7 +43,11 @@ type KafkaBridge struct {
 		InsecureSkipVerify bool
 		TopicIn            string
 		TopicOut           string
-		TLS                struct {
+		SASL               struct {
+			Username string
+			Password string
+		}
+		TLS struct {
 			ClientCertsFile string
 			CACertsFile     string
 			Enabled         bool
@@ -66,6 +71,24 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 				os.Exit(1)
 			}
 		},
+		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
+			if k.Conf.TopicOut == "" {
+				return fmt.Errorf("No output topic specified for bridge to send events to")
+			}
+			if k.Conf.TopicIn == "" {
+				return fmt.Errorf("No input topic specified for bridge to listen to")
+			}
+			if k.Conf.ConsumerGroup == "" {
+				return fmt.Errorf("No consumer group specified")
+			}
+			if err = kldutils.AllOrNoneReqd(cmd, "tls-clientcerts", "tls-clientkey"); err != nil {
+				return
+			}
+			if err = kldutils.AllOrNoneReqd(cmd, "sasl-username", "sasl-password"); err != nil {
+				return
+			}
+			return
+		},
 	}
 	defBrokerList := strings.Split(os.Getenv("KAFKA_BROKERS"), ",")
 	defTLSenabled, _ := strconv.ParseBool(os.Getenv("KAFKA_TLS_ENABLED"))
@@ -80,6 +103,8 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&k.Conf.TLS.CACertsFile, "tls-cacerts", "C", os.Getenv("KAFKA_TLS_CA_CERTS"), "CA certificates file (or host CAs will be used)")
 	cmd.Flags().BoolVarP(&k.Conf.TLS.Enabled, "tls-enabled", "e", defTLSenabled, "Encrypt network connection with TLS (SSL)")
 	cmd.Flags().BoolVarP(&k.Conf.InsecureSkipVerify, "tls-insecure", "z", defTLSinsecure, "Disable verification of TLS certificate chain")
+	cmd.Flags().StringVarP(&k.Conf.SASL.Username, "sasl-username", "u", os.Getenv("KAFKA_SASL_USERNAME"), "Username for SASL authentication")
+	cmd.Flags().StringVarP(&k.Conf.SASL.Password, "sasl-password", "p", os.Getenv("KAFKA_SASL_PASSWORD"), "Password for SASL authentication")
 	return
 }
 
@@ -140,23 +165,20 @@ func (s saramaLogger) Println(v ...interface{}) {
 
 func (k *KafkaBridge) connect() (err error) {
 
-	if k.Conf.TopicOut == "" {
-		return fmt.Errorf("No output topic specified for bridge to send events to")
-	}
-	if k.Conf.TopicIn == "" {
-		return fmt.Errorf("No input topic specified for bridge to listen to")
-	}
-	if k.Conf.ConsumerGroup == "" {
-		return fmt.Errorf("No consumer group specified")
-	}
+	sarama.Logger = k.SaramaLogger
+	clientConf := cluster.NewConfig()
 
 	var tlsConfig *tls.Config
 	if tlsConfig, err = k.createTLSConfiguration(); err != nil {
 		return
 	}
 
-	sarama.Logger = k.SaramaLogger
-	clientConf := cluster.NewConfig()
+	if k.Conf.SASL.Username != "" && k.Conf.SASL.Password != "" {
+		clientConf.Net.SASL.Enable = true
+		clientConf.Net.SASL.User = k.Conf.SASL.Username
+		clientConf.Net.SASL.Password = k.Conf.SASL.Password
+	}
+
 	clientConf.Producer.Return.Successes = true
 	clientConf.Producer.Return.Errors = true
 	clientConf.Producer.RequiredAcks = sarama.WaitForLocal

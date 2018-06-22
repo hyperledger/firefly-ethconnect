@@ -238,12 +238,6 @@ func (m *testMessage) Encode() ([]byte, error) {
 
 func (k *KafkaBridge) startProducer() (err error) {
 
-	// syncProducer, err := sarama.NewSyncProducerFromClient(k.Client.Client)
-	// if err != nil {
-	// 	log.Errorf("Failed to creator producer: %s", err)
-	// 	return
-	// }
-
 	log.Debugf("Kafka Producer Topic=%s", k.Conf.TopicOut)
 	if k.Producer, err = sarama.NewAsyncProducerFromClient(k.Client.Client); err != nil {
 		log.Errorf("Failed to create Kafka producer: %s", err)
@@ -300,7 +294,7 @@ func (k *KafkaBridge) startConsumer() (err error) {
 	}()
 	go func() {
 		for msg := range k.Consumer.Messages() {
-			log.Debugf("Kafka consumer received message: %s", msg)
+			log.Debugf("Kafka consumer received message: %s", msg.Value)
 		}
 	}()
 

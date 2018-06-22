@@ -17,6 +17,7 @@ package kldkafka
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -28,6 +29,9 @@ import (
 
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
+	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/kaleido-io/ethconnect/pkg/kldeth"
+	"github.com/kaleido-io/ethconnect/pkg/kldmessages"
 	"github.com/kaleido-io/ethconnect/pkg/kldutils"
 	uuid "github.com/nu7hatch/gouuid"
 	log "github.com/sirupsen/logrus"
@@ -43,7 +47,10 @@ type KafkaBridge struct {
 		InsecureSkipVerify bool
 		TopicIn            string
 		TopicOut           string
-		SASL               struct {
+		RPC                struct {
+			URL string
+		}
+		SASL struct {
 			Username string
 			Password string
 		}
@@ -54,6 +61,7 @@ type KafkaBridge struct {
 			PrivateKeyFile  string
 		}
 	}
+	RPC          *rpc.Client
 	Client       *cluster.Client
 	Consumer     *cluster.Consumer
 	Producer     sarama.AsyncProducer
@@ -87,6 +95,9 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 			if err = kldutils.AllOrNoneReqd(cmd, "sasl-username", "sasl-password"); err != nil {
 				return
 			}
+			if k.Conf.RPC.URL == "" {
+				return fmt.Errorf("No JSON/RPC URL set for ethereum node")
+			}
 			return
 		},
 	}
@@ -96,6 +107,7 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 	cmd.Flags().StringArrayVarP(&k.Conf.Brokers, "brokers", "b", defBrokerList, "Comma-separated list of bootstrap brokers")
 	cmd.Flags().StringVarP(&k.Conf.ClientID, "clientid", "i", os.Getenv("KAFKA_CLIENT_ID"), "Client ID (or generated UUID)")
 	cmd.Flags().StringVarP(&k.Conf.ConsumerGroup, "consumer-group", "g", os.Getenv("KAFKA_CONSUMER_GROUP"), "Client ID (or generated UUID)")
+	cmd.Flags().StringVarP(&k.Conf.RPC.URL, "rpcurl", "r", os.Getenv("ETH_RPC_URL"), "JSON/RPC URL for Ethereum node")
 	cmd.Flags().StringVarP(&k.Conf.TopicIn, "topic-in", "t", os.Getenv("KAFKA_TOPIC_IN"), "Topic to listen to")
 	cmd.Flags().StringVarP(&k.Conf.TopicOut, "topic-out", "T", os.Getenv("KAFKA_TOPIC_OUT"), "Topic to send events to")
 	cmd.Flags().StringVarP(&k.Conf.TLS.ClientCertsFile, "tls-clientcerts", "c", os.Getenv("KAFKA_TLS_CLIENT_CERT"), "A client certificate file, for mutual TLS auth")
@@ -209,31 +221,14 @@ func (k *KafkaBridge) connect() (err error) {
 	}
 	log.Infof("Kafka Connected: %s", brokers)
 
-	return
-}
-
-type testMessage struct {
-	MsgID string `json:"msgId"`
-	Text  string `json:"text"`
-
-	encoded []byte
-	err     error
-}
-
-func (m *testMessage) ensureEncoded() {
-	if m.encoded == nil && m.err == nil {
-		m.encoded, m.err = json.Marshal(m)
+	// Connect the client
+	if k.RPC, err = rpc.Dial(k.Conf.RPC.URL); err != nil {
+		err = fmt.Errorf("JSON/RPC connection to %s failed: %s", k.Conf.RPC.URL, err)
+		return
 	}
-}
+	log.Debug("JSON/RPC connected. URL=", k.Conf.RPC.URL)
 
-func (m *testMessage) Length() int {
-	m.ensureEncoded()
-	return len(m.encoded)
-}
-
-func (m *testMessage) Encode() ([]byte, error) {
-	m.ensureEncoded()
-	return m.encoded, m.err
+	return
 }
 
 func (k *KafkaBridge) startProducer() (err error) {
@@ -255,15 +250,22 @@ func (k *KafkaBridge) startProducer() (err error) {
 		}
 	}()
 
+	var testMessage kldmessages.DeployContract
 	msgID, _ := uuid.NewV4()
-	testMessage := &testMessage{
-		MsgID: msgID.String(),
-		Text:  "Testing",
-	}
+	testMessage.Headers.MsgID = msgID.String()
+	testMessage.Headers.MsgType = kldmessages.MsgTypeDeployContract
+	testMessage.Solidity = "pragma solidity ^0.4.17;\n\n  contract simplestorage {\n     uint public storedData;\n  \n     function simplestorage() public {\n        storedData = 10;\n     }\n  \n     function set(uint x) public {\n        storedData = x;\n     }\n  \n     function get() public constant returns (uint retVal) {\n        return storedData;\n     }\n  }"
+	testMessage.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	var gas json.Number = "1000000"
+	testMessage.Gas = gas
+	testMessage.Parameters = []interface{}{}
+	var msgEncoder kldmessages.MessageEncoder
+	msgEncoder.Encoded, _ = json.Marshal(&testMessage)
+
 	k.Producer.Input() <- &sarama.ProducerMessage{
 		Topic: k.Conf.TopicOut,
-		Key:   sarama.StringEncoder(testMessage.MsgID),
-		Value: testMessage,
+		Key:   sarama.StringEncoder(testMessage.From),
+		Value: msgEncoder,
 	}
 	if err != nil {
 		log.Errorf("Failed to send message: %s", err)
@@ -289,17 +291,56 @@ func (k *KafkaBridge) startConsumer() (err error) {
 	}()
 	go func() {
 		for ntf := range k.Consumer.Notifications() {
-			log.Debugf("Kafka consumer rebalanced. Current=%+v\n", ntf.Current)
+			log.Debugf("Kafka consumer rebalanced. Current=%+v", ntf.Current)
 		}
 	}()
 	go func() {
 		for msg := range k.Consumer.Messages() {
-			log.Debugf("Kafka consumer received message: %s", msg.Value)
+			log.Debugf("Kafka consumer received message")
+			k.onMessage(msg.Value)
 		}
 	}()
 
 	log.Infof("Kafka Created consumer.")
 	return
+}
+
+func (k *KafkaBridge) onMessage(msg []byte) {
+
+	var commonMsg kldmessages.MessageCommon
+	if err := json.Unmarshal(msg, &commonMsg); err != nil {
+		log.Errorf("Failed to unmarshal headers from incoming message '%s': %s", hex.Dump(msg), err)
+		return
+	}
+
+	if commonMsg.Headers.MsgType == kldmessages.MsgTypeDeployContract {
+		k.processDeployContract(msg)
+	} else {
+		log.Errorf("Unknown message type '%s' in message '%s'", commonMsg.Headers.MsgType, hex.Dump(msg))
+		return
+	}
+
+}
+
+func (k *KafkaBridge) processDeployContract(msg []byte) {
+	var deployContractMsg kldmessages.DeployContract
+	if err := json.Unmarshal(msg, &deployContractMsg); err != nil {
+		log.Errorf("Failed to unmarshal headers from DeployContract message '%s': %s", hex.Dump(msg), err)
+		return
+	}
+
+	kldTx, err := kldeth.NewContractDeployTxn(deployContractMsg)
+	if err != nil {
+		log.Errorf("Failed to parse DeployContract message '%s': %s", hex.Dump(msg), err)
+		return
+	}
+
+	txHash, err := kldTx.Send(k.RPC)
+	if err != nil {
+		log.Errorf("Contract deployment failed: %s", err)
+		return
+	}
+	log.Infof("Sent contract creation transaction successfully: %s", txHash)
 }
 
 // Start kicks off the bridge

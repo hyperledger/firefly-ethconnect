@@ -262,6 +262,8 @@ func (k *KafkaBridge) startProducer() (err error) {
 	var msgEncoder kldmessages.MessageEncoder
 	msgEncoder.Encoded, _ = json.Marshal(&testMessage)
 
+	log.Infof("Sending test message: %s", string(msgEncoder.Encoded))
+
 	k.Producer.Input() <- &sarama.ProducerMessage{
 		Topic: k.Conf.TopicOut,
 		Key:   sarama.StringEncoder(testMessage.From),

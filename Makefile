@@ -26,6 +26,7 @@ deps:
 		$(GOGET) github.com/bsm/sarama-cluster
 		$(GOGET) github.com/Shopify/sarama
 		$(GOGET) github.com/nu7hatch/gouuid
+    $(GOGET) github.com/stretchr/testify/assert
 
 build-linux:
 		GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINARY_UNIX) -v

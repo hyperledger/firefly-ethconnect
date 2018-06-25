@@ -59,13 +59,13 @@ func NewContractDeployTxn(msg kldmessages.DeployContract) (pTX *KldTx, err error
 		return
 	}
 
-  // Generate the ethereum transaction
-  var tx KldTx
-	tx.EthTX, tx.From, err = msg.ToEthTransaction(0, "", packedCall)
+	// Generate the ethereum transaction
+	var tx KldTx
+	tx.EthTX, tx.From, err = msg.ToEthTransaction(2, "", packedCall)
 	if err != nil {
 		return
-  }
-  pTX = &tx
+	}
+	pTX = &tx
 
 	return
 }

@@ -38,7 +38,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// KafkaBridge is the Kaleido go-ethereum exerciser
+// KafkaBridge receives messages from Kafka and dispatches them to go-ethereum over JSON/RPC
 type KafkaBridge struct {
 	factory kafkaFactory
 	Conf    struct {
@@ -82,11 +82,9 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
 		Use:   "kafka",
 		Short: "Kafka bridge to Ethereum",
-		Run: func(cmd *cobra.Command, args []string) {
-			if err := k.Start(); err != nil {
-				log.Error("Kafka Bridge Start: ", err)
-				os.Exit(1)
-			}
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			err = k.Start()
+			return
 		},
 		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
 			if k.Conf.TopicOut == "" {

@@ -16,7 +16,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/kaleido-io/ethconnect/pkg/kldkafka"
 	log "github.com/sirupsen/logrus"
@@ -61,9 +60,10 @@ func init() {
 }
 
 // Execute is called by the main method of the package
-func Execute() {
+func Execute() int {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }

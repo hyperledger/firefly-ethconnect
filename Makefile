@@ -27,6 +27,7 @@ deps:
 		$(GOGET) github.com/Shopify/sarama
 		$(GOGET) github.com/nu7hatch/gouuid
     $(GOGET) github.com/stretchr/testify/assert
+    $(GOGET) github.com/golang/mock/gomock
 
 build-linux:
 		GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINARY_UNIX) -v

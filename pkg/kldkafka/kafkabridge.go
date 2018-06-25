@@ -40,7 +40,8 @@ import (
 
 // KafkaBridge is the Kaleido go-ethereum exerciser
 type KafkaBridge struct {
-	Conf struct {
+	factory kafkaFactory
+	Conf    struct {
 		Brokers            []string
 		ClientID           string
 		ConsumerGroup      string
@@ -61,11 +62,19 @@ type KafkaBridge struct {
 			PrivateKeyFile  string
 		}
 	}
-	RPC          *rpc.Client
-	Client       *cluster.Client
-	Consumer     *cluster.Consumer
-	Producer     sarama.AsyncProducer
-	SaramaLogger saramaLogger
+	rpc          *rpc.Client
+	client       kafkaClient
+	signals      chan os.Signal
+	consumer     kafkaConsumer
+	producer     kafkaProducer
+	saramaLogger saramaLogger
+}
+
+// NewKafkaBridge creates a new KafkaBridge
+func NewKafkaBridge() *KafkaBridge {
+	var kf saramaKafkaFactory
+	k := KafkaBridge{factory: kf}
+	return &k
 }
 
 // CobraInit retruns a cobra command to configure this Kafka
@@ -177,7 +186,7 @@ func (s saramaLogger) Println(v ...interface{}) {
 
 func (k *KafkaBridge) connect() (err error) {
 
-	sarama.Logger = k.SaramaLogger
+	sarama.Logger = k.saramaLogger
 	clientConf := cluster.NewConfig()
 
 	var tlsConfig *tls.Config
@@ -211,18 +220,18 @@ func (k *KafkaBridge) connect() (err error) {
 	log.Debugf("Kafka ClientID: %s", clientConf.ClientID)
 
 	log.Debugf("Kafka Bootstrap brokers: %s", k.Conf.Brokers)
-	if k.Client, err = cluster.NewClient(k.Conf.Brokers, clientConf); err != nil {
+	if k.client, err = k.factory.newClient(k, clientConf); err != nil {
 		log.Errorf("Failed to create Kafka client: %s", err)
 		return
 	}
 	var brokers []string
-	for _, broker := range k.Client.Brokers() {
+	for _, broker := range k.client.Brokers() {
 		brokers = append(brokers, broker.Addr())
 	}
 	log.Infof("Kafka Connected: %s", brokers)
 
 	// Connect the client
-	if k.RPC, err = rpc.Dial(k.Conf.RPC.URL); err != nil {
+	if k.rpc, err = rpc.Dial(k.Conf.RPC.URL); err != nil {
 		err = fmt.Errorf("JSON/RPC connection to %s failed: %s", k.Conf.RPC.URL, err)
 		return
 	}
@@ -234,45 +243,21 @@ func (k *KafkaBridge) connect() (err error) {
 func (k *KafkaBridge) startProducer() (err error) {
 
 	log.Debugf("Kafka Producer Topic=%s", k.Conf.TopicOut)
-	if k.Producer, err = sarama.NewAsyncProducerFromClient(k.Client.Client); err != nil {
+	if k.producer, err = k.client.newProducer(k); err != nil {
 		log.Errorf("Failed to create Kafka producer: %s", err)
 		return
 	}
 
 	go func() {
-		for err := range k.Producer.Errors() {
+		for err := range k.producer.Errors() {
 			log.Error("Kafka producer failed:", err)
 		}
 	}()
 	go func() {
-		for msg := range k.Producer.Successes() {
+		for msg := range k.producer.Successes() {
 			log.Debugf("Kafka producer sent message. Partition=%d Offset=%d", msg.Partition, msg.Offset)
 		}
 	}()
-
-	var testMessage kldmessages.DeployContract
-	msgID, _ := uuid.NewV4()
-	testMessage.Headers.MsgID = msgID.String()
-	testMessage.Headers.MsgType = kldmessages.MsgTypeDeployContract
-	testMessage.Solidity = "pragma solidity ^0.4.17;\n\n  contract simplestorage {\n     uint public storedData;\n  \n     function simplestorage() public {\n        storedData = 10;\n     }\n  \n     function set(uint x) public {\n        storedData = x;\n     }\n  \n     function get() public constant returns (uint retVal) {\n        return storedData;\n     }\n  }"
-	testMessage.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
-	var gas json.Number = "1000000"
-	testMessage.Gas = gas
-	testMessage.Parameters = []interface{}{}
-	var msgEncoder kldmessages.MessageEncoder
-	msgEncoder.Encoded, _ = json.Marshal(&testMessage)
-
-	log.Infof("Sending test message: %s", string(msgEncoder.Encoded))
-
-	k.Producer.Input() <- &sarama.ProducerMessage{
-		Topic: k.Conf.TopicOut,
-		Key:   sarama.StringEncoder(testMessage.From),
-		Value: msgEncoder,
-	}
-	if err != nil {
-		log.Errorf("Failed to send message: %s", err)
-		return
-	}
 
 	log.Infof("Kafka Created producer")
 	return
@@ -281,29 +266,29 @@ func (k *KafkaBridge) startProducer() (err error) {
 func (k *KafkaBridge) startConsumer() (err error) {
 
 	log.Debugf("Kafka Consumer Topic=%s ConsumerGroup=%s", k.Conf.TopicIn, k.Conf.ConsumerGroup)
-	if k.Consumer, err = cluster.NewConsumerFromClient(k.Client, k.Conf.ConsumerGroup, []string{k.Conf.TopicIn}); err != nil {
+	if k.consumer, err = k.client.newConsumer(k); err != nil {
 		log.Errorf("Failed to create Kafka consumer: %s", err)
 		return
 	}
 
 	go func() {
-		for err := range k.Consumer.Errors() {
+		for err := range k.consumer.Errors() {
 			log.Error("Kafka consumer failed:", err)
 		}
 	}()
 	go func() {
-		for ntf := range k.Consumer.Notifications() {
+		for ntf := range k.consumer.Notifications() {
 			log.Debugf("Kafka consumer rebalanced. Current=%+v", ntf.Current)
 		}
 	}()
 	go func() {
-		for msg := range k.Consumer.Messages() {
+		for msg := range k.consumer.Messages() {
 			log.Debugf("Kafka consumer received message")
 			k.onMessage(msg.Value)
 		}
 	}()
 
-	log.Infof("Kafka Created consumer.")
+	log.Infof("Kafka Created consumer")
 	return
 }
 
@@ -337,7 +322,7 @@ func (k *KafkaBridge) processDeployContract(msg []byte) {
 		return
 	}
 
-	txHash, err := kldTx.Send(k.RPC)
+	txHash, err := kldTx.Send(k.rpc)
 	if err != nil {
 		log.Errorf("Contract deployment failed: %s", err)
 		return
@@ -358,13 +343,13 @@ func (k *KafkaBridge) Start() (err error) {
 		return
 	}
 
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt)
+	k.signals = make(chan os.Signal, 1)
+	signal.Notify(k.signals, os.Interrupt)
 	for {
 		select {
-		case <-signals:
-			k.Producer.Close()
-			k.Consumer.Close()
+		case <-k.signals:
+			k.producer.Close()
+			k.consumer.Close()
 
 			log.Infof("Kafka Bridge complete")
 			return

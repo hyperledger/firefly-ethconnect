@@ -38,8 +38,6 @@ func initLogging(debugLevel int) {
 	log.Debugf("Log level set to %d", debugLevel)
 }
 
-var kafkaBridge kldkafka.KafkaBridge
-
 var rootConfig struct {
 	DebugLevel int
 }
@@ -56,6 +54,8 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().IntVarP(&rootConfig.DebugLevel, "debug", "d", 1, "0=error, 1=info, 2=debug")
+
+	kafkaBridge := kldkafka.NewKafkaBridge()
 	rootCmd.AddCommand(kafkaBridge.CobraInit())
 }
 

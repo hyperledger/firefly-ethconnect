@@ -29,7 +29,6 @@ import (
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
-	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -58,7 +57,9 @@ func (f *testKafkaFactory) newClient(k *KafkaBridge, clientConf *cluster.Config)
 }
 
 func (f *testKafkaFactory) Brokers() []*sarama.Broker {
-	return []*sarama.Broker{}
+	return []*sarama.Broker{
+		&sarama.Broker{},
+	}
 }
 
 func (f *testKafkaFactory) newProducer(k *KafkaBridge) (kafkaProducer, error) {
@@ -243,6 +244,18 @@ func TestExecuteWithIncompleteArgs(t *testing.T) {
 	err = kafkaCmd.Execute()
 	assert.Equal("flag mismatch: 'sasl-username' set and 'sasl-password' unset", err.Error())
 	testArgs = append(testArgs, []string{"--sasl-password", "testpass"}...)
+}
+
+func TestDefIntWithBadEnvVar(t *testing.T) {
+	assert := assert.New(t)
+
+	os.Setenv("KAFKA_MAX_INFLIGHT", "badness")
+	defer os.Unsetenv("KAFKA_MAX_INFLIGHT")
+
+	k, err := execBridgeWithArgs(assert, minWorkingArgs, &testKafkaFactory{})
+
+	assert.Nil(err)
+	assert.Equal(10, k.Conf.MaxInFlight)
 }
 
 func TestExecuteWithBadRPCURL(t *testing.T) {
@@ -479,13 +492,13 @@ func TestSingleMessageWithReply(t *testing.T) {
 	// Send a minimal test message
 	msg1 := kldmessages.RequestCommon{}
 	msg1.Headers.MsgType = "TestAddInflightMsg"
-	msg1.Headers.ID = kldutils.UUIDv4()
 	msg1Ctx := struct {
 		Some string `json:"some"`
 	}{
 		Some: "data",
 	}
 	msg1.Headers.Context = &msg1Ctx
+	msg1.Headers.Account = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 	msg1bytes, err := json.Marshal(&msg1)
 	log.Infof("Sent message: %s", string(msg1bytes))
 	f.consumer.messages <- &sarama.ConsumerMessage{
@@ -496,9 +509,13 @@ func TestSingleMessageWithReply(t *testing.T) {
 
 	// Get the message via the processor
 	msgContext1 := <-f.processor.messages
-	assert.Equal(msg1.Headers.ID, msgContext1.Headers().ID)
+	assert.NotEmpty(msgContext1.Headers().ID) // Generated one as not supplied
 	assert.Equal(msg1.Headers.MsgType, msgContext1.Headers().MsgType)
 	assert.Equal("data", msgContext1.Headers().Context.(map[string]interface{})["some"])
+	assert.Equal(len(msgContext1.(*msgContext).replyBytes), msgContext1.(*msgContext).Length())
+	var msgUnmarshaled kldmessages.RequestCommon
+	msgContext1.Unmarshal(&msgUnmarshaled)
+	assert.Equal(msg1.Headers.MsgType, msgUnmarshaled.Headers.MsgType)
 
 	// Send the reply in a go routine
 	go func() {
@@ -622,4 +639,109 @@ func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 	// Check we acknowledge all offsets
 	assert.Equal(int64(19), f.consumer.offsetsByPartition[0])
 
+}
+
+func TestAddInflightMessageBadMessage(t *testing.T) {
+	assert := assert.New(t)
+
+	f := testKafkaFactory{
+		processor: &testKafkaMsgProcessor{
+			messages: make(chan MsgContext),
+		},
+	}
+	k, wg, err := startTestBridge(assert, minWorkingArgs, &f)
+	if err != nil {
+		return
+	}
+
+	f.consumer.messages <- &sarama.ConsumerMessage{
+		Value:     []byte("badness"),
+		Partition: 64,
+		Offset:    int64(42),
+	}
+
+	// Drain the producer
+	msg := <-f.producer.input
+	f.producer.successes <- msg
+
+	// Shut down
+	k.signals <- os.Interrupt
+	wg.Wait()
+
+	// Check we acknowledge all offsets
+	assert.Equal(int64(42), f.consumer.offsetsByPartition[64])
+
+}
+
+func TestProducerErrorLoopPanics(t *testing.T) {
+	assert := assert.New(t)
+
+	k := NewKafkaBridge()
+	f := testKafkaFactory{}
+	producer, _ := f.newProducer(k)
+	k.producer = producer
+
+	go func() {
+		producer.(*testKafkaProducer).errors <- &sarama.ProducerError{
+			Err: fmt.Errorf("pop"),
+			Msg: &sarama.ProducerMessage{},
+		}
+	}()
+
+	assert.Panics(func() {
+		k.producerErrorLoop()
+	})
+
+}
+
+func TestProducerSuccessLoopPanicsMsgNotInflight(t *testing.T) {
+	assert := assert.New(t)
+
+	k := NewKafkaBridge()
+	f := testKafkaFactory{}
+	producer, _ := f.newProducer(k)
+	k.producer = producer
+
+	go func() {
+		producer.(*testKafkaProducer).successes <- &sarama.ProducerMessage{
+			Metadata: "badness",
+		}
+	}()
+
+	assert.Panics(func() {
+		k.producerSuccessLoop()
+	})
+
+}
+
+func TestConsumerErrorLoopLogsAndContinues(t *testing.T) {
+	assert := assert.New(t)
+
+	f := testKafkaFactory{}
+	k, wg, err := startTestBridge(assert, minWorkingArgs, &f)
+	if err != nil {
+		return
+	}
+
+	f.consumer.errors <- fmt.Errorf("fizzle")
+
+	// Shut down
+	k.signals <- os.Interrupt
+	wg.Wait()
+}
+
+func TestConsumerNotificationsLoop(t *testing.T) {
+	assert := assert.New(t)
+
+	f := testKafkaFactory{}
+	k, wg, err := startTestBridge(assert, minWorkingArgs, &f)
+	if err != nil {
+		return
+	}
+
+	f.consumer.notifications <- &cluster.Notification{}
+
+	// Shut down
+	k.signals <- os.Interrupt
+	wg.Wait()
 }

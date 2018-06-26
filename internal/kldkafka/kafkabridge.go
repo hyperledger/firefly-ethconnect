@@ -329,9 +329,7 @@ func (c *msgContext) Reply(pFullMsg interface{}) (err error) {
 	replyHeaders.Context = c.requestCommon.Headers.Context
 	replyHeaders.OrigID = c.requestCommon.Headers.ID
 	replyHeaders.OrigMsg = c.origMsg
-	if c.replyBytes, err = json.Marshal(pFullMsg); err != nil {
-		return
-	}
+	c.replyBytes, _ = json.Marshal(pFullMsg)
 	log.Infof("Sending reply: %s", c)
 	c.bridge.producer.Input() <- &sarama.ProducerMessage{
 		Topic:    c.bridge.Conf.TopicOut,
@@ -423,6 +421,44 @@ func (k *KafkaBridge) connect() (err error) {
 	return
 }
 
+func (k *KafkaBridge) producerErrorLoop() {
+	for err := range k.producer.Errors() {
+		k.inFlightCond.L.Lock()
+		// If we fail to send a reply, this is significant. We have a request in flight
+		// and we have probably already sent the message.
+		// Currently we panic, on the basis that we will be restarted by Docker
+		// to drive retry logic. In the future we might consider recreating the
+		// producer and attempting to resend the message a number of times -
+		// keeping a retry counter on the msgContext object
+		origMsg := err.Msg.Metadata.(string)
+		ctx := k.inFlight[origMsg]
+		log.Errorf("Kafka producer failed for reply %s to origMsg %s: %s", ctx, origMsg, err)
+		panic(err)
+		// k.inFlightCond.L.Unlock() - unreachable while we have a panic
+	}
+	k.producerWG.Done()
+}
+
+func (k *KafkaBridge) producerSuccessLoop() {
+	for msg := range k.producer.Successes() {
+		k.inFlightCond.L.Lock()
+		origMsg := msg.Metadata.(string)
+		if ctx, ok := k.inFlight[origMsg]; ok {
+			log.Infof("Reply sent: %s", ctx)
+			// While still holding the lock, add this to the completed list
+			k.setInFlightComplete(ctx)
+			// We've reduced the in-flight count - wake any waiting consumer go func
+			k.inFlightCond.Broadcast()
+		} else {
+			// This should never happen. Represents a logic bug that must be diagnosed.
+			err := fmt.Errorf("Received confirmation for message not in in-flight map: %s", origMsg)
+			panic(err)
+		}
+		k.inFlightCond.L.Unlock()
+	}
+	k.producerWG.Done()
+}
+
 func (k *KafkaBridge) startProducer() (err error) {
 
 	log.Debugf("Kafka Producer Topic=%s", k.Conf.TopicOut)
@@ -433,46 +469,41 @@ func (k *KafkaBridge) startProducer() (err error) {
 
 	k.producerWG.Add(2)
 
-	go func() {
-		for err := range k.producer.Errors() {
-			k.inFlightCond.L.Lock()
-			// If we fail to send a reply, this is significant. We have a request in flight
-			// and we have probably already sent the message.
-			// Currently we panic, on the basis that we will be restarted by Docker
-			// to drive retry logic. In the future we might consider recreating the
-			// producer and attempting to resend the message a number of times -
-			// keeping a retry counter on the msgContext object
-			origMsg := err.Msg.Metadata.(string)
-			ctx := k.inFlight[origMsg]
-			log.Errorf("Kafka producer failed for reply %s to origMsg %s: %s", ctx, origMsg, err)
-			panic(err)
-			// k.inFlightCond.L.Unlock() - unreachable while we have a panic
-		}
-		k.producerWG.Done()
-	}()
+	go k.producerErrorLoop()
 
-	go func() {
-		for msg := range k.producer.Successes() {
-			k.inFlightCond.L.Lock()
-			origMsg := msg.Metadata.(string)
-			if ctx, ok := k.inFlight[origMsg]; ok {
-				log.Infof("Reply sent: %s", ctx)
-				// While still holding the lock, add this to the completed list
-				k.setInFlightComplete(ctx)
-				// We've reduced the in-flight count - wake any waiting consumer go func
-				k.inFlightCond.Broadcast()
-			} else {
-				// This should never happen. Represents a logic bug that must be diagnosed.
-				log.Errorf("Received confirmation for message not in in-flight map: %s", origMsg)
-				panic(err)
-			}
-			k.inFlightCond.L.Unlock()
-		}
-		k.producerWG.Done()
-	}()
+	go k.producerSuccessLoop()
 
 	log.Infof("Kafka Created producer")
 	return
+}
+
+func (k *KafkaBridge) consumerMessagesLoop() {
+	for msg := range k.consumer.Messages() {
+		k.inFlightCond.L.Lock()
+		log.Infof("Kafka consumer received message: Partition=%d Offset=%d", msg.Partition, msg.Offset)
+
+		// We cannot build up an infinite number of messages in memory
+		for len(k.inFlight) >= k.Conf.MaxInFlight {
+			log.Infof("Too many messages in-flight: In-flight=%d Max=%d", len(k.inFlight), k.Conf.MaxInFlight)
+			k.inFlightCond.Wait()
+		}
+		// addInflightMsg always adds the message, even if it cannot
+		// be parsed
+		msgCtx, err := k.addInflightMsg(msg)
+		// Unlock before any further processing
+		k.inFlightCond.L.Unlock()
+		if err == nil {
+			// Dispatch for processing if we parsed the message successfully
+			k.processor.OnMessage(msgCtx)
+		} else {
+			// Dispatch a generic 'bad data' reply
+			var errMsg kldmessages.ReplyCommon
+			errMsg.Headers.Status = 400
+			errMsg.Headers.ErrorMessage = err.Error()
+			msgCtx.Reply(&errMsg)
+		}
+	}
+	k.consumerWG.Done()
 }
 
 func (k *KafkaBridge) startConsumer() (err error) {
@@ -496,34 +527,7 @@ func (k *KafkaBridge) startConsumer() (err error) {
 		}
 		k.consumerWG.Done()
 	}()
-	go func() {
-		for msg := range k.consumer.Messages() {
-			k.inFlightCond.L.Lock()
-			log.Infof("Kafka consumer received message: Partition=%d Offset=%d", msg.Partition, msg.Offset)
-
-			// We cannot build up an infinite number of messages in memory
-			for len(k.inFlight) >= k.Conf.MaxInFlight {
-				log.Infof("Too many messages in-flight: In-flight=%d Max=%d", len(k.inFlight), k.Conf.MaxInFlight)
-				k.inFlightCond.Wait()
-			}
-			// addInflightMsg always adds the message, even if it cannot
-			// be parsed
-			msgCtx, err := k.addInflightMsg(msg)
-			// Unlock before any further processing
-			k.inFlightCond.L.Unlock()
-			if err == nil {
-				// Dispatch for processing if we parsed the message successfully
-				k.processor.OnMessage(msgCtx)
-			} else {
-				// Dispatch a generic 'bad data' reply
-				var errMsg kldmessages.ReplyCommon
-				errMsg.Headers.Status = 400
-				errMsg.Headers.ErrorMessage = err.Error()
-				msgCtx.Reply(&errMsg)
-			}
-		}
-		k.consumerWG.Done()
-	}()
+	go k.consumerMessagesLoop()
 
 	log.Infof("Kafka Created consumer")
 	return

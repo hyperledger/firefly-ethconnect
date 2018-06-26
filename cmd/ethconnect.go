@@ -17,7 +17,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/kaleido-io/ethconnect/pkg/kldkafka"
+	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )

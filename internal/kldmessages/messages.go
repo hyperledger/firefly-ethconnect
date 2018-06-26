@@ -24,7 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/kaleido-io/ethconnect/pkg/kldutils"
+	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -51,37 +51,38 @@ type ABIParam struct {
 	Type string `json:"type"`
 }
 
-// MessageHeaders are common to all messages
-type MessageHeaders struct {
-	MsgType string `json:"type"`
-	MsgID   string `json:"msgid,omitempty"`
+// CommonHeaders are common to all messages
+type CommonHeaders struct {
+	ID      string      `json:"id,omitempty"`
+	MsgType string      `json:"type"`
+	Account string      `json:"account,omitempty"`
+	Context interface{} `json:"ctx,omitempty"`
 }
 
-// MessageCommon contains common fields to all messages
-type MessageCommon struct {
-	Headers MessageHeaders `json:"headers"`
+// RequestCommon is a common interface to all requests
+type RequestCommon struct {
+	Headers CommonHeaders `json:"headers"`
 }
 
-// MessageEncoder for marshalling messages per sarama's needs
-type MessageEncoder struct {
-	Encoded []byte
-	err     error
+// ReplyHeaders are common to all replies
+type ReplyHeaders struct {
+	CommonHeaders
+	OrigMsg      string `json:"origMsg"`
+	OrigID       string `json:"origID"`
+	OrigTX       string `json:"origTX,omitempty"`
+	Status       int32  `json:"status"`
+	ErrorMessage string `json:"errorMessage"`
 }
 
-// Length Gets the encoded length
-func (m MessageEncoder) Length() int {
-	return len(m.Encoded)
-}
-
-// Encode Does the encoding
-func (m MessageEncoder) Encode() ([]byte, error) {
-	return m.Encoded, m.err
+// ReplyCommon is a common interface to all replies
+type ReplyCommon struct {
+	Headers ReplyHeaders `json:"headers"`
 }
 
 // transactionCommon is the common fields from https://github.com/ethereum/wiki/wiki/JavaScript-API#web3ethsendtransaction
 // for sending either contract call or creation transactions
 type transactionCommon struct {
-	MessageCommon
+	RequestCommon
 	From       string        `json:"from"`
 	Value      json.Number   `json:"value"`
 	Gas        json.Number   `json:"gas"`

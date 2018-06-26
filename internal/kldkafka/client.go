@@ -33,7 +33,7 @@ type kafkaClient interface {
 }
 
 type kafkaProducer interface {
-	Close() error
+	AsyncClose()
 	Input() chan<- *sarama.ProducerMessage
 	Successes() <-chan *sarama.ProducerMessage
 	Errors() <-chan *sarama.ProducerError

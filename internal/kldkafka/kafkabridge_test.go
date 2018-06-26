@@ -72,9 +72,10 @@ func (f *testKafkaFactory) newProducer(k *KafkaBridge) (kafkaProducer, error) {
 
 func (f *testKafkaFactory) newConsumer(k *KafkaBridge) (kafkaConsumer, error) {
 	f.consumer = &testKafkaConsumer{
-		messages:      make(chan *sarama.ConsumerMessage),
-		notifications: make(chan *cluster.Notification),
-		errors:        make(chan error),
+		messages:           make(chan *sarama.ConsumerMessage),
+		notifications:      make(chan *cluster.Notification),
+		errors:             make(chan error),
+		offsetsByPartition: make(map[int32]int64),
 	}
 	return f.consumer, f.errorOnNewConsumer
 }
@@ -85,7 +86,7 @@ type testKafkaProducer struct {
 	errors    chan *sarama.ProducerError
 }
 
-func (p testKafkaProducer) Close() error {
+func (p *testKafkaProducer) AsyncClose() {
 	if p.input != nil {
 		close(p.input)
 	}
@@ -95,28 +96,28 @@ func (p testKafkaProducer) Close() error {
 	if p.errors != nil {
 		close(p.errors)
 	}
-	return nil
 }
 
-func (p testKafkaProducer) Input() chan<- *sarama.ProducerMessage {
+func (p *testKafkaProducer) Input() chan<- *sarama.ProducerMessage {
 	return p.input
 }
 
-func (p testKafkaProducer) Successes() <-chan *sarama.ProducerMessage {
+func (p *testKafkaProducer) Successes() <-chan *sarama.ProducerMessage {
 	return p.successes
 }
 
-func (p testKafkaProducer) Errors() <-chan *sarama.ProducerError {
+func (p *testKafkaProducer) Errors() <-chan *sarama.ProducerError {
 	return p.errors
 }
 
 type testKafkaConsumer struct {
-	messages      chan *sarama.ConsumerMessage
-	notifications chan *cluster.Notification
-	errors        chan error
+	messages           chan *sarama.ConsumerMessage
+	notifications      chan *cluster.Notification
+	errors             chan error
+	offsetsByPartition map[int32]int64
 }
 
-func (c testKafkaConsumer) Close() error {
+func (c *testKafkaConsumer) Close() error {
 	if c.messages != nil {
 		close(c.messages)
 	}
@@ -129,19 +130,20 @@ func (c testKafkaConsumer) Close() error {
 	return nil
 }
 
-func (c testKafkaConsumer) Messages() <-chan *sarama.ConsumerMessage {
+func (c *testKafkaConsumer) Messages() <-chan *sarama.ConsumerMessage {
 	return c.messages
 }
 
-func (c testKafkaConsumer) Notifications() <-chan *cluster.Notification {
+func (c *testKafkaConsumer) Notifications() <-chan *cluster.Notification {
 	return c.notifications
 }
 
-func (c testKafkaConsumer) Errors() <-chan error {
+func (c *testKafkaConsumer) Errors() <-chan error {
 	return c.errors
 }
 
-func (c testKafkaConsumer) MarkOffset(*sarama.ConsumerMessage, string) {
+func (c *testKafkaConsumer) MarkOffset(msg *sarama.ConsumerMessage, metadata string) {
+	c.offsetsByPartition[msg.Partition] = msg.Offset
 	return
 }
 
@@ -156,6 +158,8 @@ func (p *testKafkaMsgProcessor) OnMessage(msg MsgContext) (err error) {
 }
 
 func startTestBridge(assert *assert.Assertions, testArgs []string, f *testKafkaFactory) (k *KafkaBridge, wg *sync.WaitGroup, err error) {
+	log.SetLevel(log.DebugLevel)
+
 	k = NewKafkaBridge()
 	k.factory = f
 	k.processor = f.processor
@@ -507,6 +511,7 @@ func TestSingleMessageWithReply(t *testing.T) {
 
 	// Check the reply is sent correctly to Kafka
 	replyKafkaMsg := <-f.producer.input
+	f.producer.successes <- replyKafkaMsg
 	replyBytes, err := replyKafkaMsg.Value.Encode()
 	if err != nil {
 		assert.Fail("Could not get bytes from reply: %s", err)
@@ -527,4 +532,94 @@ func TestSingleMessageWithReply(t *testing.T) {
 	// Shut down
 	k.signals <- os.Interrupt
 	wg.Wait()
+}
+
+func TestMoreMessagesThanMaxInFlight(t *testing.T) {
+	assert := assert.New(t)
+
+	f := testKafkaFactory{
+		processor: &testKafkaMsgProcessor{
+			messages: make(chan MsgContext),
+		},
+	}
+	k, wg, err := startTestBridge(assert, minWorkingArgs, &f)
+	if err != nil {
+		return
+	}
+	assert.Equal(10, k.Conf.MaxInFlight)
+
+	// Send 20 messages (10 is the max inflight)
+	go func() {
+		for i := 0; i < 20; i++ {
+			msg := kldmessages.RequestCommon{}
+			msg.Headers.MsgType = "TestAddInflightMsg"
+			msg.Headers.ID = fmt.Sprintf("msg%d", i)
+			msg1bytes, _ := json.Marshal(&msg)
+			log.Infof("Sent message %d", i)
+			f.consumer.messages <- &sarama.ConsumerMessage{Value: msg1bytes, Partition: 0, Offset: int64(i)}
+		}
+	}()
+
+	// 10 messages should be sent into the processor
+	var msgContexts []MsgContext
+	for i := 0; i < 10; i++ {
+		msgContext := <-f.processor.messages
+		log.Infof("Processor passed %s", msgContext.Headers().ID)
+		assert.Equal(fmt.Sprintf("msg%d", i), msgContext.Headers().ID)
+		msgContexts = append(msgContexts, msgContext)
+	}
+	assert.Equal(10, len(k.inFlight))
+
+	// Send the replies for the first 10
+	go func(msgContexts []MsgContext) {
+		for _, msgContext := range msgContexts {
+			reply := kldmessages.ReplyCommon{}
+			err := msgContext.Reply(&reply)
+			log.Infof("Sent reply for %s", msgContext.Headers().ID)
+			assert.Equal(nil, err)
+		}
+	}(msgContexts)
+	// Drain the producer
+	for i := 0; i < 10; i++ {
+		msg := <-f.producer.input
+		f.producer.successes <- msg
+	}
+
+	// 10 more messages should be sent into the processor
+	msgContexts = []MsgContext{}
+	for i := 10; i < 20; i++ {
+		msgContext := <-f.processor.messages
+		log.Infof("Processor passed %s", msgContext.Headers().ID)
+		assert.Equal(fmt.Sprintf("msg%d", i), msgContext.Headers().ID)
+		msgContexts = append(msgContexts, msgContext)
+	}
+	assert.Equal(10, len(k.inFlight))
+
+	// Send the replies for the next 10 - in reverse order
+	var wg1 sync.WaitGroup
+	wg1.Add(1)
+	go func(msgContexts []MsgContext) {
+		for i := (len(msgContexts) - 1); i >= 0; i-- {
+			msgContext := msgContexts[i]
+			reply := kldmessages.ReplyCommon{}
+			err := msgContext.Reply(&reply)
+			log.Infof("Sent reply for %s", msgContext.Headers().ID)
+			assert.Equal(nil, err)
+		}
+		wg1.Done()
+	}(msgContexts)
+	// Drain the producer
+	for i := 0; i < 10; i++ {
+		msg := <-f.producer.input
+		f.producer.successes <- msg
+	}
+	wg1.Wait()
+
+	// Shut down
+	k.signals <- os.Interrupt
+	wg.Wait()
+
+	// Check we acknowledge all offsets
+	assert.Equal(int64(19), f.consumer.offsetsByPartition[0])
+
 }

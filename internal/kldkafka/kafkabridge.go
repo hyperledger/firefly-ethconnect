@@ -17,7 +17,6 @@ package kldkafka
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -31,7 +30,6 @@ import (
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
@@ -201,7 +199,7 @@ type MsgContext interface {
 	Unmarshal(msg interface{}) error
 	// Send a reply that can be marshaled into bytes.
 	// Sets all the common headers on behalf of the caller, based on the request context
-	Reply(replyHeaders *kldmessages.ReplyHeaders, fullMsg interface{}) error
+	Reply(fullMsg interface{}) error
 }
 
 type msgContext struct {
@@ -263,7 +261,9 @@ func (c *msgContext) Unmarshal(msg interface{}) error {
 	return json.Unmarshal(c.origBytes, msg)
 }
 
-func (c *msgContext) Reply(replyHeaders *kldmessages.ReplyHeaders, pFullMsg interface{}) (err error) {
+func (c *msgContext) Reply(pFullMsg interface{}) (err error) {
+
+	replyHeaders := &pFullMsg.(*kldmessages.ReplyCommon).Headers
 	c.replyType = replyHeaders.MsgType
 	replyHeaders.ID = kldutils.UUIDv4()
 	replyHeaders.Context = c.requestCommon.Headers.Context
@@ -453,27 +453,6 @@ func (k *KafkaBridge) startConsumer() (err error) {
 
 	log.Infof("Kafka Created consumer")
 	return
-}
-
-func (k *KafkaBridge) processDeployContract(msg []byte) {
-	var deployContractMsg kldmessages.DeployContract
-	if err := json.Unmarshal(msg, &deployContractMsg); err != nil {
-		log.Errorf("Failed to unmarshal headers from DeployContract message '%s': %s", hex.Dump(msg), err)
-		return
-	}
-
-	kldTx, err := kldeth.NewContractDeployTxn(deployContractMsg)
-	if err != nil {
-		log.Errorf("Failed to parse DeployContract message '%s': %s", hex.Dump(msg), err)
-		return
-	}
-
-	txHash, err := kldTx.Send(k.rpc)
-	if err != nil {
-		log.Errorf("Contract deployment failed: %s", err)
-		return
-	}
-	log.Infof("Sent contract creation transaction successfully: %s", txHash)
 }
 
 // Start kicks off the bridge

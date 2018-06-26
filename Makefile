@@ -9,9 +9,11 @@ BINARY_UNIX=$(BINARY_NAME)-tux
 BINARY_MAC=$(BINARY_NAME)-mac
 BINARY_WIN=$(BINARY_NAME)-win
 
-all: deps build
+all: deps build test
 build: 
 		$(GOBUILD) -o $(BINARY_NAME) -v
+test:
+		$(GOTEST)  ./...
 clean: 
 		$(GOCLEAN)
 		rm -f $(BINARY_NAME)
@@ -26,8 +28,8 @@ deps:
 		$(GOGET) github.com/bsm/sarama-cluster
 		$(GOGET) github.com/Shopify/sarama
 		$(GOGET) github.com/nu7hatch/gouuid
-    $(GOGET) github.com/stretchr/testify/assert
-    $(GOGET) github.com/golang/mock/gomock
+		$(GOGET) github.com/stretchr/testify/assert
+		$(GOGET) github.com/golang/mock/gomock
 
 build-linux:
 		GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINARY_UNIX) -v

@@ -25,27 +25,27 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/kaleido-io/ethconnect/pkg/kldeth"
-	"github.com/kaleido-io/ethconnect/pkg/kldmessages"
-	"github.com/kaleido-io/ethconnect/pkg/kldutils"
-	uuid "github.com/nu7hatch/gouuid"
+	"github.com/kaleido-io/ethconnect/internal/kldeth"
+	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
 // KafkaBridge receives messages from Kafka and dispatches them to go-ethereum over JSON/RPC
 type KafkaBridge struct {
-	factory kafkaFactory
-	Conf    struct {
+	Conf struct {
 		Brokers            []string
 		ClientID           string
 		ConsumerGroup      string
 		InsecureSkipVerify bool
+		MaxInFlight        int
 		TopicIn            string
 		TopicOut           string
 		RPC                struct {
@@ -62,19 +62,29 @@ type KafkaBridge struct {
 			PrivateKeyFile  string
 		}
 	}
+	factory      kafkaFactory
 	rpc          *rpc.Client
 	client       kafkaClient
 	signals      chan os.Signal
 	consumer     kafkaConsumer
 	producer     kafkaProducer
 	saramaLogger saramaLogger
+	processor    MsgProcessor
+	inFlight     map[string]*msgContext
+	inFlightCond *sync.Cond
 }
 
-// NewKafkaBridge creates a new KafkaBridge
-func NewKafkaBridge() *KafkaBridge {
-	var kf saramaKafkaFactory
-	k := KafkaBridge{factory: kf}
-	return &k
+func defInt(envVarName string, defValue int) int {
+	defStr := os.Getenv(envVarName)
+	if defStr == "" {
+		return defValue
+	}
+	parsedInt, err := strconv.ParseInt(defStr, 10, 32)
+	if err != nil {
+		log.Errorf("Invalid string in env var %s", envVarName)
+		return defValue
+	}
+	return int(parsedInt)
 }
 
 // CobraInit retruns a cobra command to configure this Kafka
@@ -114,6 +124,7 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 	cmd.Flags().StringArrayVarP(&k.Conf.Brokers, "brokers", "b", defBrokerList, "Comma-separated list of bootstrap brokers")
 	cmd.Flags().StringVarP(&k.Conf.ClientID, "clientid", "i", os.Getenv("KAFKA_CLIENT_ID"), "Client ID (or generated UUID)")
 	cmd.Flags().StringVarP(&k.Conf.ConsumerGroup, "consumer-group", "g", os.Getenv("KAFKA_CONSUMER_GROUP"), "Client ID (or generated UUID)")
+	cmd.Flags().IntVarP(&k.Conf.MaxInFlight, "maxinflight", "m", defInt("KAFKA_MAX_INFLIGHT", 10), "Maximum messages to hold in-flight")
 	cmd.Flags().StringVarP(&k.Conf.RPC.URL, "rpcurl", "r", os.Getenv("ETH_RPC_URL"), "JSON/RPC URL for Ethereum node")
 	cmd.Flags().StringVarP(&k.Conf.TopicIn, "topic-in", "t", os.Getenv("KAFKA_TOPIC_IN"), "Topic to listen to")
 	cmd.Flags().StringVarP(&k.Conf.TopicOut, "topic-out", "T", os.Getenv("KAFKA_TOPIC_OUT"), "Topic to send events to")
@@ -182,6 +193,116 @@ func (s saramaLogger) Println(v ...interface{}) {
 	log.Debug(v...)
 }
 
+// MsgContext is passed for each message that arrives at the bridge
+type MsgContext interface {
+	// Unmarshal the supplied message into a give type
+	Unmarshal(msg interface{}) error
+	// Send a reply that can be marshaled into bytes.
+	// Sets all the common headers on behalf of the caller, based on the request context
+	Reply(replyHeaders *kldmessages.ReplyHeaders, fullMsg interface{}) error
+}
+
+type msgContext struct {
+	timeReceived   time.Time
+	headers        kldmessages.CommonHeaders
+	origMsg        string
+	origBytes      []byte
+	key            string
+	bridge         *KafkaBridge
+	partition      int32
+	offset         int64
+	replyType      string
+	replyTime      time.Time
+	replyBytes     []byte
+	replyPartition int32
+	replyOffset    int64
+}
+
+// addInflightMsg creates a msgContext wrapper around a message with all the
+// relevant context, and adds it to the inFlight map
+// * Caller holds the inFlightCond mutex, and has already checked for capacity *
+func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage) (pCtx *msgContext, err error) {
+	ctx := msgContext{
+		timeReceived: time.Now(),
+		origMsg:      fmt.Sprintf("%s:%d:%d", k.Conf.TopicIn, msg.Partition, msg.Offset),
+		origBytes:    msg.Value,
+		bridge:       k,
+		partition:    msg.Partition,
+		offset:       msg.Offset,
+	}
+	if err = json.Unmarshal(msg.Value, &ctx.headers); err != nil {
+		log.Errorf("Failed to unmarshal message headers: %s", err)
+		return
+	}
+	if ctx.headers.ID == "" {
+		ctx.headers.ID = kldutils.UUIDv4()
+	}
+	// Use the account as the partitioning key, or fallback to the ID, which we ensure is non-null
+	if ctx.headers.Account != "" {
+		ctx.key = ctx.headers.Account
+	} else {
+		ctx.key = ctx.headers.ID
+	}
+	// Add it to our inflight map - from this point on we need to ensure we remove it, to avoid leaks.
+	// Messages are only removed from the inflight map when a response is sent, so it
+	// is very important that the consumer of the wrapped context object calls Reply
+	pCtx = &ctx
+	k.inFlight[ctx.origMsg] = pCtx
+	log.Infof("Message now in-flight: %s", pCtx)
+	return
+}
+
+func (c *msgContext) Unmarshal(msg interface{}) error {
+	return json.Unmarshal(c.origBytes, msg)
+}
+
+func (c *msgContext) Reply(replyHeaders *kldmessages.ReplyHeaders, pFullMsg interface{}) (err error) {
+	c.replyType = replyHeaders.MsgType
+	replyHeaders.ID = kldutils.UUIDv4()
+	replyHeaders.Context = c.headers.Context
+	replyHeaders.OrigID = c.headers.ID
+	replyHeaders.OrigMsg = c.origMsg
+	if c.replyBytes, err = json.Marshal(pFullMsg); err != nil {
+		return
+	}
+	log.Infof("Sending reply: %s", c)
+	c.bridge.producer.Input() <- &sarama.ProducerMessage{
+		Topic:    c.bridge.Conf.TopicOut,
+		Key:      sarama.StringEncoder(c.key),
+		Metadata: c.origMsg,
+		Value:    c,
+	}
+	return
+}
+
+func (c *msgContext) String() string {
+	return fmt.Sprintf("MsgContext[%s:%s origMsg=%s received=%s replied=%s replyType=%s]",
+		c.headers.MsgType, c.headers.ID, c.origMsg, c.timeReceived, c.replyTime, c.replyType)
+}
+
+// Length Gets the encoded length
+func (c msgContext) Length() int {
+	return len(c.replyBytes)
+}
+
+// Encode Does the encoding
+func (c msgContext) Encode() ([]byte, error) {
+	return c.replyBytes, nil
+}
+
+// NewKafkaBridge creates a new KafkaBridge
+func NewKafkaBridge() *KafkaBridge {
+	var kf saramaKafkaFactory
+	var mp msgProcessor
+	k := KafkaBridge{
+		factory:      kf,
+		processor:    mp,
+		inFlight:     make(map[string]*msgContext),
+		inFlightCond: &sync.Cond{},
+	}
+	return &k
+}
+
 func (k *KafkaBridge) connect() (err error) {
 
 	sarama.Logger = k.saramaLogger
@@ -208,12 +329,7 @@ func (k *KafkaBridge) connect() (err error) {
 	clientConf.Net.TLS.Config = tlsConfig
 	clientConf.ClientID = k.Conf.ClientID
 	if clientConf.ClientID == "" {
-		var uuidV4 *uuid.UUID
-		if uuidV4, err = uuid.NewV4(); err != nil {
-			log.Errorf("Failed to generate UUID for ClientID: %s", err)
-			return
-		}
-		clientConf.ClientID = uuidV4.String()
+		clientConf.ClientID = kldutils.UUIDv4()
 	}
 	log.Debugf("Kafka ClientID: %s", clientConf.ClientID)
 
@@ -248,12 +364,36 @@ func (k *KafkaBridge) startProducer() (err error) {
 
 	go func() {
 		for err := range k.producer.Errors() {
-			log.Error("Kafka producer failed:", err)
+			k.inFlightCond.L.Lock()
+			// If we fail to send a reply, this is significant. We have a request in flight
+			// and we have probably already sent the message.
+			// Currently we panic, on the basis that we will be restarted by Docker
+			// to drive retry logic. In the future we might consider recreating the
+			// producer and attempting to resend the message a number of times -
+			// keeping a retry counter on the msgContext object
+			origMsg := err.Msg.Metadata.(string)
+			ctx := k.inFlight[origMsg]
+			log.Errorf("Kafka producer failed for reply %s to origMsg %s: %s", ctx, origMsg, err)
+			panic(err)
+			k.inFlightCond.L.Unlock()
 		}
 	}()
+
 	go func() {
 		for msg := range k.producer.Successes() {
-			log.Debugf("Kafka producer sent message. Partition=%d Offset=%d", msg.Partition, msg.Offset)
+			k.inFlightCond.L.Lock()
+			origMsg := msg.Metadata.(string)
+			if ctx, ok := k.inFlight[origMsg]; ok {
+				log.Infof("Reply sent: %s", ctx)
+				delete(k.inFlight, origMsg)
+				// We've reduced the in-flight count - wake any waiting consumer go func
+				k.inFlightCond.Broadcast()
+			} else {
+				// This should never happen. Represents a logic bug that must be diagnosed.
+				log.Errorf("Received confirmation for message not in in-flight map: %s", origMsg)
+				panic(err)
+			}
+			k.inFlightCond.L.Unlock()
 		}
 	}()
 
@@ -281,30 +421,22 @@ func (k *KafkaBridge) startConsumer() (err error) {
 	}()
 	go func() {
 		for msg := range k.consumer.Messages() {
-			log.Debugf("Kafka consumer received message")
-			k.onMessage(msg.Value)
+			k.inFlightCond.L.Lock()
+			log.Infof("Kafka consumer received message: Partition=%d Offset=%d", msg.Partition, msg.Offset)
+
+			// We cannot build up an infinite number of messages in memory
+			for len(k.inFlight) >= k.Conf.MaxInFlight {
+				log.Infof("Too many messages in-flight: In-flight=%d Max=%d", len(k.inFlight), k.Conf.MaxInFlight)
+				k.inFlightCond.Wait()
+			}
+			k.addInflightMsg(msg)
+
+			k.inFlightCond.L.Unlock()
 		}
 	}()
 
 	log.Infof("Kafka Created consumer")
 	return
-}
-
-func (k *KafkaBridge) onMessage(msg []byte) {
-
-	var commonMsg kldmessages.MessageCommon
-	if err := json.Unmarshal(msg, &commonMsg); err != nil {
-		log.Errorf("Failed to unmarshal headers from incoming message '%s': %s", hex.Dump(msg), err)
-		return
-	}
-
-	if commonMsg.Headers.MsgType == kldmessages.MsgTypeDeployContract {
-		k.processDeployContract(msg)
-	} else {
-		log.Errorf("Unknown message type '%s' in message '%s'", commonMsg.Headers.MsgType, hex.Dump(msg))
-		return
-	}
-
 }
 
 func (k *KafkaBridge) processDeployContract(msg []byte) {

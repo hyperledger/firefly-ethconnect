@@ -459,7 +459,7 @@ func TestPrintlnForSaramaLogger(t *testing.T) {
 	l.Println("Test log")
 }
 
-func TestAddInflightMsg(t *testing.T) {
+func TestSingleMessageWithReply(t *testing.T) {
 	assert := assert.New(t)
 
 	f := testKafkaFactory{
@@ -485,13 +485,44 @@ func TestAddInflightMsg(t *testing.T) {
 	msg1bytes, err := json.Marshal(&msg1)
 	log.Infof("Sent message: %s", string(msg1bytes))
 	f.consumer.messages <- &sarama.ConsumerMessage{
-		Value: msg1bytes,
+		Partition: 5,
+		Offset:    500,
+		Value:     msg1bytes,
 	}
 
+	// Get the message via the processor
 	msgContext1 := <-f.processor.messages
 	assert.Equal(msg1.Headers.ID, msgContext1.Headers().ID)
 	assert.Equal(msg1.Headers.MsgType, msgContext1.Headers().MsgType)
 	assert.Equal("data", msgContext1.Headers().Context.(map[string]interface{})["some"])
+
+	// Send the reply in a go routine
+	go func() {
+		reply1 := kldmessages.ReplyCommon{}
+		if err = msgContext1.Reply(&reply1); err != nil {
+			assert.Fail("Could not send reply: %s", err)
+			return
+		}
+	}()
+
+	// Check the reply is sent correctly to Kafka
+	replyKafkaMsg := <-f.producer.input
+	replyBytes, err := replyKafkaMsg.Value.Encode()
+	if err != nil {
+		assert.Fail("Could not get bytes from reply: %s", err)
+		return
+	}
+	var replySent kldmessages.ReplyCommon
+	err = json.Unmarshal(replyBytes, &replySent)
+	if err != nil {
+		assert.Fail("Could not unmarshal reply: %s", err)
+		return
+	}
+	assert.NotEmpty(replySent.Headers.ID)
+	assert.NotEqual(msgContext1.Headers().ID, replySent.Headers.ID)
+	assert.Equal(msgContext1.Headers().ID, replySent.Headers.OrigID)
+	assert.Equal("in-topic:5:500", replySent.Headers.OrigMsg)
+	assert.Equal("data", replySent.Headers.Context.(map[string]interface{})["some"])
 
 	// Shut down
 	k.signals <- os.Interrupt

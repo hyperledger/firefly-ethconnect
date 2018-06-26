@@ -17,6 +17,7 @@ package kldkafka
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -27,6 +28,9 @@ import (
 
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
+	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+	"github.com/kaleido-io/ethconnect/internal/kldutils"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -34,25 +38,45 @@ type testKafkaFactory struct {
 	errorOnNewClient   error
 	errorOnNewProducer error
 	errorOnNewConsumer error
+	producer           *testKafkaProducer
+	consumer           *testKafkaConsumer
+	processor          *testKafkaMsgProcessor
+}
+
+var minWorkingArgs = []string{
+	"-r", "https://testrpc.example.com",
+	"-t", "in-topic",
+	"-T", "out-topic",
+	"-g", "test-group",
 }
 
 var testClientConf *cluster.Config
 
-func (f testKafkaFactory) newClient(k *KafkaBridge, clientConf *cluster.Config) (kafkaClient, error) {
+func (f *testKafkaFactory) newClient(k *KafkaBridge, clientConf *cluster.Config) (kafkaClient, error) {
 	testClientConf = clientConf
 	return f, f.errorOnNewClient
 }
 
-func (f testKafkaFactory) Brokers() []*sarama.Broker {
+func (f *testKafkaFactory) Brokers() []*sarama.Broker {
 	return []*sarama.Broker{}
 }
 
-func (f testKafkaFactory) newProducer(k *KafkaBridge) (kafkaProducer, error) {
-	return testKafkaProducer{}, f.errorOnNewProducer
+func (f *testKafkaFactory) newProducer(k *KafkaBridge) (kafkaProducer, error) {
+	f.producer = &testKafkaProducer{
+		input:     make(chan *sarama.ProducerMessage),
+		successes: make(chan *sarama.ProducerMessage),
+		errors:    make(chan *sarama.ProducerError),
+	}
+	return f.producer, f.errorOnNewProducer
 }
 
-func (f testKafkaFactory) newConsumer(k *KafkaBridge) (kafkaConsumer, error) {
-	return testKafkaConsumer{}, f.errorOnNewConsumer
+func (f *testKafkaFactory) newConsumer(k *KafkaBridge) (kafkaConsumer, error) {
+	f.consumer = &testKafkaConsumer{
+		messages:      make(chan *sarama.ConsumerMessage),
+		notifications: make(chan *cluster.Notification),
+		errors:        make(chan error),
+	}
+	return f.consumer, f.errorOnNewConsumer
 }
 
 type testKafkaProducer struct {
@@ -75,17 +99,14 @@ func (p testKafkaProducer) Close() error {
 }
 
 func (p testKafkaProducer) Input() chan<- *sarama.ProducerMessage {
-	p.input = make(chan *sarama.ProducerMessage)
 	return p.input
 }
 
 func (p testKafkaProducer) Successes() <-chan *sarama.ProducerMessage {
-	p.successes = make(chan *sarama.ProducerMessage)
 	return p.successes
 }
 
 func (p testKafkaProducer) Errors() <-chan *sarama.ProducerError {
-	p.errors = make(chan *sarama.ProducerError)
 	return p.errors
 }
 
@@ -109,17 +130,14 @@ func (c testKafkaConsumer) Close() error {
 }
 
 func (c testKafkaConsumer) Messages() <-chan *sarama.ConsumerMessage {
-	c.messages = make(chan *sarama.ConsumerMessage)
 	return c.messages
 }
 
 func (c testKafkaConsumer) Notifications() <-chan *cluster.Notification {
-	c.notifications = make(chan *cluster.Notification)
 	return c.notifications
 }
 
 func (c testKafkaConsumer) Errors() <-chan error {
-	c.errors = make(chan error)
 	return c.errors
 }
 
@@ -127,20 +145,24 @@ func (c testKafkaConsumer) MarkOffset(*sarama.ConsumerMessage, string) {
 	return
 }
 
-// execBridgeWithArgs is a helper that runs the KafkaBridge with the specified
-// commandline (and stubbed kafka impl), waits for it to initialize, then
-// terminates it
-func execBridgeWithArgs(testArgs []string, f *testKafkaFactory) (k *KafkaBridge, err error) {
+type testKafkaMsgProcessor struct {
+	messages chan MsgContext
+}
 
-	if f == nil {
-		f = &testKafkaFactory{}
-	}
-	k = &KafkaBridge{}
+func (p *testKafkaMsgProcessor) OnMessage(msg MsgContext) (err error) {
+	log.Infof("Dispatched message context to processor: %s", msg)
+	p.messages <- msg
+	return
+}
+
+func startTestBridge(assert *assert.Assertions, testArgs []string, f *testKafkaFactory) (k *KafkaBridge, wg *sync.WaitGroup, err error) {
+	k = NewKafkaBridge()
 	k.factory = f
-
+	k.processor = f.processor
 	kafkaCmd := k.CobraInit()
 	kafkaCmd.SetArgs(testArgs)
-	var wg sync.WaitGroup
+
+	wg = &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		err = kafkaCmd.Execute()
@@ -149,6 +171,15 @@ func execBridgeWithArgs(testArgs []string, f *testKafkaFactory) (k *KafkaBridge,
 	for k.signals == nil && err == nil {
 		time.Sleep(10 * time.Millisecond)
 	}
+	return k, wg, err
+}
+
+// execBridgeWithArgs is a helper that runs the KafkaBridge with the specified
+// commandline (and stubbed kafka impl), waits for it to initialize, then
+// terminates it
+func execBridgeWithArgs(assert *assert.Assertions, testArgs []string, f *testKafkaFactory) (k *KafkaBridge, err error) {
+
+	k, wg, err := startTestBridge(assert, testArgs, f)
 	if err == nil {
 		k.signals <- os.Interrupt
 	}
@@ -157,12 +188,21 @@ func execBridgeWithArgs(testArgs []string, f *testKafkaFactory) (k *KafkaBridge,
 	return
 }
 
+func TestNewKafkaBridge(t *testing.T) {
+	assert := assert.New(t)
+
+	bridge := NewKafkaBridge()
+
+	assert.NotNil(bridge.inFlight)
+	assert.NotNil(bridge.inFlightCond)
+}
+
 func TestExecuteWithIncompleteArgs(t *testing.T) {
 	assert := assert.New(t)
 
 	var k KafkaBridge
 	var f testKafkaFactory
-	k.factory = f
+	k.factory = &f
 
 	kafkaCmd := k.CobraInit()
 
@@ -204,14 +244,14 @@ func TestExecuteWithIncompleteArgs(t *testing.T) {
 func TestExecuteWithBadRPCURL(t *testing.T) {
 	assert := assert.New(t)
 
-	_, err := execBridgeWithArgs([]string{
+	_, err := execBridgeWithArgs(assert, []string{
 		"-r", "!!!bad!!!",
 		"-t", "in-topic",
 		"-T", "out-topic",
 		"-g", "test-group",
 		"-u", "testuser",
 		"-p", "testpass",
-	}, nil)
+	}, &testKafkaFactory{})
 
 	assert.Regexp("connect", err.Error())
 
@@ -219,14 +259,7 @@ func TestExecuteWithBadRPCURL(t *testing.T) {
 func TestExecuteWithNewClientError(t *testing.T) {
 	assert := assert.New(t)
 
-	_, err := execBridgeWithArgs([]string{
-		"-r", "https://testurl.example.com",
-		"-t", "in-topic",
-		"-T", "out-topic",
-		"-g", "test-group",
-		"-u", "testuser",
-		"-p", "testpass",
-	}, &testKafkaFactory{
+	_, err := execBridgeWithArgs(assert, minWorkingArgs, &testKafkaFactory{
 		errorOnNewClient: fmt.Errorf("pop"),
 	})
 
@@ -237,14 +270,7 @@ func TestExecuteWithNewClientError(t *testing.T) {
 func TestExecuteWithNewProducerError(t *testing.T) {
 	assert := assert.New(t)
 
-	_, err := execBridgeWithArgs([]string{
-		"-r", "https://testurl.example.com",
-		"-t", "in-topic",
-		"-T", "out-topic",
-		"-g", "test-group",
-		"-u", "testuser",
-		"-p", "testpass",
-	}, &testKafkaFactory{
+	_, err := execBridgeWithArgs(assert, minWorkingArgs, &testKafkaFactory{
 		errorOnNewProducer: fmt.Errorf("fizz"),
 	})
 
@@ -254,14 +280,7 @@ func TestExecuteWithNewProducerError(t *testing.T) {
 func TestExecuteWithNewConsumerError(t *testing.T) {
 	assert := assert.New(t)
 
-	_, err := execBridgeWithArgs([]string{
-		"-r", "https://testurl.example.com",
-		"-t", "in-topic",
-		"-T", "out-topic",
-		"-g", "test-group",
-		"-u", "testuser",
-		"-p", "testpass",
-	}, &testKafkaFactory{
+	_, err := execBridgeWithArgs(assert, minWorkingArgs, &testKafkaFactory{
 		errorOnNewConsumer: fmt.Errorf("bang"),
 	})
 
@@ -271,12 +290,7 @@ func TestExecuteWithNewConsumerError(t *testing.T) {
 func TestExecuteWithNoTLS(t *testing.T) {
 	assert := assert.New(t)
 
-	_, err := execBridgeWithArgs([]string{
-		"-r", "https://testrpc.example.com",
-		"-t", "in-topic",
-		"-T", "out-topic",
-		"-g", "test-group",
-	}, nil)
+	_, err := execBridgeWithArgs(assert, minWorkingArgs, &testKafkaFactory{})
 
 	assert.Equal(nil, err)
 	assert.Equal(true, testClientConf.Producer.Return.Successes)
@@ -294,14 +308,14 @@ func TestExecuteWithNoTLS(t *testing.T) {
 func TestExecuteWithSASL(t *testing.T) {
 	assert := assert.New(t)
 
-	_, err := execBridgeWithArgs([]string{
+	_, err := execBridgeWithArgs(assert, []string{
 		"-r", "https://testrpc.example.com",
 		"-t", "in-topic",
 		"-T", "out-topic",
 		"-g", "test-group",
 		"-u", "testuser",
 		"-p", "testpass",
-	}, nil)
+	}, &testKafkaFactory{})
 
 	assert.Equal(nil, err)
 	assert.Equal("testuser", testClientConf.Net.SASL.User)
@@ -312,14 +326,14 @@ func TestExecuteWithSASL(t *testing.T) {
 func TestExecuteWithDefaultTLSAndClientID(t *testing.T) {
 	assert := assert.New(t)
 
-	_, err := execBridgeWithArgs([]string{
+	_, err := execBridgeWithArgs(assert, []string{
 		"-r", "https://testrpc.example.com",
 		"-t", "in-topic",
 		"-T", "out-topic",
 		"-g", "test-group",
 		"-i", "clientid1",
 		"--tls-enabled",
-	}, nil)
+	}, &testKafkaFactory{})
 
 	assert.Equal(nil, err)
 	assert.Equal(true, testClientConf.Net.TLS.Enable)
@@ -407,7 +421,7 @@ func TestExecuteWithSelfSignedMutualAuth(t *testing.T) {
 		"--tls-cacerts", testCACertFile.Name(),
 	}
 
-	k, err := execBridgeWithArgs(mutualTLSArgs, nil)
+	k, err := execBridgeWithArgs(assert, mutualTLSArgs, &testKafkaFactory{})
 
 	assert.Equal(nil, err)
 	assert.Equal(true, testClientConf.Net.TLS.Enable)
@@ -443,4 +457,43 @@ func TestPrintfForSaramaLogger(t *testing.T) {
 func TestPrintlnForSaramaLogger(t *testing.T) {
 	var l saramaLogger
 	l.Println("Test log")
+}
+
+func TestAddInflightMsg(t *testing.T) {
+	assert := assert.New(t)
+
+	f := testKafkaFactory{
+		processor: &testKafkaMsgProcessor{
+			messages: make(chan MsgContext),
+		},
+	}
+	k, wg, err := startTestBridge(assert, minWorkingArgs, &f)
+	if err != nil {
+		return
+	}
+
+	// Send a minimal test message
+	msg1 := kldmessages.RequestCommon{}
+	msg1.Headers.MsgType = "TestAddInflightMsg"
+	msg1.Headers.ID = kldutils.UUIDv4()
+	msg1Ctx := struct {
+		Some string `json:"some"`
+	}{
+		Some: "data",
+	}
+	msg1.Headers.Context = &msg1Ctx
+	msg1bytes, err := json.Marshal(&msg1)
+	log.Infof("Sent message: %s", string(msg1bytes))
+	f.consumer.messages <- &sarama.ConsumerMessage{
+		Value: msg1bytes,
+	}
+
+	msgContext1 := <-f.processor.messages
+	assert.Equal(msg1.Headers.ID, msgContext1.Headers().ID)
+	assert.Equal(msg1.Headers.MsgType, msgContext1.Headers().MsgType)
+	assert.Equal("data", msgContext1.Headers().Context.(map[string]interface{})["some"])
+
+	// Shut down
+	k.signals <- os.Interrupt
+	wg.Wait()
 }

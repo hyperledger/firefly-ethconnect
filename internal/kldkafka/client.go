@@ -51,7 +51,7 @@ type saramaKafkaFactory struct{}
 
 func (f saramaKafkaFactory) newClient(k *KafkaBridge, clientConf *cluster.Config) (c kafkaClient, err error) {
 	if client, err := cluster.NewClient(k.Conf.Brokers, clientConf); err == nil {
-		c = saramaKafkaClient{client: client}
+		c = &saramaKafkaClient{client: client}
 	}
 	return
 }
@@ -60,14 +60,14 @@ type saramaKafkaClient struct {
 	client *cluster.Client
 }
 
-func (c saramaKafkaClient) Brokers() []*sarama.Broker {
+func (c *saramaKafkaClient) Brokers() []*sarama.Broker {
 	return c.client.Brokers()
 }
 
-func (c saramaKafkaClient) newProducer(k *KafkaBridge) (kafkaProducer, error) {
+func (c *saramaKafkaClient) newProducer(k *KafkaBridge) (kafkaProducer, error) {
 	return sarama.NewAsyncProducerFromClient(c.client.Client)
 }
 
-func (c saramaKafkaClient) newConsumer(k *KafkaBridge) (kafkaConsumer, error) {
+func (c *saramaKafkaClient) newConsumer(k *KafkaBridge) (kafkaConsumer, error) {
 	return cluster.NewConsumerFromClient(c.client, k.Conf.ConsumerGroup, []string{k.Conf.TopicIn})
 }

@@ -195,6 +195,8 @@ func (s saramaLogger) Println(v ...interface{}) {
 
 // MsgContext is passed for each message that arrives at the bridge
 type MsgContext interface {
+	// Get the headers of the message
+	Headers() *kldmessages.CommonHeaders
 	// Unmarshal the supplied message into a give type
 	Unmarshal(msg interface{}) error
 	// Send a reply that can be marshaled into bytes.
@@ -204,7 +206,7 @@ type MsgContext interface {
 
 type msgContext struct {
 	timeReceived   time.Time
-	headers        kldmessages.CommonHeaders
+	requestCommon  kldmessages.RequestCommon
 	origMsg        string
 	origBytes      []byte
 	key            string
@@ -230,18 +232,19 @@ func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage) (pCtx *msgCont
 		partition:    msg.Partition,
 		offset:       msg.Offset,
 	}
-	if err = json.Unmarshal(msg.Value, &ctx.headers); err != nil {
+	if err = json.Unmarshal(msg.Value, &ctx.requestCommon); err != nil {
 		log.Errorf("Failed to unmarshal message headers: %s", err)
 		return
 	}
-	if ctx.headers.ID == "" {
-		ctx.headers.ID = kldutils.UUIDv4()
+	headers := &ctx.requestCommon.Headers
+	if headers.ID == "" {
+		headers.ID = kldutils.UUIDv4()
 	}
 	// Use the account as the partitioning key, or fallback to the ID, which we ensure is non-null
-	if ctx.headers.Account != "" {
-		ctx.key = ctx.headers.Account
+	if headers.Account != "" {
+		ctx.key = headers.Account
 	} else {
-		ctx.key = ctx.headers.ID
+		ctx.key = headers.ID
 	}
 	// Add it to our inflight map - from this point on we need to ensure we remove it, to avoid leaks.
 	// Messages are only removed from the inflight map when a response is sent, so it
@@ -252,6 +255,10 @@ func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage) (pCtx *msgCont
 	return
 }
 
+func (c *msgContext) Headers() *kldmessages.CommonHeaders {
+	return &c.requestCommon.Headers
+}
+
 func (c *msgContext) Unmarshal(msg interface{}) error {
 	return json.Unmarshal(c.origBytes, msg)
 }
@@ -259,8 +266,8 @@ func (c *msgContext) Unmarshal(msg interface{}) error {
 func (c *msgContext) Reply(replyHeaders *kldmessages.ReplyHeaders, pFullMsg interface{}) (err error) {
 	c.replyType = replyHeaders.MsgType
 	replyHeaders.ID = kldutils.UUIDv4()
-	replyHeaders.Context = c.headers.Context
-	replyHeaders.OrigID = c.headers.ID
+	replyHeaders.Context = c.requestCommon.Headers.Context
+	replyHeaders.OrigID = c.requestCommon.Headers.ID
 	replyHeaders.OrigMsg = c.origMsg
 	if c.replyBytes, err = json.Marshal(pFullMsg); err != nil {
 		return
@@ -277,7 +284,9 @@ func (c *msgContext) Reply(replyHeaders *kldmessages.ReplyHeaders, pFullMsg inte
 
 func (c *msgContext) String() string {
 	return fmt.Sprintf("MsgContext[%s:%s origMsg=%s received=%s replied=%s replyType=%s]",
-		c.headers.MsgType, c.headers.ID, c.origMsg, c.timeReceived, c.replyTime, c.replyType)
+		c.requestCommon.Headers.MsgType, c.requestCommon.Headers.ID,
+		c.origMsg, c.timeReceived.Format(time.RFC3339),
+		c.replyTime.Format(time.RFC3339), c.replyType)
 }
 
 // Length Gets the encoded length
@@ -295,10 +304,10 @@ func NewKafkaBridge() *KafkaBridge {
 	var kf saramaKafkaFactory
 	var mp msgProcessor
 	k := KafkaBridge{
-		factory:      kf,
-		processor:    mp,
+		factory:      &kf,
+		processor:    &mp,
 		inFlight:     make(map[string]*msgContext),
-		inFlightCond: &sync.Cond{},
+		inFlightCond: sync.NewCond(&sync.Mutex{}),
 	}
 	return &k
 }
@@ -375,7 +384,7 @@ func (k *KafkaBridge) startProducer() (err error) {
 			ctx := k.inFlight[origMsg]
 			log.Errorf("Kafka producer failed for reply %s to origMsg %s: %s", ctx, origMsg, err)
 			panic(err)
-			k.inFlightCond.L.Unlock()
+			// k.inFlightCond.L.Unlock() - unreachable while we have a panic
 		}
 	}()
 
@@ -429,9 +438,16 @@ func (k *KafkaBridge) startConsumer() (err error) {
 				log.Infof("Too many messages in-flight: In-flight=%d Max=%d", len(k.inFlight), k.Conf.MaxInFlight)
 				k.inFlightCond.Wait()
 			}
-			k.addInflightMsg(msg)
-
+			msgCtx, err := k.addInflightMsg(msg)
 			k.inFlightCond.L.Unlock()
+
+			// Dispatch to processor
+			if err != nil {
+				log.Errorf("Invalid message: %s", err)
+				k.consumer.MarkOffset(msg, "")
+			} else {
+				k.processor.OnMessage(msgCtx)
+			}
 		}
 	}()
 

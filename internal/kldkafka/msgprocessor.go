@@ -17,11 +17,11 @@ package kldkafka
 // MsgProcessor interface is called for each message, as is responsible
 // for tracking all in-flight messages
 type MsgProcessor interface {
-	OnMessage(*MsgContext) error
+	OnMessage(MsgContext) error
 }
 
 type msgProcessor struct{}
 
-func (p msgProcessor) OnMessage(msg *MsgContext) (err error) {
+func (p *msgProcessor) OnMessage(msg MsgContext) (err error) {
 	return
 }

@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -65,7 +66,9 @@ type KafkaBridge struct {
 	client       kafkaClient
 	signals      chan os.Signal
 	consumer     kafkaConsumer
+	consumerWG   sync.WaitGroup
 	producer     kafkaProducer
+	producerWG   sync.WaitGroup
 	saramaLogger saramaLogger
 	processor    MsgProcessor
 	inFlight     map[string]*msgContext
@@ -206,11 +209,10 @@ type msgContext struct {
 	timeReceived   time.Time
 	requestCommon  kldmessages.RequestCommon
 	origMsg        string
-	origBytes      []byte
+	saramaMsg      *sarama.ConsumerMessage
 	key            string
 	bridge         *KafkaBridge
-	partition      int32
-	offset         int64
+	complete       bool
 	replyType      string
 	replyTime      time.Time
 	replyBytes     []byte
@@ -225,11 +227,19 @@ func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage) (pCtx *msgCont
 	ctx := msgContext{
 		timeReceived: time.Now(),
 		origMsg:      fmt.Sprintf("%s:%d:%d", k.Conf.TopicIn, msg.Partition, msg.Offset),
-		origBytes:    msg.Value,
+		saramaMsg:    msg,
 		bridge:       k,
-		partition:    msg.Partition,
-		offset:       msg.Offset,
 	}
+	// Add it to our inflight map - from this point on we need to ensure we remove it, to avoid leaks.
+	// Messages are only removed from the inflight map when a response is sent, so it
+	// is very important that the consumer of the wrapped context object calls Reply
+	pCtx = &ctx
+	k.inFlight[ctx.origMsg] = pCtx
+	log.Infof("Message now in-flight: %s", pCtx)
+	// Attempt to process the headers from the original message,
+	// which could fail. In which case we still have a msgContext inflight
+	// that needs Reply (and offset commit). So our caller must
+	// send a generic error reply (after dropping the lock).
 	if err = json.Unmarshal(msg.Value, &ctx.requestCommon); err != nil {
 		log.Errorf("Failed to unmarshal message headers: %s", err)
 		return
@@ -244,12 +254,62 @@ func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage) (pCtx *msgCont
 	} else {
 		ctx.key = headers.ID
 	}
-	// Add it to our inflight map - from this point on we need to ensure we remove it, to avoid leaks.
-	// Messages are only removed from the inflight map when a response is sent, so it
-	// is very important that the consumer of the wrapped context object calls Reply
-	pCtx = &ctx
-	k.inFlight[ctx.origMsg] = pCtx
-	log.Infof("Message now in-flight: %s", pCtx)
+	return
+}
+
+type ctxByOffset []*msgContext
+
+func (a ctxByOffset) Len() int {
+	return len(a)
+}
+func (a ctxByOffset) Swap(i, j int) {
+	a[i], a[j] = a[j], a[i]
+}
+func (a ctxByOffset) Less(i, j int) bool {
+	return a[i].saramaMsg.Offset < a[j].saramaMsg.Offset
+}
+
+// Mark that a currently in-flight context is now ready.
+// Looks at the other in-flight messages for the same partition, and works out if
+// we can move the offset forwards.
+// * Caller holds the inFlightCond mutex *
+func (k *KafkaBridge) setInFlightComplete(ctx *msgContext) (err error) {
+
+	// Build an offset sorted list of the inflight
+	ctx.complete = true
+	var completeInParition []*msgContext
+	for _, inflight := range k.inFlight {
+		if inflight.saramaMsg.Partition == ctx.saramaMsg.Partition {
+			completeInParition = append(completeInParition, inflight)
+		}
+	}
+	sort.Sort(ctxByOffset(completeInParition))
+
+	// Go forwards until the first that isn't complete
+	var readyToAck []*msgContext
+	for i := 0; i < len(completeInParition); i++ {
+		if completeInParition[i].complete {
+			readyToAck = append(readyToAck, completeInParition[i])
+		} else {
+			break
+		}
+	}
+
+	canMark := len(readyToAck) > 0
+	log.Debugf("Ready=%d:%d CanMark=%t Infight=%d InflightSamePartition=%d ReadyToAck=%d",
+		ctx.saramaMsg.Partition, ctx.saramaMsg.Offset, canMark,
+		len(k.inFlight), len(completeInParition), len(readyToAck))
+	if canMark {
+		// Remove all the ready-to-acks from the in-flight list
+		for i := 0; i < len(readyToAck); i++ {
+			delete(k.inFlight, readyToAck[i].origMsg)
+		}
+		// Update the offset
+		highestOffset := readyToAck[len(readyToAck)-1].saramaMsg
+		log.Infof("Marking offset %d:%d", highestOffset.Offset, highestOffset.Partition)
+		k.consumer.MarkOffset(highestOffset, "")
+	}
+
 	return
 }
 
@@ -258,7 +318,7 @@ func (c *msgContext) Headers() *kldmessages.CommonHeaders {
 }
 
 func (c *msgContext) Unmarshal(msg interface{}) error {
-	return json.Unmarshal(c.origBytes, msg)
+	return json.Unmarshal(c.saramaMsg.Value, msg)
 }
 
 func (c *msgContext) Reply(pFullMsg interface{}) (err error) {
@@ -371,6 +431,8 @@ func (k *KafkaBridge) startProducer() (err error) {
 		return
 	}
 
+	k.producerWG.Add(2)
+
 	go func() {
 		for err := range k.producer.Errors() {
 			k.inFlightCond.L.Lock()
@@ -386,6 +448,7 @@ func (k *KafkaBridge) startProducer() (err error) {
 			panic(err)
 			// k.inFlightCond.L.Unlock() - unreachable while we have a panic
 		}
+		k.producerWG.Done()
 	}()
 
 	go func() {
@@ -394,7 +457,8 @@ func (k *KafkaBridge) startProducer() (err error) {
 			origMsg := msg.Metadata.(string)
 			if ctx, ok := k.inFlight[origMsg]; ok {
 				log.Infof("Reply sent: %s", ctx)
-				delete(k.inFlight, origMsg)
+				// While still holding the lock, add this to the completed list
+				k.setInFlightComplete(ctx)
 				// We've reduced the in-flight count - wake any waiting consumer go func
 				k.inFlightCond.Broadcast()
 			} else {
@@ -404,6 +468,7 @@ func (k *KafkaBridge) startProducer() (err error) {
 			}
 			k.inFlightCond.L.Unlock()
 		}
+		k.producerWG.Done()
 	}()
 
 	log.Infof("Kafka Created producer")
@@ -418,15 +483,18 @@ func (k *KafkaBridge) startConsumer() (err error) {
 		return
 	}
 
+	k.consumerWG.Add(3)
 	go func() {
 		for err := range k.consumer.Errors() {
 			log.Error("Kafka consumer failed:", err)
 		}
+		k.consumerWG.Done()
 	}()
 	go func() {
 		for ntf := range k.consumer.Notifications() {
 			log.Debugf("Kafka consumer rebalanced. Current=%+v", ntf.Current)
 		}
+		k.consumerWG.Done()
 	}()
 	go func() {
 		for msg := range k.consumer.Messages() {
@@ -438,17 +506,23 @@ func (k *KafkaBridge) startConsumer() (err error) {
 				log.Infof("Too many messages in-flight: In-flight=%d Max=%d", len(k.inFlight), k.Conf.MaxInFlight)
 				k.inFlightCond.Wait()
 			}
+			// addInflightMsg always adds the message, even if it cannot
+			// be parsed
 			msgCtx, err := k.addInflightMsg(msg)
+			// Unlock before any further processing
 			k.inFlightCond.L.Unlock()
-
-			// Dispatch to processor
-			if err != nil {
-				log.Errorf("Invalid message: %s", err)
-				k.consumer.MarkOffset(msg, "")
-			} else {
+			if err == nil {
+				// Dispatch for processing if we parsed the message successfully
 				k.processor.OnMessage(msgCtx)
+			} else {
+				// Dispatch a generic 'bad data' reply
+				var errMsg kldmessages.ReplyCommon
+				errMsg.Headers.Status = 400
+				errMsg.Headers.ErrorMessage = err.Error()
+				msgCtx.Reply(&errMsg)
 			}
 		}
+		k.consumerWG.Done()
 	}()
 
 	log.Infof("Kafka Created consumer")
@@ -473,8 +547,10 @@ func (k *KafkaBridge) Start() (err error) {
 	for {
 		select {
 		case <-k.signals:
-			k.producer.Close()
+			k.producer.AsyncClose()
 			k.consumer.Close()
+			k.producerWG.Wait()
+			k.consumerWG.Wait()
 
 			log.Infof("Kafka Bridge complete")
 			return

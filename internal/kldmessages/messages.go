@@ -71,7 +71,7 @@ type ReplyHeaders struct {
 	OrigID       string `json:"origID"`
 	OrigTX       string `json:"origTX,omitempty"`
 	Status       int32  `json:"status"`
-	ErrorMessage string `json:"errorMessage"`
+	ErrorMessage string `json:"errorMessage,omitempty"`
 }
 
 // ReplyCommon is a common interface to all replies

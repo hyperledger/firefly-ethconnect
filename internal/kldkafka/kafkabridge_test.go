@@ -17,6 +17,7 @@ package kldkafka
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"sync"
@@ -30,14 +31,28 @@ import (
 )
 
 type testKafkaFactory struct {
+	errorOnNewClient   error
+	errorOnNewProducer error
+	errorOnNewConsumer error
 }
 
 var testClientConf *cluster.Config
 
-func (f testKafkaFactory) newClient(k *KafkaBridge, clientConf *cluster.Config) (c kafkaClient, err error) {
+func (f testKafkaFactory) newClient(k *KafkaBridge, clientConf *cluster.Config) (kafkaClient, error) {
 	testClientConf = clientConf
-	c = testKafkaClient{}
-	return
+	return f, f.errorOnNewClient
+}
+
+func (f testKafkaFactory) Brokers() []*sarama.Broker {
+	return []*sarama.Broker{}
+}
+
+func (f testKafkaFactory) newProducer(k *KafkaBridge) (kafkaProducer, error) {
+	return testKafkaProducer{}, f.errorOnNewProducer
+}
+
+func (f testKafkaFactory) newConsumer(k *KafkaBridge) (kafkaConsumer, error) {
+	return testKafkaConsumer{}, f.errorOnNewConsumer
 }
 
 type testKafkaProducer struct {
@@ -108,25 +123,18 @@ func (c testKafkaConsumer) Errors() <-chan error {
 	return c.errors
 }
 
-type testKafkaClient struct{}
-
-func (c testKafkaClient) Brokers() []*sarama.Broker {
-	return []*sarama.Broker{}
-}
-
-func (c testKafkaClient) newProducer(k *KafkaBridge) (kafkaProducer, error) {
-	return testKafkaProducer{}, nil
-}
-
-func (c testKafkaClient) newConsumer(k *KafkaBridge) (kafkaConsumer, error) {
-	return testKafkaConsumer{}, nil
+func (c testKafkaConsumer) MarkOffset(*sarama.ConsumerMessage, string) {
+	return
 }
 
 // execBridgeWithArgs is a helper that runs the KafkaBridge with the specified
 // commandline (and stubbed kafka impl), waits for it to initialize, then
 // terminates it
-func execBridgeWithArgs(testArgs []string) (k *KafkaBridge, err error) {
-	var f testKafkaFactory
+func execBridgeWithArgs(testArgs []string, f *testKafkaFactory) (k *KafkaBridge, err error) {
+
+	if f == nil {
+		f = &testKafkaFactory{}
+	}
 	k = &KafkaBridge{}
 	k.factory = f
 
@@ -138,10 +146,12 @@ func execBridgeWithArgs(testArgs []string) (k *KafkaBridge, err error) {
 		err = kafkaCmd.Execute()
 		wg.Done()
 	}()
-	for k.signals == nil {
+	for k.signals == nil && err == nil {
 		time.Sleep(10 * time.Millisecond)
 	}
-	k.signals <- os.Interrupt
+	if err == nil {
+		k.signals <- os.Interrupt
+	}
 	wg.Wait()
 
 	return
@@ -176,7 +186,7 @@ func TestExecuteWithIncompleteArgs(t *testing.T) {
 	kafkaCmd.SetArgs(testArgs)
 	err = kafkaCmd.Execute()
 	assert.Equal(err.Error(), "No JSON/RPC URL set for ethereum node")
-	testArgs = append(testArgs, []string{"-r", "https://someurl.example.com"}...)
+	testArgs = append(testArgs, []string{"-r", "http://localhost:8545"}...)
 
 	testArgs = append(testArgs, []string{"--tls-clientcerts", "/some/file"}...)
 	kafkaCmd.SetArgs(testArgs)
@@ -191,6 +201,73 @@ func TestExecuteWithIncompleteArgs(t *testing.T) {
 	testArgs = append(testArgs, []string{"--sasl-password", "testpass"}...)
 }
 
+func TestExecuteWithBadRPCURL(t *testing.T) {
+	assert := assert.New(t)
+
+	_, err := execBridgeWithArgs([]string{
+		"-r", "!!!bad!!!",
+		"-t", "in-topic",
+		"-T", "out-topic",
+		"-g", "test-group",
+		"-u", "testuser",
+		"-p", "testpass",
+	}, nil)
+
+	assert.Regexp("connect", err.Error())
+
+}
+func TestExecuteWithNewClientError(t *testing.T) {
+	assert := assert.New(t)
+
+	_, err := execBridgeWithArgs([]string{
+		"-r", "https://testurl.example.com",
+		"-t", "in-topic",
+		"-T", "out-topic",
+		"-g", "test-group",
+		"-u", "testuser",
+		"-p", "testpass",
+	}, &testKafkaFactory{
+		errorOnNewClient: fmt.Errorf("pop"),
+	})
+
+	assert.Regexp("pop", err.Error())
+
+}
+
+func TestExecuteWithNewProducerError(t *testing.T) {
+	assert := assert.New(t)
+
+	_, err := execBridgeWithArgs([]string{
+		"-r", "https://testurl.example.com",
+		"-t", "in-topic",
+		"-T", "out-topic",
+		"-g", "test-group",
+		"-u", "testuser",
+		"-p", "testpass",
+	}, &testKafkaFactory{
+		errorOnNewProducer: fmt.Errorf("fizz"),
+	})
+
+	assert.Regexp("fizz", err.Error())
+
+}
+func TestExecuteWithNewConsumerError(t *testing.T) {
+	assert := assert.New(t)
+
+	_, err := execBridgeWithArgs([]string{
+		"-r", "https://testurl.example.com",
+		"-t", "in-topic",
+		"-T", "out-topic",
+		"-g", "test-group",
+		"-u", "testuser",
+		"-p", "testpass",
+	}, &testKafkaFactory{
+		errorOnNewConsumer: fmt.Errorf("bang"),
+	})
+
+	assert.Regexp("bang", err.Error())
+
+}
 func TestExecuteWithNoTLS(t *testing.T) {
 	assert := assert.New(t)
 
@@ -199,7 +276,7 @@ func TestExecuteWithNoTLS(t *testing.T) {
 		"-t", "in-topic",
 		"-T", "out-topic",
 		"-g", "test-group",
-	})
+	}, nil)
 
 	assert.Equal(nil, err)
 	assert.Equal(true, testClientConf.Producer.Return.Successes)
@@ -214,6 +291,24 @@ func TestExecuteWithNoTLS(t *testing.T) {
 
 }
 
+func TestExecuteWithSASL(t *testing.T) {
+	assert := assert.New(t)
+
+	_, err := execBridgeWithArgs([]string{
+		"-r", "https://testrpc.example.com",
+		"-t", "in-topic",
+		"-T", "out-topic",
+		"-g", "test-group",
+		"-u", "testuser",
+		"-p", "testpass",
+	}, nil)
+
+	assert.Equal(nil, err)
+	assert.Equal("testuser", testClientConf.Net.SASL.User)
+	assert.Equal("testpass", testClientConf.Net.SASL.Password)
+
+}
+
 func TestExecuteWithDefaultTLSAndClientID(t *testing.T) {
 	assert := assert.New(t)
 
@@ -224,7 +319,7 @@ func TestExecuteWithDefaultTLSAndClientID(t *testing.T) {
 		"-g", "test-group",
 		"-i", "clientid1",
 		"--tls-enabled",
-	})
+	}, nil)
 
 	assert.Equal(nil, err)
 	assert.Equal(true, testClientConf.Net.TLS.Enable)
@@ -312,7 +407,7 @@ func TestExecuteWithSelfSignedMutualAuth(t *testing.T) {
 		"--tls-cacerts", testCACertFile.Name(),
 	}
 
-	k, err := execBridgeWithArgs(mutualTLSArgs)
+	k, err := execBridgeWithArgs(mutualTLSArgs, nil)
 
 	assert.Equal(nil, err)
 	assert.Equal(true, testClientConf.Net.TLS.Enable)
@@ -333,4 +428,19 @@ func TestExecuteWithSelfSignedMutualAuth(t *testing.T) {
 	kafkaCmd.SetArgs(mutualTLSArgs)
 	err = kafkaCmd.Execute()
 	assert.Regexp("no such file or directory", err.Error())
+}
+
+func TestPrintForSaramaLogger(t *testing.T) {
+	var l saramaLogger
+	l.Print("Test log")
+}
+
+func TestPrintfForSaramaLogger(t *testing.T) {
+	var l saramaLogger
+	l.Printf("Test log")
+}
+
+func TestPrintlnForSaramaLogger(t *testing.T) {
+	var l saramaLogger
+	l.Println("Test log")
 }

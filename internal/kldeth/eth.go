@@ -21,7 +21,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 
-	"github.com/kaleido-io/ethconnect/pkg/kldmessages"
+	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"

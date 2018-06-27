@@ -190,6 +190,101 @@ func getInteger(methodName string, idx int, requiredType string, suppliedType re
 	return
 }
 
+func processIntArray(typedArgs []interface{}, methodName string, idx int, requiredType string, suppliedType reflect.Type, param interface{}) (updatedArgs []interface{}, err error) {
+	updatedArgs = typedArgs
+	if suppliedType.Kind() == reflect.Slice {
+		requiredBaseType := strings.SplitN(requiredType, "[", 2)[0]
+		paramV := reflect.ValueOf(param)
+		genericParams := make([]interface{}, paramV.Len())
+		paramSlice := []interface{}{}
+		if paramV.Len() > 0 {
+			for i := 0; i < paramV.Len(); i++ {
+				genericParams[i] = paramV.Index(i).Interface()
+			}
+			for _, paramInSlice := range genericParams {
+				// Process the entries as integers
+				suppliedItemType := reflect.TypeOf(paramInSlice)
+				if paramSlice, err = processIntVal(paramSlice, methodName, idx, requiredBaseType, suppliedItemType, paramInSlice.(float64)); err != nil {
+					return
+				}
+			}
+		} else {
+			// We don't have an input value, so see what we get supplying a float for the type
+			if paramSlice, err = processIntVal(paramSlice, methodName, idx, requiredBaseType, reflect.TypeOf(float64(1)), float64(1)); err != nil {
+				return
+			}
+		}
+		targetType := reflect.TypeOf(paramSlice[0])
+		targetSliceType := reflect.SliceOf(targetType)
+		targetSlice := reflect.MakeSlice(targetSliceType, paramV.Len(), paramV.Len())
+		for i := 0; i < paramV.Len(); i++ {
+			targetSlice.Index(i).Set(reflect.ValueOf(paramSlice[i]))
+		}
+		updatedArgs = append(typedArgs, targetSlice.Interface())
+
+	} else {
+		err = fmt.Errorf("Function '%s' param %d is a %s: Must supply an array", methodName, idx, requiredType)
+	}
+	return
+}
+
+func processIntVal(typedArgs []interface{}, methodName string, idx int, requiredType string, suppliedType reflect.Type, param interface{}) (updatedArgs []interface{}, err error) {
+	var intVal int64
+	updatedArgs = typedArgs
+	if requiredType == "uint8" {
+		if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
+			updatedArgs = append(typedArgs, uint8(intVal))
+		}
+	} else if requiredType == "uint16" {
+		if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
+			updatedArgs = append(typedArgs, uint16(intVal))
+		}
+	} else if requiredType == "uint32" {
+		if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
+			updatedArgs = append(typedArgs, uint32(intVal))
+		}
+	} else if requiredType == "uint64" {
+		if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
+			updatedArgs = append(typedArgs, uint64(intVal))
+		}
+	} else if requiredType == "int8" {
+		if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
+			updatedArgs = append(typedArgs, int8(intVal))
+		}
+	} else if requiredType == "int16" {
+		if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
+			updatedArgs = append(typedArgs, int16(intVal))
+		}
+	} else if requiredType == "int32" {
+		if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
+			updatedArgs = append(typedArgs, int32(intVal))
+		}
+	} else if requiredType == "int64" {
+		if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
+			updatedArgs = append(typedArgs, int64(intVal))
+		}
+	} else if strings.HasPrefix(requiredType, "int") || strings.HasPrefix(requiredType, "uint") {
+		if suppliedType.Kind() == reflect.String {
+			bigInt := big.NewInt(0)
+			if _, ok := bigInt.SetString(param.(string), 10); !ok {
+				err = fmt.Errorf("Function '%s' param %d: Could not be converted to a number", methodName, idx)
+			} else {
+				updatedArgs = append(typedArgs, bigInt)
+			}
+		} else if suppliedType.Kind() == reflect.Float64 {
+			updatedArgs = append(typedArgs, big.NewInt(int64(param.(float64))))
+		} else {
+			err = fmt.Errorf("Function '%s' param %d is a %s: Must supply a number or a string", methodName, idx, requiredType)
+		}
+	} else {
+		err = fmt.Errorf("Type '%s' is not yet supported", requiredType)
+	}
+	if err != nil {
+		log.Errorf("processIntVal: %s [Required=%s Supplied=%s Value=%s]", err, requiredType, suppliedType, param)
+	}
+	return
+}
+
 // GenerateTypedArgs parses string arguments into a range of types to pass to the ABI call
 func (tx *KldTx) generateTypedArgs(params []interface{}, method abi.Method) (typedArgs []interface{}, err error) {
 
@@ -198,7 +293,6 @@ func (tx *KldTx) generateTypedArgs(params []interface{}, method abi.Method) (typ
 		methodName = "<constructor>"
 	}
 	log.Debug("Parsing args for function: ", method)
-	var intVal int64
 	for idx, inputArg := range method.Inputs {
 		if idx >= len(params) {
 			err = fmt.Errorf("Function '%s': Requires %d args (supplied=%d)", methodName, len(method.Inputs), len(params))
@@ -214,51 +308,10 @@ func (tx *KldTx) generateTypedArgs(params []interface{}, method abi.Method) (typ
 				err = fmt.Errorf("Function '%s' param %d: Must supply a string", methodName, idx)
 				break
 			}
-		} else if requiredType == "uint8" {
-			if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
-				typedArgs = append(typedArgs, uint8(intVal))
-			}
-		} else if requiredType == "uint16" {
-			if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
-				typedArgs = append(typedArgs, uint16(intVal))
-			}
-		} else if requiredType == "uint32" {
-			if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
-				typedArgs = append(typedArgs, uint32(intVal))
-			}
-		} else if requiredType == "uint64" {
-			if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
-				typedArgs = append(typedArgs, uint64(intVal))
-			}
-		} else if requiredType == "int8" {
-			if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
-				typedArgs = append(typedArgs, int8(intVal))
-			}
-		} else if requiredType == "int16" {
-			if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
-				typedArgs = append(typedArgs, int16(intVal))
-			}
-		} else if requiredType == "int32" {
-			if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
-				typedArgs = append(typedArgs, int32(intVal))
-			}
-		} else if requiredType == "int64" {
-			if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
-				typedArgs = append(typedArgs, int64(intVal))
-			}
-		} else if strings.HasPrefix(requiredType, "int") || strings.HasPrefix(requiredType, "uint") {
-			if suppliedType.Kind() == reflect.String {
-				bigInt := big.NewInt(0)
-				if _, ok := bigInt.SetString(param.(string), 10); !ok {
-					err = fmt.Errorf("Function '%s' param %d: Could not be converted to a number", methodName, idx)
-				} else {
-					typedArgs = append(typedArgs, bigInt)
-				}
-			} else if suppliedType.Kind() == reflect.Float64 {
-				typedArgs = append(typedArgs, big.NewInt(int64(param.(float64))))
-			} else {
-				err = fmt.Errorf("Function '%s' param %d is a %s: Must supply a number or a string", methodName, idx, requiredType)
-			}
+		} else if strings.Contains(requiredType, "int") && strings.HasSuffix(requiredType, "]") {
+			typedArgs, err = processIntArray(typedArgs, methodName, idx, requiredType, suppliedType, param)
+		} else if strings.Contains(requiredType, "int") {
+			typedArgs, err = processIntVal(typedArgs, methodName, idx, requiredType, suppliedType, param)
 		} else if requiredType == "bool" {
 			if suppliedType.Kind() == reflect.String {
 				typedArgs = append(typedArgs, strings.ToLower(param.(string)) == "true")
@@ -285,15 +338,15 @@ func (tx *KldTx) generateTypedArgs(params []interface{}, method abi.Method) (typ
 				} else {
 					// Create ourselves an array of the right size (ethereum won't accept a slice)
 					bArrayType := reflect.ArrayOf(len(bSlice), reflect.TypeOf(bSlice[0]))
-					bArrayVal := reflect.Zero(bArrayType)
-					reflect.Copy(reflect.ValueOf(bSlice), bArrayVal)
-					typedArgs = append(typedArgs, bArrayVal.Interface())
+					bNewArray := reflect.New(bArrayType).Elem()
+					reflect.Copy(bNewArray, reflect.ValueOf(bSlice))
+					typedArgs = append(typedArgs, bNewArray.Interface())
 				}
 			} else {
 				err = fmt.Errorf("Function '%s' param %d is a %s: Must supply a hex string", methodName, idx, requiredType)
 			}
 		} else {
-			err = fmt.Errorf("Type '%s' is not yet supported", inputArg.Type)
+			err = fmt.Errorf("Type '%s' is not yet supported", requiredType)
 		}
 		if err != nil {
 			log.Errorf("%s [Required=%s Supplied=%s Value=%s]", err, requiredType, suppliedType, param)

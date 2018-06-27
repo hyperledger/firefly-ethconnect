@@ -15,14 +15,12 @@
 package kldeth
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"math/big"
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -30,7 +28,6 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	log "github.com/sirupsen/logrus"
 )
@@ -76,61 +73,61 @@ func NewContractDeployTxn(msg kldmessages.DeployContract) (pTX *KldTx, err error
 	return
 }
 
-// Send sends an individual transaction, choosing external or internal signing
-func (tx *KldTx) Send(rpc rpcClient) (string, error) {
-	start := time.Now()
+// NewSendTxn builds a new ethereum transaction from the supplied
+// SendTranasction message
+func NewSendTxn(msg kldmessages.SendTransaction) (pTX *KldTx, err error) {
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	var tx KldTx
+	pTX = &tx
 
-	var err error
-	var txHash string
-	// if tx.From == "" {
-	// 	txHash, err = w.signAndSendTxn(ctx, tx)
-	// } else {
-	txHash, err = tx.sendUnsignedTxn(ctx, rpc)
-	// }
-	callTime := time.Now().Sub(start)
-	ok := (err == nil)
-	log.Infof("TX:%s Sent. OK=%t [%.2fs]", txHash, ok, callTime.Seconds())
-	return txHash, err
+	methodABI, err := genMethodABI(&msg.Function)
+	if err != nil {
+		return
+	}
+
+	// Build correctly typed args for the ethereum call
+	typedArgs, err := pTX.generateTypedArgs(msg.Parameters, *methodABI)
+	if err != nil {
+		return
+	}
+
+	// Pack the arguments
+	packedCall, err := methodABI.Inputs.Pack(typedArgs...)
+	if err != nil {
+		err = fmt.Errorf("Packing arguments for method '%s': %s", methodABI.Name, err)
+		return
+	}
+	log.Infof("Packed: %x", packedCall)
+
+	// Generate the ethereum transaction
+	err = pTX.genEthTransaction(msg.From, msg.To, msg.Nonce, msg.Value, msg.Gas, msg.GasPrice, packedCall)
+	return
 }
 
-type sendTxArgs struct {
-	Nonce    hexutil.Uint64 `json:"nonce"`
-	From     string         `json:"from"`
-	To       string         `json:"to,omitempty"`
-	Gas      hexutil.Uint64 `json:"gas"`
-	GasPrice hexutil.Big    `json:"gasPrice"`
-	Value    hexutil.Big    `json:"value"`
-	Data     *hexutil.Bytes `json:"data"`
-	// EEA spec extensions
-	PrivateFrom string   `json:"privateFrom,omitempty"`
-	PrivateFor  []string `json:"privateFor,omitempty"`
-}
-
-// sendUnsignedTxn sends a transaction for internal signing by the node
-func (tx *KldTx) sendUnsignedTxn(ctx context.Context, rpc rpcClient) (string, error) {
-	data := hexutil.Bytes(tx.EthTX.Data())
-	args := sendTxArgs{
-		Nonce:    hexutil.Uint64(tx.EthTX.Nonce()),
-		From:     tx.From.Hex(),
-		Gas:      hexutil.Uint64(tx.EthTX.Gas()),
-		GasPrice: hexutil.Big(*tx.EthTX.GasPrice()),
-		Value:    hexutil.Big(*tx.EthTX.Value()),
-		Data:     &data,
+func genMethodABI(jsonABI *kldmessages.ABIFunction) (method *abi.Method, err error) {
+	method = &abi.Method{}
+	method.Name = jsonABI.Name
+	for i := 0; i < len(jsonABI.Inputs); i++ {
+		jsonInput := jsonABI.Inputs[i]
+		var arg abi.Argument
+		arg.Name = jsonInput.Name
+		if arg.Type, err = abi.NewType(jsonInput.Type); err != nil {
+			err = fmt.Errorf("ABI input %d: Unable to map %s to etherueum type: %s", i, jsonInput.Name, err)
+			return
+		}
+		method.Inputs = append(method.Inputs, arg)
 	}
-	// if tx.PrivateFrom != "" {
-	// 	args.PrivateFrom = tx.PrivateFrom
-	// 	args.PrivateFor = tx.PrivateFor
-	// }
-	var to = tx.EthTX.To()
-	if to != nil {
-		args.To = to.Hex()
+	for i := 0; i < len(jsonABI.Outputs); i++ {
+		jsonOutput := jsonABI.Outputs[i]
+		var arg abi.Argument
+		arg.Name = jsonOutput.Name
+		if arg.Type, err = abi.NewType(jsonOutput.Type); err != nil {
+			err = fmt.Errorf("ABI output %d: Unable to map %s to etherueum type: %s", i, jsonOutput.Name, err)
+			return
+		}
+		method.Outputs = append(method.Outputs, arg)
 	}
-	var txHash string
-	err := rpc.CallContext(ctx, &txHash, "eth_sendTransaction", args)
-	return txHash, err
+	return
 }
 
 func (tx *KldTx) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json.Number, data []byte) (err error) {
@@ -149,6 +146,7 @@ func (tx *KldTx) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, ms
 	value := big.NewInt(0)
 	if _, ok := value.SetString(msgValue.String(), 10); !ok {
 		err = fmt.Errorf("Converting supplied 'value' to big integer: %s", err)
+		return
 	}
 
 	gas, err := msgGas.Int64()
@@ -160,6 +158,7 @@ func (tx *KldTx) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, ms
 	gasPrice := big.NewInt(0)
 	if _, ok := value.SetString(msgGasPrice.String(), 10); !ok {
 		err = fmt.Errorf("Converting supplied 'gasPrice' to big integer")
+		return
 	}
 
 	var toAddr common.Address

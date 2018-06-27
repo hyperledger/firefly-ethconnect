@@ -22,6 +22,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -73,6 +74,7 @@ func TestNewContractDeployTxnSimpleStorage(t *testing.T) {
 	assert.Equal("0x315", jsonSent["value"])
 	// The bytecode has the packed parameters appended to the end
 	assert.Regexp(".+00000000000000000000000000000000000000000000000000000000000f423f$", jsonSent["data"])
+
 }
 
 func TestNewContractDeployTxnBadNonce(t *testing.T) {
@@ -365,6 +367,8 @@ func TestSendTxn(t *testing.T) {
 	msg.GasPrice = "789"
 	tx, err := NewSendTxn(msg)
 	assert.Nil(err)
+	msgBytes, _ := json.Marshal(&msg)
+	log.Infof(string(msgBytes))
 
 	rpc := testRPCClient{}
 

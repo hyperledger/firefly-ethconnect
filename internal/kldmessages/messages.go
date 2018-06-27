@@ -21,15 +21,22 @@ import (
 const (
 	// MsgTypeDeployContract - deploy a contract
 	MsgTypeDeployContract = "DeployContract"
+	// MsgTypeSendTransaction - send a transaction
+	MsgTypeSendTransaction = "SendTransaction"
 )
+
+// UnmarshalKldMessage is a trivial wrapper around json decoding
+func UnmarshalKldMessage(jsonMsg string, msg interface{}) error {
+	return json.Unmarshal([]byte(jsonMsg), msg)
+}
 
 // ABIFunction is the web3 form for an individual function
 // described in https://web3js.readthedocs.io/en/1.0/glossary.html
 type ABIFunction struct {
-	Type            string     `json:"type"`
+	Type            string     `json:"type,omitempty"`
 	Name            string     `json:"name"`
 	Constant        bool       `json:"constant"`
-	Payable         bool       `json:"payable"`
+	Payable         bool       `json:"payable,omitempty"`
 	StateMutability string     `json:"stateMutability"`
 	Inputs          []ABIParam `json:"inputs"`
 	Outputs         []ABIParam `json:"outputs"`
@@ -85,7 +92,6 @@ type transactionCommon struct {
 type SendTransaction struct {
 	transactionCommon
 	To       string      `json:"to"`
-	Contract string      `json:"contract"`
 	Function ABIFunction `json:"function"`
 }
 

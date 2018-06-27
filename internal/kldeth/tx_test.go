@@ -53,6 +53,7 @@ func TestNewContractDeployTxnSimpleStorage(t *testing.T) {
 	msg.Parameters = []interface{}{float64(999999)}
 	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 	msg.Nonce = "123"
+	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
 	tx, err := NewContractDeployTxn(msg)
@@ -74,6 +75,66 @@ func TestNewContractDeployTxnSimpleStorage(t *testing.T) {
 	assert.Regexp(".+00000000000000000000000000000000000000000000000000000000000f423f$", jsonSent["data"])
 }
 
+func TestNewContractDeployTxnBadNonce(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.DeployContract
+	msg.Solidity = simpleStorage
+	msg.Parameters = []interface{}{float64(999999)}
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "abc"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	_, err := NewContractDeployTxn(msg)
+	assert.Regexp("Converting supplied 'nonce' to integer", err.Error())
+}
+
+func TestNewContractDeployBadValue(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.DeployContract
+	msg.Solidity = simpleStorage
+	msg.Parameters = []interface{}{float64(999999)}
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "zzz"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	_, err := NewContractDeployTxn(msg)
+	assert.Regexp("Converting supplied 'value' to big integer", err.Error())
+}
+
+func TestNewContractDeployBadGas(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.DeployContract
+	msg.Solidity = simpleStorage
+	msg.Parameters = []interface{}{float64(999999)}
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "111"
+	msg.Gas = "abc"
+	msg.GasPrice = "789"
+	_, err := NewContractDeployTxn(msg)
+	assert.Regexp("Converting supplied 'gas' to integer", err.Error())
+}
+
+func TestNewContractDeployBadGasPrice(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.DeployContract
+	msg.Solidity = simpleStorage
+	msg.Parameters = []interface{}{float64(999999)}
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "111"
+	msg.Gas = "456"
+	msg.GasPrice = "abc"
+	_, err := NewContractDeployTxn(msg)
+	assert.Regexp("Converting supplied 'gasPrice' to big integer", err.Error())
+}
+
 func TestNewContractDeployTxnBadContract(t *testing.T) {
 	assert := assert.New(t)
 
@@ -91,6 +152,7 @@ func TestNewContractDeployStringForNumber(t *testing.T) {
 	msg.Parameters = []interface{}{"123"}
 	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 	msg.Nonce = "123"
+	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
 	_, err := NewContractDeployTxn(msg)
@@ -115,6 +177,7 @@ func TestNewContractDeploySpecificContractName(t *testing.T) {
 	msg.Parameters = []interface{}{}
 	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 	msg.Nonce = "123"
+	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
 	_, err := NewContractDeployTxn(msg)
@@ -168,6 +231,7 @@ func testComplexParam(t *testing.T, solidityType string, val interface{}, expect
 	msg.Parameters = []interface{}{val}
 	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 	msg.Nonce = "123"
+	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
 	_, err := NewContractDeployTxn(msg)
@@ -221,6 +285,7 @@ func TestSolidityIntArrayParamConversion(t *testing.T) {
 	testComplexParam(t, "int8[]", []float64{}, "")
 	testComplexParam(t, "int256[]", []float64{123, 456, 789}, "")
 	testComplexParam(t, "int256[]", []float64{}, "")
+	testComplexParam(t, "int256[]", float64(123), "Must supply an array")
 }
 
 func TestSolidityStringParamConversion(t *testing.T) {
@@ -256,4 +321,184 @@ func TestTypeNotYetSupported(t *testing.T) {
 	m.Inputs = append(m.Inputs, abi.Argument{Name: "random", Type: abi.Type{Type: reflect.TypeOf(t)}})
 	_, err := tx.generateTypedArgs([]interface{}{"abc"}, m)
 	assert.Regexp("Type '.*' is not yet supported", err)
+}
+
+func TestSendTxn(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{"123", float64(123), "abc", "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"}
+	msg.Function = kldmessages.ABIFunction{
+		Name: "testFunc",
+		Inputs: []kldmessages.ABIParam{
+			kldmessages.ABIParam{
+				Name: "param1",
+				Type: "uint8",
+			},
+			kldmessages.ABIParam{
+				Name: "param2",
+				Type: "int256",
+			},
+			kldmessages.ABIParam{
+				Name: "param3",
+				Type: "string",
+			},
+			kldmessages.ABIParam{
+				Name: "param4",
+				Type: "address",
+			},
+		},
+		Outputs: []kldmessages.ABIParam{
+			kldmessages.ABIParam{
+				Name: "ret1",
+				Type: "uint256",
+			},
+		},
+	}
+	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	tx, err := NewSendTxn(msg)
+	assert.Nil(err)
+
+	rpc := testRPCClient{}
+
+	tx.Send(&rpc)
+	assert.Equal("eth_sendTransaction", rpc.capturedMethod)
+	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
+	var jsonSent map[string]interface{}
+	json.Unmarshal(jsonBytesSent, &jsonSent)
+	assert.Equal("0x7b", jsonSent["nonce"])
+	assert.Equal("0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", jsonSent["from"])
+	assert.Equal("0x1c8", jsonSent["gas"])
+	assert.Equal("0x0", jsonSent["gasPrice"])
+	assert.Equal("0x315", jsonSent["value"])
+	assert.Regexp("0x000000000000000000000000000000000000000000000000000000000000007b000000000000000000000000000000000000000000000000000000000000007b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000aa983ad2a0e0ed8ac639277f37be42f2a5d2618c00000000000000000000000000000000000000000000000000000000000000036162630000000000000000000000000000000000000000000000000000000000", jsonSent["data"])
+}
+
+func TestSendTxnBadInputType(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Function = kldmessages.ABIFunction{
+		Name: "testFunc",
+		Inputs: []kldmessages.ABIParam{
+			kldmessages.ABIParam{
+				Name: "param1",
+				Type: "badness",
+			},
+		},
+		Outputs: []kldmessages.ABIParam{
+			kldmessages.ABIParam{
+				Name: "ret1",
+				Type: "uint256",
+			},
+		},
+	}
+	_, err := NewSendTxn(msg)
+	assert.Regexp("ABI input 0: Unable to map param1 to etherueum type: unsupported arg type:", err.Error())
+}
+
+func TestSendTxnBadTo(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{"123"}
+	msg.Function = kldmessages.ABIFunction{
+		Name: "testFunc",
+		Inputs: []kldmessages.ABIParam{
+			kldmessages.ABIParam{
+				Name: "param1",
+				Type: "uint8",
+			},
+		},
+		Outputs: []kldmessages.ABIParam{
+			kldmessages.ABIParam{
+				Name: "ret1",
+				Type: "uint256",
+			},
+		},
+	}
+	msg.To = "abc"
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	_, err := NewSendTxn(msg)
+	assert.Regexp("Supplied value for 'to' is not a valid hex address", err.Error())
+}
+
+func TestSendTxnBadOutputType(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Function = kldmessages.ABIFunction{
+		Name: "testFunc",
+		Inputs: []kldmessages.ABIParam{
+			kldmessages.ABIParam{
+				Name: "param1",
+				Type: "uint256",
+			},
+		},
+		Outputs: []kldmessages.ABIParam{
+			kldmessages.ABIParam{
+				Name: "ret1",
+				Type: "badness",
+			},
+		},
+	}
+	_, err := NewSendTxn(msg)
+	assert.Regexp("ABI output 0: Unable to map ret1 to etherueum type: unsupported arg type:", err.Error())
+}
+
+func TestSendBadParams(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{"abc"}
+	msg.Function = kldmessages.ABIFunction{
+		Name: "testFunc",
+		Inputs: []kldmessages.ABIParam{
+			kldmessages.ABIParam{
+				Name: "param1",
+				Type: "int8",
+			},
+		},
+		Outputs: []kldmessages.ABIParam{
+			kldmessages.ABIParam{
+				Name: "ret1",
+				Type: "uint256",
+			},
+		},
+	}
+	_, err := NewSendTxn(msg)
+	assert.Regexp("param 0: Could not be converted to a number", err.Error())
+}
+
+func TestSendTxnPackError(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{""}
+	msg.Function = kldmessages.ABIFunction{
+		Name: "testFunc",
+		Inputs: []kldmessages.ABIParam{
+			kldmessages.ABIParam{
+				Name: "param1",
+				Type: "bytes1",
+			},
+		},
+		Outputs: []kldmessages.ABIParam{
+			kldmessages.ABIParam{
+				Name: "ret1",
+				Type: "uint256",
+			},
+		},
+	}
+	_, err := NewSendTxn(msg)
+	assert.Regexp("cannot use \\[0\\]uint8 as type \\[1\\]uint8 as argument", err.Error())
 }

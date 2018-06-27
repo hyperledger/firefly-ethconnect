@@ -20,13 +20,15 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
+
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common/compiler"
 )
 
 // CompiledSolidity wraps solc compilation of solidity and ABI generation
 type CompiledSolidity struct {
-	Compiled string
+	Compiled []byte
 	ABI      abi.ABI
 }
 
@@ -44,8 +46,9 @@ func CompileContract(soliditySource, contractName string) (*CompiledSolidity, er
 	var contract *compiler.Contract
 	contractNames := reflect.ValueOf(compiled).MapKeys()
 	if contractName != "" {
+		contractName = "<stdin>:" + contractName
 		if _, ok := compiled[contractName]; !ok {
-			return nil, fmt.Errorf("Contract %s not found in Solidity source: %s", contractName, contractNames)
+			return nil, fmt.Errorf("Contract '%s' not found in Solidity source: %s", contractName, contractNames)
 		}
 		contract = compiled[contractName]
 	} else if len(contractNames) != 1 {
@@ -54,7 +57,10 @@ func CompileContract(soliditySource, contractName string) (*CompiledSolidity, er
 		contractName = contractNames[0].String()
 		contract = compiled[contractName]
 	}
-	c.Compiled = contract.Code
+	c.Compiled, err = hexutil.Decode(contract.Code)
+	if err != nil {
+		return nil, fmt.Errorf("Decoding bytecode: %s", err)
+	}
 
 	// Pack the arguments for calling the contract
 	abiJSON, err := json.Marshal(contract.Info.AbiDefinition)

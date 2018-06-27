@@ -16,16 +16,22 @@ package kldeth
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"math/big"
+	"reflect"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+	"github.com/kaleido-io/ethconnect/internal/kldutils"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/rpc"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -40,6 +46,9 @@ type KldTx struct {
 // SendTranasction message
 func NewContractDeployTxn(msg kldmessages.DeployContract) (pTX *KldTx, err error) {
 
+	var tx KldTx
+	pTX = &tx
+
 	// Compile the solidity contract
 	compiledSolidity, err := CompileContract(msg.Solidity, msg.ContractName)
 	if err != nil {
@@ -47,7 +56,7 @@ func NewContractDeployTxn(msg kldmessages.DeployContract) (pTX *KldTx, err error
 	}
 
 	// Build correctly typed args for the ethereum call
-	typedArgs, err := msg.GenerateTypedArgs(compiledSolidity.ABI.Constructor)
+	typedArgs, err := pTX.generateTypedArgs(msg.Parameters, compiledSolidity.ABI.Constructor)
 	if err != nil {
 		return
 	}
@@ -59,19 +68,16 @@ func NewContractDeployTxn(msg kldmessages.DeployContract) (pTX *KldTx, err error
 		return
 	}
 
-	// Generate the ethereum transaction
-	var tx KldTx
-	tx.EthTX, tx.From, err = msg.ToEthTransaction(2, "", packedCall)
-	if err != nil {
-		return
-	}
-	pTX = &tx
+	// Join the EVM bytecode with the packed call
+	data := append(compiledSolidity.Compiled, packedCall...)
 
+	// Generate the ethereum transaction
+	err = pTX.genEthTransaction(msg.From, "", msg.Nonce, msg.Value, msg.Gas, msg.GasPrice, data)
 	return
 }
 
 // Send sends an individual transaction, choosing external or internal signing
-func (tx *KldTx) Send(rpc *rpc.Client) (string, error) {
+func (tx *KldTx) Send(rpc rpcClient) (string, error) {
 	start := time.Now()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -104,7 +110,7 @@ type sendTxArgs struct {
 }
 
 // sendUnsignedTxn sends a transaction for internal signing by the node
-func (tx *KldTx) sendUnsignedTxn(ctx context.Context, rpc *rpc.Client) (string, error) {
+func (tx *KldTx) sendUnsignedTxn(ctx context.Context, rpc rpcClient) (string, error) {
 	data := hexutil.Bytes(tx.EthTX.Data())
 	args := sendTxArgs{
 		Nonce:    hexutil.Uint64(tx.EthTX.Nonce()),
@@ -125,4 +131,175 @@ func (tx *KldTx) sendUnsignedTxn(ctx context.Context, rpc *rpc.Client) (string, 
 	var txHash string
 	err := rpc.CallContext(ctx, &txHash, "eth_sendTransaction", args)
 	return txHash, err
+}
+
+func (tx *KldTx) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json.Number, data []byte) (err error) {
+
+	tx.From, err = kldutils.StrToAddress("from", msgFrom)
+	if err != nil {
+		return
+	}
+
+	nonce, err := msgNonce.Int64()
+	if err != nil {
+		err = fmt.Errorf("Converting supplied 'nonce' to integer: %s", err)
+		return
+	}
+
+	value := big.NewInt(0)
+	if _, ok := value.SetString(msgValue.String(), 10); !ok {
+		err = fmt.Errorf("Converting supplied 'value' to big integer: %s", err)
+	}
+
+	gas, err := msgGas.Int64()
+	if err != nil {
+		err = fmt.Errorf("Converting supplied 'gas' to integer: %s", err)
+		return
+	}
+
+	gasPrice := big.NewInt(0)
+	if _, ok := value.SetString(msgGasPrice.String(), 10); !ok {
+		err = fmt.Errorf("Converting supplied 'gasPrice' to big integer")
+	}
+
+	var toAddr common.Address
+	if msgTo != "" {
+		if toAddr, err = kldutils.StrToAddress("to", msgTo); err != nil {
+			return
+		}
+		tx.EthTX = types.NewTransaction(uint64(nonce), toAddr, value, uint64(gas), gasPrice, data)
+	} else {
+		tx.EthTX = types.NewContractCreation(uint64(nonce), value, uint64(gas), gasPrice, data)
+	}
+	log.Debug("TX:%s To=%s Value=%d Gas=%d GasPrice=%d",
+		tx.EthTX.Hash().Hex(), tx.EthTX.To(), tx.EthTX.Value, tx.EthTX.Gas, tx.EthTX.GasPrice)
+	return
+}
+
+func getInteger(methodName string, idx int, requiredType string, suppliedType reflect.Type, param interface{}) (val int64, err error) {
+	if suppliedType.Kind() == reflect.String {
+		if val, err = strconv.ParseInt(param.(string), 10, 64); err != nil {
+			err = fmt.Errorf("Function '%s' param %d: Could not be converted to a number", methodName, idx)
+			return
+		}
+	} else if suppliedType.Kind() == reflect.Float64 {
+		val = int64(param.(float64))
+	} else {
+		err = fmt.Errorf("Function '%s' param %d is a %s: Must supply a number or a string", methodName, idx, requiredType)
+	}
+	return
+}
+
+// GenerateTypedArgs parses string arguments into a range of types to pass to the ABI call
+func (tx *KldTx) generateTypedArgs(params []interface{}, method abi.Method) (typedArgs []interface{}, err error) {
+
+	methodName := method.Name
+	if methodName == "" {
+		methodName = "<constructor>"
+	}
+	log.Debug("Parsing args for function: ", method)
+	var intVal int64
+	for idx, inputArg := range method.Inputs {
+		if idx >= len(params) {
+			err = fmt.Errorf("Function '%s': Requires %d args (supplied=%d)", methodName, len(method.Inputs), len(params))
+			return
+		}
+		param := params[idx]
+		requiredType := inputArg.Type.String()
+		suppliedType := reflect.TypeOf(param)
+		if requiredType == "string" {
+			if suppliedType.Kind() == reflect.String {
+				typedArgs = append(typedArgs, param.(string))
+			} else {
+				err = fmt.Errorf("Function '%s' param %d: Must supply a string", methodName, idx)
+				break
+			}
+		} else if requiredType == "uint8" {
+			if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
+				typedArgs = append(typedArgs, uint8(intVal))
+			}
+		} else if requiredType == "uint16" {
+			if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
+				typedArgs = append(typedArgs, uint16(intVal))
+			}
+		} else if requiredType == "uint32" {
+			if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
+				typedArgs = append(typedArgs, uint32(intVal))
+			}
+		} else if requiredType == "uint64" {
+			if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
+				typedArgs = append(typedArgs, uint64(intVal))
+			}
+		} else if requiredType == "int8" {
+			if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
+				typedArgs = append(typedArgs, int8(intVal))
+			}
+		} else if requiredType == "int16" {
+			if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
+				typedArgs = append(typedArgs, int16(intVal))
+			}
+		} else if requiredType == "int32" {
+			if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
+				typedArgs = append(typedArgs, int32(intVal))
+			}
+		} else if requiredType == "int64" {
+			if intVal, err = getInteger(methodName, idx, requiredType, suppliedType, param); err == nil {
+				typedArgs = append(typedArgs, int64(intVal))
+			}
+		} else if strings.HasPrefix(requiredType, "int") || strings.HasPrefix(requiredType, "uint") {
+			if suppliedType.Kind() == reflect.String {
+				bigInt := big.NewInt(0)
+				if _, ok := bigInt.SetString(param.(string), 10); !ok {
+					err = fmt.Errorf("Function '%s' param %d: Could not be converted to a number", methodName, idx)
+				} else {
+					typedArgs = append(typedArgs, bigInt)
+				}
+			} else if suppliedType.Kind() == reflect.Float64 {
+				typedArgs = append(typedArgs, big.NewInt(int64(param.(float64))))
+			} else {
+				err = fmt.Errorf("Function '%s' param %d is a %s: Must supply a number or a string", methodName, idx, requiredType)
+			}
+		} else if requiredType == "bool" {
+			if suppliedType.Kind() == reflect.String {
+				typedArgs = append(typedArgs, strings.ToLower(param.(string)) == "true")
+			} else if suppliedType.Kind() == reflect.Bool {
+				typedArgs = append(typedArgs, param.(bool))
+			} else {
+				err = fmt.Errorf("Function '%s' param %d is a %s: Must supply a boolean or a string", methodName, idx, requiredType)
+			}
+		} else if requiredType == "address" {
+			if suppliedType.Kind() == reflect.String {
+				if !common.IsHexAddress(param.(string)) {
+					err = fmt.Errorf("Function '%s' param %d: Could not be converted to a hex address", methodName, idx)
+				} else {
+					typedArgs = append(typedArgs, common.HexToAddress(param.(string)))
+				}
+			} else {
+				err = fmt.Errorf("Function '%s' param %d is a %s: Must supply a hex address string", methodName, idx, requiredType)
+			}
+		} else if strings.HasPrefix(requiredType, "bytes") {
+			if suppliedType.Kind() == reflect.String {
+				bSlice := common.FromHex(param.(string))
+				if len(bSlice) == 0 {
+					typedArgs = append(typedArgs, [0]byte{})
+				} else {
+					// Create ourselves an array of the right size (ethereum won't accept a slice)
+					bArrayType := reflect.ArrayOf(len(bSlice), reflect.TypeOf(bSlice[0]))
+					bArrayVal := reflect.Zero(bArrayType)
+					reflect.Copy(reflect.ValueOf(bSlice), bArrayVal)
+					typedArgs = append(typedArgs, bArrayVal.Interface())
+				}
+			} else {
+				err = fmt.Errorf("Function '%s' param %d is a %s: Must supply a hex string", methodName, idx, requiredType)
+			}
+		} else {
+			err = fmt.Errorf("Type '%s' is not yet supported", inputArg.Type)
+		}
+		if err != nil {
+			log.Errorf("%s [Required=%s Supplied=%s Value=%s]", err, requiredType, suppliedType, param)
+			return
+		}
+	}
+
+	return
 }

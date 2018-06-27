@@ -16,16 +16,6 @@ package kldmessages
 
 import (
 	"encoding/json"
-	"fmt"
-	"math/big"
-	"reflect"
-	"strings"
-
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/kaleido-io/ethconnect/internal/kldutils"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -83,6 +73,7 @@ type ReplyCommon struct {
 // for sending either contract call or creation transactions
 type transactionCommon struct {
 	RequestCommon
+	Nonce      json.Number   `json:"nonce"`
 	From       string        `json:"from"`
 	Value      json.Number   `json:"value"`
 	Gas        json.Number   `json:"gas"`
@@ -103,107 +94,4 @@ type DeployContract struct {
 	transactionCommon
 	Solidity     string `json:"solidity"`
 	ContractName string `json:"contractName,omitempty"`
-}
-
-func (t *transactionCommon) ToEthTransaction(nonce uint64, to string, data []byte) (ethTx *types.Transaction, fromAddr common.Address, err error) {
-
-	fromAddr, err = kldutils.StrToAddress("from", t.From)
-	if err != nil {
-		return
-	}
-
-	value := big.NewInt(0)
-	if _, ok := value.SetString(t.Value.String(), 10); !ok {
-		err = fmt.Errorf("Converting supplied 'value' to big integer: %s", err)
-	}
-
-	gas, err := t.Gas.Int64()
-	if err != nil {
-		err = fmt.Errorf("Converting supplied 'nonce' to integer: %s", err)
-		return
-	}
-
-	gasPrice := big.NewInt(0)
-	if _, ok := value.SetString(t.Value.String(), 10); !ok {
-		err = fmt.Errorf("Converting supplied 'gasPrice' to big integer: %s", err)
-	}
-
-	var toAddr common.Address
-	if to != "" {
-		if toAddr, err = kldutils.StrToAddress("to", to); err != nil {
-			return
-		}
-		ethTx = types.NewTransaction(nonce, toAddr, value, uint64(gas), gasPrice, data)
-	} else {
-		ethTx = types.NewContractCreation(nonce, value, uint64(gas), gasPrice, data)
-	}
-	log.Debug("TX:%s To=%s Value=%d Gas=%d GasPrice=%d",
-		ethTx.Hash().Hex(), ethTx.To(), ethTx.Value, ethTx.Gas, ethTx.GasPrice)
-	return
-}
-
-// GenerateTypedArgs parses string arguments into a range of types to pass to the ABI call
-func (t *transactionCommon) GenerateTypedArgs(method abi.Method) (typedArgs []interface{}, err error) {
-
-	log.Debug("Parsing args for function: ", method)
-	for idx, inputArg := range method.Inputs {
-		if idx >= len(t.Parameters) {
-			err = fmt.Errorf("Function '%s': Requires %d args (supplied=%d)", method.Name, len(method.Inputs), len(t.Parameters))
-			return
-		}
-		param := t.Parameters[idx]
-		requiredType := inputArg.Type.String()
-		suppliedType := reflect.TypeOf(param)
-		switch requiredType {
-		case "string":
-			if suppliedType.Kind() == reflect.String {
-				typedArgs = append(typedArgs, param.(string))
-			} else {
-				err = fmt.Errorf("Function '%s' param %d: Must be a string", method.Name, idx)
-			}
-			break
-		case "int256", "uint256":
-			if suppliedType.Kind() == reflect.String {
-				bigInt := big.NewInt(0)
-				if _, ok := bigInt.SetString(param.(string), 10); !ok {
-					err = fmt.Errorf("Function '%s' param %d: Could not be converted to a number", method.Name, idx)
-					break
-				}
-				typedArgs = append(typedArgs, bigInt)
-			} else if suppliedType.Kind() == reflect.Float64 {
-				typedArgs = append(typedArgs, big.NewInt(int64(param.(float64))))
-			} else {
-				err = fmt.Errorf("Function '%s' param %d is a %s: Must supply a number or a string", method.Name, idx, requiredType)
-			}
-			break
-		case "bool":
-			if suppliedType.Kind() == reflect.String {
-				typedArgs = append(typedArgs, strings.ToLower(param.(string)) == "true")
-			} else if suppliedType.Kind() == reflect.Bool {
-				typedArgs = append(typedArgs, param.(bool))
-			} else {
-				err = fmt.Errorf("Function '%s' param %d is a %s: Must supply a boolean or a string", method.Name, idx, requiredType)
-			}
-			break
-		case "address":
-			if suppliedType.Kind() == reflect.String {
-				if !common.IsHexAddress(param.(string)) {
-					err = fmt.Errorf("Function '%s' param %d: Could not be converted to a hex address", method.Name, idx)
-					break
-				}
-				typedArgs = append(typedArgs, common.HexToAddress(param.(string)))
-			} else {
-				err = fmt.Errorf("Function '%s' param %d is a %s: Must supply a boolean or a string", method.Name, idx, requiredType)
-			}
-			break
-		default:
-			return nil, fmt.Errorf("Type %s is not yet supported", inputArg.Type)
-		}
-		if err != nil {
-			log.Errorf("%s [Required=%s Supplied=%s Value=%s]", err, requiredType, suppliedType, param)
-			return
-		}
-	}
-
-	return
 }

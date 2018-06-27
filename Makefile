@@ -13,7 +13,7 @@ all: deps build test
 build: 
 		$(GOBUILD) -o $(BINARY_NAME) -v
 test:
-		$(GOTEST)  ./...
+		$(GOTEST)  ./... -cover
 clean: 
 		$(GOCLEAN)
 		rm -f $(BINARY_NAME)

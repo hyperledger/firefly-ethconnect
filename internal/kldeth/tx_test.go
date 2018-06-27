@@ -286,6 +286,8 @@ func TestSolidityIntArrayParamConversion(t *testing.T) {
 	testComplexParam(t, "int256[]", []float64{123, 456, 789}, "")
 	testComplexParam(t, "int256[]", []float64{}, "")
 	testComplexParam(t, "int256[]", float64(123), "Must supply an array")
+	testComplexParam(t, "uint8[]", []string{"123"}, "")
+	testComplexParam(t, "uint8[]", []string{"abc"}, "Could not be converted to a number")
 }
 
 func TestSolidityStringParamConversion(t *testing.T) {
@@ -400,6 +402,36 @@ func TestSendTxnBadInputType(t *testing.T) {
 	}
 	_, err := NewSendTxn(msg)
 	assert.Regexp("ABI input 0: Unable to map param1 to etherueum type: unsupported arg type:", err.Error())
+}
+
+func TestSendTxnBadFrom(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{"123"}
+	msg.Function = kldmessages.ABIFunction{
+		Name: "testFunc",
+		Inputs: []kldmessages.ABIParam{
+			kldmessages.ABIParam{
+				Name: "param1",
+				Type: "uint8",
+			},
+		},
+		Outputs: []kldmessages.ABIParam{
+			kldmessages.ABIParam{
+				Name: "ret1",
+				Type: "uint256",
+			},
+		},
+	}
+	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
+	msg.From = "abc"
+	msg.Nonce = "123"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	_, err := NewSendTxn(msg)
+	assert.Regexp("Supplied value for 'from' is not a valid hex address", err.Error())
 }
 
 func TestSendTxnBadTo(t *testing.T) {

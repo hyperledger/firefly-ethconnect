@@ -203,7 +203,7 @@ func processIntArray(typedArgs []interface{}, methodName string, idx int, requir
 			for _, paramInSlice := range genericParams {
 				// Process the entries as integers
 				suppliedItemType := reflect.TypeOf(paramInSlice)
-				if paramSlice, err = processIntVal(paramSlice, methodName, idx, requiredBaseType, suppliedItemType, paramInSlice.(float64)); err != nil {
+				if paramSlice, err = processIntVal(paramSlice, methodName, idx, requiredBaseType, suppliedItemType, paramInSlice); err != nil {
 					return
 				}
 			}

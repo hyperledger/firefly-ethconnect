@@ -216,6 +216,13 @@ func TestSolidityIntParamConversion(t *testing.T) {
 	testComplexParam(t, "int256", "abc", "Could not be converted to a number")
 }
 
+func TestSolidityIntArrayParamConversion(t *testing.T) {
+	testComplexParam(t, "int8[]", []float64{123, 456, 789}, "")
+	testComplexParam(t, "int8[]", []float64{}, "")
+	testComplexParam(t, "int256[]", []float64{123, 456, 789}, "")
+	testComplexParam(t, "int256[]", []float64{}, "")
+}
+
 func TestSolidityStringParamConversion(t *testing.T) {
 	testComplexParam(t, "string", "ok", "")
 	testComplexParam(t, "string", float64(5), "Must supply a string")

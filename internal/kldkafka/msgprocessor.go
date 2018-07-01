@@ -25,9 +25,16 @@ import (
 // for tracking all in-flight messages
 type MsgProcessor interface {
 	OnMessage(MsgContext)
+	SetRPC(kldeth.RPCClient)
 }
 
-type msgProcessor struct{}
+type msgProcessor struct {
+	rpc kldeth.RPCClient
+}
+
+func (p *msgProcessor) SetRPC(rpc kldeth.RPCClient) {
+	p.rpc = rpc
+}
 
 // OnMessage checks the type and dispatches to the correct logic
 // ** From this point on the processor MUST ensure Reply is called
@@ -63,16 +70,26 @@ func (p *msgProcessor) OnMessage(msgContext MsgContext) {
 }
 
 func (p *msgProcessor) OnDeployContractMessage(msgContext MsgContext, msg *kldmessages.DeployContract) {
-	_, err := kldeth.NewContractDeployTxn(msg)
+	tx, err := kldeth.NewContractDeployTxn(msg)
 	if err != nil {
+		msgContext.SendErrorReply(400, err)
+		return
+	}
+
+	if err = tx.Send(p.rpc); err != nil {
 		msgContext.SendErrorReply(400, err)
 		return
 	}
 }
 
 func (p *msgProcessor) OnSendTransactionMessage(msgContext MsgContext, msg *kldmessages.SendTransaction) {
-	_, err := kldeth.NewSendTxn(msg)
+	tx, err := kldeth.NewSendTxn(msg)
 	if err != nil {
+		msgContext.SendErrorReply(400, err)
+		return
+	}
+
+	if err = tx.Send(p.rpc); err != nil {
 		msgContext.SendErrorReply(400, err)
 		return
 	}

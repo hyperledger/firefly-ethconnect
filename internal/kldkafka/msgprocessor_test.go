@@ -15,6 +15,7 @@
 package kldkafka
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -34,6 +35,36 @@ type testMsgContext struct {
 	badMsgType  string
 	replies     []kldmessages.ReplyWithHeaders
 	errorRepies []*errorReply
+}
+
+type ethSendTransactionRPC struct {
+	txHash string
+	err    error
+	called bool
+}
+
+var goodDeployTxnJSON = "{" +
+	"  \"headers\":{\"type\": \"DeployContract\"}," +
+	"  \"solidity\":\"pragma solidity ^0.4.17; contract t {constructor() public {}}\"," +
+	"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
+	"  \"nonce\":\"123\"," +
+	"  \"gas\":\"123\"" +
+	"}"
+
+var goodSendTxnJSON = "{" +
+	"  \"headers\":{\"type\": \"SendTransaction\"}," +
+	"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
+	"  \"nonce\":\"123\"," +
+	"  \"gas\":\"123\"" +
+	"}"
+
+func (r *ethSendTransactionRPC) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
+	if method != "eth_sendTransaction" {
+		panic(fmt.Errorf("method != eth_sendTransaction: %s", method))
+	}
+	result = r.txHash
+	r.called = true
+	return r.err
 }
 
 func (c *testMsgContext) Headers() *kldmessages.CommonHeaders {
@@ -109,23 +140,41 @@ func TestOnDeployContractMessageBadJSON(t *testing.T) {
 	assert.Regexp("invalid character", testMsgContext.errorRepies[0].err.Error())
 
 }
-func TestOnDeployContractMessageGoodMsg(t *testing.T) {
+func TestOnDeployContractMessageGoodTxn(t *testing.T) {
 	assert := assert.New(t)
 
 	msgProcessor := &msgProcessor{}
 	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = "{" +
-		"  \"headers\":{\"type\": \"DeployContract\"}," +
-		"  \"solidity\":\"pragma solidity ^0.4.17; contract t {constructor() public {}}\"," +
-		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
-		"  \"nonce\":\"123\"," +
-		"  \"gas\":\"123\"" +
-		"}"
+	testMsgContext.jsonMsg = goodDeployTxnJSON
+	testRPC := &ethSendTransactionRPC{
+		err:    nil,
+		txHash: "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b",
+	}
+	msgProcessor.SetRPC(testRPC)
+
 	msgProcessor.OnMessage(testMsgContext)
 
 	assert.Empty(testMsgContext.errorRepies)
+	assert.True(testRPC.called)
 }
 
+func TestOnDeployContractMessageFailedTxn(t *testing.T) {
+	assert := assert.New(t)
+
+	msgProcessor := &msgProcessor{}
+	testMsgContext := &testMsgContext{}
+	testMsgContext.jsonMsg = goodDeployTxnJSON
+	testRPC := &ethSendTransactionRPC{
+		err:    fmt.Errorf("fizzle"),
+		txHash: "",
+	}
+	msgProcessor.SetRPC(testRPC)
+
+	msgProcessor.OnMessage(testMsgContext)
+
+	assert.Equal("fizzle", testMsgContext.errorRepies[0].err.Error())
+	assert.True(testRPC.called)
+}
 func TestOnSendTransactionMessageBadMsg(t *testing.T) {
 	assert := assert.New(t)
 
@@ -156,18 +205,38 @@ func TestOnSendTransactionMessageBadJSON(t *testing.T) {
 	assert.Regexp("invalid character", testMsgContext.errorRepies[0].err.Error())
 
 }
-func TestOnSendTransactionMessageGoodMsg(t *testing.T) {
+func TestOnSendTransactionMessageGoodTxn(t *testing.T) {
 	assert := assert.New(t)
 
 	msgProcessor := &msgProcessor{}
 	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = "{" +
-		"  \"headers\":{\"type\": \"SendTransaction\"}," +
-		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
-		"  \"nonce\":\"123\"," +
-		"  \"gas\":\"123\"" +
-		"}"
+	testMsgContext.jsonMsg = goodSendTxnJSON
+	testRPC := &ethSendTransactionRPC{
+		err:    nil,
+		txHash: "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b",
+	}
+	msgProcessor.SetRPC(testRPC)
+
 	msgProcessor.OnMessage(testMsgContext)
 
 	assert.Empty(testMsgContext.errorRepies)
+	assert.True(testRPC.called)
+}
+
+func TestOnSendTransactionMessageFailedTxn(t *testing.T) {
+	assert := assert.New(t)
+
+	msgProcessor := &msgProcessor{}
+	testMsgContext := &testMsgContext{}
+	testMsgContext.jsonMsg = goodSendTxnJSON
+	testRPC := &ethSendTransactionRPC{
+		err:    fmt.Errorf("pop"),
+		txHash: "",
+	}
+	msgProcessor.SetRPC(testRPC)
+
+	msgProcessor.OnMessage(testMsgContext)
+
+	assert.Equal("pop", testMsgContext.errorRepies[0].err.Error())
+	assert.True(testRPC.called)
 }

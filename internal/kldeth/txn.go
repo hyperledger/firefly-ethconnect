@@ -37,6 +37,7 @@ import (
 type Txn struct {
 	From  common.Address
 	EthTX *types.Transaction
+	Hash  string
 }
 
 // NewContractDeployTxn builds a new ethereum transaction from the supplied

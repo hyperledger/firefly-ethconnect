@@ -23,23 +23,22 @@ import (
 )
 
 // Send sends an individual transaction, choosing external or internal signing
-func (tx *Txn) Send(rpc rpcClient) (string, error) {
+func (tx *Txn) Send(rpc RPCClient) error {
 	start := time.Now()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	var err error
-	var txHash string
 	// if tx.From == "" {
-	// 	txHash, err = w.signAndSendTxn(ctx, tx)
+	// 	tx.Hash, err = w.signAndSendTxn(ctx, tx)
 	// } else {
-	txHash, err = tx.sendUnsignedTxn(ctx, rpc)
+	tx.Hash, err = tx.sendUnsignedTxn(ctx, rpc)
 	// }
 	callTime := time.Now().Sub(start)
 	ok := (err == nil)
-	log.Infof("TX:%s Sent. OK=%t [%.2fs]", txHash, ok, callTime.Seconds())
-	return txHash, err
+	log.Infof("TX:%s Sent. OK=%t [%.2fs]", tx.Hash, ok, callTime.Seconds())
+	return err
 }
 
 type sendTxArgs struct {
@@ -56,7 +55,7 @@ type sendTxArgs struct {
 }
 
 // sendUnsignedTxn sends a transaction for internal signing by the node
-func (tx *Txn) sendUnsignedTxn(ctx context.Context, rpc rpcClient) (string, error) {
+func (tx *Txn) sendUnsignedTxn(ctx context.Context, rpc RPCClient) (string, error) {
 	data := hexutil.Bytes(tx.EthTX.Data())
 	args := sendTxArgs{
 		Nonce:    hexutil.Uint64(tx.EthTX.Nonce()),

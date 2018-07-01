@@ -18,7 +18,7 @@ import (
 	"context"
 )
 
-// Slim interface for stubbing
-type rpcClient interface {
+// RPCClient refers to the functions from the ethereum RPC client that we use
+type RPCClient interface {
 	CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error
 }

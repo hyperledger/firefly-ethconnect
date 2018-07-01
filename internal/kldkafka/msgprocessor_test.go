@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -37,10 +38,12 @@ type testMsgContext struct {
 	errorRepies []*errorReply
 }
 
-type ethSendTransactionRPC struct {
-	txHash string
-	err    error
-	called bool
+type testRPC struct {
+	ethSendTransactionResult     string
+	ethSendTransactionErr        error
+	ethGetTransactionCountResult hexutil.Uint64
+	ethGetTransactionCountErr    error
+	calls                        []string
 }
 
 var goodDeployTxnJSON = "{" +
@@ -58,13 +61,17 @@ var goodSendTxnJSON = "{" +
 	"  \"gas\":\"123\"" +
 	"}"
 
-func (r *ethSendTransactionRPC) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
-	if method != "eth_sendTransaction" {
+func (r *testRPC) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
+	r.calls = append(r.calls, method)
+	if method == "eth_sendTransaction" {
+		result = r.ethSendTransactionResult
+		return r.ethSendTransactionErr
+	} else if method == "eth_getTransactionCount" {
+		result = r.ethGetTransactionCountResult
+		return r.ethGetTransactionCountErr
+	} else {
 		panic(fmt.Errorf("method != eth_sendTransaction: %s", method))
 	}
-	result = r.txHash
-	r.called = true
-	return r.err
 }
 
 func (c *testMsgContext) Headers() *kldmessages.CommonHeaders {
@@ -84,7 +91,7 @@ func (c *testMsgContext) Unmarshal(msg interface{}) error {
 }
 
 func (c *testMsgContext) SendErrorReply(status int, err error) {
-	log.Infof("Sending error reply. Status=%d", status)
+	log.Infof("Sending error reply. Status=%d Err=%s", status, err)
 	c.errorRepies = append(c.errorRepies, &errorReply{
 		status: status,
 		err:    err,
@@ -98,7 +105,7 @@ func (c *testMsgContext) Reply(replyMsg kldmessages.ReplyWithHeaders) {
 func TestOnMessageBadMessage(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := &msgProcessor{}
+	msgProcessor := newMsgProcessor()
 	testMsgContext := &testMsgContext{}
 	testMsgContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"badness\"}" +
@@ -114,10 +121,12 @@ func TestOnMessageBadMessage(t *testing.T) {
 func TestOnDeployContractMessageBadMsg(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := &msgProcessor{}
+	msgProcessor := newMsgProcessor()
 	testMsgContext := &testMsgContext{}
 	testMsgContext.jsonMsg = "{" +
-		"  \"headers\":{\"type\": \"DeployContract\"}" +
+		"  \"headers\":{\"type\": \"DeployContract\"}," +
+		"  \"nonce\":\"123\"," +
+		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"" +
 		"}"
 	msgProcessor.OnMessage(testMsgContext)
 
@@ -129,7 +138,7 @@ func TestOnDeployContractMessageBadMsg(t *testing.T) {
 func TestOnDeployContractMessageBadJSON(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := &msgProcessor{}
+	msgProcessor := newMsgProcessor()
 	testMsgContext := &testMsgContext{}
 	testMsgContext.jsonMsg = "badness"
 	testMsgContext.badMsgType = kldmessages.MsgTypeDeployContract
@@ -143,58 +152,78 @@ func TestOnDeployContractMessageBadJSON(t *testing.T) {
 func TestOnDeployContractMessageGoodTxn(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := &msgProcessor{}
+	msgProcessor := newMsgProcessor()
 	testMsgContext := &testMsgContext{}
 	testMsgContext.jsonMsg = goodDeployTxnJSON
-	testRPC := &ethSendTransactionRPC{
-		err:    nil,
-		txHash: "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b",
+	testRPC := &testRPC{
+		ethSendTransactionResult: "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b",
 	}
 	msgProcessor.SetRPC(testRPC)
 
 	msgProcessor.OnMessage(testMsgContext)
 
 	assert.Empty(testMsgContext.errorRepies)
-	assert.True(testRPC.called)
+	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
 }
 
 func TestOnDeployContractMessageFailedTxn(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := &msgProcessor{}
+	msgProcessor := newMsgProcessor()
 	testMsgContext := &testMsgContext{}
 	testMsgContext.jsonMsg = goodDeployTxnJSON
-	testRPC := &ethSendTransactionRPC{
-		err:    fmt.Errorf("fizzle"),
-		txHash: "",
+	testRPC := &testRPC{
+		ethSendTransactionErr: fmt.Errorf("fizzle"),
 	}
 	msgProcessor.SetRPC(testRPC)
 
 	msgProcessor.OnMessage(testMsgContext)
 
 	assert.Equal("fizzle", testMsgContext.errorRepies[0].err.Error())
-	assert.True(testRPC.called)
+	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
 }
+
+func TestOnDeployContractMessageFailedToGetNonce(t *testing.T) {
+	assert := assert.New(t)
+
+	msgProcessor := newMsgProcessor()
+	testMsgContext := &testMsgContext{}
+	testMsgContext.jsonMsg = "{" +
+		"  \"headers\":{\"type\": \"DeployContract\"}," +
+		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"" +
+		"}"
+	testRPC := &testRPC{
+		ethGetTransactionCountErr: fmt.Errorf("ding"),
+	}
+	msgProcessor.SetRPC(testRPC)
+
+	msgProcessor.OnMessage(testMsgContext)
+
+	assert.Equal("ding", testMsgContext.errorRepies[0].err.Error())
+	assert.EqualValues([]string{"eth_getTransactionCount"}, testRPC.calls)
+}
+
 func TestOnSendTransactionMessageBadMsg(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := &msgProcessor{}
+	msgProcessor := newMsgProcessor()
 	testMsgContext := &testMsgContext{}
 	testMsgContext.jsonMsg = "{" +
-		"  \"headers\":{\"type\": \"SendTransaction\"}" +
+		"  \"headers\":{\"type\": \"SendTransaction\"}," +
+		"  \"nonce\":\"123\"" +
 		"}"
 	msgProcessor.OnMessage(testMsgContext)
 
 	assert.NotEmpty(testMsgContext.errorRepies)
 	assert.Empty(testMsgContext.replies)
-	assert.Regexp("not a valid hex address", testMsgContext.errorRepies[0].err.Error())
+	assert.Regexp("'from' must be supplied", testMsgContext.errorRepies[0].err.Error())
 
 }
 
 func TestOnSendTransactionMessageBadJSON(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := &msgProcessor{}
+	msgProcessor := newMsgProcessor()
 	testMsgContext := &testMsgContext{}
 	testMsgContext.jsonMsg = "badness"
 	testMsgContext.badMsgType = kldmessages.MsgTypeSendTransaction
@@ -208,35 +237,76 @@ func TestOnSendTransactionMessageBadJSON(t *testing.T) {
 func TestOnSendTransactionMessageGoodTxn(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := &msgProcessor{}
+	msgProcessor := newMsgProcessor()
 	testMsgContext := &testMsgContext{}
 	testMsgContext.jsonMsg = goodSendTxnJSON
-	testRPC := &ethSendTransactionRPC{
-		err:    nil,
-		txHash: "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b",
+	testRPC := &testRPC{
+		ethSendTransactionResult: "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b",
 	}
 	msgProcessor.SetRPC(testRPC)
 
 	msgProcessor.OnMessage(testMsgContext)
 
 	assert.Empty(testMsgContext.errorRepies)
-	assert.True(testRPC.called)
+	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
 }
 
 func TestOnSendTransactionMessageFailedTxn(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := &msgProcessor{}
+	msgProcessor := newMsgProcessor()
 	testMsgContext := &testMsgContext{}
 	testMsgContext.jsonMsg = goodSendTxnJSON
-	testRPC := &ethSendTransactionRPC{
-		err:    fmt.Errorf("pop"),
-		txHash: "",
+	testRPC := &testRPC{
+		ethSendTransactionErr: fmt.Errorf("pop"),
 	}
 	msgProcessor.SetRPC(testRPC)
 
 	msgProcessor.OnMessage(testMsgContext)
 
 	assert.Equal("pop", testMsgContext.errorRepies[0].err.Error())
-	assert.True(testRPC.called)
+	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
+}
+
+func TestOnSendTransactionMessageFailedToGetNonce(t *testing.T) {
+	assert := assert.New(t)
+
+	msgProcessor := newMsgProcessor()
+	testMsgContext := &testMsgContext{}
+	testMsgContext.jsonMsg = "{" +
+		"  \"headers\":{\"type\": \"SendTransaction\"}," +
+		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"" +
+		"}"
+	testRPC := &testRPC{
+		ethGetTransactionCountErr: fmt.Errorf("poof"),
+	}
+	msgProcessor.SetRPC(testRPC)
+
+	msgProcessor.OnMessage(testMsgContext)
+
+	assert.Equal("poof", testMsgContext.errorRepies[0].err.Error())
+	assert.EqualValues([]string{"eth_getTransactionCount"}, testRPC.calls)
+}
+
+func TestOnSendTransactionMessageInflightNonce(t *testing.T) {
+	assert := assert.New(t)
+
+	msgProcessor := newMsgProcessor()
+	msgProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] =
+		[]*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
+	testMsgContext := &testMsgContext{}
+	testMsgContext.jsonMsg = "{" +
+		"  \"headers\":{\"type\": \"SendTransaction\"}," +
+		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
+		"  \"gas\":\"123\"" +
+		"}"
+	testRPC := &testRPC{
+		ethSendTransactionResult: "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b",
+	}
+	msgProcessor.SetRPC(testRPC)
+
+	msgProcessor.OnMessage(testMsgContext)
+
+	assert.Empty(testMsgContext.errorRepies)
+	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
 }

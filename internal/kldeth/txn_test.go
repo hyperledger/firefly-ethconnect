@@ -57,7 +57,7 @@ func TestNewContractDeployTxnSimpleStorage(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	tx, err := NewContractDeployTxn(msg)
+	tx, err := NewContractDeployTxn(&msg)
 	assert.Nil(err)
 	rpc := testRPCClient{}
 
@@ -88,7 +88,7 @@ func TestNewContractDeployTxnBadNonce(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewContractDeployTxn(msg)
+	_, err := NewContractDeployTxn(&msg)
 	assert.Regexp("Converting supplied 'nonce' to integer", err.Error())
 }
 
@@ -103,7 +103,7 @@ func TestNewContractDeployBadValue(t *testing.T) {
 	msg.Value = "zzz"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewContractDeployTxn(msg)
+	_, err := NewContractDeployTxn(&msg)
 	assert.Regexp("Converting supplied 'value' to big integer", err.Error())
 }
 
@@ -118,7 +118,7 @@ func TestNewContractDeployBadGas(t *testing.T) {
 	msg.Value = "111"
 	msg.Gas = "abc"
 	msg.GasPrice = "789"
-	_, err := NewContractDeployTxn(msg)
+	_, err := NewContractDeployTxn(&msg)
 	assert.Regexp("Converting supplied 'gas' to integer", err.Error())
 }
 
@@ -133,7 +133,7 @@ func TestNewContractDeployBadGasPrice(t *testing.T) {
 	msg.Value = "111"
 	msg.Gas = "456"
 	msg.GasPrice = "abc"
-	_, err := NewContractDeployTxn(msg)
+	_, err := NewContractDeployTxn(&msg)
 	assert.Regexp("Converting supplied 'gasPrice' to big integer", err.Error())
 }
 
@@ -142,7 +142,7 @@ func TestNewContractDeployTxnBadContract(t *testing.T) {
 
 	var msg kldmessages.DeployContract
 	msg.Solidity = "badness"
-	_, err := NewContractDeployTxn(msg)
+	_, err := NewContractDeployTxn(&msg)
 	assert.Regexp("Solidity compilation failed", err.Error())
 }
 
@@ -157,7 +157,7 @@ func TestNewContractDeployStringForNumber(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewContractDeployTxn(msg)
+	_, err := NewContractDeployTxn(&msg)
 	assert.Nil(err)
 }
 
@@ -167,7 +167,7 @@ func TestNewContractDeployTxnBadContractName(t *testing.T) {
 	var msg kldmessages.DeployContract
 	msg.Solidity = simpleStorage
 	msg.ContractName = "wrongun"
-	_, err := NewContractDeployTxn(msg)
+	_, err := NewContractDeployTxn(&msg)
 	assert.Regexp("Contract '<stdin>:wrongun' not found in Solidity source", err.Error())
 }
 func TestNewContractDeploySpecificContractName(t *testing.T) {
@@ -182,7 +182,7 @@ func TestNewContractDeploySpecificContractName(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewContractDeployTxn(msg)
+	_, err := NewContractDeployTxn(&msg)
 	assert.Nil(err)
 }
 
@@ -191,7 +191,7 @@ func TestNewContractDeployMissingNameMultipleContracts(t *testing.T) {
 
 	var msg kldmessages.DeployContract
 	msg.Solidity = twoContracts
-	_, err := NewContractDeployTxn(msg)
+	_, err := NewContractDeployTxn(&msg)
 	assert.Regexp("More than one contract in Solidity file", err.Error())
 }
 
@@ -201,7 +201,7 @@ func TestNewContractDeployBadNumber(t *testing.T) {
 	var msg kldmessages.DeployContract
 	msg.Solidity = simpleStorage
 	msg.Parameters = []interface{}{"ABCD"}
-	_, err := NewContractDeployTxn(msg)
+	_, err := NewContractDeployTxn(&msg)
 	assert.Regexp("Could not be converted to a number", err.Error())
 }
 
@@ -211,7 +211,7 @@ func TestNewContractDeployBadTypeForNumber(t *testing.T) {
 	var msg kldmessages.DeployContract
 	msg.Solidity = simpleStorage
 	msg.Parameters = []interface{}{false}
-	_, err := NewContractDeployTxn(msg)
+	_, err := NewContractDeployTxn(&msg)
 	assert.Regexp("Must supply a number or a string", err.Error())
 }
 
@@ -221,7 +221,7 @@ func TestNewContractDeployMissingParam(t *testing.T) {
 	var msg kldmessages.DeployContract
 	msg.Solidity = simpleStorage
 	msg.Parameters = []interface{}{}
-	_, err := NewContractDeployTxn(msg)
+	_, err := NewContractDeployTxn(&msg)
 	assert.Regexp("Requires 1 args \\(supplied=0\\)", err.Error())
 }
 
@@ -236,7 +236,7 @@ func testComplexParam(t *testing.T, solidityType string, val interface{}, expect
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewContractDeployTxn(msg)
+	_, err := NewContractDeployTxn(&msg)
 
 	if expectedErr == "" {
 		assert.Nil(err)
@@ -320,7 +320,7 @@ func TestSolidityBytesParamConversion(t *testing.T) {
 
 func TestTypeNotYetSupported(t *testing.T) {
 	assert := assert.New(t)
-	var tx KldTx
+	var tx Txn
 	var m abi.Method
 	m.Inputs = append(m.Inputs, abi.Argument{Name: "random", Type: abi.Type{Type: reflect.TypeOf(t)}})
 	_, err := tx.generateTypedArgs([]interface{}{"abc"}, m)
@@ -365,7 +365,7 @@ func TestSendTxn(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	tx, err := NewSendTxn(msg)
+	tx, err := NewSendTxn(&msg)
 	assert.Nil(err)
 	msgBytes, _ := json.Marshal(&msg)
 	log.Infof(string(msgBytes))
@@ -404,7 +404,7 @@ func TestSendTxnBadInputType(t *testing.T) {
 			},
 		},
 	}
-	_, err := NewSendTxn(msg)
+	_, err := NewSendTxn(&msg)
 	assert.Regexp("ABI input 0: Unable to map param1 to etherueum type: unsupported arg type:", err.Error())
 }
 
@@ -434,7 +434,7 @@ func TestSendTxnBadFrom(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewSendTxn(msg)
+	_, err := NewSendTxn(&msg)
 	assert.Regexp("Supplied value for 'from' is not a valid hex address", err.Error())
 }
 
@@ -464,7 +464,7 @@ func TestSendTxnBadTo(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewSendTxn(msg)
+	_, err := NewSendTxn(&msg)
 	assert.Regexp("Supplied value for 'to' is not a valid hex address", err.Error())
 }
 
@@ -487,7 +487,7 @@ func TestSendTxnBadOutputType(t *testing.T) {
 			},
 		},
 	}
-	_, err := NewSendTxn(msg)
+	_, err := NewSendTxn(&msg)
 	assert.Regexp("ABI output 0: Unable to map ret1 to etherueum type: unsupported arg type:", err.Error())
 }
 
@@ -511,7 +511,7 @@ func TestSendBadParams(t *testing.T) {
 			},
 		},
 	}
-	_, err := NewSendTxn(msg)
+	_, err := NewSendTxn(&msg)
 	assert.Regexp("param 0: Could not be converted to a number", err.Error())
 }
 
@@ -535,6 +535,6 @@ func TestSendTxnPackError(t *testing.T) {
 			},
 		},
 	}
-	_, err := NewSendTxn(msg)
+	_, err := NewSendTxn(&msg)
 	assert.Regexp("cannot use \\[0\\]uint8 as type \\[1\\]uint8 as argument", err.Error())
 }

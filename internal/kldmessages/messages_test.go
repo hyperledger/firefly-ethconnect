@@ -15,6 +15,8 @@
 package kldmessages
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,7 +47,7 @@ func TestJSONEncodingAssumptions(t *testing.T) {
 		"\"outputs\":[{\"name\":\"ret1\",\"type\":\"uint256\"}]}" +
 		"}"
 	var sendTxnMsg SendTransaction
-	err := UnmarshalKldMessage(jsonMsg, &sendTxnMsg)
+	err := json.Unmarshal([]byte(jsonMsg), &sendTxnMsg)
 
 	assert.Nil(err)
 	assert.Equal("123", sendTxnMsg.Parameters[0])
@@ -54,4 +56,38 @@ func TestJSONEncodingAssumptions(t *testing.T) {
 	assert.Equal("0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", sendTxnMsg.Parameters[3])
 	ctx := sendTxnMsg.Headers.Context.(map[string]interface{})
 	assert.Equal("hello world", ctx["myContext"])
+
+	// Simulate an error for this transaction, and check it marshals/unmarshals with the embedded request payload
+	exampleErrMsg := NewErrorReply(400, fmt.Errorf("pop"), &sendTxnMsg)
+	marshaledErrMsg, _ := json.Marshal(&exampleErrMsg)
+	var unmarshaledErrMsg ErrorReply
+	json.Unmarshal(marshaledErrMsg, &unmarshaledErrMsg)
+	assert.Equal(400, unmarshaledErrMsg.Headers.Status)
+	assert.Equal("pop", unmarshaledErrMsg.ErrorMessage)
+	assert.NotEmpty(unmarshaledErrMsg.OriginalMessage)
+
+}
+
+func TestErrorMessageForEmptyData(t *testing.T) {
+	assert := assert.New(t)
+
+	exampleErrMsg := NewErrorReply(400, fmt.Errorf("pop"), []byte{})
+	marshaledErrMsg, _ := json.Marshal(&exampleErrMsg)
+	var unmarshaledErrMsg ErrorReply
+	json.Unmarshal(marshaledErrMsg, &unmarshaledErrMsg)
+	assert.Equal(400, unmarshaledErrMsg.Headers.Status)
+	assert.Equal("pop", unmarshaledErrMsg.ErrorMessage)
+	assert.Equal("", unmarshaledErrMsg.OriginalMessage)
+}
+
+func TestErrorMessageForUnparsableBinaryData(t *testing.T) {
+	assert := assert.New(t)
+
+	exampleErrMsg := NewErrorReply(400, fmt.Errorf("pop"), []byte{00, 0xfe, 0xed, 0xbe, 0xef})
+	marshaledErrMsg, _ := json.Marshal(&exampleErrMsg)
+	var unmarshaledErrMsg ErrorReply
+	json.Unmarshal(marshaledErrMsg, &unmarshaledErrMsg)
+	assert.Equal(400, unmarshaledErrMsg.ReplyHeaders().Status)
+	assert.Equal("pop", unmarshaledErrMsg.ErrorMessage)
+	assert.Equal("\u0000\ufffd\ufffd\ufffd\ufffd", unmarshaledErrMsg.OriginalMessage)
 }

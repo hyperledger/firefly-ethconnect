@@ -152,7 +152,7 @@ type testKafkaMsgProcessor struct {
 	messages chan MsgContext
 }
 
-func (p *testKafkaMsgProcessor) OnMessage(msg MsgContext) (err error) {
+func (p *testKafkaMsgProcessor) OnMessage(msg MsgContext) {
 	log.Infof("Dispatched message context to processor: %s", msg)
 	p.messages <- msg
 	return
@@ -256,6 +256,18 @@ func TestDefIntWithBadEnvVar(t *testing.T) {
 
 	assert.Nil(err)
 	assert.Equal(10, k.Conf.MaxInFlight)
+}
+
+func TestDefIntWithGoodEnvVar(t *testing.T) {
+	assert := assert.New(t)
+
+	os.Setenv("KAFKA_MAX_INFLIGHT", "123")
+	defer os.Unsetenv("KAFKA_MAX_INFLIGHT")
+
+	k, err := execBridgeWithArgs(assert, minWorkingArgs, &testKafkaFactory{})
+
+	assert.Nil(err)
+	assert.Equal(123, k.Conf.MaxInFlight)
 }
 
 func TestExecuteWithBadRPCURL(t *testing.T) {
@@ -491,7 +503,7 @@ func TestSingleMessageWithReply(t *testing.T) {
 
 	// Send a minimal test message
 	msg1 := kldmessages.RequestCommon{}
-	msg1.Headers.MsgType = "TestAddInflightMsg"
+	msg1.Headers.MsgType = "TestSingleMessageWithReply"
 	msg1Ctx := struct {
 		Some string `json:"some"`
 	}{
@@ -520,10 +532,7 @@ func TestSingleMessageWithReply(t *testing.T) {
 	// Send the reply in a go routine
 	go func() {
 		reply1 := kldmessages.ReplyCommon{}
-		if err = msgContext1.Reply(&reply1); err != nil {
-			assert.Fail("Could not send reply: %s", err)
-			return
-		}
+		msgContext1.Reply(&reply1)
 	}()
 
 	// Check the reply is sent correctly to Kafka
@@ -551,6 +560,55 @@ func TestSingleMessageWithReply(t *testing.T) {
 	wg.Wait()
 }
 
+func TestSingleMessageWithErrorReply(t *testing.T) {
+	assert := assert.New(t)
+
+	f := testKafkaFactory{
+		processor: &testKafkaMsgProcessor{
+			messages: make(chan MsgContext),
+		},
+	}
+	k, wg, err := startTestBridge(assert, minWorkingArgs, &f)
+	if err != nil {
+		return
+	}
+
+	// Send a minimal test message
+	msg1 := kldmessages.RequestCommon{}
+	msg1.Headers.MsgType = "TestSingleMessageWithErrorReply"
+	msg1.Headers.Account = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg1bytes, err := json.Marshal(&msg1)
+	log.Infof("Sent message: %s", string(msg1bytes))
+	f.consumer.messages <- &sarama.ConsumerMessage{Value: msg1bytes}
+
+	// Get the message via the processor
+	msgContext1 := <-f.processor.messages
+	assert.NotEmpty(msgContext1.Headers().ID) // Generated one as not supplied
+	go func() {
+		msgContext1.SendErrorReply(400, fmt.Errorf("bang"))
+	}()
+
+	// Check the reply is sent correctly to Kafka
+	replyKafkaMsg := <-f.producer.input
+	f.producer.successes <- replyKafkaMsg
+	replyBytes, err := replyKafkaMsg.Value.Encode()
+	if err != nil {
+		assert.Fail("Could not get bytes from reply: %s", err)
+		return
+	}
+	var errorReply kldmessages.ErrorReply
+	err = json.Unmarshal(replyBytes, &errorReply)
+	if err != nil {
+		assert.Fail("Could not unmarshal reply: %s", err)
+		return
+	}
+	assert.Equal("bang", errorReply.ErrorMessage)
+	assert.Equal(400, errorReply.Headers.Status)
+
+	// Shut down
+	k.signals <- os.Interrupt
+	wg.Wait()
+}
 func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 	assert := assert.New(t)
 
@@ -591,9 +649,8 @@ func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 	go func(msgContexts []MsgContext) {
 		for _, msgContext := range msgContexts {
 			reply := kldmessages.ReplyCommon{}
-			err := msgContext.Reply(&reply)
+			msgContext.Reply(&reply)
 			log.Infof("Sent reply for %s", msgContext.Headers().ID)
-			assert.Equal(nil, err)
 		}
 	}(msgContexts)
 	// Drain the producer
@@ -619,9 +676,8 @@ func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 		for i := (len(msgContexts) - 1); i >= 0; i-- {
 			msgContext := msgContexts[i]
 			reply := kldmessages.ReplyCommon{}
-			err := msgContext.Reply(&reply)
+			msgContext.Reply(&reply)
 			log.Infof("Sent reply for %s", msgContext.Headers().ID)
-			assert.Equal(nil, err)
 		}
 		wg1.Done()
 	}(msgContexts)

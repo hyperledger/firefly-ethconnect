@@ -32,18 +32,18 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// KldTx wraps an ethereum transaction, along with the logic to send it over
+// Txn wraps an ethereum transaction, along with the logic to send it over
 // JSON/RPC to a node
-type KldTx struct {
+type Txn struct {
 	From  common.Address
 	EthTX *types.Transaction
 }
 
 // NewContractDeployTxn builds a new ethereum transaction from the supplied
 // SendTranasction message
-func NewContractDeployTxn(msg kldmessages.DeployContract) (pTX *KldTx, err error) {
+func NewContractDeployTxn(msg *kldmessages.DeployContract) (pTX *Txn, err error) {
 
-	var tx KldTx
+	var tx Txn
 	pTX = &tx
 
 	// Compile the solidity contract
@@ -75,9 +75,9 @@ func NewContractDeployTxn(msg kldmessages.DeployContract) (pTX *KldTx, err error
 
 // NewSendTxn builds a new ethereum transaction from the supplied
 // SendTranasction message
-func NewSendTxn(msg kldmessages.SendTransaction) (pTX *KldTx, err error) {
+func NewSendTxn(msg *kldmessages.SendTransaction) (pTX *Txn, err error) {
 
-	var tx KldTx
+	var tx Txn
 	pTX = &tx
 
 	methodABI, err := genMethodABI(&msg.Function)
@@ -130,7 +130,7 @@ func genMethodABI(jsonABI *kldmessages.ABIFunction) (method *abi.Method, err err
 	return
 }
 
-func (tx *KldTx) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json.Number, data []byte) (err error) {
+func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json.Number, data []byte) (err error) {
 
 	tx.From, err = kldutils.StrToAddress("from", msgFrom)
 	if err != nil {
@@ -144,9 +144,11 @@ func (tx *KldTx) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, ms
 	}
 
 	value := big.NewInt(0)
-	if _, ok := value.SetString(msgValue.String(), 10); !ok {
-		err = fmt.Errorf("Converting supplied 'value' to big integer: %s", err)
-		return
+	if msgValue.String() != "" {
+		if _, ok := value.SetString(msgValue.String(), 10); !ok {
+			err = fmt.Errorf("Converting supplied 'value' to big integer: %s", err)
+			return
+		}
 	}
 
 	gas, err := msgGas.Int64()
@@ -156,9 +158,11 @@ func (tx *KldTx) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, ms
 	}
 
 	gasPrice := big.NewInt(0)
-	if _, ok := value.SetString(msgGasPrice.String(), 10); !ok {
-		err = fmt.Errorf("Converting supplied 'gasPrice' to big integer")
-		return
+	if msgGasPrice.String() != "" {
+		if _, ok := value.SetString(msgGasPrice.String(), 10); !ok {
+			err = fmt.Errorf("Converting supplied 'gasPrice' to big integer")
+			return
+		}
 	}
 
 	var toAddr common.Address
@@ -285,7 +289,7 @@ func processIntVal(typedArgs []interface{}, methodName string, idx int, required
 }
 
 // GenerateTypedArgs parses string arguments into a range of types to pass to the ABI call
-func (tx *KldTx) generateTypedArgs(params []interface{}, method abi.Method) (typedArgs []interface{}, err error) {
+func (tx *Txn) generateTypedArgs(params []interface{}, method abi.Method) (typedArgs []interface{}, err error) {
 
 	methodName := method.Name
 	if methodName == "" {

@@ -550,6 +550,7 @@ func TestSingleMessageWithReply(t *testing.T) {
 	// Send the reply in a go routine
 	go func() {
 		reply1 := kldmessages.ReplyCommon{}
+		reply1.Headers.MsgType = "TestReply"
 		msgContext1.Reply(&reply1)
 	}()
 

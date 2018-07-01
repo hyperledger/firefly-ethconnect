@@ -343,6 +343,9 @@ func (c *msgContext) Reply(replyMessage kldmessages.ReplyWithHeaders) {
 	replyHeaders.OrigID = c.requestCommon.Headers.ID
 	replyHeaders.OrigMsg = c.origMsg
 	replyHeaders.OrigMsg = c.origMsg
+	replyHeaders.Received = c.timeReceived.Format(time.RFC3339)
+	c.replyTime = time.Now()
+	replyHeaders.Elapsed = c.replyTime.Sub(c.timeReceived).Seconds()
 	c.replyBytes, _ = json.Marshal(replyMessage)
 	log.Infof("Sending reply: %s", c)
 	c.bridge.producer.Input() <- &sarama.ProducerMessage{
@@ -355,10 +358,15 @@ func (c *msgContext) Reply(replyMessage kldmessages.ReplyWithHeaders) {
 }
 
 func (c *msgContext) String() string {
-	return fmt.Sprintf("MsgContext[%s:%s origMsg=%s received=%s replied=%s replyType=%s]",
+	retval := fmt.Sprintf("MsgContext[%s:%s origMsg=%s complete=%t received=%s",
 		c.requestCommon.Headers.MsgType, c.requestCommon.Headers.ID,
-		c.origMsg, c.timeReceived.Format(time.RFC3339),
-		c.replyTime.Format(time.RFC3339), c.replyType)
+		c.origMsg, c.complete, c.timeReceived.Format(time.RFC3339))
+	if c.replyType != "" {
+		retval += fmt.Sprintf(" replied=%s replyType=%s",
+			c.replyTime.Format(time.RFC3339), c.replyType)
+	}
+	retval += "]"
+	return retval
 }
 
 // Length Gets the encoded length

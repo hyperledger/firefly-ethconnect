@@ -175,8 +175,9 @@ func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgG
 	} else {
 		tx.EthTX = types.NewContractCreation(uint64(nonce), value, uint64(gas), gasPrice, data)
 	}
-	log.Debug("TX:%s To=%s Value=%d Gas=%d GasPrice=%d",
-		tx.EthTX.Hash().Hex(), tx.EthTX.To(), tx.EthTX.Value, tx.EthTX.Gas, tx.EthTX.GasPrice)
+	etx := tx.EthTX
+	log.Debugf("TX:%s From=%s To=%s Nonce=%d Value=%d Gas=%d GasPrice=%d",
+		etx.Hash().Hex(), tx.From.Hex(), etx.To(), etx.Nonce(), etx.Value(), etx.Gas(), etx.GasPrice())
 	return
 }
 

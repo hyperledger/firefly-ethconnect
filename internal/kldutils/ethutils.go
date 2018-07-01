@@ -21,7 +21,12 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
+// StrToAddress is a helper to parse eth addresses with useful errors
 func StrToAddress(desc string, strAddr string) (addr common.Address, err error) {
+	if strAddr == "" {
+		err = fmt.Errorf("'%s' must be supplied", desc)
+		return
+	}
 	if !strings.HasPrefix(strAddr, "0x") {
 		strAddr = "0x" + strAddr
 	}

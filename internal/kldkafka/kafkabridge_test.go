@@ -28,6 +28,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
+	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -40,6 +41,22 @@ type testKafkaFactory struct {
 	producer           *testKafkaProducer
 	consumer           *testKafkaConsumer
 	processor          *testKafkaMsgProcessor
+}
+
+func newTestKafkaFactory() *testKafkaFactory {
+	return &testKafkaFactory{
+		processor: &testKafkaMsgProcessor{
+			messages: make(chan MsgContext),
+		},
+	}
+}
+
+func newErrorTestKafkaFactory(errorOnNewClient error, errorOnNewConsumer error, errorOnNewProducer error) *testKafkaFactory {
+	f := newTestKafkaFactory()
+	f.errorOnNewClient = errorOnNewClient
+	f.errorOnNewConsumer = errorOnNewConsumer
+	f.errorOnNewProducer = errorOnNewProducer
+	return f
 }
 
 var minWorkingArgs = []string{
@@ -150,6 +167,11 @@ func (c *testKafkaConsumer) MarkOffset(msg *sarama.ConsumerMessage, metadata str
 
 type testKafkaMsgProcessor struct {
 	messages chan MsgContext
+	rpc      kldeth.RPCClient
+}
+
+func (p *testKafkaMsgProcessor) SetRPC(rpc kldeth.RPCClient) {
+	p.rpc = rpc
 }
 
 func (p *testKafkaMsgProcessor) OnMessage(msg MsgContext) {
@@ -252,7 +274,7 @@ func TestDefIntWithBadEnvVar(t *testing.T) {
 	os.Setenv("KAFKA_MAX_INFLIGHT", "badness")
 	defer os.Unsetenv("KAFKA_MAX_INFLIGHT")
 
-	k, err := execBridgeWithArgs(assert, minWorkingArgs, &testKafkaFactory{})
+	k, err := execBridgeWithArgs(assert, minWorkingArgs, newTestKafkaFactory())
 
 	assert.Nil(err)
 	assert.Equal(10, k.Conf.MaxInFlight)
@@ -264,7 +286,7 @@ func TestDefIntWithGoodEnvVar(t *testing.T) {
 	os.Setenv("KAFKA_MAX_INFLIGHT", "123")
 	defer os.Unsetenv("KAFKA_MAX_INFLIGHT")
 
-	k, err := execBridgeWithArgs(assert, minWorkingArgs, &testKafkaFactory{})
+	k, err := execBridgeWithArgs(assert, minWorkingArgs, newTestKafkaFactory())
 
 	assert.Nil(err)
 	assert.Equal(123, k.Conf.MaxInFlight)
@@ -280,7 +302,7 @@ func TestExecuteWithBadRPCURL(t *testing.T) {
 		"-g", "test-group",
 		"-u", "testuser",
 		"-p", "testpass",
-	}, &testKafkaFactory{})
+	}, newTestKafkaFactory())
 
 	assert.Regexp("connect", err.Error())
 
@@ -288,9 +310,9 @@ func TestExecuteWithBadRPCURL(t *testing.T) {
 func TestExecuteWithNewClientError(t *testing.T) {
 	assert := assert.New(t)
 
-	_, err := execBridgeWithArgs(assert, minWorkingArgs, &testKafkaFactory{
-		errorOnNewClient: fmt.Errorf("pop"),
-	})
+	_, err := execBridgeWithArgs(assert, minWorkingArgs, newErrorTestKafkaFactory(
+		fmt.Errorf("pop"), nil, nil,
+	))
 
 	assert.Regexp("pop", err.Error())
 
@@ -299,9 +321,9 @@ func TestExecuteWithNewClientError(t *testing.T) {
 func TestExecuteWithNewProducerError(t *testing.T) {
 	assert := assert.New(t)
 
-	_, err := execBridgeWithArgs(assert, minWorkingArgs, &testKafkaFactory{
-		errorOnNewProducer: fmt.Errorf("fizz"),
-	})
+	_, err := execBridgeWithArgs(assert, minWorkingArgs, newErrorTestKafkaFactory(
+		nil, fmt.Errorf("fizz"), nil,
+	))
 
 	assert.Regexp("fizz", err.Error())
 
@@ -309,9 +331,9 @@ func TestExecuteWithNewProducerError(t *testing.T) {
 func TestExecuteWithNewConsumerError(t *testing.T) {
 	assert := assert.New(t)
 
-	_, err := execBridgeWithArgs(assert, minWorkingArgs, &testKafkaFactory{
-		errorOnNewConsumer: fmt.Errorf("bang"),
-	})
+	_, err := execBridgeWithArgs(assert, minWorkingArgs, newErrorTestKafkaFactory(
+		nil, nil, fmt.Errorf("bang"),
+	))
 
 	assert.Regexp("bang", err.Error())
 
@@ -319,7 +341,7 @@ func TestExecuteWithNewConsumerError(t *testing.T) {
 func TestExecuteWithNoTLS(t *testing.T) {
 	assert := assert.New(t)
 
-	_, err := execBridgeWithArgs(assert, minWorkingArgs, &testKafkaFactory{})
+	_, err := execBridgeWithArgs(assert, minWorkingArgs, newTestKafkaFactory())
 
 	assert.Equal(nil, err)
 	assert.Equal(true, testClientConf.Producer.Return.Successes)
@@ -344,7 +366,7 @@ func TestExecuteWithSASL(t *testing.T) {
 		"-g", "test-group",
 		"-u", "testuser",
 		"-p", "testpass",
-	}, &testKafkaFactory{})
+	}, newTestKafkaFactory())
 
 	assert.Equal(nil, err)
 	assert.Equal("testuser", testClientConf.Net.SASL.User)
@@ -362,7 +384,7 @@ func TestExecuteWithDefaultTLSAndClientID(t *testing.T) {
 		"-g", "test-group",
 		"-i", "clientid1",
 		"--tls-enabled",
-	}, &testKafkaFactory{})
+	}, newTestKafkaFactory())
 
 	assert.Equal(nil, err)
 	assert.Equal(true, testClientConf.Net.TLS.Enable)
@@ -450,7 +472,7 @@ func TestExecuteWithSelfSignedMutualAuth(t *testing.T) {
 		"--tls-cacerts", testCACertFile.Name(),
 	}
 
-	k, err := execBridgeWithArgs(assert, mutualTLSArgs, &testKafkaFactory{})
+	k, err := execBridgeWithArgs(assert, mutualTLSArgs, newTestKafkaFactory())
 
 	assert.Equal(nil, err)
 	assert.Equal(true, testClientConf.Net.TLS.Enable)
@@ -491,12 +513,8 @@ func TestPrintlnForSaramaLogger(t *testing.T) {
 func TestSingleMessageWithReply(t *testing.T) {
 	assert := assert.New(t)
 
-	f := testKafkaFactory{
-		processor: &testKafkaMsgProcessor{
-			messages: make(chan MsgContext),
-		},
-	}
-	k, wg, err := startTestBridge(assert, minWorkingArgs, &f)
+	f := newTestKafkaFactory()
+	k, wg, err := startTestBridge(assert, minWorkingArgs, f)
 	if err != nil {
 		return
 	}
@@ -563,12 +581,8 @@ func TestSingleMessageWithReply(t *testing.T) {
 func TestSingleMessageWithErrorReply(t *testing.T) {
 	assert := assert.New(t)
 
-	f := testKafkaFactory{
-		processor: &testKafkaMsgProcessor{
-			messages: make(chan MsgContext),
-		},
-	}
-	k, wg, err := startTestBridge(assert, minWorkingArgs, &f)
+	f := newTestKafkaFactory()
+	k, wg, err := startTestBridge(assert, minWorkingArgs, f)
 	if err != nil {
 		return
 	}
@@ -612,12 +626,8 @@ func TestSingleMessageWithErrorReply(t *testing.T) {
 func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 	assert := assert.New(t)
 
-	f := testKafkaFactory{
-		processor: &testKafkaMsgProcessor{
-			messages: make(chan MsgContext),
-		},
-	}
-	k, wg, err := startTestBridge(assert, minWorkingArgs, &f)
+	f := newTestKafkaFactory()
+	k, wg, err := startTestBridge(assert, minWorkingArgs, f)
 	if err != nil {
 		return
 	}
@@ -700,12 +710,8 @@ func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 func TestAddInflightMessageBadMessage(t *testing.T) {
 	assert := assert.New(t)
 
-	f := testKafkaFactory{
-		processor: &testKafkaMsgProcessor{
-			messages: make(chan MsgContext),
-		},
-	}
-	k, wg, err := startTestBridge(assert, minWorkingArgs, &f)
+	f := newTestKafkaFactory()
+	k, wg, err := startTestBridge(assert, minWorkingArgs, f)
 	if err != nil {
 		return
 	}
@@ -733,7 +739,7 @@ func TestProducerErrorLoopPanics(t *testing.T) {
 	assert := assert.New(t)
 
 	k := NewKafkaBridge()
-	f := testKafkaFactory{}
+	f := newTestKafkaFactory()
 	producer, _ := f.newProducer(k)
 	k.producer = producer
 
@@ -754,7 +760,7 @@ func TestProducerSuccessLoopPanicsMsgNotInflight(t *testing.T) {
 	assert := assert.New(t)
 
 	k := NewKafkaBridge()
-	f := testKafkaFactory{}
+	f := newTestKafkaFactory()
 	producer, _ := f.newProducer(k)
 	k.producer = producer
 
@@ -773,8 +779,8 @@ func TestProducerSuccessLoopPanicsMsgNotInflight(t *testing.T) {
 func TestConsumerErrorLoopLogsAndContinues(t *testing.T) {
 	assert := assert.New(t)
 
-	f := testKafkaFactory{}
-	k, wg, err := startTestBridge(assert, minWorkingArgs, &f)
+	f := newTestKafkaFactory()
+	k, wg, err := startTestBridge(assert, minWorkingArgs, f)
 	if err != nil {
 		return
 	}
@@ -789,8 +795,8 @@ func TestConsumerErrorLoopLogsAndContinues(t *testing.T) {
 func TestConsumerNotificationsLoop(t *testing.T) {
 	assert := assert.New(t)
 
-	f := testKafkaFactory{}
-	k, wg, err := startTestBridge(assert, minWorkingArgs, &f)
+	f := newTestKafkaFactory()
+	k, wg, err := startTestBridge(assert, minWorkingArgs, f)
 	if err != nil {
 		return
 	}

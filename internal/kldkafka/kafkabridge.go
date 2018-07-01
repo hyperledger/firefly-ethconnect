@@ -430,6 +430,7 @@ func (k *KafkaBridge) connect() (err error) {
 		err = fmt.Errorf("JSON/RPC connection to %s failed: %s", k.Conf.RPC.URL, err)
 		return
 	}
+	k.processor.SetRPC(k.rpc)
 	log.Debug("JSON/RPC connected. URL=", k.Conf.RPC.URL)
 
 	return

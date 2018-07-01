@@ -374,10 +374,10 @@ func (c msgContext) Encode() ([]byte, error) {
 // NewKafkaBridge creates a new KafkaBridge
 func NewKafkaBridge() *KafkaBridge {
 	var kf saramaKafkaFactory
-	var mp msgProcessor
+	mp := newMsgProcessor()
 	k := KafkaBridge{
 		factory:      &kf,
-		processor:    &mp,
+		processor:    mp,
 		inFlight:     make(map[string]*msgContext),
 		inFlightCond: sync.NewCond(&sync.Mutex{}),
 	}

@@ -200,9 +200,11 @@ type MsgContext interface {
 	Headers() *kldmessages.CommonHeaders
 	// Unmarshal the supplied message into a give type
 	Unmarshal(msg interface{}) error
+	// Send an error reply
+	SendErrorReply(status int, err error)
 	// Send a reply that can be marshaled into bytes.
 	// Sets all the common headers on behalf of the caller, based on the request context
-	Reply(fullMsg interface{}) error
+	Reply(replyMsg kldmessages.ReplyWithHeaders)
 }
 
 type msgContext struct {
@@ -241,7 +243,7 @@ func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage) (pCtx *msgCont
 	// that needs Reply (and offset commit). So our caller must
 	// send a generic error reply (after dropping the lock).
 	if err = json.Unmarshal(msg.Value, &ctx.requestCommon); err != nil {
-		log.Errorf("Failed to unmarshal message headers: %s", err)
+		log.Errorf("Failed to unmarshal message headers: %s - Message=%s", err, string(msg.Value))
 		return
 	}
 	headers := &ctx.requestCommon.Headers
@@ -317,19 +319,31 @@ func (c *msgContext) Headers() *kldmessages.CommonHeaders {
 	return &c.requestCommon.Headers
 }
 
-func (c *msgContext) Unmarshal(msg interface{}) error {
-	return json.Unmarshal(c.saramaMsg.Value, msg)
+func (c *msgContext) Unmarshal(msg interface{}) (err error) {
+	if err = json.Unmarshal(c.saramaMsg.Value, msg); err != nil {
+		log.Errorf("Failed to message: %s - Message=%s", err, string(c.saramaMsg.Value))
+	}
+	return
 }
 
-func (c *msgContext) Reply(pFullMsg interface{}) (err error) {
+func (c *msgContext) SendErrorReply(status int, err error) {
+	errMsg := kldmessages.NewErrorReply(400, err, c.saramaMsg.Value)
+	c.Reply(errMsg)
+}
 
-	replyHeaders := &pFullMsg.(*kldmessages.ReplyCommon).Headers
+func (c *msgContext) Reply(replyMessage kldmessages.ReplyWithHeaders) {
+
+	replyHeaders := replyMessage.ReplyHeaders()
 	c.replyType = replyHeaders.MsgType
+	if replyHeaders.Status == 0 {
+		replyHeaders.Status = 200
+	}
 	replyHeaders.ID = kldutils.UUIDv4()
 	replyHeaders.Context = c.requestCommon.Headers.Context
 	replyHeaders.OrigID = c.requestCommon.Headers.ID
 	replyHeaders.OrigMsg = c.origMsg
-	c.replyBytes, _ = json.Marshal(pFullMsg)
+	replyHeaders.OrigMsg = c.origMsg
+	c.replyBytes, _ = json.Marshal(replyMessage)
 	log.Infof("Sending reply: %s", c)
 	c.bridge.producer.Input() <- &sarama.ProducerMessage{
 		Topic:    c.bridge.Conf.TopicOut,
@@ -497,10 +511,8 @@ func (k *KafkaBridge) consumerMessagesLoop() {
 			k.processor.OnMessage(msgCtx)
 		} else {
 			// Dispatch a generic 'bad data' reply
-			var errMsg kldmessages.ReplyCommon
-			errMsg.Headers.Status = 400
-			errMsg.Headers.ErrorMessage = err.Error()
-			msgCtx.Reply(&errMsg)
+			errMsg := kldmessages.NewErrorReply(400, err, msg.Value)
+			msgCtx.Reply(errMsg)
 		}
 	}
 	k.consumerWG.Done()

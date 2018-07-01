@@ -16,6 +16,7 @@ package kldmessages
 
 import (
 	"encoding/json"
+	"reflect"
 )
 
 const (
@@ -24,11 +25,6 @@ const (
 	// MsgTypeSendTransaction - send a transaction
 	MsgTypeSendTransaction = "SendTransaction"
 )
-
-// UnmarshalKldMessage is a trivial wrapper around json decoding
-func UnmarshalKldMessage(jsonMsg string, msg interface{}) error {
-	return json.Unmarshal([]byte(jsonMsg), msg)
-}
 
 // ABIFunction is the web3 form for an individual function
 // described in https://web3js.readthedocs.io/en/1.0/glossary.html
@@ -64,16 +60,25 @@ type RequestCommon struct {
 // ReplyHeaders are common to all replies
 type ReplyHeaders struct {
 	CommonHeaders
-	OrigMsg      string `json:"origMsg"`
-	OrigID       string `json:"origID"`
-	OrigTX       string `json:"origTX,omitempty"`
-	Status       int32  `json:"status"`
-	ErrorMessage string `json:"errorMessage,omitempty"`
+	OrigMsg string `json:"origMsg"`
+	OrigID  string `json:"origID"`
+	OrigTX  string `json:"origTX,omitempty"`
+	Status  int    `json:"status"`
+}
+
+// ReplyWithHeaders gives common access the reply headers
+type ReplyWithHeaders interface {
+	ReplyHeaders() *ReplyHeaders
 }
 
 // ReplyCommon is a common interface to all replies
 type ReplyCommon struct {
 	Headers ReplyHeaders `json:"headers"`
+}
+
+// ReplyHeaders returns the reply headers
+func (r *ReplyCommon) ReplyHeaders() *ReplyHeaders {
+	return &r.Headers
 }
 
 // transactionCommon is the common fields from https://github.com/ethereum/wiki/wiki/JavaScript-API#web3ethsendtransaction
@@ -100,4 +105,29 @@ type DeployContract struct {
 	transactionCommon
 	Solidity     string `json:"solidity"`
 	ContractName string `json:"contractName,omitempty"`
+}
+
+// ErrorReply is
+type ErrorReply struct {
+	ReplyCommon
+	ErrorMessage    string `json:"errorMessage,omitempty"`
+	OriginalMessage string `json:"requestPayload,omitempty"`
+}
+
+// NewErrorReply is a helper to construct an error message
+func NewErrorReply(status int, err error, origMsg interface{}) *ErrorReply {
+	var errMsg ErrorReply
+	errMsg.Headers.Status = status
+	if err != nil {
+		errMsg.ErrorMessage = err.Error()
+	}
+	if reflect.TypeOf(origMsg).Kind() == reflect.Slice {
+		errMsg.OriginalMessage = string(origMsg.([]byte))
+	} else {
+		origMsgBytes, _ := json.Marshal(origMsg)
+		if origMsgBytes != nil {
+			errMsg.OriginalMessage = string(origMsgBytes)
+		}
+	}
+	return &errMsg
 }

@@ -14,14 +14,66 @@
 
 package kldkafka
 
+import (
+	"fmt"
+
+	"github.com/kaleido-io/ethconnect/internal/kldeth"
+	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+)
+
 // MsgProcessor interface is called for each message, as is responsible
 // for tracking all in-flight messages
 type MsgProcessor interface {
-	OnMessage(MsgContext) error
+	OnMessage(MsgContext)
 }
 
 type msgProcessor struct{}
 
-func (p *msgProcessor) OnMessage(msg MsgContext) (err error) {
-	return
+// OnMessage checks the type and dispatches to the correct logic
+// ** From this point on the processor MUST ensure Reply is called
+//    on msgContext eventually in all scenarios.
+//    It cannot return an error synchronously from this function **
+func (p *msgProcessor) OnMessage(msgContext MsgContext) {
+
+	var unmarshalErr error
+	headers := msgContext.Headers()
+	switch headers.MsgType {
+	case kldmessages.MsgTypeDeployContract:
+		var deployContractMsg kldmessages.DeployContract
+		if unmarshalErr = msgContext.Unmarshal(&deployContractMsg); unmarshalErr != nil {
+			break
+		}
+		p.OnDeployContractMessage(msgContext, &deployContractMsg)
+		break
+	case kldmessages.MsgTypeSendTransaction:
+		var sendTransactionMsg kldmessages.SendTransaction
+		if unmarshalErr = msgContext.Unmarshal(&sendTransactionMsg); unmarshalErr != nil {
+			break
+		}
+		p.OnSendTransactionMessage(msgContext, &sendTransactionMsg)
+		break
+	default:
+		unmarshalErr = fmt.Errorf("Unknown message type '%s'", headers.MsgType)
+	}
+	// We must always send a reply
+	if unmarshalErr != nil {
+		msgContext.SendErrorReply(400, unmarshalErr)
+	}
+
+}
+
+func (p *msgProcessor) OnDeployContractMessage(msgContext MsgContext, msg *kldmessages.DeployContract) {
+	_, err := kldeth.NewContractDeployTxn(msg)
+	if err != nil {
+		msgContext.SendErrorReply(400, err)
+		return
+	}
+}
+
+func (p *msgProcessor) OnSendTransactionMessage(msgContext MsgContext, msg *kldmessages.SendTransaction) {
+	_, err := kldeth.NewSendTxn(msg)
+	if err != nil {
+		msgContext.SendErrorReply(400, err)
+		return
+	}
 }

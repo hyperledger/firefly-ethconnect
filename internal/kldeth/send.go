@@ -23,7 +23,7 @@ import (
 )
 
 // Send sends an individual transaction, choosing external or internal signing
-func (tx *KldTx) Send(rpc rpcClient) (string, error) {
+func (tx *Txn) Send(rpc rpcClient) (string, error) {
 	start := time.Now()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -56,7 +56,7 @@ type sendTxArgs struct {
 }
 
 // sendUnsignedTxn sends a transaction for internal signing by the node
-func (tx *KldTx) sendUnsignedTxn(ctx context.Context, rpc rpcClient) (string, error) {
+func (tx *Txn) sendUnsignedTxn(ctx context.Context, rpc rpcClient) (string, error) {
 	data := hexutil.Bytes(tx.EthTX.Data())
 	args := sendTxArgs{
 		Nonce:    hexutil.Uint64(tx.EthTX.Nonce()),

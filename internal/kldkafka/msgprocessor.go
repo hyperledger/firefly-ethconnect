@@ -190,7 +190,7 @@ func (p *msgProcessor) OnDeployContractMessage(msgContext MsgContext, msg *kldme
 
 	inflightWrapper, err := p.newInflightWrapper(msgContext, msg.From, msg.Nonce)
 	if err != nil {
-		msgContext.SendErrorReply(500, err)
+		msgContext.SendErrorReply(400, err)
 		return
 	}
 	msg.Nonce = inflightWrapper.nonceNumber()
@@ -213,7 +213,7 @@ func (p *msgProcessor) OnSendTransactionMessage(msgContext MsgContext, msg *kldm
 
 	inflightWrapper, err := p.newInflightWrapper(msgContext, msg.From, msg.Nonce)
 	if err != nil {
-		msgContext.SendErrorReply(500, err)
+		msgContext.SendErrorReply(400, err)
 		return
 	}
 	msg.Nonce = inflightWrapper.nonceNumber()

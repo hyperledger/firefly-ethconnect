@@ -203,7 +203,7 @@ func TestOnDeployContractMessageFailedToGetNonce(t *testing.T) {
 	assert.EqualValues([]string{"eth_getTransactionCount"}, testRPC.calls)
 }
 
-func TestOnSendTransactionMessageBadMsg(t *testing.T) {
+func TestOnSendTransactionMessageMissingFrom(t *testing.T) {
 	assert := assert.New(t)
 
 	msgProcessor := newMsgProcessor()
@@ -217,6 +217,43 @@ func TestOnSendTransactionMessageBadMsg(t *testing.T) {
 	assert.NotEmpty(testMsgContext.errorRepies)
 	assert.Empty(testMsgContext.replies)
 	assert.Regexp("'from' must be supplied", testMsgContext.errorRepies[0].err.Error())
+
+}
+
+func TestOnSendTransactionMessageBadNonce(t *testing.T) {
+	assert := assert.New(t)
+
+	msgProcessor := newMsgProcessor()
+	testMsgContext := &testMsgContext{}
+	testMsgContext.jsonMsg = "{" +
+		"  \"headers\":{\"type\": \"SendTransaction\"}," +
+		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
+		"  \"nonce\":\"abc\"" +
+		"}"
+	msgProcessor.OnMessage(testMsgContext)
+
+	assert.NotEmpty(testMsgContext.errorRepies)
+	assert.Empty(testMsgContext.replies)
+	assert.Regexp("Converting supplied 'nonce' to integer", testMsgContext.errorRepies[0].err.Error())
+
+}
+
+func TestOnSendTransactionMessageBadMsg(t *testing.T) {
+	assert := assert.New(t)
+
+	msgProcessor := newMsgProcessor()
+	testMsgContext := &testMsgContext{}
+	testMsgContext.jsonMsg = "{" +
+		"  \"headers\":{\"type\": \"SendTransaction\"}," +
+		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
+		"  \"nonce\":\"123\"," +
+		"  \"value\":\"abc\"" +
+		"}"
+	msgProcessor.OnMessage(testMsgContext)
+
+	assert.NotEmpty(testMsgContext.errorRepies)
+	assert.Empty(testMsgContext.replies)
+	assert.Regexp("Converting supplied 'value' to big integer", testMsgContext.errorRepies[0].err.Error())
 
 }
 

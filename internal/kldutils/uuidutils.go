@@ -12,15 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package kldutils
 
 import (
-	"os"
-
-	"github.com/kaleido-io/ethconnect/cmd"
+	uuid "github.com/nu7hatch/gouuid"
+	log "github.com/sirupsen/logrus"
 )
 
-func main() {
-	exitVal := cmd.Execute()
-	os.Exit(exitVal)
+// UUIDv4 returns a new UUID V4 as a string
+func UUIDv4() string {
+	uuidV4, err := uuid.NewV4()
+	if err != nil {
+		log.Errorf("Failed to generate UUID for ClientID: %s", err)
+		panic(err)
+	}
+	return uuidV4.String()
 }

@@ -12,15 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package kldeth
 
 import (
-	"os"
-
-	"github.com/kaleido-io/ethconnect/cmd"
+	"context"
 )
 
-func main() {
-	exitVal := cmd.Execute()
-	os.Exit(exitVal)
+// RPCClient refers to the functions from the ethereum RPC client that we use
+type RPCClient interface {
+	CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error
 }

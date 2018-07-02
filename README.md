@@ -13,6 +13,9 @@ Provides Key Management System (KMS) integration for signing transactions.
 Technology support currently includes:
 - Messaging
   - Apache Kafka - https://kafka.apache.org/
+
+Under development:
+
 - Key Management Service
   - AWS Key Management Service - https://aws.amazon.com/kms/
 

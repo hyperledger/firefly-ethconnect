@@ -16,9 +16,8 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
-	"github.com/kaleido-io/ethconnect/pkg/kldkafka"
+	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -39,8 +38,6 @@ func initLogging(debugLevel int) {
 	log.Debugf("Log level set to %d", debugLevel)
 }
 
-var kafkaBridge kldkafka.KafkaBridge
-
 var rootConfig struct {
 	DebugLevel int
 }
@@ -57,13 +54,16 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().IntVarP(&rootConfig.DebugLevel, "debug", "d", 1, "0=error, 1=info, 2=debug")
+
+	kafkaBridge := kldkafka.NewKafkaBridge()
 	rootCmd.AddCommand(kafkaBridge.CobraInit())
 }
 
 // Execute is called by the main method of the package
-func Execute() {
+func Execute() int {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }

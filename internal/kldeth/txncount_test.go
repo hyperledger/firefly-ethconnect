@@ -12,15 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package kldeth
 
 import (
-	"os"
+	"testing"
 
-	"github.com/kaleido-io/ethconnect/cmd"
+	"github.com/ethereum/go-ethereum/common"
+	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 )
 
-func main() {
-	exitVal := cmd.Execute()
-	os.Exit(exitVal)
+func TestGetTransactionCount(t *testing.T) {
+	log.SetLevel(log.DebugLevel)
+	assert := assert.New(t)
+
+	r := testRPCClient{}
+
+	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
+	_, err := GetTransactionCount(&r, &addr, "latest")
+
+	assert.Equal(nil, err)
+	assert.Equal("eth_getTransactionCount", r.capturedMethod)
 }

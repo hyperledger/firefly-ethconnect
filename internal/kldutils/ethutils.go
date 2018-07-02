@@ -12,15 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package kldutils
 
 import (
-	"os"
+	"fmt"
+	"strings"
 
-	"github.com/kaleido-io/ethconnect/cmd"
+	"github.com/ethereum/go-ethereum/common"
 )
 
-func main() {
-	exitVal := cmd.Execute()
-	os.Exit(exitVal)
+// StrToAddress is a helper to parse eth addresses with useful errors
+func StrToAddress(desc string, strAddr string) (addr common.Address, err error) {
+	if strAddr == "" {
+		err = fmt.Errorf("'%s' must be supplied", desc)
+		return
+	}
+	if !strings.HasPrefix(strAddr, "0x") {
+		strAddr = "0x" + strAddr
+	}
+	if !common.IsHexAddress(strAddr) {
+		err = fmt.Errorf("Supplied value for '%s' is not a valid hex address", desc)
+		return
+	}
+	addr = common.HexToAddress(strAddr)
+	return
 }

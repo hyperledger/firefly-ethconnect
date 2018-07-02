@@ -1,5 +1,7 @@
 # github.com/kaleido-io/ethconnect
 
+![Coverage report](https://codecov.io/gh/kaleido-io/ethconnect/branch/master/graph/badge.svg)
+
 Open Source component that is used as part of [Kaleido Connect](https://kaleido.io).
 
 Provides an integration bridge into Ethereum permissioned chains, from simple

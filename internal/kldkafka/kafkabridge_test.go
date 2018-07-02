@@ -170,7 +170,7 @@ type testKafkaMsgProcessor struct {
 	rpc      kldeth.RPCClient
 }
 
-func (p *testKafkaMsgProcessor) SetRPC(rpc kldeth.RPCClient) {
+func (p *testKafkaMsgProcessor) Init(rpc kldeth.RPCClient, maxTXWaitTime int) {
 	p.rpc = rpc
 }
 
@@ -618,7 +618,6 @@ func TestSingleMessageWithErrorReply(t *testing.T) {
 		return
 	}
 	assert.Equal("bang", errorReply.ErrorMessage)
-	assert.Equal(400, errorReply.Headers.Status)
 
 	// Shut down
 	k.signals <- os.Interrupt

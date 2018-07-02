@@ -45,6 +45,7 @@ type KafkaBridge struct {
 		ConsumerGroup      string
 		InsecureSkipVerify bool
 		MaxInFlight        int
+		MaxTXWaitTime      int
 		TopicIn            string
 		TopicOut           string
 		RPC                struct {
@@ -116,6 +117,9 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 			if k.Conf.RPC.URL == "" {
 				return fmt.Errorf("No JSON/RPC URL set for ethereum node")
 			}
+			if k.Conf.MaxTXWaitTime < 10 {
+				return fmt.Errorf("tx-timeout must be at least 10s")
+			}
 			return
 		},
 	}
@@ -126,7 +130,8 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&k.Conf.ClientID, "clientid", "i", os.Getenv("KAFKA_CLIENT_ID"), "Client ID (or generated UUID)")
 	cmd.Flags().StringVarP(&k.Conf.ConsumerGroup, "consumer-group", "g", os.Getenv("KAFKA_CONSUMER_GROUP"), "Client ID (or generated UUID)")
 	cmd.Flags().IntVarP(&k.Conf.MaxInFlight, "maxinflight", "m", defInt("KAFKA_MAX_INFLIGHT", 10), "Maximum messages to hold in-flight")
-	cmd.Flags().StringVarP(&k.Conf.RPC.URL, "rpcurl", "r", os.Getenv("ETH_RPC_URL"), "JSON/RPC URL for Ethereum node")
+	cmd.Flags().StringVarP(&k.Conf.RPC.URL, "rpc-url", "r", os.Getenv("ETH_RPC_URL"), "JSON/RPC URL for Ethereum node")
+	cmd.Flags().IntVarP(&k.Conf.MaxTXWaitTime, "tx-timeout", "x", defInt("ETH_TX_TIMEOUT", 300), "Maximum wait time for an individual transaction (seconds)")
 	cmd.Flags().StringVarP(&k.Conf.TopicIn, "topic-in", "t", os.Getenv("KAFKA_TOPIC_IN"), "Topic to listen to")
 	cmd.Flags().StringVarP(&k.Conf.TopicOut, "topic-out", "T", os.Getenv("KAFKA_TOPIC_OUT"), "Topic to send events to")
 	cmd.Flags().StringVarP(&k.Conf.TLS.ClientCertsFile, "tls-clientcerts", "c", os.Getenv("KAFKA_TLS_CLIENT_CERT"), "A client certificate file, for mutual TLS auth")
@@ -205,6 +210,8 @@ type MsgContext interface {
 	// Send a reply that can be marshaled into bytes.
 	// Sets all the common headers on behalf of the caller, based on the request context
 	Reply(replyMsg kldmessages.ReplyWithHeaders)
+	// Get a string summary
+	String() string
 }
 
 type msgContext struct {
@@ -327,7 +334,7 @@ func (c *msgContext) Unmarshal(msg interface{}) (err error) {
 }
 
 func (c *msgContext) SendErrorReply(status int, err error) {
-	errMsg := kldmessages.NewErrorReply(400, err, c.saramaMsg.Value)
+	errMsg := kldmessages.NewErrorReply(err, c.saramaMsg.Value)
 	c.Reply(errMsg)
 }
 
@@ -335,9 +342,6 @@ func (c *msgContext) Reply(replyMessage kldmessages.ReplyWithHeaders) {
 
 	replyHeaders := replyMessage.ReplyHeaders()
 	c.replyType = replyHeaders.MsgType
-	if replyHeaders.Status == 0 {
-		replyHeaders.Status = 200
-	}
 	replyHeaders.ID = kldutils.UUIDv4()
 	replyHeaders.Context = c.requestCommon.Headers.Context
 	replyHeaders.OrigID = c.requestCommon.Headers.ID
@@ -438,7 +442,7 @@ func (k *KafkaBridge) connect() (err error) {
 		err = fmt.Errorf("JSON/RPC connection to %s failed: %s", k.Conf.RPC.URL, err)
 		return
 	}
-	k.processor.SetRPC(k.rpc)
+	k.processor.Init(k.rpc, k.Conf.MaxTXWaitTime)
 	log.Debug("JSON/RPC connected. URL=", k.Conf.RPC.URL)
 
 	return
@@ -520,7 +524,7 @@ func (k *KafkaBridge) consumerMessagesLoop() {
 			k.processor.OnMessage(msgCtx)
 		} else {
 			// Dispatch a generic 'bad data' reply
-			errMsg := kldmessages.NewErrorReply(400, err, msg.Value)
+			errMsg := kldmessages.NewErrorReply(err, msg.Value)
 			msgCtx.Reply(errMsg)
 		}
 	}

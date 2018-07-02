@@ -15,27 +15,22 @@
 package kldeth
 
 import (
-	"context"
-	"time"
+	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
 	log "github.com/sirupsen/logrus"
-
-	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/stretchr/testify/assert"
 )
 
-// GetTransactionCount gets the transaction count for an address
-func GetTransactionCount(rpc RPCClient, addr *common.Address, blockNumber string) (int64, error) {
-	start := time.Now()
+func TestGetTransactionCount(t *testing.T) {
+	log.SetLevel(log.DebugLevel)
+	assert := assert.New(t)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	r := testRPCClient{}
 
-	var txnCount hexutil.Uint64
-	if err := rpc.CallContext(ctx, &txnCount, "eth_getTransactionCount", addr, blockNumber); err != nil {
-		return 0, err
-	}
-	callTime := time.Now().Sub(start)
-	log.Debugf("eth_getTransactionCount(%x,latest)=%d [%.2fs]", addr, txnCount, callTime.Seconds())
-	return int64(txnCount), nil
+	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
+	_, err := GetTransactionCount(&r, &addr, "latest")
+
+	assert.Equal(nil, err)
+	assert.Equal("eth_getTransactionCount", r.capturedMethod)
 }

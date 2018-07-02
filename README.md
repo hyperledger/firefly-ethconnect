@@ -2,6 +2,8 @@
 
 ![Coverage report](https://codecov.io/gh/kaleido-io/ethconnect/branch/master/graph/badge.svg)
 
+> Currently pre-relesae - please check back soon for updates
+
 Open Source component that is used as part of [Kaleido Connect](https://kaleido.io).
 
 Provides an integration bridge into Ethereum permissioned chains, from simple

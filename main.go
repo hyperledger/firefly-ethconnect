@@ -14,8 +14,13 @@
 
 package main
 
-import "github.com/kaleido-io/ethconnect/cmd"
+import (
+	"os"
+
+	"github.com/kaleido-io/ethconnect/cmd"
+)
 
 func main() {
-	cmd.Execute()
+	exitVal := cmd.Execute()
+	os.Exit(exitVal)
 }

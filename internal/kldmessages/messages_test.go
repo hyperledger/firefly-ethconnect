@@ -58,11 +58,11 @@ func TestJSONEncodingAssumptions(t *testing.T) {
 	assert.Equal("hello world", ctx["myContext"])
 
 	// Simulate an error for this transaction, and check it marshals/unmarshals with the embedded request payload
-	exampleErrMsg := NewErrorReply(400, fmt.Errorf("pop"), &sendTxnMsg)
+	exampleErrMsg := NewErrorReply(fmt.Errorf("pop"), &sendTxnMsg)
 	marshaledErrMsg, _ := json.Marshal(&exampleErrMsg)
 	var unmarshaledErrMsg ErrorReply
 	json.Unmarshal(marshaledErrMsg, &unmarshaledErrMsg)
-	assert.Equal(400, unmarshaledErrMsg.Headers.Status)
+	assert.Equal(MsgTypeError, unmarshaledErrMsg.ReplyHeaders().MsgType)
 	assert.Equal("pop", unmarshaledErrMsg.ErrorMessage)
 	assert.NotEmpty(unmarshaledErrMsg.OriginalMessage)
 
@@ -71,11 +71,10 @@ func TestJSONEncodingAssumptions(t *testing.T) {
 func TestErrorMessageForEmptyData(t *testing.T) {
 	assert := assert.New(t)
 
-	exampleErrMsg := NewErrorReply(400, fmt.Errorf("pop"), []byte{})
+	exampleErrMsg := NewErrorReply(fmt.Errorf("pop"), []byte{})
 	marshaledErrMsg, _ := json.Marshal(&exampleErrMsg)
 	var unmarshaledErrMsg ErrorReply
 	json.Unmarshal(marshaledErrMsg, &unmarshaledErrMsg)
-	assert.Equal(400, unmarshaledErrMsg.Headers.Status)
 	assert.Equal("pop", unmarshaledErrMsg.ErrorMessage)
 	assert.Equal("", unmarshaledErrMsg.OriginalMessage)
 }
@@ -83,11 +82,10 @@ func TestErrorMessageForEmptyData(t *testing.T) {
 func TestErrorMessageForUnparsableBinaryData(t *testing.T) {
 	assert := assert.New(t)
 
-	exampleErrMsg := NewErrorReply(400, fmt.Errorf("pop"), []byte{00, 0xfe, 0xed, 0xbe, 0xef})
+	exampleErrMsg := NewErrorReply(fmt.Errorf("pop"), []byte{00, 0xfe, 0xed, 0xbe, 0xef})
 	marshaledErrMsg, _ := json.Marshal(&exampleErrMsg)
 	var unmarshaledErrMsg ErrorReply
 	json.Unmarshal(marshaledErrMsg, &unmarshaledErrMsg)
-	assert.Equal(400, unmarshaledErrMsg.ReplyHeaders().Status)
 	assert.Equal("pop", unmarshaledErrMsg.ErrorMessage)
 	assert.Equal("\u0000\ufffd\ufffd\ufffd\ufffd", unmarshaledErrMsg.OriginalMessage)
 }

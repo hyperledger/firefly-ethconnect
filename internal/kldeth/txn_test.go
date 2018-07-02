@@ -28,7 +28,6 @@ import (
 
 // Slim interface for stubbing
 type testRPCClient struct {
-	mockResult     interface{}
 	mockError      error
 	capturedMethod string
 	capturedArgs   []interface{}
@@ -37,7 +36,6 @@ type testRPCClient struct {
 func (r *testRPCClient) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
 	r.capturedMethod = method
 	r.capturedArgs = args
-	result = r.mockResult
 	return r.mockError
 }
 

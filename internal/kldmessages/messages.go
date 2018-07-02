@@ -17,13 +17,22 @@ package kldmessages
 import (
 	"encoding/json"
 	"reflect"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
 const (
+	// MsgTypeError - an error
+	MsgTypeError = "Error"
 	// MsgTypeDeployContract - deploy a contract
 	MsgTypeDeployContract = "DeployContract"
 	// MsgTypeSendTransaction - send a transaction
 	MsgTypeSendTransaction = "SendTransaction"
+	// MsgTypeTransactionSuccess - a transaction receipt where status is 1
+	MsgTypeTransactionSuccess = "TransactionSuccess"
+	// MsgTypeTransactionFailure - a transaction receipt where status is 0
+	MsgTypeTransactionFailure = "TransactionFailure"
 )
 
 // ABIFunction is the web3 form for an individual function
@@ -65,7 +74,6 @@ type ReplyHeaders struct {
 	OrigMsg  string  `json:"origMsg"`
 	OrigID   string  `json:"origID"`
 	OrigTX   string  `json:"origTX,omitempty"`
-	Status   int     `json:"status"`
 }
 
 // ReplyWithHeaders gives common access the reply headers
@@ -109,6 +117,28 @@ type DeployContract struct {
 	ContractName string `json:"contractName,omitempty"`
 }
 
+// TransactionReceipt is sent when a transaction has been successfully mined
+// For the big numbers, we pass a simple string as well as a full
+// ethereum hex encoding version
+type TransactionReceipt struct {
+	ReplyCommon
+	BlockHash            *common.Hash    `json:"blockHash"`
+	BlockNumberStr       string          `json:"blockNumber"`
+	BlockNumberHex       *hexutil.Big    `json:"blockNumberHex"`
+	ContractAddress      *common.Address `json:"contractAddress,omitempty"`
+	CumulativeGasUsedStr string          `json:"cumulativeGasUsed"`
+	CumulativeGasUsedHex *hexutil.Big    `json:"cumulativeGasUsedHex"`
+	From                 *common.Address `json:"from"`
+	GasUsedStr           string          `json:"gasUsed"`
+	GasUsedHex           *hexutil.Big    `json:"gasUsedHex"`
+	StatusStr            string          `json:"status"`
+	StatusHex            *hexutil.Big    `json:"statusHex"`
+	To                   *common.Address `json:"to"`
+	TransactionHash      *common.Hash    `json:"transactionHash"`
+	TransactionIndexStr  string          `json:"transactionIndex"`
+	TransactionIndexHex  *hexutil.Uint   `json:"transactionIndexHex"`
+}
+
 // ErrorReply is
 type ErrorReply struct {
 	ReplyCommon
@@ -117,9 +147,9 @@ type ErrorReply struct {
 }
 
 // NewErrorReply is a helper to construct an error message
-func NewErrorReply(status int, err error, origMsg interface{}) *ErrorReply {
+func NewErrorReply(err error, origMsg interface{}) *ErrorReply {
 	var errMsg ErrorReply
-	errMsg.Headers.Status = status
+	errMsg.Headers.MsgType = MsgTypeError
 	if err != nil {
 		errMsg.ErrorMessage = err.Error()
 	}

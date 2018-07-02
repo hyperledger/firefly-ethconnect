@@ -24,6 +24,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
@@ -35,9 +36,24 @@ import (
 // Txn wraps an ethereum transaction, along with the logic to send it over
 // JSON/RPC to a node
 type Txn struct {
-	From  common.Address
-	EthTX *types.Transaction
-	Hash  string
+	From    common.Address
+	EthTX   *types.Transaction
+	Hash    string
+	Receipt TxnReceipt
+}
+
+// TxnReceipt is the receipt obtained over JSON/RPC from the ethereum client
+type TxnReceipt struct {
+	BlockHash         *common.Hash    `json:"blockHash"`
+	BlockNumber       *hexutil.Big    `json:"blockNumber"`
+	ContractAddress   *common.Address `json:"contractAddress"`
+	CumulativeGasUsed *hexutil.Big    `json:"cumulativeGasUsed"`
+	TransactionHash   *common.Hash    `json:"transactionHash"`
+	From              *common.Address `json:"from"`
+	GasUsed           *hexutil.Big    `json:"gasUsed"`
+	Status            *hexutil.Big    `json:"status"`
+	To                *common.Address `json:"to"`
+	TransactionIndex  *hexutil.Uint   `json:"transactionIndex"`
 }
 
 // NewContractDeployTxn builds a new ethereum transaction from the supplied

@@ -7,7 +7,7 @@
 //     http://www.apache.org/licenses/LICENSE-2.0
 
 // Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
+// distributed under the icense is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
@@ -25,13 +25,14 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
+	log "github.com/sirupsen/logrus"
 )
 
 // MsgProcessor interface is called for each message, as is responsible
 // for tracking all in-flight messages
 type MsgProcessor interface {
 	OnMessage(MsgContext)
-	SetRPC(kldeth.RPCClient)
+	Init(kldeth.RPCClient, int)
 }
 
 type inflightTxn struct {
@@ -39,13 +40,23 @@ type inflightTxn struct {
 	nonce      int64
 	msgContext MsgContext
 	tx         *kldeth.Txn
+	wg         sync.WaitGroup
 }
 
 func (i *inflightTxn) nonceNumber() json.Number {
 	return json.Number(strconv.FormatInt(i.nonce, 10))
 }
 
+func (i *inflightTxn) String() string {
+	txHash := ""
+	if i.tx != nil {
+		txHash = i.tx.Hash
+	}
+	return fmt.Sprintf("TX=%s CTX=%s", txHash, i.msgContext.String())
+}
+
 type msgProcessor struct {
+	maxTXWaitTime      time.Duration
 	inflightTxnsLock   *sync.Mutex
 	inflightTxns       map[string][]*inflightTxn
 	inflightTxnDelayer TxnDelayTracker
@@ -60,8 +71,9 @@ func newMsgProcessor() *msgProcessor {
 	}
 }
 
-func (p *msgProcessor) SetRPC(rpc kldeth.RPCClient) {
+func (p *msgProcessor) Init(rpc kldeth.RPCClient, maxTXWaitTime int) {
 	p.rpc = rpc
+	p.maxTXWaitTime = time.Duration(maxTXWaitTime) * time.Second
 }
 
 // OnMessage checks the type and dispatches to the correct logic
@@ -156,14 +168,85 @@ func (p *msgProcessor) newInflightWrapper(msgContext MsgContext, suppliedFrom st
 
 // waitForCompletion is the goroutine to track a transaction through
 // to completion and send the result
-func (p *msgProcessor) waitForCompletion(i *inflightTxn, initialWaitDelay time.Duration) {
+func (p *msgProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time.Duration) {
 
 	// The initial delay is passed in, based on updates from all the other
 	// go routines that are tracking transactions. The idea is to minimize
 	// both latency beyond the block period, and avoiding spamming the node
 	// with REST calls for long block periods, or when there is a backlog
+	replyWaitStart := time.Now()
 	time.Sleep(initialWaitDelay)
 
+	var isMined, timedOut bool
+	var err error
+	var retries int
+	for !isMined && !timedOut {
+
+		if isMined, err = iTX.tx.GetTXReceipt(p.rpc); err != nil {
+			// We wait even on connectivity errors, as we've submitted the transaction and
+			// we want to provide a receipt if connectivity resumes within the timeout
+			log.Infof("Failed to get receipt for %s (retries=%d): %s", iTX, retries, err)
+		}
+
+		elapsed := time.Now().Sub(replyWaitStart)
+		timedOut = elapsed > p.maxTXWaitTime
+		if !isMined && !timedOut {
+			// Need to have the inflight lock to calculate the delay, but not
+			// while we're waiting
+			p.inflightTxnsLock.Lock()
+			delayBeforeRetry := p.inflightTxnDelayer.GetRetryDelay(initialWaitDelay, retries+1)
+			p.inflightTxnsLock.Unlock()
+
+			log.Infof("Recept not available after %.2fs (retries=%d): %s", elapsed.Seconds(), retries, iTX)
+			time.Sleep(delayBeforeRetry)
+			retries++
+		}
+	}
+
+	if timedOut {
+		if err != nil {
+			iTX.msgContext.SendErrorReply(500, fmt.Errorf("Error obtaining transaction receipt (%d retries): %s", retries, err))
+		} else {
+			iTX.msgContext.SendErrorReply(408, fmt.Errorf("Timed out waiting for transaction receipt"))
+		}
+	} else {
+		// Build our reply
+		receipt := iTX.tx.Receipt
+		var reply kldmessages.TransactionReceipt
+		if receipt.Status != nil && receipt.Status.ToInt().Int64() > 0 {
+			reply.Headers.MsgType = kldmessages.MsgTypeTransactionSuccess
+		} else {
+			reply.Headers.MsgType = kldmessages.MsgTypeTransactionFailure
+		}
+		reply.BlockHash = receipt.BlockHash
+		reply.BlockNumberHex = receipt.BlockNumber
+		if receipt.BlockNumber != nil {
+			reply.BlockNumberStr = receipt.BlockNumber.ToInt().Text(10)
+		}
+		reply.ContractAddress = receipt.ContractAddress
+		reply.CumulativeGasUsedHex = receipt.CumulativeGasUsed
+		if receipt.CumulativeGasUsed != nil {
+			reply.CumulativeGasUsedStr = receipt.CumulativeGasUsed.ToInt().Text(10)
+		}
+		reply.From = receipt.From
+		reply.GasUsedHex = receipt.GasUsed
+		if receipt.GasUsed != nil {
+			reply.GasUsedStr = receipt.GasUsed.ToInt().Text(10)
+		}
+		reply.StatusHex = receipt.Status
+		if receipt.Status != nil {
+			reply.StatusStr = receipt.Status.ToInt().Text(10)
+		}
+		reply.To = receipt.To
+		reply.TransactionHash = receipt.TransactionHash
+		reply.TransactionIndexHex = receipt.TransactionIndex
+		if receipt.TransactionIndex != nil {
+			reply.TransactionIndexStr = strconv.FormatUint(uint64(*receipt.TransactionIndex), 10)
+		}
+		iTX.msgContext.Reply(&reply)
+	}
+
+	iTX.wg.Done()
 }
 
 // addInflight adds a transction to the inflight list, and kick off
@@ -182,6 +265,7 @@ func (p *msgProcessor) addInflight(inflight *inflightTxn, tx *kldeth.Txn) {
 	p.inflightTxnsLock.Unlock()
 
 	// Kick off the goroutine to track it to completion
+	inflight.wg.Add(1)
 	go p.waitForCompletion(inflight, initialWaitDelay)
 
 }

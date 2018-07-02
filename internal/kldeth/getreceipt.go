@@ -18,24 +18,21 @@ import (
 	"context"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	log "github.com/sirupsen/logrus"
-
-	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
-// GetTransactionCount gets the transaction count for an address
-func GetTransactionCount(rpc RPCClient, addr *common.Address, blockNumber string) (int64, error) {
+// GetTXReceipt gets the receipt for the transaction
+func (tx *Txn) GetTXReceipt(rpc RPCClient) (bool, error) {
 	start := time.Now()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	var txnCount hexutil.Uint64
-	if err := rpc.CallContext(ctx, &txnCount, "eth_getTransactionCount", addr, blockNumber); err != nil {
-		return 0, err
+	if err := rpc.CallContext(ctx, &tx.Receipt, "eth_getTransactionReceipt", tx.Hash); err != nil {
+		return false, err
 	}
 	callTime := time.Now().Sub(start)
-	log.Debugf("eth_getTransactionCount(%x,latest)=%d [%.2fs]", addr, txnCount, callTime.Seconds())
-	return int64(txnCount), nil
+	isMined := tx.Receipt.BlockNumber != nil && tx.Receipt.BlockNumber.ToInt().Uint64() > 0
+	log.Debugf("eth_getTransactionReceipt(%x,latest)=%t [%.2fs]", tx.Hash, isMined, callTime.Seconds())
+	return isMined, nil
 }

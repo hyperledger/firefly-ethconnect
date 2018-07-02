@@ -68,7 +68,7 @@ var minWorkingArgs = []string{
 
 var testClientConf *cluster.Config
 
-func (f *testKafkaFactory) newClient(k *KafkaBridge, clientConf *cluster.Config) (kafkaClient, error) {
+func (f *testKafkaFactory) newClient(k *KafkaCommon, clientConf *cluster.Config) (kafkaClient, error) {
 	testClientConf = clientConf
 	return f, f.errorOnNewClient
 }
@@ -79,7 +79,7 @@ func (f *testKafkaFactory) Brokers() []*sarama.Broker {
 	}
 }
 
-func (f *testKafkaFactory) newProducer(k *KafkaBridge) (kafkaProducer, error) {
+func (f *testKafkaFactory) newProducer(k *KafkaCommon) (KafkaProducer, error) {
 	f.producer = &testKafkaProducer{
 		input:     make(chan *sarama.ProducerMessage),
 		successes: make(chan *sarama.ProducerMessage),
@@ -88,7 +88,7 @@ func (f *testKafkaFactory) newProducer(k *KafkaBridge) (kafkaProducer, error) {
 	return f.producer, f.errorOnNewProducer
 }
 
-func (f *testKafkaFactory) newConsumer(k *KafkaBridge) (kafkaConsumer, error) {
+func (f *testKafkaFactory) newConsumer(k *KafkaCommon) (KafkaConsumer, error) {
 	f.consumer = &testKafkaConsumer{
 		messages:           make(chan *sarama.ConsumerMessage),
 		notifications:      make(chan *cluster.Notification),
@@ -184,7 +184,7 @@ func startTestBridge(assert *assert.Assertions, testArgs []string, f *testKafkaF
 	log.SetLevel(log.DebugLevel)
 
 	k = NewKafkaBridge()
-	k.factory = f
+	k.kafka.factory = f
 	k.processor = f.processor
 	kafkaCmd := k.CobraInit()
 	kafkaCmd.SetArgs(testArgs)
@@ -195,7 +195,7 @@ func startTestBridge(assert *assert.Assertions, testArgs []string, f *testKafkaF
 		err = kafkaCmd.Execute()
 		wg.Done()
 	}()
-	for k.signals == nil && err == nil {
+	for k.kafka.signals == nil && err == nil {
 		time.Sleep(10 * time.Millisecond)
 	}
 	return k, wg, err
@@ -208,7 +208,7 @@ func execBridgeWithArgs(assert *assert.Assertions, testArgs []string, f *testKaf
 
 	k, wg, err := startTestBridge(assert, testArgs, f)
 	if err == nil {
-		k.signals <- os.Interrupt
+		k.kafka.signals <- os.Interrupt
 	}
 	wg.Wait()
 
@@ -227,9 +227,9 @@ func TestNewKafkaBridge(t *testing.T) {
 func TestExecuteWithIncompleteArgs(t *testing.T) {
 	assert := assert.New(t)
 
-	var k KafkaBridge
+	k := NewKafkaBridge()
 	var f testKafkaFactory
-	k.factory = &f
+	k.kafka.factory = &f
 
 	kafkaCmd := k.CobraInit()
 
@@ -266,6 +266,13 @@ func TestExecuteWithIncompleteArgs(t *testing.T) {
 	err = kafkaCmd.Execute()
 	assert.Equal("flag mismatch: 'sasl-username' set and 'sasl-password' unset", err.Error())
 	testArgs = append(testArgs, []string{"--sasl-password", "testpass"}...)
+
+	testArgs = append(testArgs, []string{"--tx-timeout", "1"}...)
+	kafkaCmd.SetArgs(testArgs)
+	err = kafkaCmd.Execute()
+	assert.Equal("tx-timeout must be at least 10s", err.Error())
+	testArgs = append(testArgs, []string{"--tls-clientkey", "somekey"}...)
+
 }
 
 func TestDefIntWithBadEnvVar(t *testing.T) {
@@ -575,7 +582,7 @@ func TestSingleMessageWithReply(t *testing.T) {
 	assert.Equal("data", replySent.Headers.Context.(map[string]interface{})["some"])
 
 	// Shut down
-	k.signals <- os.Interrupt
+	k.kafka.signals <- os.Interrupt
 	wg.Wait()
 }
 
@@ -620,7 +627,7 @@ func TestSingleMessageWithErrorReply(t *testing.T) {
 	assert.Equal("bang", errorReply.ErrorMessage)
 
 	// Shut down
-	k.signals <- os.Interrupt
+	k.kafka.signals <- os.Interrupt
 	wg.Wait()
 }
 func TestMoreMessagesThanMaxInFlight(t *testing.T) {
@@ -699,7 +706,7 @@ func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 	wg1.Wait()
 
 	// Shut down
-	k.signals <- os.Interrupt
+	k.kafka.signals <- os.Interrupt
 	wg.Wait()
 
 	// Check we acknowledge all offsets
@@ -727,7 +734,7 @@ func TestAddInflightMessageBadMessage(t *testing.T) {
 	f.producer.successes <- msg
 
 	// Shut down
-	k.signals <- os.Interrupt
+	k.kafka.signals <- os.Interrupt
 	wg.Wait()
 
 	// Check we acknowledge all offsets
@@ -740,8 +747,8 @@ func TestProducerErrorLoopPanics(t *testing.T) {
 
 	k := NewKafkaBridge()
 	f := newTestKafkaFactory()
-	producer, _ := f.newProducer(k)
-	k.producer = producer
+	producer, _ := f.newProducer(k.kafka)
+	k.kafka.producer = producer
 
 	go func() {
 		producer.(*testKafkaProducer).errors <- &sarama.ProducerError{
@@ -750,8 +757,9 @@ func TestProducerErrorLoopPanics(t *testing.T) {
 		}
 	}()
 
+	wg := sync.WaitGroup{}
 	assert.Panics(func() {
-		k.producerErrorLoop()
+		k.ProducerErrorLoop(nil, producer, &wg)
 	})
 
 }
@@ -761,8 +769,8 @@ func TestProducerSuccessLoopPanicsMsgNotInflight(t *testing.T) {
 
 	k := NewKafkaBridge()
 	f := newTestKafkaFactory()
-	producer, _ := f.newProducer(k)
-	k.producer = producer
+	producer, _ := f.newProducer(k.kafka)
+	k.kafka.producer = producer
 
 	go func() {
 		producer.(*testKafkaProducer).successes <- &sarama.ProducerMessage{
@@ -770,8 +778,9 @@ func TestProducerSuccessLoopPanicsMsgNotInflight(t *testing.T) {
 		}
 	}()
 
+	wg := sync.WaitGroup{}
 	assert.Panics(func() {
-		k.producerSuccessLoop()
+		k.ProducerSuccessLoop(nil, k.kafka.producer, &wg)
 	})
 
 }
@@ -788,7 +797,7 @@ func TestConsumerErrorLoopLogsAndContinues(t *testing.T) {
 	f.consumer.errors <- fmt.Errorf("fizzle")
 
 	// Shut down
-	k.signals <- os.Interrupt
+	k.kafka.signals <- os.Interrupt
 	wg.Wait()
 }
 
@@ -804,6 +813,6 @@ func TestConsumerNotificationsLoop(t *testing.T) {
 	f.consumer.notifications <- &cluster.Notification{}
 
 	// Shut down
-	k.signals <- os.Interrupt
+	k.kafka.signals <- os.Interrupt
 	wg.Wait()
 }

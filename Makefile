@@ -13,7 +13,7 @@ all: deps build test
 build: 
 		$(GOBUILD) -o $(BINARY_NAME) -v
 test:
-		$(GOTEST)  ./... -cover
+		$(GOTEST)  ./... -cover -coverprofile=coverage.txt -covermode=atomic
 clean: 
 		$(GOCLEAN)
 		rm -f $(BINARY_NAME)

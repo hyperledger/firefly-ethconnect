@@ -63,6 +63,10 @@ func (k *testKafkaCommon) Conf() *KafkaCommonConf {
 	return &KafkaCommonConf{}
 }
 
+func (k *testKafkaCommon) Producer() KafkaProducer {
+	return nil
+}
+
 type testKafkaMsgProcessor struct {
 	messages chan MsgContext
 	rpc      kldeth.RPCClient

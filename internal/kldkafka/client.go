@@ -62,7 +62,8 @@ type SaramaKafkaFactory struct{}
 
 // NewClient - returns a new sarama-cluster client
 func (f *SaramaKafkaFactory) NewClient(k KafkaCommon, clientConf *cluster.Config) (c KafkaClient, err error) {
-	if client, err := cluster.NewClient(k.Conf().Brokers, clientConf); err == nil {
+	var client *cluster.Client
+	if client, err = cluster.NewClient(k.Conf().Brokers, clientConf); err == nil {
 		c = &saramaKafkaClient{client: client}
 	}
 	return

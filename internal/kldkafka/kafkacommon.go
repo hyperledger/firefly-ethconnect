@@ -61,6 +61,7 @@ type KafkaCommon interface {
 	Start() error
 	Conf() *KafkaCommonConf
 	CreateTLSConfiguration() (t *tls.Config, err error)
+	Producer() KafkaProducer
 }
 
 // NewKafkaCommon constructs a new KafkaCommon instance
@@ -90,6 +91,10 @@ type kafkaCommon struct {
 
 func (k *kafkaCommon) Conf() *KafkaCommonConf {
 	return &k.conf
+}
+
+func (k *kafkaCommon) Producer() KafkaProducer {
+	return k.producer
 }
 
 // CobraPreRunE performs common Cobra PreRunE logic for Kafka related commands
@@ -231,13 +236,16 @@ func (k *kafkaCommon) connect() (err error) {
 	return
 }
 
-func (k *kafkaCommon) startProducer() (err error) {
-
+func (k *kafkaCommon) createProducer() (err error) {
 	log.Debugf("Kafka Producer Topic=%s", k.conf.TopicOut)
 	if k.producer, err = k.client.NewProducer(k); err != nil {
 		log.Errorf("Failed to create Kafka producer: %s", err)
 		return
 	}
+	return
+}
+
+func (k *kafkaCommon) startProducer() (err error) {
 
 	k.producerWG.Add(2)
 
@@ -249,13 +257,16 @@ func (k *kafkaCommon) startProducer() (err error) {
 	return
 }
 
-func (k *kafkaCommon) startConsumer() (err error) {
-
+func (k *kafkaCommon) createConsumer() (err error) {
 	log.Debugf("Kafka Consumer Topic=%s ConsumerGroup=%s", k.conf.TopicIn, k.conf.ConsumerGroup)
 	if k.consumer, err = k.client.NewConsumer(k); err != nil {
 		log.Errorf("Failed to create Kafka consumer: %s", err)
 		return
 	}
+	return
+}
+
+func (k *kafkaCommon) startConsumer() (err error) {
 
 	k.consumerWG.Add(3)
 	go func() {
@@ -280,6 +291,12 @@ func (k *kafkaCommon) startConsumer() (err error) {
 func (k *kafkaCommon) Start() (err error) {
 
 	if err = k.connect(); err != nil {
+		return
+	}
+	if err = k.createConsumer(); err != nil {
+		return
+	}
+	if err = k.createProducer(); err != nil {
 		return
 	}
 	if err = k.startConsumer(); err != nil {

@@ -52,6 +52,7 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 		Use:   "kafka",
 		Short: "Kafka bridge to Ethereum",
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			log.Infof("Starting Kafka bridge")
 			err = k.Start()
 			return
 		},

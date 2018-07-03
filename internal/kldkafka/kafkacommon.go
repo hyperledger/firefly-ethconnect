@@ -60,6 +60,7 @@ type KafkaCommon interface {
 	CobraInit(cmd *cobra.Command)
 	Start() error
 	Conf() *KafkaCommonConf
+	CreateTLSConfiguration() (t *tls.Config, err error)
 }
 
 // NewKafkaCommon constructs a new KafkaCommon instance
@@ -131,7 +132,7 @@ func (k *kafkaCommon) CobraInit(cmd *cobra.Command) {
 	return
 }
 
-func (k *kafkaCommon) createTLSConfiguration() (t *tls.Config, err error) {
+func (k *kafkaCommon) CreateTLSConfiguration() (t *tls.Config, err error) {
 
 	mutualAuth := k.conf.TLS.ClientCertsFile != "" && k.conf.TLS.PrivateKeyFile != ""
 	log.Debugf("Kafka TLS Enabled=%t Insecure=%t MutualAuth=%t ClientCertsFile=%s PrivateKeyFile=%s CACertsFile=%s",
@@ -192,7 +193,7 @@ func (k *kafkaCommon) connect() (err error) {
 	clientConf := cluster.NewConfig()
 
 	var tlsConfig *tls.Config
-	if tlsConfig, err = k.createTLSConfiguration(); err != nil {
+	if tlsConfig, err = k.CreateTLSConfiguration(); err != nil {
 		return
 	}
 

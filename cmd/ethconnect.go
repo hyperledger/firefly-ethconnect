@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
+	"github.com/kaleido-io/ethconnect/internal/kldwebhooks"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -57,6 +58,9 @@ func init() {
 
 	kafkaBridge := kldkafka.NewKafkaBridge()
 	rootCmd.AddCommand(kafkaBridge.CobraInit())
+
+	webhooksBridge := kldwebhooks.NewWebhooksBridge()
+	rootCmd.AddCommand(webhooksBridge.CobraInit())
 }
 
 // Execute is called by the main method of the package

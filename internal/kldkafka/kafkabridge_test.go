@@ -15,6 +15,7 @@
 package kldkafka
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -52,6 +53,10 @@ func (k *testKafkaCommon) CobraInit(cmd *cobra.Command) {
 func (k *testKafkaCommon) CobraPreRunE(cmd *cobra.Command) error {
 	k.cobraPreRunECalled = true
 	return nil
+}
+
+func (k *testKafkaCommon) CreateTLSConfiguration() (t *tls.Config, err error) {
+	return nil, nil
 }
 
 func (k *testKafkaCommon) Conf() *KafkaCommonConf {

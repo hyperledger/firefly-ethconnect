@@ -34,30 +34,50 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// KafkaCommon provides a base command for establishing Kafka connectivity with a
-// producer and a consumer-group
-type KafkaCommon struct {
-	Conf struct {
-		Brokers       []string
-		ClientID      string
-		ConsumerGroup string
-		TopicIn       string
-		TopicOut      string
-		SASL          struct {
-			Username string
-			Password string
-		}
-		TLS struct {
-			ClientCertsFile    string
-			CACertsFile        string
-			Enabled            bool
-			PrivateKeyFile     string
-			InsecureSkipVerify bool
-		}
+// KafkaCommonConf - Common configuration for Kafka
+type KafkaCommonConf struct {
+	Brokers       []string
+	ClientID      string
+	ConsumerGroup string
+	TopicIn       string
+	TopicOut      string
+	SASL          struct {
+		Username string
+		Password string
 	}
-	factory         kafkaFactory
+	TLS struct {
+		ClientCertsFile    string
+		CACertsFile        string
+		Enabled            bool
+		PrivateKeyFile     string
+		InsecureSkipVerify bool
+	}
+}
+
+// KafkaCommon is the base interface for bridges that interact with Kafka
+type KafkaCommon interface {
+	CobraPreRunE(cmd *cobra.Command) error
+	CobraInit(cmd *cobra.Command)
+	Start() error
+	Conf() *KafkaCommonConf
+}
+
+// NewKafkaCommon constructs a new KafkaCommon instance
+func NewKafkaCommon(kf KafkaFactory, kafkaGoRoutines KafkaGoRoutines) (k KafkaCommon) {
+	k = &kafkaCommon{
+		factory:         kf,
+		kafkaGoRoutines: kafkaGoRoutines,
+	}
+	return
+}
+
+// *kafkaCommon provides a base command for establishing Kafka connectivity with a
+// producer and a consumer-group
+type kafkaCommon struct {
+	conf            KafkaCommonConf
+	factory         KafkaFactory
 	rpc             *rpc.Client
-	client          kafkaClient
+	client          KafkaClient
 	signals         chan os.Signal
 	consumer        KafkaConsumer
 	consumerWG      sync.WaitGroup
@@ -67,28 +87,19 @@ type KafkaCommon struct {
 	saramaLogger    saramaLogger
 }
 
-func defInt(envVarName string, defValue int) int {
-	defStr := os.Getenv(envVarName)
-	if defStr == "" {
-		return defValue
-	}
-	parsedInt, err := strconv.ParseInt(defStr, 10, 32)
-	if err != nil {
-		log.Errorf("Invalid string in env var %s", envVarName)
-		return defValue
-	}
-	return int(parsedInt)
+func (k *kafkaCommon) Conf() *KafkaCommonConf {
+	return &k.conf
 }
 
 // CobraPreRunE performs common Cobra PreRunE logic for Kafka related commands
-func (k *KafkaCommon) CobraPreRunE(cmd *cobra.Command) (err error) {
-	if k.Conf.TopicOut == "" {
+func (k *kafkaCommon) CobraPreRunE(cmd *cobra.Command) (err error) {
+	if k.conf.TopicOut == "" {
 		return fmt.Errorf("No output topic specified for bridge to send events to")
 	}
-	if k.Conf.TopicIn == "" {
+	if k.conf.TopicIn == "" {
 		return fmt.Errorf("No input topic specified for bridge to listen to")
 	}
-	if k.Conf.ConsumerGroup == "" {
+	if k.conf.ConsumerGroup == "" {
 		return fmt.Errorf("No consumer group specified")
 	}
 	if err = kldutils.AllOrNoneReqd(cmd, "tls-clientcerts", "tls-clientkey"); err != nil {
@@ -101,38 +112,38 @@ func (k *KafkaCommon) CobraPreRunE(cmd *cobra.Command) (err error) {
 }
 
 // CobraInit performs common Cobra init for Kafka related commands
-func (k *KafkaCommon) CobraInit(cmd *cobra.Command) {
+func (k *kafkaCommon) CobraInit(cmd *cobra.Command) {
 	defBrokerList := strings.Split(os.Getenv("KAFKA_BROKERS"), ",")
 	defTLSenabled, _ := strconv.ParseBool(os.Getenv("KAFKA_TLS_ENABLED"))
 	defTLSinsecure, _ := strconv.ParseBool(os.Getenv("KAFKA_TLS_INSECURE"))
-	cmd.Flags().StringArrayVarP(&k.Conf.Brokers, "brokers", "b", defBrokerList, "Comma-separated list of bootstrap brokers")
-	cmd.Flags().StringVarP(&k.Conf.ClientID, "clientid", "i", os.Getenv("KAFKA_CLIENT_ID"), "Client ID (or generated UUID)")
-	cmd.Flags().StringVarP(&k.Conf.ConsumerGroup, "consumer-group", "g", os.Getenv("KAFKA_CONSUMER_GROUP"), "Client ID (or generated UUID)")
-	cmd.Flags().StringVarP(&k.Conf.TopicIn, "topic-in", "t", os.Getenv("KAFKA_TOPIC_IN"), "Topic to listen to")
-	cmd.Flags().StringVarP(&k.Conf.TopicOut, "topic-out", "T", os.Getenv("KAFKA_TOPIC_OUT"), "Topic to send events to")
-	cmd.Flags().StringVarP(&k.Conf.TLS.ClientCertsFile, "tls-clientcerts", "c", os.Getenv("KAFKA_TLS_CLIENT_CERT"), "A client certificate file, for mutual TLS auth")
-	cmd.Flags().StringVarP(&k.Conf.TLS.PrivateKeyFile, "tls-clientkey", "k", os.Getenv("KAFKA_TLS_CLIENT_KEY"), "A client private key file, for mutual TLS auth")
-	cmd.Flags().StringVarP(&k.Conf.TLS.CACertsFile, "tls-cacerts", "C", os.Getenv("KAFKA_TLS_CA_CERTS"), "CA certificates file (or host CAs will be used)")
-	cmd.Flags().BoolVarP(&k.Conf.TLS.Enabled, "tls-enabled", "e", defTLSenabled, "Encrypt network connection with TLS (SSL)")
-	cmd.Flags().BoolVarP(&k.Conf.TLS.InsecureSkipVerify, "tls-insecure", "z", defTLSinsecure, "Disable verification of TLS certificate chain")
-	cmd.Flags().StringVarP(&k.Conf.SASL.Username, "sasl-username", "u", os.Getenv("KAFKA_SASL_USERNAME"), "Username for SASL authentication")
-	cmd.Flags().StringVarP(&k.Conf.SASL.Password, "sasl-password", "p", os.Getenv("KAFKA_SASL_PASSWORD"), "Password for SASL authentication")
+	cmd.Flags().StringArrayVarP(&k.conf.Brokers, "brokers", "b", defBrokerList, "Comma-separated list of bootstrap brokers")
+	cmd.Flags().StringVarP(&k.conf.ClientID, "clientid", "i", os.Getenv("KAFKA_CLIENT_ID"), "Client ID (or generated UUID)")
+	cmd.Flags().StringVarP(&k.conf.ConsumerGroup, "consumer-group", "g", os.Getenv("KAFKA_CONSUMER_GROUP"), "Client ID (or generated UUID)")
+	cmd.Flags().StringVarP(&k.conf.TopicIn, "topic-in", "t", os.Getenv("KAFKA_TOPIC_IN"), "Topic to listen to")
+	cmd.Flags().StringVarP(&k.conf.TopicOut, "topic-out", "T", os.Getenv("KAFKA_TOPIC_OUT"), "Topic to send events to")
+	cmd.Flags().StringVarP(&k.conf.TLS.ClientCertsFile, "tls-clientcerts", "c", os.Getenv("KAFKA_TLS_CLIENT_CERT"), "A client certificate file, for mutual TLS auth")
+	cmd.Flags().StringVarP(&k.conf.TLS.PrivateKeyFile, "tls-clientkey", "k", os.Getenv("KAFKA_TLS_CLIENT_KEY"), "A client private key file, for mutual TLS auth")
+	cmd.Flags().StringVarP(&k.conf.TLS.CACertsFile, "tls-cacerts", "C", os.Getenv("KAFKA_TLS_CA_CERTS"), "CA certificates file (or host CAs will be used)")
+	cmd.Flags().BoolVarP(&k.conf.TLS.Enabled, "tls-enabled", "e", defTLSenabled, "Encrypt network connection with TLS (SSL)")
+	cmd.Flags().BoolVarP(&k.conf.TLS.InsecureSkipVerify, "tls-insecure", "z", defTLSinsecure, "Disable verification of TLS certificate chain")
+	cmd.Flags().StringVarP(&k.conf.SASL.Username, "sasl-username", "u", os.Getenv("KAFKA_SASL_USERNAME"), "Username for SASL authentication")
+	cmd.Flags().StringVarP(&k.conf.SASL.Password, "sasl-password", "p", os.Getenv("KAFKA_SASL_PASSWORD"), "Password for SASL authentication")
 	return
 }
 
-func (k *KafkaCommon) createTLSConfiguration() (t *tls.Config, err error) {
+func (k *kafkaCommon) createTLSConfiguration() (t *tls.Config, err error) {
 
-	mutualAuth := k.Conf.TLS.ClientCertsFile != "" && k.Conf.TLS.PrivateKeyFile != ""
+	mutualAuth := k.conf.TLS.ClientCertsFile != "" && k.conf.TLS.PrivateKeyFile != ""
 	log.Debugf("Kafka TLS Enabled=%t Insecure=%t MutualAuth=%t ClientCertsFile=%s PrivateKeyFile=%s CACertsFile=%s",
-		k.Conf.TLS.Enabled, k.Conf.TLS.InsecureSkipVerify, mutualAuth, k.Conf.TLS.ClientCertsFile, k.Conf.TLS.PrivateKeyFile, k.Conf.TLS.CACertsFile)
-	if !k.Conf.TLS.Enabled {
+		k.conf.TLS.Enabled, k.conf.TLS.InsecureSkipVerify, mutualAuth, k.conf.TLS.ClientCertsFile, k.conf.TLS.PrivateKeyFile, k.conf.TLS.CACertsFile)
+	if !k.conf.TLS.Enabled {
 		return
 	}
 
 	var clientCerts []tls.Certificate
 	if mutualAuth {
 		var cert tls.Certificate
-		if cert, err = tls.LoadX509KeyPair(k.Conf.TLS.ClientCertsFile, k.Conf.TLS.PrivateKeyFile); err != nil {
+		if cert, err = tls.LoadX509KeyPair(k.conf.TLS.ClientCertsFile, k.conf.TLS.PrivateKeyFile); err != nil {
 			log.Errorf("Unable to load client key/certificate: %s", err)
 			return
 		}
@@ -140,9 +151,9 @@ func (k *KafkaCommon) createTLSConfiguration() (t *tls.Config, err error) {
 	}
 
 	var caCertPool *x509.CertPool
-	if k.Conf.TLS.CACertsFile != "" {
+	if k.conf.TLS.CACertsFile != "" {
 		var caCert []byte
-		if caCert, err = ioutil.ReadFile(k.Conf.TLS.CACertsFile); err != nil {
+		if caCert, err = ioutil.ReadFile(k.conf.TLS.CACertsFile); err != nil {
 			log.Errorf("Unable to load CA certificates: %s", err)
 			return
 		}
@@ -153,7 +164,7 @@ func (k *KafkaCommon) createTLSConfiguration() (t *tls.Config, err error) {
 	t = &tls.Config{
 		Certificates:       clientCerts,
 		RootCAs:            caCertPool,
-		InsecureSkipVerify: k.Conf.TLS.InsecureSkipVerify,
+		InsecureSkipVerify: k.conf.TLS.InsecureSkipVerify,
 	}
 	return
 }
@@ -175,17 +186,7 @@ func (s saramaLogger) Println(v ...interface{}) {
 	log.Debug(v...)
 }
 
-// NewKafkaCommon constructs a new KafkaCommon instance
-func NewKafkaCommon(KafkaGoRoutines KafkaGoRoutines) *KafkaCommon {
-	var kf saramaKafkaFactory
-	k := KafkaCommon{
-		factory:         &kf,
-		kafkaGoRoutines: KafkaGoRoutines,
-	}
-	return &k
-}
-
-func (k *KafkaCommon) connect() (err error) {
+func (k *kafkaCommon) connect() (err error) {
 
 	sarama.Logger = k.saramaLogger
 	clientConf := cluster.NewConfig()
@@ -195,10 +196,10 @@ func (k *KafkaCommon) connect() (err error) {
 		return
 	}
 
-	if k.Conf.SASL.Username != "" && k.Conf.SASL.Password != "" {
+	if k.conf.SASL.Username != "" && k.conf.SASL.Password != "" {
 		clientConf.Net.SASL.Enable = true
-		clientConf.Net.SASL.User = k.Conf.SASL.Username
-		clientConf.Net.SASL.Password = k.Conf.SASL.Password
+		clientConf.Net.SASL.User = k.conf.SASL.Username
+		clientConf.Net.SASL.Password = k.conf.SASL.Password
 	}
 
 	clientConf.Producer.Return.Successes = true
@@ -209,14 +210,14 @@ func (k *KafkaCommon) connect() (err error) {
 	clientConf.Group.Return.Notifications = true
 	clientConf.Net.TLS.Enable = (tlsConfig != nil)
 	clientConf.Net.TLS.Config = tlsConfig
-	clientConf.ClientID = k.Conf.ClientID
+	clientConf.ClientID = k.conf.ClientID
 	if clientConf.ClientID == "" {
 		clientConf.ClientID = kldutils.UUIDv4()
 	}
 	log.Debugf("Kafka ClientID: %s", clientConf.ClientID)
 
-	log.Debugf("Kafka Bootstrap brokers: %s", k.Conf.Brokers)
-	if k.client, err = k.factory.newClient(k, clientConf); err != nil {
+	log.Debugf("Kafka Bootstrap brokers: %s", k.conf.Brokers)
+	if k.client, err = k.factory.NewClient(k, clientConf); err != nil {
 		log.Errorf("Failed to create Kafka client: %s", err)
 		return
 	}
@@ -229,10 +230,10 @@ func (k *KafkaCommon) connect() (err error) {
 	return
 }
 
-func (k *KafkaCommon) startProducer() (err error) {
+func (k *kafkaCommon) startProducer() (err error) {
 
-	log.Debugf("Kafka Producer Topic=%s", k.Conf.TopicOut)
-	if k.producer, err = k.client.newProducer(k); err != nil {
+	log.Debugf("Kafka Producer Topic=%s", k.conf.TopicOut)
+	if k.producer, err = k.client.NewProducer(k); err != nil {
 		log.Errorf("Failed to create Kafka producer: %s", err)
 		return
 	}
@@ -247,10 +248,10 @@ func (k *KafkaCommon) startProducer() (err error) {
 	return
 }
 
-func (k *KafkaCommon) startConsumer() (err error) {
+func (k *kafkaCommon) startConsumer() (err error) {
 
-	log.Debugf("Kafka Consumer Topic=%s ConsumerGroup=%s", k.Conf.TopicIn, k.Conf.ConsumerGroup)
-	if k.consumer, err = k.client.newConsumer(k); err != nil {
+	log.Debugf("Kafka Consumer Topic=%s ConsumerGroup=%s", k.conf.TopicIn, k.conf.ConsumerGroup)
+	if k.consumer, err = k.client.NewConsumer(k); err != nil {
 		log.Errorf("Failed to create Kafka consumer: %s", err)
 		return
 	}
@@ -275,7 +276,7 @@ func (k *KafkaCommon) startConsumer() (err error) {
 }
 
 // Start kicks off the bridge
-func (k *KafkaCommon) Start() (err error) {
+func (k *kafkaCommon) Start() (err error) {
 
 	if err = k.connect(); err != nil {
 		return

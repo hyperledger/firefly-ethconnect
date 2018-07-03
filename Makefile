@@ -11,7 +11,7 @@ BINARY_WIN=$(BINARY_NAME)-win
 
 all: deps build test
 build: 
-		$(GOBUILD) -o $(BINARY_NAME) -v
+		$(GOBUILD) -tags=prod -o $(BINARY_NAME) -v
 test:
 		$(GOTEST)  ./... -cover -coverprofile=coverage.txt -covermode=atomic
 clean: 

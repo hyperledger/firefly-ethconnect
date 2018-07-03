@@ -45,20 +45,24 @@ type KafkaConsumer interface {
 	MarkOffset(*sarama.ConsumerMessage, string)
 }
 
-type kafkaFactory interface {
-	newClient(*KafkaCommon, *cluster.Config) (kafkaClient, error)
+// KafkaFactory builds new clients
+type KafkaFactory interface {
+	NewClient(KafkaCommon, *cluster.Config) (KafkaClient, error)
 }
 
-type kafkaClient interface {
-	newProducer(*KafkaCommon) (KafkaProducer, error)
-	newConsumer(*KafkaCommon) (KafkaConsumer, error)
+// KafkaClient is the kafka client
+type KafkaClient interface {
+	NewProducer(KafkaCommon) (KafkaProducer, error)
+	NewConsumer(KafkaCommon) (KafkaConsumer, error)
 	Brokers() []*sarama.Broker
 }
 
-type saramaKafkaFactory struct{}
+// SaramaKafkaFactory - uses sarama and sarama-cluster
+type SaramaKafkaFactory struct{}
 
-func (f saramaKafkaFactory) newClient(k *KafkaCommon, clientConf *cluster.Config) (c kafkaClient, err error) {
-	if client, err := cluster.NewClient(k.Conf.Brokers, clientConf); err == nil {
+// NewClient - returns a new sarama-cluster client
+func (f *SaramaKafkaFactory) NewClient(k KafkaCommon, clientConf *cluster.Config) (c KafkaClient, err error) {
+	if client, err := cluster.NewClient(k.Conf().Brokers, clientConf); err == nil {
 		c = &saramaKafkaClient{client: client}
 	}
 	return
@@ -72,10 +76,10 @@ func (c *saramaKafkaClient) Brokers() []*sarama.Broker {
 	return c.client.Brokers()
 }
 
-func (c *saramaKafkaClient) newProducer(k *KafkaCommon) (KafkaProducer, error) {
+func (c *saramaKafkaClient) NewProducer(k KafkaCommon) (KafkaProducer, error) {
 	return sarama.NewAsyncProducerFromClient(c.client.Client)
 }
 
-func (c *saramaKafkaClient) newConsumer(k *KafkaCommon) (KafkaConsumer, error) {
-	return cluster.NewConsumerFromClient(c.client, k.Conf.ConsumerGroup, []string{k.Conf.TopicIn})
+func (c *saramaKafkaClient) NewConsumer(k KafkaCommon) (KafkaConsumer, error) {
+	return cluster.NewConsumerFromClient(c.client, k.Conf().ConsumerGroup, []string{k.Conf().TopicIn})
 }

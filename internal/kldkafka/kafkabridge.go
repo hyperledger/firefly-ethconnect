@@ -39,7 +39,7 @@ type KafkaBridge struct {
 			URL string
 		}
 	}
-	kafka        *KafkaCommon
+	kafka        KafkaCommon
 	rpc          *rpc.Client
 	processor    MsgProcessor
 	inFlight     map[string]*msgContext
@@ -69,9 +69,9 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 		},
 	}
 	k.kafka.CobraInit(cmd)
-	cmd.Flags().IntVarP(&k.Conf.MaxInFlight, "maxinflight", "m", defInt("KAFKA_MAX_INFLIGHT", 10), "Maximum messages to hold in-flight")
+	cmd.Flags().IntVarP(&k.Conf.MaxInFlight, "maxinflight", "m", kldutils.DefInt("KAFKA_MAX_INFLIGHT", 10), "Maximum messages to hold in-flight")
 	cmd.Flags().StringVarP(&k.Conf.RPC.URL, "rpc-url", "r", os.Getenv("ETH_RPC_URL"), "JSON/RPC URL for Ethereum node")
-	cmd.Flags().IntVarP(&k.Conf.MaxTXWaitTime, "tx-timeout", "x", defInt("ETH_TX_TIMEOUT", 300), "Maximum wait time for an individual transaction (seconds)")
+	cmd.Flags().IntVarP(&k.Conf.MaxTXWaitTime, "tx-timeout", "x", kldutils.DefInt("ETH_TX_TIMEOUT", 300), "Maximum wait time for an individual transaction (seconds)")
 	return
 }
 
@@ -92,6 +92,7 @@ type MsgContext interface {
 
 type msgContext struct {
 	timeReceived   time.Time
+	producer       KafkaProducer
 	requestCommon  kldmessages.RequestCommon
 	origMsg        string
 	saramaMsg      *sarama.ConsumerMessage
@@ -108,12 +109,13 @@ type msgContext struct {
 // addInflightMsg creates a msgContext wrapper around a message with all the
 // relevant context, and adds it to the inFlight map
 // * Caller holds the inFlightCond mutex, and has already checked for capacity *
-func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage) (pCtx *msgContext, err error) {
+func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage, producer KafkaProducer) (pCtx *msgContext, err error) {
 	ctx := msgContext{
 		timeReceived: time.Now(),
-		origMsg:      fmt.Sprintf("%s:%d:%d", k.kafka.Conf.TopicIn, msg.Partition, msg.Offset),
+		origMsg:      fmt.Sprintf("%s:%d:%d", msg.Topic, msg.Partition, msg.Offset),
 		saramaMsg:    msg,
 		bridge:       k,
+		producer:     producer,
 	}
 	// Add it to our inflight map - from this point on we need to ensure we remove it, to avoid leaks.
 	// Messages are only removed from the inflight map when a response is sent, so it
@@ -228,8 +230,8 @@ func (c *msgContext) Reply(replyMessage kldmessages.ReplyWithHeaders) {
 	replyHeaders.Elapsed = c.replyTime.Sub(c.timeReceived).Seconds()
 	c.replyBytes, _ = json.Marshal(replyMessage)
 	log.Infof("Sending reply: %s", c)
-	c.bridge.kafka.producer.Input() <- &sarama.ProducerMessage{
-		Topic:    c.bridge.kafka.Conf.TopicOut,
+	c.producer.Input() <- &sarama.ProducerMessage{
+		Topic:    c.bridge.kafka.Conf().TopicOut,
 		Key:      sarama.StringEncoder(c.key),
 		Metadata: c.origMsg,
 		Value:    c,
@@ -267,12 +269,13 @@ func NewKafkaBridge() *KafkaBridge {
 		inFlight:     make(map[string]*msgContext),
 		inFlightCond: sync.NewCond(&sync.Mutex{}),
 	}
-	k.kafka = NewKafkaCommon(k)
+	k.kafka = NewKafkaCommon(&SaramaKafkaFactory{}, k)
 	return k
 }
 
 // ConsumerMessagesLoop - goroutine to process messages
 func (k *KafkaBridge) ConsumerMessagesLoop(consumer KafkaConsumer, producer KafkaProducer, wg *sync.WaitGroup) {
+	log.Debugf("Kafka consumer loop started")
 	for msg := range consumer.Messages() {
 		k.inFlightCond.L.Lock()
 		log.Infof("Kafka consumer received message: Partition=%d Offset=%d", msg.Partition, msg.Offset)
@@ -284,7 +287,7 @@ func (k *KafkaBridge) ConsumerMessagesLoop(consumer KafkaConsumer, producer Kafk
 		}
 		// addInflightMsg always adds the message, even if it cannot
 		// be parsed
-		msgCtx, err := k.addInflightMsg(msg)
+		msgCtx, err := k.addInflightMsg(msg, producer)
 		// Unlock before any further processing
 		k.inFlightCond.L.Unlock()
 		if err == nil {
@@ -301,6 +304,7 @@ func (k *KafkaBridge) ConsumerMessagesLoop(consumer KafkaConsumer, producer Kafk
 
 // ProducerErrorLoop - goroutine to process producer errors
 func (k *KafkaBridge) ProducerErrorLoop(consumer KafkaConsumer, producer KafkaProducer, wg *sync.WaitGroup) {
+	log.Debugf("Kafka producer error loop started")
 	for err := range producer.Errors() {
 		k.inFlightCond.L.Lock()
 		// If we fail to send a reply, this is significant. We have a request in flight
@@ -320,6 +324,7 @@ func (k *KafkaBridge) ProducerErrorLoop(consumer KafkaConsumer, producer KafkaPr
 
 // ProducerSuccessLoop - goroutine to process producer successes
 func (k *KafkaBridge) ProducerSuccessLoop(consumer KafkaConsumer, producer KafkaProducer, wg *sync.WaitGroup) {
+	log.Debugf("Kafka producer successes loop started")
 	for msg := range producer.Successes() {
 		k.inFlightCond.L.Lock()
 		origMsg := msg.Metadata.(string)

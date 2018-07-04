@@ -30,6 +30,7 @@ deps:
 		$(GOGET) github.com/nu7hatch/gouuid
 		$(GOGET) github.com/stretchr/testify/assert
 		$(GOGET) github.com/golang/mock/gomock
+		$(GOGET) gopkg.in/yaml.v2
 
 build-linux:
 		GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINARY_UNIX) -v

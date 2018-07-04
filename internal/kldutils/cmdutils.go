@@ -16,8 +16,11 @@ package kldutils
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -39,4 +42,18 @@ func AllOrNoneReqd(cmd *cobra.Command, opts ...string) (err error) {
 		return fmt.Errorf("flag mismatch: '%s' set and '%s' unset", strings.Join(setFlags, ","), strings.Join(unsetFlags, ","))
 	}
 	return
+}
+
+// DefInt defaults an integer to a value in an Env var, and if not the default integer provided
+func DefInt(envVarName string, defValue int) int {
+	defStr := os.Getenv(envVarName)
+	if defStr == "" {
+		return defValue
+	}
+	parsedInt, err := strconv.ParseInt(defStr, 10, 32)
+	if err != nil {
+		log.Errorf("Invalid string in env var %s", envVarName)
+		return defValue
+	}
+	return int(parsedInt)
 }

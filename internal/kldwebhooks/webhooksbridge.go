@@ -15,10 +15,12 @@
 package kldwebhooks
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -31,6 +33,7 @@ import (
 
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	"github.com/spf13/cobra"
 )
 
@@ -43,9 +46,12 @@ const (
 
 // WebhooksBridge receives messages over HTTP POST and sends them to Kafka
 type WebhooksBridge struct {
-	Conf struct {
+	conf struct {
+		LocalAddr string
+		Port      int
 	}
 	kafka kldkafka.KafkaCommon
+	srv   *http.Server
 }
 
 // NewWebhooksBridge constructor
@@ -73,6 +79,8 @@ func (w *WebhooksBridge) CobraInit() (cmd *cobra.Command) {
 		},
 	}
 	w.kafka.CobraInit(cmd)
+	cmd.Flags().StringVarP(&w.conf.LocalAddr, "listen-addr", "L", os.Getenv("WEBHOOKS_LISTEN_ADDR"), "Local address to listen on")
+	cmd.Flags().IntVarP(&w.conf.Port, "listen-port", "l", kldutils.DefInt("WEBHOOKS_LISTEN_PORT", 8080), "Port to listen on")
 	return
 }
 
@@ -178,20 +186,36 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 	res.WriteHeader(204)
 }
 
-// Start kicks off the bridge
+type statusMsg struct {
+	OK bool `json:"ok"`
+}
+
+func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Request) {
+	replyMsg := statusMsg{}
+	replyMsg.OK = true
+	replyBytes, err := json.Marshal(&replyMsg)
+	if err != nil {
+		errReply(res, fmt.Errorf("Failed to serialize status reply: %s", err), 500)
+		return
+	}
+	res.Write(replyBytes)
+	res.WriteHeader(200)
+}
+
+// Start kicks off the HTTP and Kafka listeners
 func (w *WebhooksBridge) Start() (err error) {
 
 	mux := http.NewServeMux()
-	th := http.HandlerFunc(w.webhookHandler)
-	mux.Handle("/message", th)
+	mux.Handle("/message", http.HandlerFunc(w.webhookHandler))
+	mux.Handle("/status", http.HandlerFunc(w.statusHandler))
 
 	tlsConfig, err := w.kafka.CreateTLSConfiguration()
 	if err != nil {
 		return
 	}
 
-	srv := &http.Server{
-		Addr:           ":8080",
+	w.srv = &http.Server{
+		Addr:           fmt.Sprintf("%s:%d", w.conf.LocalAddr, w.conf.Port),
 		TLSConfig:      tlsConfig,
 		Handler:        mux,
 		MaxHeaderBytes: MaxHeaderSize,
@@ -202,13 +226,19 @@ func (w *WebhooksBridge) Start() (err error) {
 		for w.kafka.Producer() == nil {
 			time.Sleep(500)
 		}
-		log.Printf("Listening on :8080")
-		if err = srv.ListenAndServe(); err != nil {
+		log.Printf("Listening on %s", w.srv.Addr)
+		if err = w.srv.ListenAndServe(); err != nil {
 			return
 		}
 	}()
 
 	// Defer to KafkaCommon processing
 	err = w.kafka.Start()
+
+	// Ensure we shutdown the server
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	w.srv.Shutdown(ctx)
+	defer cancel()
+
 	return
 }

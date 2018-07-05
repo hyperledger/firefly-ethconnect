@@ -29,11 +29,11 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/Shopify/sarama"
-	log "github.com/sirupsen/logrus"
-
+	"github.com/icza/dyno"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -108,14 +108,25 @@ func (w *WebhooksBridge) ProducerSuccessLoop(consumer kldkafka.KafkaConsumer, pr
 	wg.Done()
 }
 
-type httpError struct {
+type errMsg struct {
 	Message string `json:"error"`
 }
 
 func errReply(res http.ResponseWriter, err error, status int) {
-	reply, _ := json.Marshal(&httpError{Message: err.Error()})
-	res.Write(reply)
+	reply, _ := json.Marshal(&errMsg{Message: err.Error()})
 	res.WriteHeader(400)
+	res.Write(reply)
+	return
+}
+
+type okMsg struct {
+	OK bool `json:"ok"`
+}
+
+func okReply(res http.ResponseWriter) {
+	reply, _ := json.Marshal(&okMsg{OK: true})
+	res.WriteHeader(200)
+	res.Write(reply)
 	return
 }
 
@@ -125,23 +136,36 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 		errReply(res, fmt.Errorf("Message exceeds maximum allowable size"), 400)
 		return
 	}
-	originalPayload, err := ioutil.ReadAll(req.Body)
+	payloadToForward, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		errReply(res, fmt.Errorf("Unable to read input dataL: %s", err), 400)
+		errReply(res, fmt.Errorf("Unable to read input data: %s", err), 400)
 		return
 	}
 
-	genericPayload := make(map[string]interface{})
+	// We support both YAML and JSON input.
+	// We parse the message into a generic string->interface map, that lets
+	// us check a couple of routing fields needed to dispatch the messages
+	// to Kafka (always in JSON). However, we do not perform full parsing.
+	var genericPayload map[string]interface{}
 	contentType := strings.ToLower(req.Header.Get("Content-type"))
 	log.Infof("Received message 'Content-Type: %s' Length: %d", contentType, req.ContentLength)
 	if contentType == "application/x-yaml" || contentType == "text/yaml" {
-		err := yaml.Unmarshal(originalPayload, genericPayload)
+		yamlGenericPayload := make(map[interface{}]interface{})
+		err := yaml.Unmarshal(payloadToForward, &yamlGenericPayload)
 		if err != nil {
 			errReply(res, fmt.Errorf("Unable to parse YAML: %s", err), 400)
 			return
 		}
+		genericPayload = dyno.ConvertMapI2MapS(yamlGenericPayload).(map[string]interface{})
+		// Reseialize back to JSON
+		payloadToForward, err = json.Marshal(&genericPayload)
+		if err != nil {
+			errReply(res, fmt.Errorf("Unable to reserialize YAML payload as JSON: %s", err), 500)
+			return
+		}
 	} else {
-		err := json.Unmarshal(originalPayload, genericPayload)
+		genericPayload = make(map[string]interface{})
+		err := json.Unmarshal(payloadToForward, &genericPayload)
 		if err != nil {
 			errReply(res, fmt.Errorf("Unable to parse JSON: %s", err), 400)
 			return
@@ -155,51 +179,38 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 		errReply(res, fmt.Errorf("Invalid message - missing 'headers' (or not an object)"), 400)
 		return
 	}
-	msgType, exists := headers.(map[interface{}]interface{})["type"]
+	msgType, exists := headers.(map[string]interface{})["type"]
 	if !exists || reflect.TypeOf(msgType).Kind() != reflect.String {
 		errReply(res, fmt.Errorf("Invalid message - missing 'headers.type' (or not a string)"), 400)
 		return
 	}
 	var key string
 	switch msgType {
-	case kldmessages.MsgTypeDeployContract:
-	case kldmessages.MsgTypeSendTransaction:
-		to, exists := genericPayload["to"]
-		if !exists || reflect.TypeOf(to).Kind() != reflect.String {
-			errReply(res, fmt.Errorf("Invalid message - missing 'to' (or not a string)"), 400)
+	case kldmessages.MsgTypeDeployContract, kldmessages.MsgTypeSendTransaction:
+		from, exists := genericPayload["from"]
+		if !exists || reflect.TypeOf(from).Kind() != reflect.String {
+			errReply(res, fmt.Errorf("Invalid message - missing 'from' (or not a string)"), 400)
 			return
 		}
-		key = to.(string)
+		key = from.(string)
 		break
 	default:
 		errReply(res, fmt.Errorf("Invalid message type: %s", msgType), 400)
 		return
 	}
 
-	log.Debugf("Forwarding message to Kafka bridge: %s", originalPayload)
+	log.Debugf("Forwarding message to Kafka bridge: %s", payloadToForward)
 	w.kafka.Producer().Input() <- &sarama.ProducerMessage{
 		Topic: w.kafka.Conf().TopicOut,
 		Key:   sarama.StringEncoder(key),
-		Value: sarama.ByteEncoder(originalPayload),
+		Value: sarama.ByteEncoder(payloadToForward),
 	}
 
-	res.WriteHeader(204)
-}
-
-type statusMsg struct {
-	OK bool `json:"ok"`
+	okReply(res)
 }
 
 func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Request) {
-	replyMsg := statusMsg{}
-	replyMsg.OK = true
-	replyBytes, err := json.Marshal(&replyMsg)
-	if err != nil {
-		errReply(res, fmt.Errorf("Failed to serialize status reply: %s", err), 500)
-		return
-	}
-	res.Write(replyBytes)
-	res.WriteHeader(200)
+	okReply(res)
 }
 
 // Start kicks off the HTTP and Kafka listeners

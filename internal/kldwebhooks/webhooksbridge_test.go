@@ -105,7 +105,7 @@ func startTestWebhooks(testArgs []string, kafka *testKafkaCommon) (*WebhooksBrid
 	w.kafka = kafka
 	cmd := w.CobraInit()
 	cmd.SetArgs(testArgs)
-	webhookExecuteError.Store(errors.New("none"))
+	webhookExecuteError.Store(errors.New("none")) // We can't store nil in the atomic Value
 	go func() {
 		err := cmd.Execute()
 		log.Infof("Kafka webhooks completed. Err=%s", err)

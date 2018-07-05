@@ -302,6 +302,9 @@ func sendTestTransaction(assert *assert.Assertions, msgBytes []byte, contentType
 
 	url := fmt.Sprintf("http://localhost:%d/message", w.conf.Port)
 	resp, httpErr := http.Post(url, contentType, bytes.NewReader(msgBytes))
+	if err != nil {
+		log.Errorf("HTTP error for %s: %+v", url, err)
+	}
 	assert.Nil(httpErr)
 
 	k.stop <- true

@@ -16,11 +16,15 @@ package kldwebhooks
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net/http"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/Shopify/sarama"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -28,14 +32,14 @@ import (
 )
 
 type testKafkaCommon struct {
-	stop               chan bool
-	startCalled        bool
-	startErr           error
-	cobraInitCalled    bool
-	cobraPreRunECalled bool
-	kafkaFactory       *kldkafka.MockKafkaFactory
-	kafkaInitDelay     int
-	startTime          time.Time
+	stop             chan bool
+	startCalled      bool
+	startErr         error
+	cobraInitCalled  bool
+	cobraPreRunError error
+	kafkaFactory     *kldkafka.MockKafkaFactory
+	kafkaInitDelay   int
+	startTime        time.Time
 }
 
 func (k *testKafkaCommon) Start() error {
@@ -43,6 +47,12 @@ func (k *testKafkaCommon) Start() error {
 	log.Infof("Test KafkaCommon started")
 	<-k.stop
 	log.Infof("Test KafkaCommon stopped")
+	if k.kafkaFactory.Consumer != nil {
+		k.kafkaFactory.Consumer.Close()
+	}
+	if k.kafkaFactory.Producer != nil {
+		k.kafkaFactory.Producer.AsyncClose()
+	}
 	return k.startErr
 }
 
@@ -51,8 +61,7 @@ func (k *testKafkaCommon) CobraInit(cmd *cobra.Command) {
 }
 
 func (k *testKafkaCommon) CobraPreRunE(cmd *cobra.Command) error {
-	k.cobraPreRunECalled = true
-	return nil
+	return k.cobraPreRunError
 }
 
 func (k *testKafkaCommon) CreateTLSConfiguration() (t *tls.Config, err error) {
@@ -72,61 +81,168 @@ func (k *testKafkaCommon) Producer() kldkafka.KafkaProducer {
 	return producer
 }
 
-// newTestKafkaCommon creates a Webhooks instance with a Cobra command wrapper
-func newTestWebhooks(testArgs []string, kafkaInitDelay int) (*WebhooksBridge, *testKafkaCommon) {
-	log.SetLevel(log.DebugLevel)
+var webhookExecuteError atomic.Value
+
+func newTestKafkaComon() *testKafkaCommon {
 	kafka := &testKafkaCommon{}
 	kafka.startTime = time.Now()
-	kafka.kafkaInitDelay = kafkaInitDelay
 	kafka.stop = make(chan bool)
 	kafka.kafkaFactory = kldkafka.NewMockKafkaFactory()
+	return kafka
+}
+
+// startTestWebhooks creates a Webhooks instance with a Cobra command wrapper, and executes it
+// It returns once it's reached kafka initialization successfully, or errored during initialization
+func startTestWebhooks(testArgs []string, kafka *testKafkaCommon) (*WebhooksBridge, error) {
+	log.SetLevel(log.DebugLevel)
 	w := NewWebhooksBridge()
 	w.kafka = kafka
 	cmd := w.CobraInit()
 	cmd.SetArgs(testArgs)
+	webhookExecuteError.Store(errors.New("none"))
 	go func() {
-		cmd.Execute()
+		err := cmd.Execute()
+		log.Infof("Kafka webhooks completed. Err=%s", err)
+		if err != nil {
+			webhookExecuteError.Store(err)
+		}
 	}()
 	status := -1
-	for status != 200 {
+	var err error
+	for err == nil && status != 200 {
 		statusURL := fmt.Sprintf("http://localhost:%d/status", w.conf.Port)
-		resp, err := http.Get(statusURL)
-		if err == nil {
+		resp, httpErr := http.Get(statusURL)
+		if httpErr == nil {
 			status = resp.StatusCode
 		}
-		log.Infof("Waiting for Webhook server to start (URL=%s Status=%d Err=%s)", statusURL, status, err)
+		errI := webhookExecuteError.Load()
+		if errI != nil {
+			err = errI.(error)
+		}
+		log.Infof("Waiting for Webhook server to start (URL=%s Status=%d HTTPErr=%s Err=%s)", statusURL, status, httpErr, err)
 		if status != 200 {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
-	return w, kafka
+	return w, err
 }
 
 func TestStartStopDefaultArgs(t *testing.T) {
 	assert := assert.New(t)
 
-	w, kafka := newTestWebhooks([]string{}, 0)
+	k := newTestKafkaComon()
+	w, err := startTestWebhooks([]string{}, k)
+	assert.Errorf(err, "none")
 
 	assert.Equal(8080, w.conf.Port)    // default
 	assert.Equal("", w.conf.LocalAddr) // default
 
-	kafka.stop <- true
+	k.stop <- true
 }
 
 func TestStartStopCustomArgs(t *testing.T) {
 	assert := assert.New(t)
 
-	w, kafka := newTestWebhooks([]string{"-l", "8081", "-L", "127.0.0.1"}, 0)
+	k := newTestKafkaComon()
+	w, err := startTestWebhooks([]string{"-l", "8081", "-L", "127.0.0.1"}, k)
+	assert.Errorf(err, "none")
 
 	assert.Equal(8081, w.conf.Port)
 	assert.Equal("127.0.0.1", w.conf.LocalAddr)
 	assert.Equal("127.0.0.1:8081", w.srv.Addr)
 
-	kafka.stop <- true
+	k.stop <- true
 }
 
 func TestStartStopKafkaInitDelay(t *testing.T) {
-	_, kafka := newTestWebhooks([]string{}, 500)
+	assert := assert.New(t)
 
-	kafka.stop <- true
+	k := newTestKafkaComon()
+	k.kafkaInitDelay = 500
+	_, err := startTestWebhooks([]string{}, k)
+	assert.Errorf(err, "none")
+
+	k.stop <- true
+}
+
+func TestStartStopKafkaPreRunError(t *testing.T) {
+	assert := assert.New(t)
+
+	k := newTestKafkaComon()
+	k.cobraPreRunError = fmt.Errorf("pop")
+	_, err := startTestWebhooks([]string{}, k)
+	assert.Errorf(err, "pop")
+}
+
+func TestConsumerMessagesLoopIsNoop(t *testing.T) {
+	assert := assert.New(t)
+
+	k := newTestKafkaComon()
+	w, err := startTestWebhooks([]string{}, k)
+	assert.Errorf(err, "none")
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	consumer, _ := k.kafkaFactory.NewConsumer(k)
+	producer, _ := k.kafkaFactory.NewProducer(k)
+
+	go func() {
+		w.ConsumerMessagesLoop(consumer, producer, wg)
+	}()
+
+	consumer.(*kldkafka.MockKafkaConsumer).MockMessages <- &sarama.ConsumerMessage{
+		Value: []byte("hello world"),
+	}
+
+	k.stop <- true
+	wg.Wait()
+
+}
+
+func TestProducerErrorLoopIsNoop(t *testing.T) {
+	assert := assert.New(t)
+
+	k := newTestKafkaComon()
+	w, err := startTestWebhooks([]string{}, k)
+	assert.Errorf(err, "none")
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	consumer, _ := k.kafkaFactory.NewConsumer(k)
+	producer, _ := k.kafkaFactory.NewProducer(k)
+
+	go func() {
+		w.ProducerErrorLoop(consumer, producer, wg)
+	}()
+
+	producer.(*kldkafka.MockKafkaProducer).MockErrors <- &sarama.ProducerError{
+		Err: fmt.Errorf("fizzle"),
+	}
+
+	k.stop <- true
+	wg.Wait()
+
+}
+
+func TestProducerSuccessesLoopIsNoop(t *testing.T) {
+	assert := assert.New(t)
+
+	k := newTestKafkaComon()
+	w, err := startTestWebhooks([]string{}, k)
+	assert.Errorf(err, "none")
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	consumer, _ := k.kafkaFactory.NewConsumer(k)
+	producer, _ := k.kafkaFactory.NewProducer(k)
+
+	go func() {
+		w.ProducerSuccessLoop(consumer, producer, wg)
+	}()
+
+	producer.(*kldkafka.MockKafkaProducer).MockSuccesses <- &sarama.ProducerMessage{}
+
+	k.stop <- true
+	wg.Wait()
+
 }

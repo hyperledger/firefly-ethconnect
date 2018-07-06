@@ -98,7 +98,7 @@ func NewSendTxn(msg *kldmessages.SendTransaction) (pTX *Txn, err error) {
 	pTX = &tx
 
 	if msg.Method.Name == "" {
-		err = fmt.Errorf("Method name must be supplied in 'func.name'")
+		err = fmt.Errorf("Method name must be supplied in 'method.name'")
 		return
 	}
 	methodABI, err := genMethodABI(&msg.Method)

@@ -419,7 +419,7 @@ func TestSendTxnMissingMethodName(t *testing.T) {
 	msg.Gas = "456"
 	msg.GasPrice = "789"
 	_, err := NewSendTxn(&msg)
-	assert.Regexp("Method name must be supplied in 'func.name'", err.Error())
+	assert.Regexp("Method name must be supplied in 'method.name'", err.Error())
 }
 func TestSendTxnBadFrom(t *testing.T) {
 	assert := assert.New(t)

@@ -330,7 +330,7 @@ func TestSendTxn(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"123", float64(123), "abc", "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"}
-	msg.Function = kldmessages.ABIFunction{
+	msg.Method = kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
 			kldmessages.ABIParam{
@@ -380,14 +380,14 @@ func TestSendTxn(t *testing.T) {
 	assert.Equal("0x1c8", jsonSent["gas"])
 	assert.Equal("0x0", jsonSent["gasPrice"])
 	assert.Equal("0x315", jsonSent["value"])
-	assert.Regexp("0x000000000000000000000000000000000000000000000000000000000000007b000000000000000000000000000000000000000000000000000000000000007b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000aa983ad2a0e0ed8ac639277f37be42f2a5d2618c00000000000000000000000000000000000000000000000000000000000000036162630000000000000000000000000000000000000000000000000000000000", jsonSent["data"])
+	assert.Regexp("0xe5537abb000000000000000000000000000000000000000000000000000000000000007b000000000000000000000000000000000000000000000000000000000000007b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000aa983ad2a0e0ed8ac639277f37be42f2a5d2618c00000000000000000000000000000000000000000000000000000000000000036162630000000000000000000000000000000000000000000000000000000000", jsonSent["data"])
 }
 
 func TestSendTxnBadInputType(t *testing.T) {
 	assert := assert.New(t)
 
 	var msg kldmessages.SendTransaction
-	msg.Function = kldmessages.ABIFunction{
+	msg.Method = kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
 			kldmessages.ABIParam{
@@ -406,12 +406,12 @@ func TestSendTxnBadInputType(t *testing.T) {
 	assert.Regexp("ABI input 0: Unable to map param1 to etherueum type: unsupported arg type:", err.Error())
 }
 
-func TestSendTxnMissingFunctionName(t *testing.T) {
+func TestSendTxnMissingMethodName(t *testing.T) {
 	assert := assert.New(t)
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"123"}
-	msg.Function = kldmessages.ABIFunction{}
+	msg.Method = kldmessages.ABIMethod{}
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
 	msg.From = "abc"
 	msg.Nonce = "123"
@@ -419,14 +419,14 @@ func TestSendTxnMissingFunctionName(t *testing.T) {
 	msg.Gas = "456"
 	msg.GasPrice = "789"
 	_, err := NewSendTxn(&msg)
-	assert.Regexp("Function name must be supplied in 'func.name'", err.Error())
+	assert.Regexp("Method name must be supplied in 'func.name'", err.Error())
 }
 func TestSendTxnBadFrom(t *testing.T) {
 	assert := assert.New(t)
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"123"}
-	msg.Function = kldmessages.ABIFunction{
+	msg.Method = kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
 			kldmessages.ABIParam{
@@ -456,7 +456,7 @@ func TestSendTxnBadTo(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"123"}
-	msg.Function = kldmessages.ABIFunction{
+	msg.Method = kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
 			kldmessages.ABIParam{
@@ -485,7 +485,7 @@ func TestSendTxnBadOutputType(t *testing.T) {
 	assert := assert.New(t)
 
 	var msg kldmessages.SendTransaction
-	msg.Function = kldmessages.ABIFunction{
+	msg.Method = kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
 			kldmessages.ABIParam{
@@ -509,7 +509,7 @@ func TestSendBadParams(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"abc"}
-	msg.Function = kldmessages.ABIFunction{
+	msg.Method = kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
 			kldmessages.ABIParam{
@@ -533,7 +533,7 @@ func TestSendTxnPackError(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{""}
-	msg.Function = kldmessages.ABIFunction{
+	msg.Method = kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
 			kldmessages.ABIParam{

@@ -345,6 +345,8 @@ func TestProducerErrorLoopPanicsOnBadErrStructure(t *testing.T) {
 	assert.Panics(func() {
 		w.ProducerErrorLoop(k.kafkaFactory.Consumer, k.kafkaFactory.Producer, wg)
 	})
+
+	k.stop <- true
 }
 
 func TestProducerErrorLoopPanicsOnBadMsgStructure(t *testing.T) {
@@ -364,7 +366,10 @@ func TestProducerErrorLoopPanicsOnBadMsgStructure(t *testing.T) {
 	assert.Panics(func() {
 		w.ProducerSuccessLoop(k.kafkaFactory.Consumer, k.kafkaFactory.Producer, wg)
 	})
+
+	k.stop <- true
 }
+
 func TestWebhookHandlerJSONDeployContract(t *testing.T) {
 
 	assert := assert.New(t)

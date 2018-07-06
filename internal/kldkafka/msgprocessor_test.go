@@ -69,7 +69,8 @@ var goodSendTxnJSON = "{" +
 	"  \"headers\":{\"type\": \"SendTransaction\"}," +
 	"  \"from\":\"" + testFromAddr + "\"," +
 	"  \"nonce\":\"123\"," +
-	"  \"gas\":\"123\"" +
+	"  \"gas\":\"123\"," +
+	"  \"method\":{\"name\":\"test\"}" +
 	"}"
 
 func (r *testRPC) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
@@ -366,7 +367,8 @@ func TestOnSendTransactionMessageBadMsg(t *testing.T) {
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
 		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
 		"  \"nonce\":\"123\"," +
-		"  \"value\":\"abc\"" +
+		"  \"value\":\"abc\"," +
+		"  \"method\":{\"name\":\"test\"}" +
 		"}"
 	msgProcessor.OnMessage(testMsgContext)
 
@@ -461,7 +463,8 @@ func TestOnSendTransactionMessageInflightNonce(t *testing.T) {
 	testMsgContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
 		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
-		"  \"gas\":\"123\"" +
+		"  \"gas\":\"123\"," +
+		"  \"method\":{\"name\":\"test\"}" +
 		"}"
 	testRPC := &testRPC{
 		ethSendTransactionResult: "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b",

@@ -152,6 +152,7 @@ func (w *WebhooksBridge) ProducerSuccessLoop(consumer kldkafka.KafkaConsumer, pr
 }
 
 type errMsg struct {
+	Sent    bool   `json:"sent"`
 	Message string `json:"error"`
 }
 

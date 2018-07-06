@@ -406,6 +406,21 @@ func TestSendTxnBadInputType(t *testing.T) {
 	assert.Regexp("ABI input 0: Unable to map param1 to etherueum type: unsupported arg type:", err.Error())
 }
 
+func TestSendTxnMissingFunctionName(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{"123"}
+	msg.Function = kldmessages.ABIFunction{}
+	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
+	msg.From = "abc"
+	msg.Nonce = "123"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	_, err := NewSendTxn(&msg)
+	assert.Regexp("Function name must be supplied in 'func.name'", err.Error())
+}
 func TestSendTxnBadFrom(t *testing.T) {
 	assert := assert.New(t)
 

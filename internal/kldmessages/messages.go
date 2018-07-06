@@ -107,7 +107,7 @@ type transactionCommon struct {
 type SendTransaction struct {
 	transactionCommon
 	To       string      `json:"to"`
-	Function ABIFunction `json:"function"`
+	Function ABIFunction `json:"func"`
 }
 
 // DeployContract message instructs the bridge to install a contract

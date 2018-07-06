@@ -97,6 +97,10 @@ func NewSendTxn(msg *kldmessages.SendTransaction) (pTX *Txn, err error) {
 	var tx Txn
 	pTX = &tx
 
+	if msg.Function.Name == "" {
+		err = fmt.Errorf("Function name must be supplied in 'func.name'")
+		return
+	}
 	methodABI, err := genMethodABI(&msg.Function)
 	if err != nil {
 		return
@@ -183,17 +187,20 @@ func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgG
 	}
 
 	var toAddr common.Address
+	var toStr string
 	if msgTo != "" {
 		if toAddr, err = kldutils.StrToAddress("to", msgTo); err != nil {
 			return
 		}
 		tx.EthTX = types.NewTransaction(uint64(nonce), toAddr, value, uint64(gas), gasPrice, data)
+		toStr = toAddr.Hex()
 	} else {
 		tx.EthTX = types.NewContractCreation(uint64(nonce), value, uint64(gas), gasPrice, data)
+		toStr = ""
 	}
 	etx := tx.EthTX
-	log.Debugf("TX:%s From=%s To=%s Nonce=%d Value=%d Gas=%d GasPrice=%d",
-		etx.Hash().Hex(), tx.From.Hex(), etx.To(), etx.Nonce(), etx.Value(), etx.Gas(), etx.GasPrice())
+	log.Debugf("TX:%s From='%s' To='%s' Nonce=%d Value=%d Gas=%d GasPrice=%d",
+		etx.Hash().Hex(), tx.From.Hex(), toStr, etx.Nonce(), etx.Value(), etx.Gas(), etx.GasPrice())
 	return
 }
 

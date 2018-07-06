@@ -50,13 +50,20 @@ type WebhooksBridge struct {
 		LocalAddr string
 		Port      int
 	}
-	kafka kldkafka.KafkaCommon
-	srv   *http.Server
+	kafka       kldkafka.KafkaCommon
+	srv         *http.Server
+	sendCond    *sync.Cond
+	successMsgs map[string]*sarama.ProducerMessage
+	failedMsgs  map[string]error
 }
 
 // NewWebhooksBridge constructor
 func NewWebhooksBridge() (w *WebhooksBridge) {
-	w = &WebhooksBridge{}
+	w = &WebhooksBridge{
+		sendCond:    sync.NewCond(&sync.Mutex{}),
+		successMsgs: make(map[string]*sarama.ProducerMessage),
+		failedMsgs:  make(map[string]error),
+	}
 	kf := &kldkafka.SaramaKafkaFactory{}
 	w.kafka = kldkafka.NewKafkaCommon(kf, w)
 	return
@@ -92,18 +99,54 @@ func (w *WebhooksBridge) ConsumerMessagesLoop(consumer kldkafka.KafkaConsumer, p
 	wg.Done()
 }
 
+func (w *WebhooksBridge) waitForSend(msgID string) (msg *sarama.ProducerMessage, err error) {
+	w.sendCond.L.Lock()
+	for msg == nil && err == nil {
+		var found bool
+		if err, found = w.failedMsgs[msgID]; found {
+			delete(w.failedMsgs, msgID)
+		} else if msg, found = w.successMsgs[msgID]; found {
+			delete(w.successMsgs, msgID)
+		} else {
+			w.sendCond.Wait()
+		}
+	}
+	w.sendCond.L.Unlock()
+	return
+}
+
 // ProducerErrorLoop - consume errors
 func (w *WebhooksBridge) ProducerErrorLoop(consumer kldkafka.KafkaConsumer, producer kldkafka.KafkaProducer, wg *sync.WaitGroup) {
+	log.Debugf("Webhooks listening for errors sending to Kafka")
 	for err := range producer.Errors() {
-		log.Errorf("Webhooks received error: %s", err)
+		log.Errorf("Error sending message: %s", err)
+		if err.Msg == nil || err.Msg.Metadata == nil {
+			// This should not be possible
+			panic(fmt.Errorf("Error did not contain message and metadata: %+v", err))
+		}
+		msgID := err.Msg.Metadata.(string)
+		w.sendCond.L.Lock()
+		w.failedMsgs[msgID] = err
+		w.sendCond.Broadcast()
+		w.sendCond.L.Unlock()
 	}
 	wg.Done()
 }
 
 // ProducerSuccessLoop - consume successes
 func (w *WebhooksBridge) ProducerSuccessLoop(consumer kldkafka.KafkaConsumer, producer kldkafka.KafkaProducer, wg *sync.WaitGroup) {
+	log.Debugf("Webhooks listening for successful sends to Kafka")
 	for msg := range producer.Successes() {
 		log.Infof("Webhooks sent message ok: %s", msg)
+		if msg.Metadata == nil {
+			// This should not be possible
+			panic(fmt.Errorf("Sent message did not contain metadata: %+v", msg))
+		}
+		msgID := msg.Metadata.(string)
+		w.sendCond.L.Lock()
+		w.successMsgs[msgID] = msg
+		w.sendCond.Broadcast()
+		w.sendCond.L.Unlock()
 	}
 	wg.Done()
 }
@@ -114,7 +157,7 @@ type errMsg struct {
 
 func errReply(res http.ResponseWriter, err error, status int) {
 	reply, _ := json.Marshal(&errMsg{Message: err.Error()})
-	res.WriteHeader(400)
+	res.WriteHeader(status)
 	res.Write(reply)
 	return
 }
@@ -125,6 +168,25 @@ type okMsg struct {
 
 func okReply(res http.ResponseWriter) {
 	reply, _ := json.Marshal(&okMsg{OK: true})
+	res.WriteHeader(200)
+	res.Write(reply)
+	return
+}
+
+type sentMsg struct {
+	Sent    bool   `json:"sent"`
+	Request string `json:"id"`
+	Msg     string `json:"msg"`
+}
+
+func msgSentReply(res http.ResponseWriter, msg *sarama.ProducerMessage) {
+	replyMsg := sentMsg{
+		Sent:    true,
+		Request: msg.Metadata.(string),
+		Msg:     fmt.Sprintf("%s:%d:%d", msg.Topic, msg.Partition, msg.Offset),
+	}
+	reply, _ := json.Marshal(&replyMsg)
+	log.Infof("Sending 200 OK to HTTP webhook. Request=%s Msg=%s", replyMsg.Request, replyMsg.Msg)
 	res.WriteHeader(200)
 	res.Write(reply)
 	return
@@ -199,14 +261,24 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 		return
 	}
 
+	// We always generate the ID. It cannot be set by the user
+	msgID := kldutils.UUIDv4()
+	headers.(map[string]interface{})["id"] = msgID
+
 	log.Debugf("Forwarding message to Kafka bridge: %s", payloadToForward)
 	w.kafka.Producer().Input() <- &sarama.ProducerMessage{
-		Topic: w.kafka.Conf().TopicOut,
-		Key:   sarama.StringEncoder(key),
-		Value: sarama.ByteEncoder(payloadToForward),
+		Topic:    w.kafka.Conf().TopicOut,
+		Key:      sarama.StringEncoder(key),
+		Value:    sarama.ByteEncoder(payloadToForward),
+		Metadata: msgID,
 	}
 
-	okReply(res)
+	successMsg, err := w.waitForSend(msgID)
+	if err != nil {
+		errReply(res, fmt.Errorf("Failed to deliver message to Kafka: %s", err), 502)
+		return
+	}
+	msgSentReply(res, successMsg)
 }
 
 func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Request) {

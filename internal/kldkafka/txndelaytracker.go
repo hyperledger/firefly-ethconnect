@@ -37,13 +37,15 @@ const (
 	// MaxDelay - maximum delay between tries
 	MaxDelay = 10 * time.Second
 	// Factor - exponential backoff factor
-	Factor = 1.5
+	Factor = 1.3
+	// InitialDelayFraction - faction of average to use for initial delay
+	InitialDelayFraction = 0.4
 	// TracerFrequency - run an aggressive txn every X txns, and reset average
 	TracerFrequency = 25
 	// TracerDivisor - when a tracer runs, it runs at this division of the average
 	TracerDivisor = 5
 	// ResetThreshold - if a tracer comes in below this threshold of the average, we reset
-	ResetThreshold = 0.6
+	ResetThreshold = 0.3
 )
 
 // TxnDelayTracker - helps manage delays when checking for txn receipts
@@ -65,7 +67,8 @@ type txnDelayTracker struct {
 // current moving average, or might be artifically low to send in a
 // tracer
 func (d *txnDelayTracker) GetInitialDelay() (delay time.Duration) {
-	delay = time.Duration(d.avg()) * time.Millisecond
+	// We start with a fraction of the average
+	delay = time.Duration(int64(float64(d.avg())*InitialDelayFraction)) * time.Millisecond
 	d.count++
 	if (d.count % TracerFrequency) == 0 {
 		log.Debugf("Sending tracer at count=%d delay=%.2fs", d.count, delay.Seconds())

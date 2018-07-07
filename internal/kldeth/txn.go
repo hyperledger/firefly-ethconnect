@@ -97,7 +97,11 @@ func NewSendTxn(msg *kldmessages.SendTransaction) (pTX *Txn, err error) {
 	var tx Txn
 	pTX = &tx
 
-	methodABI, err := genMethodABI(&msg.Function)
+	if msg.Method.Name == "" {
+		err = fmt.Errorf("Method name must be supplied in 'method.name'")
+		return
+	}
+	methodABI, err := genMethodABI(&msg.Method)
 	if err != nil {
 		return
 	}
@@ -109,19 +113,21 @@ func NewSendTxn(msg *kldmessages.SendTransaction) (pTX *Txn, err error) {
 	}
 
 	// Pack the arguments
-	packedCall, err := methodABI.Inputs.Pack(typedArgs...)
+	packedArgs, err := methodABI.Inputs.Pack(typedArgs...)
 	if err != nil {
 		err = fmt.Errorf("Packing arguments for method '%s': %s", methodABI.Name, err)
 		return
 	}
-	log.Infof("Packed: %x", packedCall)
+	methodID := methodABI.Id()
+	log.Infof("Method Name=%s ID=%x PackedArgs=%x", msg.Method.Name, methodID, packedArgs)
+	packedCall := append(methodID, packedArgs...)
 
 	// Generate the ethereum transaction
 	err = pTX.genEthTransaction(msg.From, msg.To, msg.Nonce, msg.Value, msg.Gas, msg.GasPrice, packedCall)
 	return
 }
 
-func genMethodABI(jsonABI *kldmessages.ABIFunction) (method *abi.Method, err error) {
+func genMethodABI(jsonABI *kldmessages.ABIMethod) (method *abi.Method, err error) {
 	method = &abi.Method{}
 	method.Name = jsonABI.Name
 	for i := 0; i < len(jsonABI.Inputs); i++ {
@@ -183,30 +189,33 @@ func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgG
 	}
 
 	var toAddr common.Address
+	var toStr string
 	if msgTo != "" {
 		if toAddr, err = kldutils.StrToAddress("to", msgTo); err != nil {
 			return
 		}
 		tx.EthTX = types.NewTransaction(uint64(nonce), toAddr, value, uint64(gas), gasPrice, data)
+		toStr = toAddr.Hex()
 	} else {
 		tx.EthTX = types.NewContractCreation(uint64(nonce), value, uint64(gas), gasPrice, data)
+		toStr = ""
 	}
 	etx := tx.EthTX
-	log.Debugf("TX:%s From=%s To=%s Nonce=%d Value=%d Gas=%d GasPrice=%d",
-		etx.Hash().Hex(), tx.From.Hex(), etx.To(), etx.Nonce(), etx.Value(), etx.Gas(), etx.GasPrice())
+	log.Debugf("TX:%s From='%s' To='%s' Nonce=%d Value=%d Gas=%d GasPrice=%d",
+		etx.Hash().Hex(), tx.From.Hex(), toStr, etx.Nonce(), etx.Value(), etx.Gas(), etx.GasPrice())
 	return
 }
 
 func getInteger(methodName string, idx int, requiredType string, suppliedType reflect.Type, param interface{}) (val int64, err error) {
 	if suppliedType.Kind() == reflect.String {
 		if val, err = strconv.ParseInt(param.(string), 10, 64); err != nil {
-			err = fmt.Errorf("Function '%s' param %d: Could not be converted to a number", methodName, idx)
+			err = fmt.Errorf("Method '%s' param %d: Could not be converted to a number", methodName, idx)
 			return
 		}
 	} else if suppliedType.Kind() == reflect.Float64 {
 		val = int64(param.(float64))
 	} else {
-		err = fmt.Errorf("Function '%s' param %d is a %s: Must supply a number or a string", methodName, idx, requiredType)
+		err = fmt.Errorf("Method '%s' param %d is a %s: Must supply a number or a string", methodName, idx, requiredType)
 	}
 	return
 }
@@ -244,7 +253,7 @@ func processIntArray(typedArgs []interface{}, methodName string, idx int, requir
 		updatedArgs = append(typedArgs, targetSlice.Interface())
 
 	} else {
-		err = fmt.Errorf("Function '%s' param %d is a %s: Must supply an array", methodName, idx, requiredType)
+		err = fmt.Errorf("Method '%s' param %d is a %s: Must supply an array", methodName, idx, requiredType)
 	}
 	return
 }
@@ -288,14 +297,14 @@ func processIntVal(typedArgs []interface{}, methodName string, idx int, required
 		if suppliedType.Kind() == reflect.String {
 			bigInt := big.NewInt(0)
 			if _, ok := bigInt.SetString(param.(string), 10); !ok {
-				err = fmt.Errorf("Function '%s' param %d: Could not be converted to a number", methodName, idx)
+				err = fmt.Errorf("Method '%s' param %d: Could not be converted to a number", methodName, idx)
 			} else {
 				updatedArgs = append(typedArgs, bigInt)
 			}
 		} else if suppliedType.Kind() == reflect.Float64 {
 			updatedArgs = append(typedArgs, big.NewInt(int64(param.(float64))))
 		} else {
-			err = fmt.Errorf("Function '%s' param %d is a %s: Must supply a number or a string", methodName, idx, requiredType)
+			err = fmt.Errorf("Method '%s' param %d is a %s: Must supply a number or a string", methodName, idx, requiredType)
 		}
 	} else {
 		err = fmt.Errorf("Type '%s' is not yet supported", requiredType)
@@ -316,7 +325,7 @@ func (tx *Txn) generateTypedArgs(params []interface{}, method abi.Method) (typed
 	log.Debug("Parsing args for function: ", method)
 	for idx, inputArg := range method.Inputs {
 		if idx >= len(params) {
-			err = fmt.Errorf("Function '%s': Requires %d args (supplied=%d)", methodName, len(method.Inputs), len(params))
+			err = fmt.Errorf("Method '%s': Requires %d args (supplied=%d)", methodName, len(method.Inputs), len(params))
 			return
 		}
 		param := params[idx]
@@ -326,7 +335,7 @@ func (tx *Txn) generateTypedArgs(params []interface{}, method abi.Method) (typed
 			if suppliedType.Kind() == reflect.String {
 				typedArgs = append(typedArgs, param.(string))
 			} else {
-				err = fmt.Errorf("Function '%s' param %d: Must supply a string", methodName, idx)
+				err = fmt.Errorf("Method '%s' param %d: Must supply a string", methodName, idx)
 				break
 			}
 		} else if strings.Contains(requiredType, "int") && strings.HasSuffix(requiredType, "]") {
@@ -339,17 +348,17 @@ func (tx *Txn) generateTypedArgs(params []interface{}, method abi.Method) (typed
 			} else if suppliedType.Kind() == reflect.Bool {
 				typedArgs = append(typedArgs, param.(bool))
 			} else {
-				err = fmt.Errorf("Function '%s' param %d is a %s: Must supply a boolean or a string", methodName, idx, requiredType)
+				err = fmt.Errorf("Method '%s' param %d is a %s: Must supply a boolean or a string", methodName, idx, requiredType)
 			}
 		} else if requiredType == "address" {
 			if suppliedType.Kind() == reflect.String {
 				if !common.IsHexAddress(param.(string)) {
-					err = fmt.Errorf("Function '%s' param %d: Could not be converted to a hex address", methodName, idx)
+					err = fmt.Errorf("Method '%s' param %d: Could not be converted to a hex address", methodName, idx)
 				} else {
 					typedArgs = append(typedArgs, common.HexToAddress(param.(string)))
 				}
 			} else {
-				err = fmt.Errorf("Function '%s' param %d is a %s: Must supply a hex address string", methodName, idx, requiredType)
+				err = fmt.Errorf("Method '%s' param %d is a %s: Must supply a hex address string", methodName, idx, requiredType)
 			}
 		} else if strings.HasPrefix(requiredType, "bytes") {
 			if suppliedType.Kind() == reflect.String {
@@ -364,7 +373,7 @@ func (tx *Txn) generateTypedArgs(params []interface{}, method abi.Method) (typed
 					typedArgs = append(typedArgs, bNewArray.Interface())
 				}
 			} else {
-				err = fmt.Errorf("Function '%s' param %d is a %s: Must supply a hex string", methodName, idx, requiredType)
+				err = fmt.Errorf("Method '%s' param %d is a %s: Must supply a hex string", methodName, idx, requiredType)
 			}
 		} else {
 			err = fmt.Errorf("Type '%s' is not yet supported", requiredType)

@@ -180,6 +180,7 @@ func (p *msgProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 	var isMined, timedOut bool
 	var err error
 	var retries int
+	var elapsed time.Duration
 	for !isMined && !timedOut {
 
 		if isMined, err = iTX.tx.GetTXReceipt(p.rpc); err != nil {
@@ -188,7 +189,7 @@ func (p *msgProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 			log.Infof("Failed to get receipt for %s (retries=%d): %s", iTX, retries, err)
 		}
 
-		elapsed := time.Now().Sub(replyWaitStart)
+		elapsed = time.Now().Sub(replyWaitStart)
 		timedOut = elapsed > p.maxTXWaitTime
 		if !isMined && !timedOut {
 			// Need to have the inflight lock to calculate the delay, but not
@@ -210,6 +211,11 @@ func (p *msgProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 			iTX.msgContext.SendErrorReply(408, fmt.Errorf("Timed out waiting for transaction receipt"))
 		}
 	} else {
+		// Update the stats
+		p.inflightTxnsLock.Lock()
+		p.inflightTxnDelayer.ReportSuccess(elapsed)
+		p.inflightTxnsLock.Unlock()
+
 		// Build our reply
 		receipt := iTX.tx.Receipt
 		var reply kldmessages.TransactionReceipt

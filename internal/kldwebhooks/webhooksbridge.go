@@ -50,13 +50,22 @@ type WebhooksBridge struct {
 		LocalAddr string
 		Port      int
 	}
-	kafka kldkafka.KafkaCommon
-	srv   *http.Server
+	kafka       kldkafka.KafkaCommon
+	srv         *http.Server
+	sendCond    *sync.Cond
+	pendingMsgs map[string]bool
+	successMsgs map[string]*sarama.ProducerMessage
+	failedMsgs  map[string]error
 }
 
 // NewWebhooksBridge constructor
 func NewWebhooksBridge() (w *WebhooksBridge) {
-	w = &WebhooksBridge{}
+	w = &WebhooksBridge{
+		sendCond:    sync.NewCond(&sync.Mutex{}),
+		pendingMsgs: make(map[string]bool),
+		successMsgs: make(map[string]*sarama.ProducerMessage),
+		failedMsgs:  make(map[string]error),
+	}
 	kf := &kldkafka.SaramaKafkaFactory{}
 	w.kafka = kldkafka.NewKafkaCommon(kf, w)
 	return
@@ -92,29 +101,78 @@ func (w *WebhooksBridge) ConsumerMessagesLoop(consumer kldkafka.KafkaConsumer, p
 	wg.Done()
 }
 
+func (w *WebhooksBridge) setMsgPending(msgID string) {
+	w.sendCond.L.Lock()
+	w.pendingMsgs[msgID] = true
+	w.sendCond.L.Unlock()
+}
+
+func (w *WebhooksBridge) waitForSend(msgID string) (msg *sarama.ProducerMessage, err error) {
+	w.sendCond.L.Lock()
+	for msg == nil && err == nil {
+		var found bool
+		if err, found = w.failedMsgs[msgID]; found {
+			delete(w.failedMsgs, msgID)
+		} else if msg, found = w.successMsgs[msgID]; found {
+			delete(w.successMsgs, msgID)
+		} else {
+			w.sendCond.Wait()
+		}
+	}
+	w.sendCond.L.Unlock()
+	return
+}
+
 // ProducerErrorLoop - consume errors
 func (w *WebhooksBridge) ProducerErrorLoop(consumer kldkafka.KafkaConsumer, producer kldkafka.KafkaProducer, wg *sync.WaitGroup) {
+	log.Debugf("Webhooks listening for errors sending to Kafka")
 	for err := range producer.Errors() {
-		log.Errorf("Webhooks received error: %s", err)
+		log.Errorf("Error sending message: %s", err)
+		if err.Msg == nil || err.Msg.Metadata == nil {
+			// This should not be possible
+			panic(fmt.Errorf("Error did not contain message and metadata: %+v", err))
+		}
+		msgID := err.Msg.Metadata.(string)
+		w.sendCond.L.Lock()
+		if _, found := w.pendingMsgs[msgID]; found {
+			delete(w.pendingMsgs, msgID)
+			w.failedMsgs[msgID] = err
+			w.sendCond.Broadcast()
+		}
+		w.sendCond.L.Unlock()
 	}
 	wg.Done()
 }
 
 // ProducerSuccessLoop - consume successes
 func (w *WebhooksBridge) ProducerSuccessLoop(consumer kldkafka.KafkaConsumer, producer kldkafka.KafkaProducer, wg *sync.WaitGroup) {
+	log.Debugf("Webhooks listening for successful sends to Kafka")
 	for msg := range producer.Successes() {
 		log.Infof("Webhooks sent message ok: %s", msg)
+		if msg.Metadata == nil {
+			// This should not be possible
+			panic(fmt.Errorf("Sent message did not contain metadata: %+v", msg))
+		}
+		msgID := msg.Metadata.(string)
+		w.sendCond.L.Lock()
+		if _, found := w.pendingMsgs[msgID]; found {
+			delete(w.pendingMsgs, msgID)
+			w.successMsgs[msgID] = msg
+			w.sendCond.Broadcast()
+		}
+		w.sendCond.L.Unlock()
 	}
 	wg.Done()
 }
 
 type errMsg struct {
+	Sent    bool   `json:"sent"`
 	Message string `json:"error"`
 }
 
 func errReply(res http.ResponseWriter, err error, status int) {
 	reply, _ := json.Marshal(&errMsg{Message: err.Error()})
-	res.WriteHeader(400)
+	res.WriteHeader(status)
 	res.Write(reply)
 	return
 }
@@ -130,7 +188,38 @@ func okReply(res http.ResponseWriter) {
 	return
 }
 
-func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Request) {
+type sentMsg struct {
+	Sent    bool   `json:"sent"`
+	Request string `json:"id"`
+	Msg     string `json:"msg,omitempty"`
+}
+
+func msgSentReply(res http.ResponseWriter, ack bool, msg *sarama.ProducerMessage) {
+	msgAck := ""
+	if ack {
+		msgAck = fmt.Sprintf("%s:%d:%d", msg.Topic, msg.Partition, msg.Offset)
+	}
+	replyMsg := sentMsg{
+		Sent:    true,
+		Request: msg.Metadata.(string),
+		Msg:     msgAck,
+	}
+	reply, _ := json.Marshal(&replyMsg)
+	log.Infof("Sending 200 OK to HTTP webhook. Request=%s Msg=%s", replyMsg.Request, replyMsg.Msg)
+	res.WriteHeader(200)
+	res.Write(reply)
+	return
+}
+
+func (w *WebhooksBridge) webhookHandlerWithAck(res http.ResponseWriter, req *http.Request) {
+	w.webhookHandler(res, req, true)
+}
+
+func (w *WebhooksBridge) webhookHandlerNoAck(res http.ResponseWriter, req *http.Request) {
+	w.webhookHandler(res, req, false)
+}
+
+func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Request, ack bool) {
 
 	if req.ContentLength > MaxPayloadSize {
 		errReply(res, fmt.Errorf("Message exceeds maximum allowable size"), 400)
@@ -199,14 +288,32 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	log.Debugf("Forwarding message to Kafka bridge: %s", payloadToForward)
-	w.kafka.Producer().Input() <- &sarama.ProducerMessage{
-		Topic: w.kafka.Conf().TopicOut,
-		Key:   sarama.StringEncoder(key),
-		Value: sarama.ByteEncoder(payloadToForward),
+	// We always generate the ID. It cannot be set by the user
+	msgID := kldutils.UUIDv4()
+	headers.(map[string]interface{})["id"] = msgID
+	if ack {
+		w.setMsgPending(msgID)
 	}
 
-	okReply(res)
+	log.Debugf("Forwarding message to Kafka bridge: %s", payloadToForward)
+	sentMsg := &sarama.ProducerMessage{
+		Topic:    w.kafka.Conf().TopicOut,
+		Key:      sarama.StringEncoder(key),
+		Value:    sarama.ByteEncoder(payloadToForward),
+		Metadata: msgID,
+	}
+	w.kafka.Producer().Input() <- sentMsg
+
+	if ack {
+		successMsg, err := w.waitForSend(msgID)
+		if err != nil {
+			errReply(res, fmt.Errorf("Failed to deliver message to Kafka: %s", err), 502)
+			return
+		}
+		msgSentReply(res, ack, successMsg)
+	} else {
+		msgSentReply(res, ack, sentMsg)
+	}
 }
 
 func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Request) {
@@ -217,7 +324,8 @@ func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Reques
 func (w *WebhooksBridge) Start() (err error) {
 
 	mux := http.NewServeMux()
-	mux.Handle("/message", http.HandlerFunc(w.webhookHandler))
+	mux.Handle("/hook", http.HandlerFunc(w.webhookHandlerWithAck))
+	mux.Handle("/fasthook", http.HandlerFunc(w.webhookHandlerNoAck))
 	mux.Handle("/status", http.HandlerFunc(w.statusHandler))
 
 	tlsConfig, err := w.kafka.CreateTLSConfiguration()

@@ -36,8 +36,11 @@ func (tx *Txn) Send(rpc RPCClient) error {
 	tx.Hash, err = tx.sendUnsignedTxn(ctx, rpc)
 	// }
 	callTime := time.Now().Sub(start)
-	ok := (err == nil)
-	log.Infof("TX:%s Sent. OK=%t [%.2fs]", tx.Hash, ok, callTime.Seconds())
+	if err != nil {
+		log.Warnf("TX:%s Failed to send: %s [%.2fs]", tx.Hash, err, callTime.Seconds())
+	} else {
+		log.Infof("TX:%s Sent OK [%.2fs]", tx.Hash, callTime.Seconds())
+	}
 	return err
 }
 

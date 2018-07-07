@@ -35,9 +35,9 @@ const (
 	MsgTypeTransactionFailure = "TransactionFailure"
 )
 
-// ABIFunction is the web3 form for an individual function
+// ABIMethod is the web3 form for an individual function
 // described in https://web3js.readthedocs.io/en/1.0/glossary.html
-type ABIFunction struct {
+type ABIMethod struct {
 	Type            string     `json:"type,omitempty"`
 	Name            string     `json:"name"`
 	Constant        bool       `json:"constant"`
@@ -106,8 +106,8 @@ type transactionCommon struct {
 // SendTransaction message instructs the bridge to install a contract
 type SendTransaction struct {
 	transactionCommon
-	To       string      `json:"to"`
-	Function ABIFunction `json:"function"`
+	To     string    `json:"to"`
+	Method ABIMethod `json:"method"`
 }
 
 // DeployContract message instructs the bridge to install a contract

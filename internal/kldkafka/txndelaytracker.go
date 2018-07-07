@@ -108,6 +108,7 @@ func (d *txnDelayTracker) ReportSuccess(timeTaken time.Duration) {
 
 	// Average is in miliseconds
 	d.add(val)
+	log.Debugf("Average transaction time to receipt: %.2fms", d.avg())
 }
 
 func (d *txnDelayTracker) avg() float64 {

@@ -207,12 +207,13 @@ func (c *msgContext) Headers() *kldmessages.CommonHeaders {
 
 func (c *msgContext) Unmarshal(msg interface{}) (err error) {
 	if err = json.Unmarshal(c.saramaMsg.Value, msg); err != nil {
-		log.Errorf("Failed to message: %s - Message=%s", err, string(c.saramaMsg.Value))
+		log.Errorf("Failed to parse message: %s - Message=%s", err, string(c.saramaMsg.Value))
 	}
 	return
 }
 
 func (c *msgContext) SendErrorReply(status int, err error) {
+	log.Warnf("Failed to process message %s: %s", c, err)
 	errMsg := kldmessages.NewErrorReply(err, c.saramaMsg.Value)
 	c.Reply(errMsg)
 }

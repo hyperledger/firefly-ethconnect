@@ -53,6 +53,7 @@ type WebhooksBridge struct {
 	kafka       kldkafka.KafkaCommon
 	srv         *http.Server
 	sendCond    *sync.Cond
+	pendingMsgs map[string]bool
 	successMsgs map[string]*sarama.ProducerMessage
 	failedMsgs  map[string]error
 }
@@ -61,6 +62,7 @@ type WebhooksBridge struct {
 func NewWebhooksBridge() (w *WebhooksBridge) {
 	w = &WebhooksBridge{
 		sendCond:    sync.NewCond(&sync.Mutex{}),
+		pendingMsgs: make(map[string]bool),
 		successMsgs: make(map[string]*sarama.ProducerMessage),
 		failedMsgs:  make(map[string]error),
 	}
@@ -99,6 +101,12 @@ func (w *WebhooksBridge) ConsumerMessagesLoop(consumer kldkafka.KafkaConsumer, p
 	wg.Done()
 }
 
+func (w *WebhooksBridge) setMsgPending(msgID string) {
+	w.sendCond.L.Lock()
+	w.pendingMsgs[msgID] = true
+	w.sendCond.L.Unlock()
+}
+
 func (w *WebhooksBridge) waitForSend(msgID string) (msg *sarama.ProducerMessage, err error) {
 	w.sendCond.L.Lock()
 	for msg == nil && err == nil {
@@ -126,8 +134,11 @@ func (w *WebhooksBridge) ProducerErrorLoop(consumer kldkafka.KafkaConsumer, prod
 		}
 		msgID := err.Msg.Metadata.(string)
 		w.sendCond.L.Lock()
-		w.failedMsgs[msgID] = err
-		w.sendCond.Broadcast()
+		if _, found := w.pendingMsgs[msgID]; found {
+			delete(w.pendingMsgs, msgID)
+			w.failedMsgs[msgID] = err
+			w.sendCond.Broadcast()
+		}
 		w.sendCond.L.Unlock()
 	}
 	wg.Done()
@@ -144,8 +155,11 @@ func (w *WebhooksBridge) ProducerSuccessLoop(consumer kldkafka.KafkaConsumer, pr
 		}
 		msgID := msg.Metadata.(string)
 		w.sendCond.L.Lock()
-		w.successMsgs[msgID] = msg
-		w.sendCond.Broadcast()
+		if _, found := w.pendingMsgs[msgID]; found {
+			delete(w.pendingMsgs, msgID)
+			w.successMsgs[msgID] = msg
+			w.sendCond.Broadcast()
+		}
 		w.sendCond.L.Unlock()
 	}
 	wg.Done()
@@ -177,14 +191,18 @@ func okReply(res http.ResponseWriter) {
 type sentMsg struct {
 	Sent    bool   `json:"sent"`
 	Request string `json:"id"`
-	Msg     string `json:"msg"`
+	Msg     string `json:"msg,omitempty"`
 }
 
-func msgSentReply(res http.ResponseWriter, msg *sarama.ProducerMessage) {
+func msgSentReply(res http.ResponseWriter, ack bool, msg *sarama.ProducerMessage) {
+	msgAck := ""
+	if ack {
+		msgAck = fmt.Sprintf("%s:%d:%d", msg.Topic, msg.Partition, msg.Offset)
+	}
 	replyMsg := sentMsg{
 		Sent:    true,
 		Request: msg.Metadata.(string),
-		Msg:     fmt.Sprintf("%s:%d:%d", msg.Topic, msg.Partition, msg.Offset),
+		Msg:     msgAck,
 	}
 	reply, _ := json.Marshal(&replyMsg)
 	log.Infof("Sending 200 OK to HTTP webhook. Request=%s Msg=%s", replyMsg.Request, replyMsg.Msg)
@@ -193,7 +211,15 @@ func msgSentReply(res http.ResponseWriter, msg *sarama.ProducerMessage) {
 	return
 }
 
-func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Request) {
+func (w *WebhooksBridge) webhookHandlerWithAck(res http.ResponseWriter, req *http.Request) {
+	w.webhookHandler(res, req, true)
+}
+
+func (w *WebhooksBridge) webhookHandlerNoAck(res http.ResponseWriter, req *http.Request) {
+	w.webhookHandler(res, req, false)
+}
+
+func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Request, ack bool) {
 
 	if req.ContentLength > MaxPayloadSize {
 		errReply(res, fmt.Errorf("Message exceeds maximum allowable size"), 400)
@@ -265,21 +291,29 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 	// We always generate the ID. It cannot be set by the user
 	msgID := kldutils.UUIDv4()
 	headers.(map[string]interface{})["id"] = msgID
+	if ack {
+		w.setMsgPending(msgID)
+	}
 
 	log.Debugf("Forwarding message to Kafka bridge: %s", payloadToForward)
-	w.kafka.Producer().Input() <- &sarama.ProducerMessage{
+	sentMsg := &sarama.ProducerMessage{
 		Topic:    w.kafka.Conf().TopicOut,
 		Key:      sarama.StringEncoder(key),
 		Value:    sarama.ByteEncoder(payloadToForward),
 		Metadata: msgID,
 	}
+	w.kafka.Producer().Input() <- sentMsg
 
-	successMsg, err := w.waitForSend(msgID)
-	if err != nil {
-		errReply(res, fmt.Errorf("Failed to deliver message to Kafka: %s", err), 502)
-		return
+	if ack {
+		successMsg, err := w.waitForSend(msgID)
+		if err != nil {
+			errReply(res, fmt.Errorf("Failed to deliver message to Kafka: %s", err), 502)
+			return
+		}
+		msgSentReply(res, ack, successMsg)
+	} else {
+		msgSentReply(res, ack, sentMsg)
 	}
-	msgSentReply(res, successMsg)
 }
 
 func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Request) {
@@ -290,7 +324,8 @@ func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Reques
 func (w *WebhooksBridge) Start() (err error) {
 
 	mux := http.NewServeMux()
-	mux.Handle("/message", http.HandlerFunc(w.webhookHandler))
+	mux.Handle("/hook", http.HandlerFunc(w.webhookHandlerWithAck))
+	mux.Handle("/fasthook", http.HandlerFunc(w.webhookHandlerNoAck))
 	mux.Handle("/status", http.HandlerFunc(w.statusHandler))
 
 	tlsConfig, err := w.kafka.CreateTLSConfiguration()

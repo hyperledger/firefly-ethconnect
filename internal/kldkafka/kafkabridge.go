@@ -118,6 +118,15 @@ func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage, producer Kafka
 		bridge:       k,
 		producer:     producer,
 	}
+	// If the mesage is already in our inflight map, we've got a redelivery from Kafka.
+	// We ignore it, as we'll already do the ack.
+	var alreadyInflight bool
+	if pCtx, alreadyInflight = k.inFlight[ctx.origMsg]; alreadyInflight {
+		log.Infof("Message already in-flight: %s", pCtx)
+		// Return nil to idicate to caller not to duplicate process
+		return nil, nil
+	}
+
 	// Add it to our inflight map - from this point on we need to ensure we remove it, to avoid leaks.
 	// Messages are only removed from the inflight map when a response is sent, so it
 	// is very important that the consumer of the wrapped context object calls Reply
@@ -292,7 +301,9 @@ func (k *KafkaBridge) ConsumerMessagesLoop(consumer KafkaConsumer, producer Kafk
 		msgCtx, err := k.addInflightMsg(msg, producer)
 		// Unlock before any further processing
 		k.inFlightCond.L.Unlock()
-		if err == nil {
+		if msgCtx == nil {
+			// This was a dup
+		} else if err == nil {
 			// Dispatch for processing if we parsed the message successfully
 			k.processor.OnMessage(msgCtx)
 		} else {

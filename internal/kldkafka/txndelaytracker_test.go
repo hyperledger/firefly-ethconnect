@@ -57,7 +57,7 @@ func TestTxnDelayTrackerExponentialBackoff(t *testing.T) {
 	assert.Equal(MinDelay, initDelay)
 
 	lastDelay := initDelay
-	for i := 1; i <= 15; i++ {
+	for i := 1; i <= 20; i++ {
 		delay := d.GetRetryDelay(initDelay, i)
 		log.Infof("InitDelay=%05.2fs Factor=%05.2f Retry=%02d Delay=%05.2fs", initDelay.Seconds(), Factor, i, delay.Seconds())
 		assert.True(delay > lastDelay || delay == MaxDelay)
@@ -81,18 +81,19 @@ func TestTxnDelayTrackerTracerAndReset(t *testing.T) {
 		delay = d.GetInitialDelay()
 		d.ReportSuccess(MinDelay * 100)
 	}
-	// Do a 2digit precision check that we've pushed the average
+	// Do a single digit precision check that we've pushed the average
 	// to 100x the minimum
+	normalInitDelay := time.Duration(float64(MinDelay) * 100 * InitialDelayFraction)
 	assert.Equal(
-		fmt.Sprintf("%.2fs", (MinDelay*100).Seconds()),
-		fmt.Sprintf("%.2fs", delay.Seconds()))
+		fmt.Sprintf("test1:%.1fs", normalInitDelay.Seconds()),
+		fmt.Sprintf("test1:%.1fs", delay.Seconds()))
 	highDelay := delay
 
 	// Now send a tracer, which should be much lower
 	delay = d.GetInitialDelay()
 	assert.Equal(
-		fmt.Sprintf("%.2fs", (MinDelay*100/TracerDivisor).Seconds()),
-		fmt.Sprintf("%.2fs", delay.Seconds()))
+		fmt.Sprintf("test2:%.1fs", (normalInitDelay/TracerDivisor).Seconds()),
+		fmt.Sprintf("test2:%.1fs", delay.Seconds()))
 
 	// Report success of that tracer to below the threshold,
 	// and see that we've reset the average
@@ -100,6 +101,6 @@ func TestTxnDelayTrackerTracerAndReset(t *testing.T) {
 	d.ReportSuccess(resetDuration)
 	delay = d.GetInitialDelay()
 	assert.Equal(
-		fmt.Sprintf("%.2fs", resetDuration.Seconds()),
-		fmt.Sprintf("%.2fs", delay.Seconds()))
+		fmt.Sprintf("test3:%.1fs", time.Duration(float64(resetDuration)*InitialDelayFraction).Seconds()),
+		fmt.Sprintf("test3:%.1fs", delay.Seconds()))
 }

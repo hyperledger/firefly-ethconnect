@@ -16,15 +16,10 @@ package kldutils
 
 import (
 	uuid "github.com/nu7hatch/gouuid"
-	log "github.com/sirupsen/logrus"
 )
 
 // UUIDv4 returns a new UUID V4 as a string
 func UUIDv4() string {
-	uuidV4, err := uuid.NewV4()
-	if err != nil {
-		log.Errorf("Failed to generate UUID for ClientID: %s", err)
-		panic(err)
-	}
+	uuidV4, _ := uuid.NewV4()
 	return uuidV4.String()
 }

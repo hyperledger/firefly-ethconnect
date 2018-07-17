@@ -44,12 +44,19 @@ const (
 	MaxPayloadSize = 128 * 1024
 )
 
+// WebhooksBridgeConf defines the YAML config structure for a webhooks bridge instance
+type WebhooksBridgeConf struct {
+	Kafka kldkafka.KafkaCommonConf `yaml:"kafka"`
+	HTTP  struct {
+		LocalAddr string             `yaml:"localAddr"`
+		Port      int                `yaml:"port"`
+		TLS       kldutils.TLSConfig `yaml:"tls"`
+	} `yaml:"http"`
+}
+
 // WebhooksBridge receives messages over HTTP POST and sends them to Kafka
 type WebhooksBridge struct {
-	conf struct {
-		LocalAddr string
-		Port      int
-	}
+	conf        WebhooksBridgeConf
 	kafka       kldkafka.KafkaCommon
 	srv         *http.Server
 	sendCond    *sync.Cond
@@ -84,12 +91,16 @@ func (w *WebhooksBridge) CobraInit() (cmd *cobra.Command) {
 			if err = w.kafka.CobraPreRunE(cmd); err != nil {
 				return
 			}
+			// The simple commandline interface requires the TLS configuration for
+			// both Kafka and HTTP is the same. Only the YAML configuration allows
+			// them to be different
+			w.conf.HTTP.TLS = w.kafka.Conf().TLS
 			return
 		},
 	}
 	w.kafka.CobraInit(cmd)
-	cmd.Flags().StringVarP(&w.conf.LocalAddr, "listen-addr", "L", os.Getenv("WEBHOOKS_LISTEN_ADDR"), "Local address to listen on")
-	cmd.Flags().IntVarP(&w.conf.Port, "listen-port", "l", kldutils.DefInt("WEBHOOKS_LISTEN_PORT", 8080), "Port to listen on")
+	cmd.Flags().StringVarP(&w.conf.HTTP.LocalAddr, "listen-addr", "L", os.Getenv("WEBHOOKS_LISTEN_ADDR"), "Local address to listen on")
+	cmd.Flags().IntVarP(&w.conf.HTTP.Port, "listen-port", "l", kldutils.DefInt("WEBHOOKS_LISTEN_PORT", 8080), "Port to listen on")
 	return
 }
 
@@ -328,13 +339,13 @@ func (w *WebhooksBridge) Start() (err error) {
 	mux.Handle("/fasthook", http.HandlerFunc(w.webhookHandlerNoAck))
 	mux.Handle("/status", http.HandlerFunc(w.statusHandler))
 
-	tlsConfig, err := w.kafka.CreateTLSConfiguration()
+	tlsConfig, err := kldutils.CreateTLSConfiguration(&w.conf.HTTP.TLS)
 	if err != nil {
 		return
 	}
 
 	w.srv = &http.Server{
-		Addr:           fmt.Sprintf("%s:%d", w.conf.LocalAddr, w.conf.Port),
+		Addr:           fmt.Sprintf("%s:%d", w.conf.HTTP.LocalAddr, w.conf.HTTP.Port),
 		TLSConfig:      tlsConfig,
 		Handler:        mux,
 		MaxHeaderBytes: MaxHeaderSize,

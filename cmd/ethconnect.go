@@ -119,13 +119,13 @@ func startServer() (err error) {
 			return err
 		}
 		wg.Add(1)
-		go func() {
+		go func(name string) {
 			log.Infof("Starting Kafka->Ethereum bridge '%s'", name)
 			if err := kafkaBridge.Start(); err != nil {
 				log.Errorf("Kafka->Ethereum bridge failed: %s", err)
 			}
 			wg.Done()
-		}()
+		}(name)
 	}
 	for name, conf := range serverConfig.WebhooksBridges {
 		webhooksBridge := kldwebhooks.NewWebhooksBridge()
@@ -134,13 +134,13 @@ func startServer() (err error) {
 			return err
 		}
 		wg.Add(1)
-		go func() {
+		go func(name string) {
 			log.Infof("Starting Webhooks->Kafka bridge '%s'", name)
 			if err := webhooksBridge.Start(); err != nil {
 				log.Errorf("Webhooks->Kafka bridge failed: %s", err)
 			}
 			wg.Done()
-		}()
+		}(name)
 	}
 	wg.Wait()
 

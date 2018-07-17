@@ -30,15 +30,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// KafkaBridgeConf defines the YAML config structure for a webhooks bridge instance
+type KafkaBridgeConf struct {
+	Kafka         KafkaCommonConf `yaml:"kafka"`
+	MaxInFlight   int             `yaml:"maxInFlight"`
+	MaxTXWaitTime int             `yaml:"maxTXWaitTime"`
+	RPC           struct {
+		URL string `yaml:"url"`
+	} `yaml:"rpc"`
+}
+
 // KafkaBridge receives messages from Kafka and dispatches them to go-ethereum over JSON/RPC
 type KafkaBridge struct {
-	Conf struct {
-		MaxInFlight   int
-		MaxTXWaitTime int
-		RPC           struct {
-			URL string
-		}
-	}
+	Conf         KafkaBridgeConf
 	kafka        KafkaCommon
 	rpc          *rpc.Client
 	processor    MsgProcessor

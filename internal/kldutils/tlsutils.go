@@ -17,6 +17,7 @@ package kldutils
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"io/ioutil"
 
 	log "github.com/sirupsen/logrus"
@@ -33,6 +34,11 @@ type TLSConfig struct {
 
 // CreateTLSConfiguration creates a tls.Config structure based on parsing the configuration passed in via a TLSConfig structure
 func CreateTLSConfiguration(tlsConfig *TLSConfig) (t *tls.Config, err error) {
+
+	if !AllOrNoneReqd(tlsConfig.ClientCertsFile, tlsConfig.ClientKeyFile) {
+		err = fmt.Errorf("Client private key and certificate must both be provided for mutual auth")
+		return
+	}
 
 	mutualAuth := tlsConfig.ClientCertsFile != "" && tlsConfig.ClientKeyFile != ""
 	log.Debugf("Kafka TLS Enabled=%t Insecure=%t MutualAuth=%t ClientCertsFile=%s PrivateKeyFile=%s CACertsFile=%s",

@@ -35,10 +35,10 @@ var kbMinWorkingArgs = []string{
 }
 
 type testKafkaCommon struct {
-	startCalled        bool
-	startErr           error
-	cobraInitCalled    bool
-	cobraPreRunECalled bool
+	startCalled     bool
+	startErr        error
+	validateErr     error
+	cobraInitCalled bool
 }
 
 func (k *testKafkaCommon) Start() error {
@@ -50,9 +50,8 @@ func (k *testKafkaCommon) CobraInit(cmd *cobra.Command) {
 	k.cobraInitCalled = true
 }
 
-func (k *testKafkaCommon) CobraPreRunE(cmd *cobra.Command) error {
-	k.cobraPreRunECalled = true
-	return nil
+func (k *testKafkaCommon) ValidateConf() error {
+	return k.validateErr
 }
 
 func (k *testKafkaCommon) CreateTLSConfiguration() (t *tls.Config, err error) {
@@ -61,6 +60,10 @@ func (k *testKafkaCommon) CreateTLSConfiguration() (t *tls.Config, err error) {
 
 func (k *testKafkaCommon) Conf() *KafkaCommonConf {
 	return &KafkaCommonConf{}
+}
+
+func (k *testKafkaCommon) SetConf(*KafkaCommonConf) {
+	return
 }
 
 func (k *testKafkaCommon) Producer() KafkaProducer {
@@ -85,6 +88,10 @@ func TestNewKafkaBridge(t *testing.T) {
 	assert := assert.New(t)
 
 	bridge := NewKafkaBridge()
+	var conf KafkaBridgeConf
+	conf.RPC.URL = "http://example.com"
+	bridge.SetConf(&conf)
+	assert.Equal("http://example.com", bridge.Conf().RPC.URL)
 
 	assert.NotNil(bridge.inFlight)
 	assert.NotNil(bridge.inFlightCond)
@@ -117,6 +124,18 @@ func TestExecuteBridgeWithIncompleteArgs(t *testing.T) {
 	assert.Equal("tx-timeout must be at least 10s", err.Error())
 }
 
+func TestExecuteBridgeWithIncompleteKafkaArgs(t *testing.T) {
+	assert := assert.New(t)
+
+	k, kafkaCmd := newTestKafkaBridge()
+	k.kafka.(*testKafkaCommon).validateErr = fmt.Errorf("pop")
+	testArgs := []string{}
+
+	kafkaCmd.SetArgs(testArgs)
+	err := kafkaCmd.Execute()
+	assert.Equal(err.Error(), "pop")
+}
+
 func TestDefIntWithBadEnvVar(t *testing.T) {
 	assert := assert.New(t)
 
@@ -128,7 +147,7 @@ func TestDefIntWithBadEnvVar(t *testing.T) {
 	err := kafkaCmd.Execute()
 
 	assert.Nil(err)
-	assert.Equal(10, k.Conf.MaxInFlight)
+	assert.Equal(10, k.conf.MaxInFlight)
 }
 
 func TestDefIntWithGoodEnvVar(t *testing.T) {
@@ -142,7 +161,7 @@ func TestDefIntWithGoodEnvVar(t *testing.T) {
 	err := kafkaCmd.Execute()
 
 	assert.Nil(err)
-	assert.Equal(123, k.Conf.MaxInFlight)
+	assert.Equal(123, k.conf.MaxInFlight)
 }
 
 func TestExecuteWithBadRPCURL(t *testing.T) {
@@ -284,7 +303,7 @@ func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 	assert := assert.New(t)
 
 	k, processor, mockConsumer, mockProducer, wg := setupMocks()
-	assert.Equal(10, k.Conf.MaxInFlight)
+	assert.Equal(10, k.conf.MaxInFlight)
 
 	// Send 20 messages (10 is the max inflight)
 	go func() {
@@ -389,7 +408,7 @@ func TestAddInflightMessageBadMessage(t *testing.T) {
 func TestProducerErrorLoopPanics(t *testing.T) {
 	assert := assert.New(t)
 
-	k, _, _, mockProducer, _ := setupMocks()
+	k, _, _, mockProducer, wg := setupMocks()
 
 	go func() {
 		mockProducer.MockErrors <- &sarama.ProducerError{
@@ -398,7 +417,6 @@ func TestProducerErrorLoopPanics(t *testing.T) {
 		}
 	}()
 
-	wg := &sync.WaitGroup{}
 	assert.Panics(func() {
 		k.ProducerErrorLoop(nil, mockProducer, wg)
 	})
@@ -408,7 +426,7 @@ func TestProducerErrorLoopPanics(t *testing.T) {
 func TestProducerSuccessLoopPanicsMsgNotInflight(t *testing.T) {
 	assert := assert.New(t)
 
-	k, _, _, mockProducer, _ := setupMocks()
+	k, _, _, mockProducer, wg := setupMocks()
 
 	go func() {
 		mockProducer.MockSuccesses <- &sarama.ProducerMessage{
@@ -416,9 +434,8 @@ func TestProducerSuccessLoopPanicsMsgNotInflight(t *testing.T) {
 		}
 	}()
 
-	wg := sync.WaitGroup{}
 	assert.Panics(func() {
-		k.ProducerSuccessLoop(nil, mockProducer, &wg)
+		k.ProducerSuccessLoop(nil, mockProducer, wg)
 	})
 
 }

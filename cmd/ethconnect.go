@@ -16,12 +16,25 @@ package cmd
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
+	"sync"
+
+	"gopkg.in/yaml.v2"
 
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldwebhooks"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
+
+// ServerConfig is the parent YAML structure that configures ethconnect
+// to run with a set of individual commands as goroutines
+// (rather than the simple commandline mode that runs a single command)
+type ServerConfig struct {
+	KafkaBridges    map[string]*kldkafka.KafkaBridgeConf       `yaml:"kafka"`
+	WebhooksBridges map[string]*kldwebhooks.WebhooksBridgeConf `yaml:"webhooks"`
+}
 
 func initLogging(debugLevel int) {
 	log.SetFormatter(&log.TextFormatter{FullTimestamp: true})
@@ -43,6 +56,10 @@ var rootConfig struct {
 	DebugLevel int
 }
 
+var serverCmdConfig struct {
+	Filename string
+}
+
 var rootCmd = &cobra.Command{
 	Use: "ethconnect [sub]",
 	Short: "Connectivity Bridge for Ethereum permissioned chains\n" +
@@ -53,8 +70,94 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+func initServer() (serverCmd *cobra.Command) {
+	serverCmd = &cobra.Command{
+		Use:   "server",
+		Short: "Runs all of the bridges defined in a YAML config file",
+		RunE: func(cmd *cobra.Command, args []string) (err error) {
+			err = startServer()
+			return
+		},
+		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
+			if serverCmdConfig.Filename == "" {
+				err = fmt.Errorf("No YAML configuration filename specified")
+				return
+			}
+			return
+		},
+	}
+	serverCmd.Flags().StringVarP(&serverCmdConfig.Filename, "filename", "f", os.Getenv("ETHCONNECT_CONFIGFILE"), "YAML configuration file")
+	return
+}
+
+func readServerConfig() (serverConfig *ServerConfig, err error) {
+	yamlFile, err := os.Open(serverCmdConfig.Filename)
+	if err != nil {
+		err = fmt.Errorf("Failed to open %s: %s", serverCmdConfig.Filename, err)
+		return
+	}
+	yamlBytes, err := ioutil.ReadAll(yamlFile)
+	yamlFile.Close()
+	if err != nil {
+		err = fmt.Errorf("Failed to read contents of %s: %s", serverCmdConfig.Filename, err)
+		return
+	}
+	serverConfig = &ServerConfig{}
+	err = yaml.Unmarshal(yamlBytes, serverConfig)
+	if err != nil {
+		err = fmt.Errorf("Failed to process YAML config from %s: %s", serverCmdConfig.Filename, err)
+		return
+	}
+	return
+}
+
+func startServer() (err error) {
+	serverConfig, err := readServerConfig()
+	if err != nil {
+		return
+	}
+
+	var wg sync.WaitGroup
+	for name, conf := range serverConfig.KafkaBridges {
+		kafkaBridge := kldkafka.NewKafkaBridge()
+		kafkaBridge.SetConf(conf)
+		if err := kafkaBridge.ValidateConf(); err != nil {
+			return err
+		}
+		wg.Add(1)
+		go func() {
+			log.Infof("Starting Kafka->Ethereum bridge '%s'", name)
+			if err := kafkaBridge.Start(); err != nil {
+				log.Errorf("Kafka->Ethereum bridge failed: %s", err)
+			}
+			wg.Done()
+		}()
+	}
+	for name, conf := range serverConfig.WebhooksBridges {
+		webhooksBridge := kldwebhooks.NewWebhooksBridge()
+		webhooksBridge.SetConf(conf)
+		if err := webhooksBridge.ValidateConf(); err != nil {
+			return err
+		}
+		wg.Add(1)
+		go func() {
+			log.Infof("Starting Webhooks->Kafka bridge '%s'", name)
+			if err := webhooksBridge.Start(); err != nil {
+				log.Errorf("Webhooks->Kafka bridge failed: %s", err)
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+
+	return
+}
+
 func init() {
 	rootCmd.PersistentFlags().IntVarP(&rootConfig.DebugLevel, "debug", "d", 1, "0=error, 1=info, 2=debug")
+
+	serverCmd := initServer()
+	rootCmd.AddCommand(serverCmd)
 
 	kafkaBridge := kldkafka.NewKafkaBridge()
 	rootCmd.AddCommand(kafkaBridge.CobraInit())

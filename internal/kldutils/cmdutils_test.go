@@ -18,7 +18,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -26,29 +25,10 @@ func TestAllOrNoneReqd(t *testing.T) {
 
 	assert := assert.New(t)
 
-	cmd := &cobra.Command{
-		RunE: func(cmd *cobra.Command, args []string) (err error) {
-			return
-		},
-	}
-	cmd.Flags().String("flag1", "", "Flag 1")
-	cmd.Flags().String("flag2", "", "Flag 2")
-
-	err := AllOrNoneReqd(cmd, "flag1", "flag2")
-	assert.Nil(err)
-
-	cmd.Flags().Set("flag1", "value1")
-
-	err = AllOrNoneReqd(cmd, "flag1", "flag2")
-	assert.Regexp("flag mismatch", err.Error())
-
-	cmd.Flags().Set("flag2", "value2")
-
-	err = AllOrNoneReqd(cmd, "flag1", "flag2")
-	assert.Nil(err)
-
-	err = AllOrNoneReqd(cmd, "random")
-	assert.Regexp("flag accessed but not defined", err.Error())
+	assert.Equal(true, AllOrNoneReqd("", ""))
+	assert.Equal(false, AllOrNoneReqd("flag1", ""))
+	assert.Equal(false, AllOrNoneReqd("", "flag2"))
+	assert.Equal(true, AllOrNoneReqd("flag1", "flag2"))
 
 }
 

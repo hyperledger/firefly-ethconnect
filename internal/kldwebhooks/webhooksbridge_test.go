@@ -36,14 +36,14 @@ import (
 )
 
 type testKafkaCommon struct {
-	stop             chan bool
-	startCalled      bool
-	startErr         error
-	cobraInitCalled  bool
-	cobraPreRunError error
-	kafkaFactory     *kldkafka.MockKafkaFactory
-	kafkaInitDelay   int
-	startTime        time.Time
+	stop            chan bool
+	startCalled     bool
+	startErr        error
+	cobraInitCalled bool
+	validateConfErr error
+	kafkaFactory    *kldkafka.MockKafkaFactory
+	kafkaInitDelay  int
+	startTime       time.Time
 }
 
 func (k *testKafkaCommon) Start() error {
@@ -64,8 +64,8 @@ func (k *testKafkaCommon) CobraInit(cmd *cobra.Command) {
 	k.cobraInitCalled = true
 }
 
-func (k *testKafkaCommon) CobraPreRunE(cmd *cobra.Command) error {
-	return k.cobraPreRunError
+func (k *testKafkaCommon) ValidateConf() error {
+	return k.validateConfErr
 }
 
 func (k *testKafkaCommon) CreateTLSConfiguration() (t *tls.Config, err error) {
@@ -136,6 +136,15 @@ func startTestWebhooks(testArgs []string, kafka *testKafkaCommon) (*WebhooksBrid
 	return w, err
 }
 
+func TestNewWebhooksBridge(t *testing.T) {
+	assert := assert.New(t)
+	w := NewWebhooksBridge()
+	var conf WebhooksBridgeConf
+	conf.HTTP.LocalAddr = "127.0.0.1"
+	w.SetConf(&conf)
+	assert.Equal("127.0.0.1", w.Conf().HTTP.LocalAddr)
+}
+
 func TestStartStopDefaultArgs(t *testing.T) {
 	assert := assert.New(t)
 
@@ -178,7 +187,7 @@ func TestStartStopKafkaPreRunError(t *testing.T) {
 	assert := assert.New(t)
 
 	k := newTestKafkaComon()
-	k.cobraPreRunError = fmt.Errorf("pop")
+	k.validateConfErr = fmt.Errorf("pop")
 	_, err := startTestWebhooks([]string{}, k)
 	assert.Errorf(err, "pop")
 }

@@ -36,6 +36,17 @@ func TestCreateTLSConfigurationWithDefaultOptions(t *testing.T) {
 
 }
 
+func TestCreateTLSConfigurationWithInvalMutalAuth(t *testing.T) {
+	assert := assert.New(t)
+
+	tlsConfigOptions := TLSConfig{
+		ClientCertsFile: "anything",
+	}
+	_, err := CreateTLSConfiguration(&tlsConfigOptions)
+
+	assert.Regexp("Client private key and certificate must both be provided for mutual auth", err.Error())
+}
+
 func TestCreateTLSConfigurationWithSelfSignedMutualAuth(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	assert := assert.New(t)

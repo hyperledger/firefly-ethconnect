@@ -65,6 +65,22 @@ type WebhooksBridge struct {
 	failedMsgs  map[string]error
 }
 
+// Conf gets the config for this bridge
+func (w *WebhooksBridge) Conf() *WebhooksBridgeConf {
+	return &w.conf
+}
+
+// SetConf sets the config for this bridge
+func (w *WebhooksBridge) SetConf(conf *WebhooksBridgeConf) {
+	w.conf = *conf
+}
+
+// ValidateConf validates the config
+func (w *WebhooksBridge) ValidateConf() (err error) {
+	// No validation currently
+	return
+}
+
 // NewWebhooksBridge constructor
 func NewWebhooksBridge() (w *WebhooksBridge) {
 	w = &WebhooksBridge{
@@ -82,19 +98,22 @@ func NewWebhooksBridge() (w *WebhooksBridge) {
 func (w *WebhooksBridge) CobraInit() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
 		Use:   "webhooks",
-		Short: "Webhooks bridge to Kafka",
+		Short: "Webhooks->Kafka Bridge",
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			err = w.Start()
 			return
 		},
 		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			if err = w.kafka.CobraPreRunE(cmd); err != nil {
+			if err = w.kafka.ValidateConf(); err != nil {
 				return
 			}
+
 			// The simple commandline interface requires the TLS configuration for
 			// both Kafka and HTTP is the same. Only the YAML configuration allows
 			// them to be different
 			w.conf.HTTP.TLS = w.kafka.Conf().TLS
+
+			err = w.ValidateConf()
 			return
 		},
 	}

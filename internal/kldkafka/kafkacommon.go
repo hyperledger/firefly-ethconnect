@@ -48,7 +48,7 @@ type KafkaCommonConf struct {
 
 // KafkaCommon is the base interface for bridges that interact with Kafka
 type KafkaCommon interface {
-	CobraPreRunE(cmd *cobra.Command) error
+	ValidateConf() error
 	CobraInit(cmd *cobra.Command)
 	Start() error
 	Conf() *KafkaCommonConf
@@ -88,8 +88,8 @@ func (k *kafkaCommon) Producer() KafkaProducer {
 	return k.producer
 }
 
-// CobraPreRunE performs common Cobra PreRunE logic for Kafka related commands
-func (k *kafkaCommon) CobraPreRunE(cmd *cobra.Command) (err error) {
+// ValidateConf performs common Cobra PreRunE logic for Kafka related commands
+func (k *kafkaCommon) ValidateConf() (err error) {
 	if k.conf.TopicOut == "" {
 		return fmt.Errorf("No output topic specified for bridge to send events to")
 	}
@@ -99,10 +99,8 @@ func (k *kafkaCommon) CobraPreRunE(cmd *cobra.Command) (err error) {
 	if k.conf.ConsumerGroup == "" {
 		return fmt.Errorf("No consumer group specified")
 	}
-	if err = kldutils.AllOrNoneReqd(cmd, "tls-clientcerts", "tls-clientkey"); err != nil {
-		return
-	}
-	if err = kldutils.AllOrNoneReqd(cmd, "sasl-username", "sasl-password"); err != nil {
+	if !kldutils.AllOrNoneReqd(k.conf.SASL.Username, k.conf.SASL.Password) {
+		err = fmt.Errorf("Username and Password must both be provided for SASL")
 		return
 	}
 	return

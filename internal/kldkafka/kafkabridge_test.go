@@ -110,7 +110,7 @@ func newTestKafkaBridge() (k *KafkaBridge, kafkaCmd *cobra.Command) {
 func TestExecuteBridgeWithIncompleteArgs(t *testing.T) {
 	assert := assert.New(t)
 
-	_, kafkaCmd := newTestKafkaBridge()
+	k, kafkaCmd := newTestKafkaBridge()
 	testArgs := []string{}
 
 	kafkaCmd.SetArgs(testArgs)
@@ -121,7 +121,8 @@ func TestExecuteBridgeWithIncompleteArgs(t *testing.T) {
 	testArgs = append(testArgs, []string{"--tx-timeout", "1"}...)
 	kafkaCmd.SetArgs(testArgs)
 	err = kafkaCmd.Execute()
-	assert.Equal("tx-timeout must be at least 10s", err.Error())
+	// Bumped up to minimum
+	assert.Equal(10, k.conf.MaxTXWaitTime)
 }
 
 func TestExecuteBridgeWithIncompleteKafkaArgs(t *testing.T) {
@@ -178,6 +179,7 @@ func TestExecuteWithBadRPCURL(t *testing.T) {
 
 func setupMocks() (*KafkaBridge, *testKafkaMsgProcessor, *MockKafkaConsumer, *MockKafkaProducer, *sync.WaitGroup) {
 	k, _ := newTestKafkaBridge()
+	k.conf.MaxInFlight = 10
 	f := NewMockKafkaFactory()
 	mockConsumer, _ := f.NewConsumer(k.kafka)
 	mockProducer, _ := f.NewProducer(k.kafka)

@@ -16,6 +16,8 @@ package cmd
 
 import (
 	"fmt"
+	"io/ioutil"
+	"syscall"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -70,4 +72,66 @@ func TestExecuteFail(t *testing.T) {
 	osExit := Execute()
 
 	assert.Equal(1, osExit, "The process exits with 1")
+}
+
+func TestExecuteServerMissingArgs(t *testing.T) {
+	assert := assert.New(t)
+
+	rootCmd.SetArgs([]string{"server"})
+	osExit := Execute()
+
+	assert.Equal(1, osExit)
+}
+
+func TestExecuteServerMissingFile(t *testing.T) {
+	assert := assert.New(t)
+
+	rootCmd.SetArgs([]string{"server", "-f", "missing"})
+	osExit := Execute()
+
+	assert.Equal(1, osExit)
+}
+
+func TestExecuteServerInvalidYAMLContent(t *testing.T) {
+	assert := assert.New(t)
+
+	exampleConfYAML, _ := ioutil.TempFile("", "testYAML")
+	defer syscall.Unlink(exampleConfYAML.Name())
+	ioutil.WriteFile(exampleConfYAML.Name(), []byte("this is not the YAML you are looking for"), 0644)
+
+	rootCmd.SetArgs([]string{"server", "-f", exampleConfYAML.Name()})
+	osExit := Execute()
+
+	assert.Equal(1, osExit)
+}
+
+func TestExecuteServerWithYAML(t *testing.T) {
+	assert := assert.New(t)
+
+	exampleConfYAML, _ := ioutil.TempFile("", "testYAML")
+	defer syscall.Unlink(exampleConfYAML.Name())
+	ioutil.WriteFile(exampleConfYAML.Name(), []byte(
+		"kafka:\n"+
+			"  kbridge1:\n"+
+			"    topicIn: in1\n"+
+			"    topicOut: out1\n"+
+			"    rpc:\n"+
+			"      url: http://ethereum1\n"+
+			"  kbridge2:\n"+
+			"    topicIn: in2\n"+
+			"    topicOut: out2\n"+
+			"    rpc:\n"+
+			"      url: http://ethereum1\n"+
+			"webhooks:\n"+
+			"  wbridge1:\n"+
+			"    http:\n"+
+			"      port: 1234\n"+
+			"  wbridge2:\n"+
+			"    http:\n"+
+			"      port: 5678\n"), 0644)
+
+	rootCmd.SetArgs([]string{"server", "-f", exampleConfYAML.Name()})
+	osExit := Execute()
+
+	assert.Equal(0, osExit)
 }

@@ -91,15 +91,9 @@ func initServer() (serverCmd *cobra.Command) {
 }
 
 func readServerConfig() (serverConfig *ServerConfig, err error) {
-	yamlFile, err := os.Open(serverCmdConfig.Filename)
+	yamlBytes, err := ioutil.ReadFile(serverCmdConfig.Filename)
 	if err != nil {
-		err = fmt.Errorf("Failed to open %s: %s", serverCmdConfig.Filename, err)
-		return
-	}
-	yamlBytes, err := ioutil.ReadAll(yamlFile)
-	yamlFile.Close()
-	if err != nil {
-		err = fmt.Errorf("Failed to read contents of %s: %s", serverCmdConfig.Filename, err)
+		err = fmt.Errorf("Failed to read %s: %s", serverCmdConfig.Filename, err)
 		return
 	}
 	serverConfig = &ServerConfig{}

@@ -66,7 +66,13 @@ func (k *KafkaBridge) ValidateConf() (err error) {
 		return fmt.Errorf("No JSON/RPC URL set for ethereum node")
 	}
 	if k.conf.MaxTXWaitTime < 10 {
-		return fmt.Errorf("tx-timeout must be at least 10s")
+		if k.conf.MaxTXWaitTime > 0 {
+			log.Warnf("Maximum wait time increased from %d to minimum of 10 seconds", k.conf.MaxTXWaitTime)
+		}
+		k.conf.MaxTXWaitTime = 10
+	}
+	if k.conf.MaxInFlight == 0 {
+		k.conf.MaxInFlight = 10
 	}
 	return
 }
@@ -90,9 +96,9 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 		},
 	}
 	k.kafka.CobraInit(cmd)
-	cmd.Flags().IntVarP(&k.conf.MaxInFlight, "maxinflight", "m", kldutils.DefInt("KAFKA_MAX_INFLIGHT", 10), "Maximum messages to hold in-flight")
+	cmd.Flags().IntVarP(&k.conf.MaxInFlight, "maxinflight", "m", kldutils.DefInt("KAFKA_MAX_INFLIGHT", 0), "Maximum messages to hold in-flight")
 	cmd.Flags().StringVarP(&k.conf.RPC.URL, "rpc-url", "r", os.Getenv("ETH_RPC_URL"), "JSON/RPC URL for Ethereum node")
-	cmd.Flags().IntVarP(&k.conf.MaxTXWaitTime, "tx-timeout", "x", kldutils.DefInt("ETH_TX_TIMEOUT", 300), "Maximum wait time for an individual transaction (seconds)")
+	cmd.Flags().IntVarP(&k.conf.MaxTXWaitTime, "tx-timeout", "x", kldutils.DefInt("ETH_TX_TIMEOUT", 0), "Maximum wait time for an individual transaction (seconds)")
 	return
 }
 

@@ -66,7 +66,7 @@ var kcMinWorkingArgs = []string{
 func newTestKafkaCommon(testArgs []string) (*kafkaCommon, *cobra.Command) {
 	log.SetLevel(log.DebugLevel)
 	gr := &testKafkaGoRoutines{}
-	k := NewKafkaCommon(NewMockKafkaFactory(), gr).(*kafkaCommon)
+	k := NewKafkaCommon(NewMockKafkaFactory(), &KafkaCommonConf{}, gr).(*kafkaCommon)
 
 	kafkaCmd := &cobra.Command{
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -111,7 +111,7 @@ func execKafkaCommonWithArgs(assert *assert.Assertions, testArgs []string, f *Mo
 func TestNewKafkaCommon(t *testing.T) {
 	assert := assert.New(t)
 	gr := &testKafkaGoRoutines{}
-	k := NewKafkaCommon(NewMockKafkaFactory(), gr)
+	k := NewKafkaCommon(NewMockKafkaFactory(), &KafkaCommonConf{}, gr)
 	assert.NotNil(k.Conf())
 }
 

@@ -34,16 +34,16 @@ import (
 
 // KafkaCommonConf - Common configuration for Kafka
 type KafkaCommonConf struct {
-	Brokers       []string `yaml:"brokers"`
-	ClientID      string   `yaml:"clientID"`
-	ConsumerGroup string   `yaml:"consumerGroup"`
-	TopicIn       string   `yaml:"topicIn"`
-	TopicOut      string   `yaml:"topicOut"`
+	Brokers       []string `json:"brokers"`
+	ClientID      string   `json:"clientID"`
+	ConsumerGroup string   `json:"consumerGroup"`
+	TopicIn       string   `json:"topicIn"`
+	TopicOut      string   `json:"topicOut"`
 	SASL          struct {
 		Username string
 		Password string
-	} `yaml:"sasl"`
-	TLS kldutils.TLSConfig `yaml:"tls"`
+	} `json:"sasl"`
+	TLS kldutils.TLSConfig `json:"tls"`
 }
 
 // KafkaCommon is the base interface for bridges that interact with Kafka
@@ -56,10 +56,11 @@ type KafkaCommon interface {
 }
 
 // NewKafkaCommon constructs a new KafkaCommon instance
-func NewKafkaCommon(kf KafkaFactory, kafkaGoRoutines KafkaGoRoutines) (k KafkaCommon) {
+func NewKafkaCommon(kf KafkaFactory, conf *KafkaCommonConf, kafkaGoRoutines KafkaGoRoutines) (k KafkaCommon) {
 	k = &kafkaCommon{
 		factory:         kf,
 		kafkaGoRoutines: kafkaGoRoutines,
+		conf:            conf,
 	}
 	return
 }
@@ -67,7 +68,7 @@ func NewKafkaCommon(kf KafkaFactory, kafkaGoRoutines KafkaGoRoutines) (k KafkaCo
 // *kafkaCommon provides a base command for establishing Kafka connectivity with a
 // producer and a consumer-group
 type kafkaCommon struct {
-	conf            KafkaCommonConf
+	conf            *KafkaCommonConf
 	factory         KafkaFactory
 	rpc             *rpc.Client
 	client          KafkaClient
@@ -81,7 +82,7 @@ type kafkaCommon struct {
 }
 
 func (k *kafkaCommon) Conf() *KafkaCommonConf {
-	return &k.conf
+	return k.conf
 }
 
 func (k *kafkaCommon) Producer() KafkaProducer {

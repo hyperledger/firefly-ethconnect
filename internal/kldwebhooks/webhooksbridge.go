@@ -46,12 +46,12 @@ const (
 
 // WebhooksBridgeConf defines the YAML config structure for a webhooks bridge instance
 type WebhooksBridgeConf struct {
-	Kafka kldkafka.KafkaCommonConf `yaml:"kafka"`
+	Kafka kldkafka.KafkaCommonConf `json:"kafka"`
 	HTTP  struct {
-		LocalAddr string             `yaml:"localAddr"`
-		Port      int                `yaml:"port"`
-		TLS       kldutils.TLSConfig `yaml:"tls"`
-	} `yaml:"http"`
+		LocalAddr string             `json:"localAddr"`
+		Port      int                `json:"port"`
+		TLS       kldutils.TLSConfig `json:"tls"`
+	} `json:"http"`
 }
 
 // WebhooksBridge receives messages over HTTP POST and sends them to Kafka
@@ -90,7 +90,7 @@ func NewWebhooksBridge() (w *WebhooksBridge) {
 		failedMsgs:  make(map[string]error),
 	}
 	kf := &kldkafka.SaramaKafkaFactory{}
-	w.kafka = kldkafka.NewKafkaCommon(kf, w)
+	w.kafka = kldkafka.NewKafkaCommon(kf, &w.conf.Kafka, w)
 	return
 }
 

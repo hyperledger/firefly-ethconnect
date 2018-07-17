@@ -25,11 +25,11 @@ import (
 
 // TLSConfig is the common TLS config
 type TLSConfig struct {
-	ClientCertsFile    string `yaml:"clientCertsFile"`
-	ClientKeyFile      string `yaml:"clientKeyFile"`
-	CACertsFile        string `yaml:"caCertsFile"`
-	Enabled            bool   `yaml:"enabled"`
-	InsecureSkipVerify bool   `yaml:"insecureSkipVerify"`
+	ClientCertsFile    string `json:"clientCertsFile"`
+	ClientKeyFile      string `json:"clientKeyFile"`
+	CACertsFile        string `json:"caCertsFile"`
+	Enabled            bool   `json:"enabled"`
+	InsecureSkipVerify bool   `json:"insecureSkipVerify"`
 }
 
 // CreateTLSConfiguration creates a tls.Config structure based on parsing the configuration passed in via a TLSConfig structure

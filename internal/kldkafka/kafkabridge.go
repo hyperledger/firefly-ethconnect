@@ -32,12 +32,12 @@ import (
 
 // KafkaBridgeConf defines the YAML config structure for a webhooks bridge instance
 type KafkaBridgeConf struct {
-	Kafka         KafkaCommonConf `yaml:"kafka"`
-	MaxInFlight   int             `yaml:"maxInFlight"`
-	MaxTXWaitTime int             `yaml:"maxTXWaitTime"`
+	Kafka         KafkaCommonConf `json:"kafka"`
+	MaxInFlight   int             `json:"maxInFlight"`
+	MaxTXWaitTime int             `json:"maxTXWaitTime"`
 	RPC           struct {
-		URL string `yaml:"url"`
-	} `yaml:"rpc"`
+		URL string `json:"url"`
+	} `json:"rpc"`
 }
 
 // KafkaBridge receives messages from Kafka and dispatches them to go-ethereum over JSON/RPC
@@ -306,7 +306,7 @@ func NewKafkaBridge() *KafkaBridge {
 		inFlight:     make(map[string]*msgContext),
 		inFlightCond: sync.NewCond(&sync.Mutex{}),
 	}
-	k.kafka = NewKafkaCommon(&SaramaKafkaFactory{}, k)
+	k.kafka = NewKafkaCommon(&SaramaKafkaFactory{}, &k.conf.Kafka, k)
 	return k
 }
 

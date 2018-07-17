@@ -15,13 +15,16 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 	"sync"
 
 	"gopkg.in/yaml.v2"
 
+	"github.com/icza/dyno"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldwebhooks"
 	log "github.com/sirupsen/logrus"
@@ -32,8 +35,8 @@ import (
 // to run with a set of individual commands as goroutines
 // (rather than the simple commandline mode that runs a single command)
 type ServerConfig struct {
-	KafkaBridges    map[string]*kldkafka.KafkaBridgeConf       `yaml:"kafka"`
-	WebhooksBridges map[string]*kldwebhooks.WebhooksBridgeConf `yaml:"webhooks"`
+	KafkaBridges    map[string]*kldkafka.KafkaBridgeConf       `json:"kafka"`
+	WebhooksBridges map[string]*kldwebhooks.WebhooksBridgeConf `json:"webhooks"`
 }
 
 func initLogging(debugLevel int) {
@@ -58,6 +61,7 @@ var rootConfig struct {
 
 var serverCmdConfig struct {
 	Filename string
+	Type     string
 }
 
 var rootCmd = &cobra.Command{
@@ -86,18 +90,38 @@ func initServer() (serverCmd *cobra.Command) {
 			return
 		},
 	}
-	serverCmd.Flags().StringVarP(&serverCmdConfig.Filename, "filename", "f", os.Getenv("ETHCONNECT_CONFIGFILE"), "YAML configuration file")
+	defType := os.Getenv("ETHCONNECT_CONFIGFILE_TYPE")
+	if defType == "" {
+		defType = "yaml"
+	}
+	serverCmd.Flags().StringVarP(&serverCmdConfig.Filename, "filename", "f", os.Getenv("ETHCONNECT_CONFIGFILE"), "Configuration file")
+	serverCmd.Flags().StringVarP(&serverCmdConfig.Type, "type", "t", defType, "File type (json/yaml)")
 	return
 }
 
 func readServerConfig() (serverConfig *ServerConfig, err error) {
-	yamlBytes, err := ioutil.ReadFile(serverCmdConfig.Filename)
+	confBytes, err := ioutil.ReadFile(serverCmdConfig.Filename)
 	if err != nil {
 		err = fmt.Errorf("Failed to read %s: %s", serverCmdConfig.Filename, err)
 		return
 	}
+	if strings.ToLower(serverCmdConfig.Type) == "yaml" {
+		// Convert to JSON first
+		yamlGenericPayload := make(map[interface{}]interface{})
+		if err = yaml.Unmarshal(confBytes, &yamlGenericPayload); err != nil {
+			err = fmt.Errorf("Unable to parse %s as YAML: %s", serverCmdConfig.Filename, err)
+			return
+		}
+		genericPayload := dyno.ConvertMapI2MapS(yamlGenericPayload).(map[string]interface{})
+		// Reseialize back to JSON
+		confBytes, err = json.Marshal(&genericPayload)
+		if err != nil {
+			err = fmt.Errorf("Unable to reserialize YAML payload as JSON: %s", err)
+			return
+		}
+	}
 	serverConfig = &ServerConfig{}
-	err = yaml.Unmarshal(yamlBytes, serverConfig)
+	err = json.Unmarshal(confBytes, serverConfig)
 	if err != nil {
 		err = fmt.Errorf("Failed to process YAML config from %s: %s", serverCmdConfig.Filename, err)
 		return
@@ -114,6 +138,7 @@ func startServer() (err error) {
 	var wg sync.WaitGroup
 	for name, conf := range serverConfig.KafkaBridges {
 		kafkaBridge := kldkafka.NewKafkaBridge()
+		log.Debugf("Kafka bridge conf: %+v", conf)
 		kafkaBridge.SetConf(conf)
 		if err := kafkaBridge.ValidateConf(); err != nil {
 			return err

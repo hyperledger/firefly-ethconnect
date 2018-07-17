@@ -135,3 +135,27 @@ func TestExecuteServerWithYAML(t *testing.T) {
 
 	assert.Equal(0, osExit)
 }
+
+func TestExecuteServerWithJSON(t *testing.T) {
+	assert := assert.New(t)
+
+	exampleConfYAML, _ := ioutil.TempFile("", "testJSON")
+	defer syscall.Unlink(exampleConfYAML.Name())
+	testJSON := "{ \"kafka\": {\n" +
+		"  \"kbridge1\": {\n" +
+		"    \"topicIn\": \"in1\",\n" +
+		"    \"topicOut\": \"out1\",\n" +
+		"    \"rpc\": {\n" +
+		"      \"url\": \"http://ethereum1\"\n" +
+		"      }\n" +
+		"    }\n" +
+		"  }\n" +
+		"}\n"
+	ioutil.WriteFile(exampleConfYAML.Name(), []byte(testJSON), 0644)
+
+	log.Infof("JSON: %s", testJSON)
+	rootCmd.SetArgs([]string{"server", "-t", "json", "-f", exampleConfYAML.Name()})
+	osExit := Execute()
+
+	assert.Equal(0, osExit)
+}

@@ -29,6 +29,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/Shopify/sarama"
+	"github.com/globalsign/mgo"
 	"github.com/icza/dyno"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
@@ -46,8 +47,13 @@ const (
 
 // WebhooksBridgeConf defines the YAML config structure for a webhooks bridge instance
 type WebhooksBridgeConf struct {
-	Kafka kldkafka.KafkaCommonConf `json:"kafka"`
-	HTTP  struct {
+	Kafka   kldkafka.KafkaCommonConf `json:"kafka"`
+	MongoDB struct {
+		URL        string `json:"url"`
+		Database   string `json:"database"`
+		Collection string `json:"collection"`
+	} `json:"mongodb"`
+	HTTP struct {
 		LocalAddr string             `json:"localAddr"`
 		Port      int                `json:"port"`
 		TLS       kldutils.TLSConfig `json:"tls"`
@@ -63,6 +69,7 @@ type WebhooksBridge struct {
 	pendingMsgs map[string]bool
 	successMsgs map[string]*sarama.ProducerMessage
 	failedMsgs  map[string]error
+	mongo       *mgo.Collection
 }
 
 // Conf gets the config for this bridge
@@ -77,7 +84,10 @@ func (w *WebhooksBridge) SetConf(conf *WebhooksBridgeConf) {
 
 // ValidateConf validates the config
 func (w *WebhooksBridge) ValidateConf() (err error) {
-	// No validation currently
+	if !kldutils.AllOrNoneReqd(w.conf.MongoDB.URL, w.conf.MongoDB.Database, w.conf.MongoDB.Collection) {
+		err = fmt.Errorf("MongoDB URL, Database and Collection name must be specified to enable the receipt store")
+		return
+	}
 	return
 }
 
@@ -120,13 +130,40 @@ func (w *WebhooksBridge) CobraInit() (cmd *cobra.Command) {
 	w.kafka.CobraInit(cmd)
 	cmd.Flags().StringVarP(&w.conf.HTTP.LocalAddr, "listen-addr", "L", os.Getenv("WEBHOOKS_LISTEN_ADDR"), "Local address to listen on")
 	cmd.Flags().IntVarP(&w.conf.HTTP.Port, "listen-port", "l", kldutils.DefInt("WEBHOOKS_LISTEN_PORT", 8080), "Port to listen on")
+	cmd.Flags().StringVarP(&w.conf.MongoDB.URL, "mongodb-url", "m", os.Getenv("MONGODB_URL"), "MongoDB URL for a receipt store")
+	cmd.Flags().StringVarP(&w.conf.MongoDB.URL, "mongodb-receipts-collection", "r", os.Getenv("MONGODB_COLLECTION"), "MongoDB receipt store collection")
 	return
 }
 
 // ConsumerMessagesLoop - consume replies
 func (w *WebhooksBridge) ConsumerMessagesLoop(consumer kldkafka.KafkaConsumer, producer kldkafka.KafkaProducer, wg *sync.WaitGroup) {
 	for msg := range consumer.Messages() {
-		log.Infof("Webhooks received reply: %s", msg)
+
+		// Parse the reply as JSON and find the ID
+		var origID string
+		var parsedMsg map[string]interface{}
+		if err := json.Unmarshal(msg.Value, &parsedMsg); err != nil {
+			log.Errorf("Unable to unmarshal reply message '%s' as JSON: %s", string(msg.Value), err)
+		} else {
+			if headers, exists := parsedMsg["headers"]; exists {
+				if origIDGen, exists := headers.(map[string]interface{})["origID"]; !exists {
+					log.Errorf("Failed to extract original headers.id from '%s'", string(msg.Value))
+				} else {
+					origID = origIDGen.(string)
+				}
+			}
+		}
+		log.Infof("Received reply message for original ID '%s'", origID)
+
+		// Insert the receipt into MongoDB
+		if origID != "" && w.mongo != nil {
+			parsedMsg["_id"] = origID
+			if err := w.mongo.Insert(parsedMsg); err != nil {
+				log.Errorf("Failed to insert '%s' into mongodb: %s", string(msg.Value), err)
+			} else {
+				log.Infof("Inserted receipt into MongoDB")
+			}
+		}
 	}
 	wg.Done()
 }
@@ -350,6 +387,20 @@ func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Reques
 	okReply(res)
 }
 
+func (w *WebhooksBridge) connectMongoDB() (err error) {
+	if w.conf.MongoDB.URL == "" {
+		return
+	}
+	session, err := mgo.Dial(w.conf.MongoDB.URL)
+	if err != nil {
+		err = fmt.Errorf("Unable to connect to MongoDB: %s", err)
+		return
+	}
+	w.mongo = session.DB(w.conf.MongoDB.Database).C(w.conf.MongoDB.Collection)
+	log.Infof("Connected to MongoDB on %s DB=%s Collection=%s", w.conf.MongoDB.URL, w.conf.MongoDB.Database, w.conf.MongoDB.Collection)
+	return
+}
+
 // Start kicks off the HTTP and Kafka listeners
 func (w *WebhooksBridge) Start() (err error) {
 
@@ -361,6 +412,10 @@ func (w *WebhooksBridge) Start() (err error) {
 
 	tlsConfig, err := kldutils.CreateTLSConfiguration(&w.conf.HTTP.TLS)
 	if err != nil {
+		return
+	}
+
+	if err = w.connectMongoDB(); err != nil {
 		return
 	}
 

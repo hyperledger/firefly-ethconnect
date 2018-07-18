@@ -32,6 +32,7 @@ deps:
 		$(GOGET) github.com/golang/mock/gomock
 		$(GOGET) github.com/icza/dyno
 		$(GOGET) gopkg.in/yaml.v2
+		$(GOGET) github.com/globalsign/mgo
 
 build-linux:
 		GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINARY_UNIX) -v

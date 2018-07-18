@@ -44,18 +44,41 @@ const (
 	MaxPayloadSize = 128 * 1024
 )
 
+// WebhooksBridgeConf defines the YAML config structure for a webhooks bridge instance
+type WebhooksBridgeConf struct {
+	Kafka kldkafka.KafkaCommonConf `json:"kafka"`
+	HTTP  struct {
+		LocalAddr string             `json:"localAddr"`
+		Port      int                `json:"port"`
+		TLS       kldutils.TLSConfig `json:"tls"`
+	} `json:"http"`
+}
+
 // WebhooksBridge receives messages over HTTP POST and sends them to Kafka
 type WebhooksBridge struct {
-	conf struct {
-		LocalAddr string
-		Port      int
-	}
+	conf        WebhooksBridgeConf
 	kafka       kldkafka.KafkaCommon
 	srv         *http.Server
 	sendCond    *sync.Cond
 	pendingMsgs map[string]bool
 	successMsgs map[string]*sarama.ProducerMessage
 	failedMsgs  map[string]error
+}
+
+// Conf gets the config for this bridge
+func (w *WebhooksBridge) Conf() *WebhooksBridgeConf {
+	return &w.conf
+}
+
+// SetConf sets the config for this bridge
+func (w *WebhooksBridge) SetConf(conf *WebhooksBridgeConf) {
+	w.conf = *conf
+}
+
+// ValidateConf validates the config
+func (w *WebhooksBridge) ValidateConf() (err error) {
+	// No validation currently
+	return
 }
 
 // NewWebhooksBridge constructor
@@ -67,7 +90,7 @@ func NewWebhooksBridge() (w *WebhooksBridge) {
 		failedMsgs:  make(map[string]error),
 	}
 	kf := &kldkafka.SaramaKafkaFactory{}
-	w.kafka = kldkafka.NewKafkaCommon(kf, w)
+	w.kafka = kldkafka.NewKafkaCommon(kf, &w.conf.Kafka, w)
 	return
 }
 
@@ -75,21 +98,28 @@ func NewWebhooksBridge() (w *WebhooksBridge) {
 func (w *WebhooksBridge) CobraInit() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
 		Use:   "webhooks",
-		Short: "Webhooks bridge to Kafka",
+		Short: "Webhooks->Kafka Bridge",
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			err = w.Start()
 			return
 		},
 		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			if err = w.kafka.CobraPreRunE(cmd); err != nil {
+			if err = w.kafka.ValidateConf(); err != nil {
 				return
 			}
+
+			// The simple commandline interface requires the TLS configuration for
+			// both Kafka and HTTP is the same. Only the YAML configuration allows
+			// them to be different
+			w.conf.HTTP.TLS = w.kafka.Conf().TLS
+
+			err = w.ValidateConf()
 			return
 		},
 	}
 	w.kafka.CobraInit(cmd)
-	cmd.Flags().StringVarP(&w.conf.LocalAddr, "listen-addr", "L", os.Getenv("WEBHOOKS_LISTEN_ADDR"), "Local address to listen on")
-	cmd.Flags().IntVarP(&w.conf.Port, "listen-port", "l", kldutils.DefInt("WEBHOOKS_LISTEN_PORT", 8080), "Port to listen on")
+	cmd.Flags().StringVarP(&w.conf.HTTP.LocalAddr, "listen-addr", "L", os.Getenv("WEBHOOKS_LISTEN_ADDR"), "Local address to listen on")
+	cmd.Flags().IntVarP(&w.conf.HTTP.Port, "listen-port", "l", kldutils.DefInt("WEBHOOKS_LISTEN_PORT", 8080), "Port to listen on")
 	return
 }
 
@@ -328,13 +358,13 @@ func (w *WebhooksBridge) Start() (err error) {
 	mux.Handle("/fasthook", http.HandlerFunc(w.webhookHandlerNoAck))
 	mux.Handle("/status", http.HandlerFunc(w.statusHandler))
 
-	tlsConfig, err := w.kafka.CreateTLSConfiguration()
+	tlsConfig, err := kldutils.CreateTLSConfiguration(&w.conf.HTTP.TLS)
 	if err != nil {
 		return
 	}
 
 	w.srv = &http.Server{
-		Addr:           fmt.Sprintf("%s:%d", w.conf.LocalAddr, w.conf.Port),
+		Addr:           fmt.Sprintf("%s:%d", w.conf.HTTP.LocalAddr, w.conf.HTTP.Port),
 		TLSConfig:      tlsConfig,
 		Handler:        mux,
 		MaxHeaderBytes: MaxHeaderSize,

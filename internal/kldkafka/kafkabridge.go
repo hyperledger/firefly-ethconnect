@@ -30,15 +30,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// KafkaBridgeConf defines the YAML config structure for a webhooks bridge instance
+type KafkaBridgeConf struct {
+	Kafka         KafkaCommonConf `json:"kafka"`
+	MaxInFlight   int             `json:"maxInFlight"`
+	MaxTXWaitTime int             `json:"maxTXWaitTime"`
+	RPC           struct {
+		URL string `json:"url"`
+	} `json:"rpc"`
+}
+
 // KafkaBridge receives messages from Kafka and dispatches them to go-ethereum over JSON/RPC
 type KafkaBridge struct {
-	Conf struct {
-		MaxInFlight   int
-		MaxTXWaitTime int
-		RPC           struct {
-			URL string
-		}
-	}
+	conf         KafkaBridgeConf
 	kafka        KafkaCommon
 	rpc          *rpc.Client
 	processor    MsgProcessor
@@ -46,33 +50,55 @@ type KafkaBridge struct {
 	inFlightCond *sync.Cond
 }
 
+// Conf gets the config for this bridge
+func (k *KafkaBridge) Conf() *KafkaBridgeConf {
+	return &k.conf
+}
+
+// SetConf sets the config for this bridge
+func (k *KafkaBridge) SetConf(conf *KafkaBridgeConf) {
+	k.conf = *conf
+}
+
+// ValidateConf validates the configuration
+func (k *KafkaBridge) ValidateConf() (err error) {
+	if k.conf.RPC.URL == "" {
+		return fmt.Errorf("No JSON/RPC URL set for ethereum node")
+	}
+	if k.conf.MaxTXWaitTime < 10 {
+		if k.conf.MaxTXWaitTime > 0 {
+			log.Warnf("Maximum wait time increased from %d to minimum of 10 seconds", k.conf.MaxTXWaitTime)
+		}
+		k.conf.MaxTXWaitTime = 10
+	}
+	if k.conf.MaxInFlight == 0 {
+		k.conf.MaxInFlight = 10
+	}
+	return
+}
+
 // CobraInit retruns a cobra command to configure this KafkaBridge
 func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 	cmd = &cobra.Command{
 		Use:   "kafka",
-		Short: "Kafka bridge to Ethereum",
+		Short: "Kafka->Ethereum (JSON/RPC) Bridge",
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			log.Infof("Starting Kafka bridge")
 			err = k.Start()
 			return
 		},
 		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			if err = k.kafka.CobraPreRunE(cmd); err != nil {
+			if err = k.kafka.ValidateConf(); err != nil {
 				return
 			}
-			if k.Conf.RPC.URL == "" {
-				return fmt.Errorf("No JSON/RPC URL set for ethereum node")
-			}
-			if k.Conf.MaxTXWaitTime < 10 {
-				return fmt.Errorf("tx-timeout must be at least 10s")
-			}
+			err = k.ValidateConf()
 			return
 		},
 	}
 	k.kafka.CobraInit(cmd)
-	cmd.Flags().IntVarP(&k.Conf.MaxInFlight, "maxinflight", "m", kldutils.DefInt("KAFKA_MAX_INFLIGHT", 10), "Maximum messages to hold in-flight")
-	cmd.Flags().StringVarP(&k.Conf.RPC.URL, "rpc-url", "r", os.Getenv("ETH_RPC_URL"), "JSON/RPC URL for Ethereum node")
-	cmd.Flags().IntVarP(&k.Conf.MaxTXWaitTime, "tx-timeout", "x", kldutils.DefInt("ETH_TX_TIMEOUT", 300), "Maximum wait time for an individual transaction (seconds)")
+	cmd.Flags().IntVarP(&k.conf.MaxInFlight, "maxinflight", "m", kldutils.DefInt("KAFKA_MAX_INFLIGHT", 0), "Maximum messages to hold in-flight")
+	cmd.Flags().StringVarP(&k.conf.RPC.URL, "rpc-url", "r", os.Getenv("ETH_RPC_URL"), "JSON/RPC URL for Ethereum node")
+	cmd.Flags().IntVarP(&k.conf.MaxTXWaitTime, "tx-timeout", "x", kldutils.DefInt("ETH_TX_TIMEOUT", 0), "Maximum wait time for an individual transaction (seconds)")
 	return
 }
 
@@ -280,7 +306,7 @@ func NewKafkaBridge() *KafkaBridge {
 		inFlight:     make(map[string]*msgContext),
 		inFlightCond: sync.NewCond(&sync.Mutex{}),
 	}
-	k.kafka = NewKafkaCommon(&SaramaKafkaFactory{}, k)
+	k.kafka = NewKafkaCommon(&SaramaKafkaFactory{}, &k.conf.Kafka, k)
 	return k
 }
 
@@ -292,8 +318,8 @@ func (k *KafkaBridge) ConsumerMessagesLoop(consumer KafkaConsumer, producer Kafk
 		log.Infof("Kafka consumer received message: Partition=%d Offset=%d", msg.Partition, msg.Offset)
 
 		// We cannot build up an infinite number of messages in memory
-		for len(k.inFlight) >= k.Conf.MaxInFlight {
-			log.Infof("Too many messages in-flight: In-flight=%d Max=%d", len(k.inFlight), k.Conf.MaxInFlight)
+		for len(k.inFlight) >= k.conf.MaxInFlight {
+			log.Infof("Too many messages in-flight: In-flight=%d Max=%d", len(k.inFlight), k.conf.MaxInFlight)
 			k.inFlightCond.Wait()
 		}
 		// addInflightMsg always adds the message, even if it cannot
@@ -359,12 +385,12 @@ func (k *KafkaBridge) ProducerSuccessLoop(consumer KafkaConsumer, producer Kafka
 
 func (k *KafkaBridge) connect() (err error) {
 	// Connect the client
-	if k.rpc, err = rpc.Dial(k.Conf.RPC.URL); err != nil {
-		err = fmt.Errorf("JSON/RPC connection to %s failed: %s", k.Conf.RPC.URL, err)
+	if k.rpc, err = rpc.Dial(k.conf.RPC.URL); err != nil {
+		err = fmt.Errorf("JSON/RPC connection to %s failed: %s", k.conf.RPC.URL, err)
 		return
 	}
-	k.processor.Init(k.rpc, k.Conf.MaxTXWaitTime)
-	log.Debug("JSON/RPC connected. URL=", k.Conf.RPC.URL)
+	k.processor.Init(k.rpc, k.conf.MaxTXWaitTime)
+	log.Debug("JSON/RPC connected. URL=", k.conf.RPC.URL)
 
 	return
 }

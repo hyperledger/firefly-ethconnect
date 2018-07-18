@@ -36,14 +36,14 @@ import (
 )
 
 type testKafkaCommon struct {
-	stop             chan bool
-	startCalled      bool
-	startErr         error
-	cobraInitCalled  bool
-	cobraPreRunError error
-	kafkaFactory     *kldkafka.MockKafkaFactory
-	kafkaInitDelay   int
-	startTime        time.Time
+	stop            chan bool
+	startCalled     bool
+	startErr        error
+	cobraInitCalled bool
+	validateConfErr error
+	kafkaFactory    *kldkafka.MockKafkaFactory
+	kafkaInitDelay  int
+	startTime       time.Time
 }
 
 func (k *testKafkaCommon) Start() error {
@@ -64,8 +64,8 @@ func (k *testKafkaCommon) CobraInit(cmd *cobra.Command) {
 	k.cobraInitCalled = true
 }
 
-func (k *testKafkaCommon) CobraPreRunE(cmd *cobra.Command) error {
-	return k.cobraPreRunError
+func (k *testKafkaCommon) ValidateConf() error {
+	return k.validateConfErr
 }
 
 func (k *testKafkaCommon) CreateTLSConfiguration() (t *tls.Config, err error) {
@@ -116,7 +116,7 @@ func startTestWebhooks(testArgs []string, kafka *testKafkaCommon) (*WebhooksBrid
 	status := -1
 	var err error
 	for (err == nil || err.Error() == "none") && status != 200 {
-		statusURL := fmt.Sprintf("http://localhost:%d/status", w.conf.Port)
+		statusURL := fmt.Sprintf("http://localhost:%d/status", w.conf.HTTP.Port)
 		resp, httpErr := http.Get(statusURL)
 		if httpErr == nil {
 			status = resp.StatusCode
@@ -136,6 +136,15 @@ func startTestWebhooks(testArgs []string, kafka *testKafkaCommon) (*WebhooksBrid
 	return w, err
 }
 
+func TestNewWebhooksBridge(t *testing.T) {
+	assert := assert.New(t)
+	w := NewWebhooksBridge()
+	var conf WebhooksBridgeConf
+	conf.HTTP.LocalAddr = "127.0.0.1"
+	w.SetConf(&conf)
+	assert.Equal("127.0.0.1", w.Conf().HTTP.LocalAddr)
+}
+
 func TestStartStopDefaultArgs(t *testing.T) {
 	assert := assert.New(t)
 
@@ -143,8 +152,8 @@ func TestStartStopDefaultArgs(t *testing.T) {
 	w, err := startTestWebhooks([]string{}, k)
 	assert.Nil(err)
 
-	assert.Equal(8080, w.conf.Port)    // default
-	assert.Equal("", w.conf.LocalAddr) // default
+	assert.Equal(8080, w.conf.HTTP.Port)    // default
+	assert.Equal("", w.conf.HTTP.LocalAddr) // default
 
 	k.stop <- true
 }
@@ -156,8 +165,8 @@ func TestStartStopCustomArgs(t *testing.T) {
 	w, err := startTestWebhooks([]string{"-l", "8081", "-L", "127.0.0.1"}, k)
 	assert.Nil(err)
 
-	assert.Equal(8081, w.conf.Port)
-	assert.Equal("127.0.0.1", w.conf.LocalAddr)
+	assert.Equal(8081, w.conf.HTTP.Port)
+	assert.Equal("127.0.0.1", w.conf.HTTP.LocalAddr)
 	assert.Equal("127.0.0.1:8081", w.srv.Addr)
 
 	k.stop <- true
@@ -178,7 +187,7 @@ func TestStartStopKafkaPreRunError(t *testing.T) {
 	assert := assert.New(t)
 
 	k := newTestKafkaComon()
-	k.cobraPreRunError = fmt.Errorf("pop")
+	k.validateConfErr = fmt.Errorf("pop")
 	_, err := startTestWebhooks([]string{}, k)
 	assert.Errorf(err, "pop")
 }
@@ -291,9 +300,9 @@ func sendTestTransaction(assert *assert.Assertions, msgBytes []byte, contentType
 
 	var url string
 	if ack {
-		url = fmt.Sprintf("http://localhost:%d/hook", w.conf.Port)
+		url = fmt.Sprintf("http://localhost:%d/hook", w.conf.HTTP.Port)
 	} else {
-		url = fmt.Sprintf("http://localhost:%d/fasthook", w.conf.Port)
+		url = fmt.Sprintf("http://localhost:%d/fasthook", w.conf.HTTP.Port)
 
 	}
 	resp, httpErr := http.Post(url, contentType, bytes.NewReader(msgBytes))

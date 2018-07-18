@@ -16,9 +16,7 @@ package kldkafka
 
 import (
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/signal"
 	"strconv"
@@ -36,39 +34,33 @@ import (
 
 // KafkaCommonConf - Common configuration for Kafka
 type KafkaCommonConf struct {
-	Brokers       []string
-	ClientID      string
-	ConsumerGroup string
-	TopicIn       string
-	TopicOut      string
+	Brokers       []string `json:"brokers"`
+	ClientID      string   `json:"clientID"`
+	ConsumerGroup string   `json:"consumerGroup"`
+	TopicIn       string   `json:"topicIn"`
+	TopicOut      string   `json:"topicOut"`
 	SASL          struct {
 		Username string
 		Password string
-	}
-	TLS struct {
-		ClientCertsFile    string
-		CACertsFile        string
-		Enabled            bool
-		PrivateKeyFile     string
-		InsecureSkipVerify bool
-	}
+	} `json:"sasl"`
+	TLS kldutils.TLSConfig `json:"tls"`
 }
 
 // KafkaCommon is the base interface for bridges that interact with Kafka
 type KafkaCommon interface {
-	CobraPreRunE(cmd *cobra.Command) error
+	ValidateConf() error
 	CobraInit(cmd *cobra.Command)
 	Start() error
 	Conf() *KafkaCommonConf
-	CreateTLSConfiguration() (t *tls.Config, err error)
 	Producer() KafkaProducer
 }
 
 // NewKafkaCommon constructs a new KafkaCommon instance
-func NewKafkaCommon(kf KafkaFactory, kafkaGoRoutines KafkaGoRoutines) (k KafkaCommon) {
+func NewKafkaCommon(kf KafkaFactory, conf *KafkaCommonConf, kafkaGoRoutines KafkaGoRoutines) (k KafkaCommon) {
 	k = &kafkaCommon{
 		factory:         kf,
 		kafkaGoRoutines: kafkaGoRoutines,
+		conf:            conf,
 	}
 	return
 }
@@ -76,7 +68,7 @@ func NewKafkaCommon(kf KafkaFactory, kafkaGoRoutines KafkaGoRoutines) (k KafkaCo
 // *kafkaCommon provides a base command for establishing Kafka connectivity with a
 // producer and a consumer-group
 type kafkaCommon struct {
-	conf            KafkaCommonConf
+	conf            *KafkaCommonConf
 	factory         KafkaFactory
 	rpc             *rpc.Client
 	client          KafkaClient
@@ -90,15 +82,15 @@ type kafkaCommon struct {
 }
 
 func (k *kafkaCommon) Conf() *KafkaCommonConf {
-	return &k.conf
+	return k.conf
 }
 
 func (k *kafkaCommon) Producer() KafkaProducer {
 	return k.producer
 }
 
-// CobraPreRunE performs common Cobra PreRunE logic for Kafka related commands
-func (k *kafkaCommon) CobraPreRunE(cmd *cobra.Command) (err error) {
+// ValidateConf performs common Cobra PreRunE logic for Kafka related commands
+func (k *kafkaCommon) ValidateConf() (err error) {
 	if k.conf.TopicOut == "" {
 		return fmt.Errorf("No output topic specified for bridge to send events to")
 	}
@@ -108,10 +100,8 @@ func (k *kafkaCommon) CobraPreRunE(cmd *cobra.Command) (err error) {
 	if k.conf.ConsumerGroup == "" {
 		return fmt.Errorf("No consumer group specified")
 	}
-	if err = kldutils.AllOrNoneReqd(cmd, "tls-clientcerts", "tls-clientkey"); err != nil {
-		return
-	}
-	if err = kldutils.AllOrNoneReqd(cmd, "sasl-username", "sasl-password"); err != nil {
+	if !kldutils.AllOrNoneReqd(k.conf.SASL.Username, k.conf.SASL.Password) {
+		err = fmt.Errorf("Username and Password must both be provided for SASL")
 		return
 	}
 	return
@@ -128,50 +118,12 @@ func (k *kafkaCommon) CobraInit(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&k.conf.TopicIn, "topic-in", "t", os.Getenv("KAFKA_TOPIC_IN"), "Topic to listen to")
 	cmd.Flags().StringVarP(&k.conf.TopicOut, "topic-out", "T", os.Getenv("KAFKA_TOPIC_OUT"), "Topic to send events to")
 	cmd.Flags().StringVarP(&k.conf.TLS.ClientCertsFile, "tls-clientcerts", "c", os.Getenv("KAFKA_TLS_CLIENT_CERT"), "A client certificate file, for mutual TLS auth")
-	cmd.Flags().StringVarP(&k.conf.TLS.PrivateKeyFile, "tls-clientkey", "k", os.Getenv("KAFKA_TLS_CLIENT_KEY"), "A client private key file, for mutual TLS auth")
+	cmd.Flags().StringVarP(&k.conf.TLS.ClientKeyFile, "tls-clientkey", "k", os.Getenv("KAFKA_TLS_CLIENT_KEY"), "A client private key file, for mutual TLS auth")
 	cmd.Flags().StringVarP(&k.conf.TLS.CACertsFile, "tls-cacerts", "C", os.Getenv("KAFKA_TLS_CA_CERTS"), "CA certificates file (or host CAs will be used)")
 	cmd.Flags().BoolVarP(&k.conf.TLS.Enabled, "tls-enabled", "e", defTLSenabled, "Encrypt network connection with TLS (SSL)")
 	cmd.Flags().BoolVarP(&k.conf.TLS.InsecureSkipVerify, "tls-insecure", "z", defTLSinsecure, "Disable verification of TLS certificate chain")
 	cmd.Flags().StringVarP(&k.conf.SASL.Username, "sasl-username", "u", os.Getenv("KAFKA_SASL_USERNAME"), "Username for SASL authentication")
 	cmd.Flags().StringVarP(&k.conf.SASL.Password, "sasl-password", "p", os.Getenv("KAFKA_SASL_PASSWORD"), "Password for SASL authentication")
-	return
-}
-
-func (k *kafkaCommon) CreateTLSConfiguration() (t *tls.Config, err error) {
-
-	mutualAuth := k.conf.TLS.ClientCertsFile != "" && k.conf.TLS.PrivateKeyFile != ""
-	log.Debugf("Kafka TLS Enabled=%t Insecure=%t MutualAuth=%t ClientCertsFile=%s PrivateKeyFile=%s CACertsFile=%s",
-		k.conf.TLS.Enabled, k.conf.TLS.InsecureSkipVerify, mutualAuth, k.conf.TLS.ClientCertsFile, k.conf.TLS.PrivateKeyFile, k.conf.TLS.CACertsFile)
-	if !k.conf.TLS.Enabled {
-		return
-	}
-
-	var clientCerts []tls.Certificate
-	if mutualAuth {
-		var cert tls.Certificate
-		if cert, err = tls.LoadX509KeyPair(k.conf.TLS.ClientCertsFile, k.conf.TLS.PrivateKeyFile); err != nil {
-			log.Errorf("Unable to load client key/certificate: %s", err)
-			return
-		}
-		clientCerts = append(clientCerts, cert)
-	}
-
-	var caCertPool *x509.CertPool
-	if k.conf.TLS.CACertsFile != "" {
-		var caCert []byte
-		if caCert, err = ioutil.ReadFile(k.conf.TLS.CACertsFile); err != nil {
-			log.Errorf("Unable to load CA certificates: %s", err)
-			return
-		}
-		caCertPool = x509.NewCertPool()
-		caCertPool.AppendCertsFromPEM(caCert)
-	}
-
-	t = &tls.Config{
-		Certificates:       clientCerts,
-		RootCAs:            caCertPool,
-		InsecureSkipVerify: k.conf.TLS.InsecureSkipVerify,
-	}
 	return
 }
 
@@ -198,7 +150,7 @@ func (k *kafkaCommon) connect() (err error) {
 	clientConf := cluster.NewConfig()
 
 	var tlsConfig *tls.Config
-	if tlsConfig, err = k.CreateTLSConfiguration(); err != nil {
+	if tlsConfig, err = kldutils.CreateTLSConfiguration(&k.conf.TLS); err != nil {
 		return
 	}
 

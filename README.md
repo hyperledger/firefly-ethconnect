@@ -17,6 +17,8 @@ Provides Key Management System (KMS) integration for signing transactions.
 Technology support currently includes:
 - Messaging
   - Apache Kafka - https://kafka.apache.org/
+- Webhooks
+  - Simple POST of a transaction over HTTP in YAML/JSON queued to Kafka for processing
 
 Under development:
 

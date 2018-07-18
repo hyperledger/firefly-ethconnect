@@ -138,7 +138,6 @@ func startServer() (err error) {
 	var wg sync.WaitGroup
 	for name, conf := range serverConfig.KafkaBridges {
 		kafkaBridge := kldkafka.NewKafkaBridge()
-		log.Debugf("Kafka bridge conf: %+v", conf)
 		kafkaBridge.SetConf(conf)
 		if err := kafkaBridge.ValidateConf(); err != nil {
 			return err

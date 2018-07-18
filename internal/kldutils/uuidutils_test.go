@@ -15,11 +15,15 @@
 package kldutils
 
 import (
-	uuid "github.com/nu7hatch/gouuid"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-// UUIDv4 returns a new UUID V4 as a string
-func UUIDv4() string {
-	uuidV4, _ := uuid.NewV4()
-	return uuidV4.String()
+func TestUUIDv4(t *testing.T) {
+	assert := assert.New(t)
+
+	uuidV4 := UUIDv4()
+	assert.Regexp("[0-9a-f-]+", uuidV4)
+
 }

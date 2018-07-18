@@ -66,13 +66,14 @@ var kcMinWorkingArgs = []string{
 func newTestKafkaCommon(testArgs []string) (*kafkaCommon, *cobra.Command) {
 	log.SetLevel(log.DebugLevel)
 	gr := &testKafkaGoRoutines{}
-	k := NewKafkaCommon(NewMockKafkaFactory(), gr).(*kafkaCommon)
+	k := NewKafkaCommon(NewMockKafkaFactory(), &KafkaCommonConf{}, gr).(*kafkaCommon)
+
 	kafkaCmd := &cobra.Command{
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return k.Start()
 		},
 		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			err = k.CobraPreRunE(cmd)
+			err = k.ValidateConf()
 			return
 		},
 	}
@@ -108,8 +109,10 @@ func execKafkaCommonWithArgs(assert *assert.Assertions, testArgs []string, f *Mo
 }
 
 func TestNewKafkaCommon(t *testing.T) {
+	assert := assert.New(t)
 	gr := &testKafkaGoRoutines{}
-	NewKafkaCommon(NewMockKafkaFactory(), gr)
+	k := NewKafkaCommon(NewMockKafkaFactory(), &KafkaCommonConf{}, gr)
+	assert.NotNil(k.Conf())
 }
 
 func TestExecuteWithIncompleteArgs(t *testing.T) {
@@ -131,12 +134,12 @@ func TestExecuteWithIncompleteArgs(t *testing.T) {
 
 	testArgs = append(testArgs, []string{"--tls-clientcerts", "/some/file"}...)
 	_, err = execKafkaCommonWithArgs(assert, testArgs, f)
-	assert.Equal("flag mismatch: 'tls-clientcerts' set and 'tls-clientkey' unset", err.Error())
+	assert.Equal("Client private key and certificate must both be provided for mutual auth", err.Error())
 	testArgs = append(testArgs, []string{"--tls-clientkey", "somekey"}...)
 
 	testArgs = append(testArgs, []string{"--sasl-username", "testuser"}...)
 	_, err = execKafkaCommonWithArgs(assert, testArgs, f)
-	assert.Equal("flag mismatch: 'sasl-username' set and 'sasl-password' unset", err.Error())
+	assert.Equal("Username and Password must both be provided for SASL", err.Error())
 	testArgs = append(testArgs, []string{"--sasl-password", "testpass"}...)
 
 }
@@ -176,7 +179,8 @@ func TestExecuteWithNoTLS(t *testing.T) {
 	assert := assert.New(t)
 
 	f := NewMockKafkaFactory()
-	_, err := execKafkaCommonWithArgs(assert, kcMinWorkingArgs, f)
+	k, err := execKafkaCommonWithArgs(assert, kcMinWorkingArgs, f)
+	assert.NotNil(k.Producer())
 
 	assert.Equal(nil, err)
 	assert.Equal(true, f.ClientConf.Producer.Return.Successes)

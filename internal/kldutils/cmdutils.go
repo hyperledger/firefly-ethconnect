@@ -15,32 +15,23 @@
 package kldutils
 
 import (
-	"fmt"
 	"os"
 	"strconv"
-	"strings"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
 )
 
-// AllOrNoneReqd util for checking Cobra parameters in PreRunE validators
-func AllOrNoneReqd(cmd *cobra.Command, opts ...string) (err error) {
+// AllOrNoneReqd util for checking parameters that must be provided together
+func AllOrNoneReqd(opts ...string) (ok bool) {
 	var setFlags, unsetFlags []string
 	for _, opt := range opts {
-		if optVal, err := cmd.Flags().GetString(opt); err == nil {
-			if optVal != "" {
-				setFlags = append(setFlags, opt)
-			} else {
-				unsetFlags = append(unsetFlags, opt)
-			}
+		if opt != "" {
+			setFlags = append(setFlags, opt)
 		} else {
-			return err
+			unsetFlags = append(unsetFlags, opt)
 		}
 	}
-	if len(setFlags) != 0 && len(unsetFlags) != 0 {
-		return fmt.Errorf("flag mismatch: '%s' set and '%s' unset", strings.Join(setFlags, ","), strings.Join(unsetFlags, ","))
-	}
+	ok = !(len(setFlags) != 0 && len(unsetFlags) != 0)
 	return
 }
 

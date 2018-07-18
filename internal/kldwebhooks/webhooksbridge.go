@@ -354,6 +354,7 @@ func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Reques
 func (w *WebhooksBridge) Start() (err error) {
 
 	mux := http.NewServeMux()
+	mux.Handle("/", http.HandlerFunc(w.webhookHandlerNoAck)) // Default on base URL
 	mux.Handle("/hook", http.HandlerFunc(w.webhookHandlerWithAck))
 	mux.Handle("/fasthook", http.HandlerFunc(w.webhookHandlerNoAck))
 	mux.Handle("/status", http.HandlerFunc(w.statusHandler))

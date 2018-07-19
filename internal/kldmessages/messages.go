@@ -69,11 +69,10 @@ type RequestCommon struct {
 // ReplyHeaders are common to all replies
 type ReplyHeaders struct {
 	CommonHeaders
-	Received string  `json:"timeReceived"`
-	Elapsed  float64 `json:"timeElapsed"`
-	OrigMsg  string  `json:"origMsg"`
-	OrigID   string  `json:"origID"`
-	OrigTX   string  `json:"origTX,omitempty"`
+	Received  string  `json:"timeReceived"`
+	Elapsed   float64 `json:"timeElapsed"`
+	ReqOffset string  `json:"reqOffset"`
+	ReqID     string  `json:"reqID"`
 }
 
 // ReplyWithHeaders gives common access the reply headers

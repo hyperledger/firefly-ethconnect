@@ -88,6 +88,7 @@ func (k *testKafkaCommon) Producer() kldkafka.KafkaProducer {
 var webhookExecuteError atomic.Value
 
 func newTestKafkaComon() *testKafkaCommon {
+	log.SetLevel(log.DebugLevel)
 	kafka := &testKafkaCommon{}
 	kafka.startTime = time.Now()
 	kafka.stop = make(chan bool)
@@ -145,6 +146,14 @@ func TestNewWebhooksBridge(t *testing.T) {
 	assert.Equal("127.0.0.1", w.Conf().HTTP.LocalAddr)
 }
 
+func TestValidateConfInvalidArgs(t *testing.T) {
+	assert := assert.New(t)
+	w := NewWebhooksBridge()
+	w.conf.MongoDB.URL = "mongodb://localhost:27017"
+	err := w.ValidateConf()
+	assert.Regexp("MongoDB URL, Database and Collection name must be specified to enable the receipt store", err.Error())
+}
+
 func TestStartStopDefaultArgs(t *testing.T) {
 	assert := assert.New(t)
 
@@ -190,31 +199,6 @@ func TestStartStopKafkaPreRunError(t *testing.T) {
 	k.validateConfErr = fmt.Errorf("pop")
 	_, err := startTestWebhooks([]string{}, k)
 	assert.Errorf(err, "pop")
-}
-
-func TestConsumerMessagesLoopIsNoop(t *testing.T) {
-	assert := assert.New(t)
-
-	k := newTestKafkaComon()
-	w, err := startTestWebhooks([]string{}, k)
-	assert.Nil(err)
-
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	consumer, _ := k.kafkaFactory.NewConsumer(k)
-	producer, _ := k.kafkaFactory.NewProducer(k)
-
-	go func() {
-		w.ConsumerMessagesLoop(consumer, producer, wg)
-	}()
-
-	consumer.(*kldkafka.MockKafkaConsumer).MockMessages <- &sarama.ConsumerMessage{
-		Value: []byte("hello world"),
-	}
-
-	k.stop <- true
-	wg.Wait()
-
 }
 
 func assertSentResp(assert *assert.Assertions, resp *http.Response, ack bool) {
@@ -555,4 +539,29 @@ func TestWebhookHandlerTooBig(t *testing.T) {
 	resp, replyMsgs := sendTestTransaction(assert, msgBytes, "application/json", nil, true)
 	assertErrResp(assert, resp, 400, "Message exceeds maximum allowable size")
 	assert.Equal(0, len(replyMsgs))
+}
+
+func TestConsumerMessagesLoopCallsReplyProcessorWithEmptyPayload(t *testing.T) {
+	assert := assert.New(t)
+
+	k := newTestKafkaComon()
+	w, err := startTestWebhooks([]string{}, k)
+	assert.Nil(err)
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	consumer, _ := k.kafkaFactory.NewConsumer(k)
+	producer, _ := k.kafkaFactory.NewProducer(k)
+
+	go func() {
+		w.ConsumerMessagesLoop(consumer, producer, wg)
+	}()
+
+	consumer.(*kldkafka.MockKafkaConsumer).MockMessages <- &sarama.ConsumerMessage{
+		Value: []byte(""),
+	}
+
+	k.stop <- true
+	wg.Wait()
+
 }

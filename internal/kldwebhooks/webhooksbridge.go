@@ -69,7 +69,7 @@ type WebhooksBridge struct {
 	pendingMsgs map[string]bool
 	successMsgs map[string]*sarama.ProducerMessage
 	failedMsgs  map[string]error
-	mongo       *mgo.Collection
+	mongo       MongoCollection
 }
 
 // Conf gets the config for this bridge
@@ -131,71 +131,9 @@ func (w *WebhooksBridge) CobraInit() (cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&w.conf.HTTP.LocalAddr, "listen-addr", "L", os.Getenv("WEBHOOKS_LISTEN_ADDR"), "Local address to listen on")
 	cmd.Flags().IntVarP(&w.conf.HTTP.Port, "listen-port", "l", kldutils.DefInt("WEBHOOKS_LISTEN_PORT", 8080), "Port to listen on")
 	cmd.Flags().StringVarP(&w.conf.MongoDB.URL, "mongodb-url", "m", os.Getenv("MONGODB_URL"), "MongoDB URL for a receipt store")
-	cmd.Flags().StringVarP(&w.conf.MongoDB.URL, "mongodb-receipts-collection", "r", os.Getenv("MONGODB_COLLECTION"), "MongoDB receipt store collection")
+	cmd.Flags().StringVarP(&w.conf.MongoDB.Database, "mongodb-database", "d", os.Getenv("MONGODB_DATABASE"), "MongoDB receipt store database")
+	cmd.Flags().StringVarP(&w.conf.MongoDB.Collection, "mongodb-receipt-collection", "r", os.Getenv("MONGODB_COLLECTION"), "MongoDB receipt store collection")
 	return
-}
-
-func getString(genericMap map[string]interface{}, key string) string {
-	if val, exists := genericMap[key]; !exists {
-		if reflect.TypeOf(val).Kind() == reflect.String {
-			return val.(string)
-		}
-	}
-	return ""
-}
-
-// processReceipt processes an individual reply message, containing all errors
-func (w *WebhooksBridge) processReceipt(msgBytes []byte) {
-
-	// Parse the reply as JSON
-	var parsedMsg map[string]interface{}
-	if err := json.Unmarshal(msgBytes, &parsedMsg); err != nil {
-		log.Errorf("Unable to unmarshal reply message '%s' as JSON: %s", string(msgBytes), err)
-		return
-	}
-
-	// Extract the headers
-	var headers map[string]interface{}
-	if iHeaders, exists := parsedMsg["headers"]; exists && reflect.TypeOf(headers).Kind() == reflect.Map {
-		headers = iHeaders.(map[string]interface{})
-	} else {
-		log.Errorf("Failed to extract request headers from '%s'", string(msgBytes))
-		return
-	}
-
-	// The one field we require is the original ID (as it's the key in MongoDB)
-	reqID := getString(headers, "reqID")
-	if reqID == "" {
-		log.Errorf("Failed to extract headers.reqID from '%s'", string(msgBytes))
-		return
-	}
-	reqOffset := getString(headers, "reqOffset")
-	msgType := getString(headers, "type")
-	result := ""
-	if msgType == kldmessages.MsgTypeError {
-		result = getString(headers, "errorMessage")
-	} else {
-		result = getString(parsedMsg, "transactionHash")
-	}
-	log.Infof("Received reply message. reqID='%s' reqOffset='%s' type='%s': %s", reqID, reqOffset, msgType, result)
-
-	// Insert the receipt into MongoDB
-	if reqID != "" && w.mongo != nil {
-		parsedMsg["_id"] = reqID
-		if err := w.mongo.Insert(parsedMsg); err != nil {
-			log.Errorf("Failed to insert '%s' into mongodb: %s", string(msgBytes), err)
-		} else {
-			log.Infof("Inserted receipt into MongoDB")
-		}
-	}
-}
-
-// ConsumerMessagesLoop - consume replies
-func (w *WebhooksBridge) ConsumerMessagesLoop(consumer kldkafka.KafkaConsumer, producer kldkafka.KafkaProducer, wg *sync.WaitGroup) {
-	for msg := range consumer.Messages() {
-		w.processReceipt(msg.Value)
-	}
-	wg.Done()
 }
 
 func (w *WebhooksBridge) setMsgPending(msgID string) {
@@ -419,6 +357,7 @@ func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Reques
 
 func (w *WebhooksBridge) connectMongoDB() (err error) {
 	if w.conf.MongoDB.URL == "" {
+		log.Debugf("No MongoDB URL configured. Receipt store disabled")
 		return
 	}
 	session, err := mgo.Dial(w.conf.MongoDB.URL)

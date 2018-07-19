@@ -71,8 +71,8 @@ type ReplyHeaders struct {
 	CommonHeaders
 	Received  string  `json:"timeReceived"`
 	Elapsed   float64 `json:"timeElapsed"`
-	ReqOffset string  `json:"reqOffset"`
-	ReqID     string  `json:"reqID"`
+	ReqOffset string  `json:"requestOffset"`
+	ReqID     string  `json:"requestId"`
 }
 
 // ReplyWithHeaders gives common access the reply headers

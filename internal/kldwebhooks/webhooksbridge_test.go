@@ -272,14 +272,18 @@ func sendTestTransaction(assert *assert.Assertions, msgBytes []byte, contentType
 			msgs = append(msgs, msgBytes)
 
 			// Send an ack or an err
-			if sendErr != nil {
-				k.kafkaFactory.Producer.MockErrors <- &sarama.ProducerError{
-					Msg: msg,
-					Err: sendErr,
+			k.kafkaFactory.Producer.CloseSync.Lock()
+			if !k.kafkaFactory.Producer.Closed {
+				if sendErr != nil {
+					k.kafkaFactory.Producer.MockErrors <- &sarama.ProducerError{
+						Msg: msg,
+						Err: sendErr,
+					}
+				} else {
+					k.kafkaFactory.Producer.MockSuccesses <- msg
 				}
-			} else {
-				k.kafkaFactory.Producer.MockSuccesses <- msg
 			}
+			k.kafkaFactory.Producer.CloseSync.Unlock()
 		}
 		wg.Done()
 	}()

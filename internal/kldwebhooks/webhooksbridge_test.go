@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -87,6 +88,8 @@ func (k *testKafkaCommon) Producer() kldkafka.KafkaProducer {
 
 var webhookExecuteError atomic.Value
 
+var lastPort = 9000
+
 func newTestKafkaComon() *testKafkaCommon {
 	log.SetLevel(log.DebugLevel)
 	kafka := &testKafkaCommon{}
@@ -105,6 +108,10 @@ func startTestWebhooks(testArgs []string, kafka *testKafkaCommon) (*WebhooksBrid
 	w := NewWebhooksBridge()
 	w.kafka = kafka
 	cmd := w.CobraInit()
+	if testArgs == nil {
+		testArgs = []string{"-l", strconv.Itoa(lastPort)}
+		lastPort++
+	}
 	cmd.SetArgs(testArgs)
 	webhookExecuteError.Store(errors.New("none")) // We can't store nil in the atomic Value
 	go func() {
@@ -117,7 +124,8 @@ func startTestWebhooks(testArgs []string, kafka *testKafkaCommon) (*WebhooksBrid
 	status := -1
 	startTime := time.Now()
 	var err error
-	for status != 200 && time.Now().Sub(startTime) < (4*time.Second) {
+	for status != 200 && err == nil && time.Now().Sub(startTime) < (4*time.Second) {
+		time.Sleep(50 * time.Millisecond)
 		statusURL := fmt.Sprintf("http://localhost:%d/status", w.conf.HTTP.Port)
 		resp, httpErr := http.Get(statusURL)
 		if httpErr == nil {
@@ -127,11 +135,7 @@ func startTestWebhooks(testArgs []string, kafka *testKafkaCommon) (*WebhooksBrid
 		if errI != nil {
 			err = errI.(error)
 		}
-		time.Sleep(50 * time.Millisecond)
 		log.Infof("Waiting for Webhook server to start (URL=%s Status=%d HTTPErr=%s Err=%s)", statusURL, status, httpErr, err)
-		if status != 200 {
-			time.Sleep(10 * time.Millisecond)
-		}
 	}
 	if err != nil && err.Error() == "none" {
 		err = nil
@@ -160,10 +164,11 @@ func TestStartStopDefaultArgs(t *testing.T) {
 	assert := assert.New(t)
 
 	k := newTestKafkaComon()
-	w, err := startTestWebhooks([]string{}, k)
+	port := lastPort
+	w, err := startTestWebhooks(nil, k)
 	assert.Nil(err)
 
-	assert.Equal(8080, w.conf.HTTP.Port)    // default
+	assert.Equal(port, w.conf.HTTP.Port)    // default
 	assert.Equal("", w.conf.HTTP.LocalAddr) // default
 
 	k.stop <- true
@@ -188,7 +193,7 @@ func TestStartStopKafkaInitDelay(t *testing.T) {
 
 	k := newTestKafkaComon()
 	k.kafkaInitDelay = 500
-	_, err := startTestWebhooks([]string{}, k)
+	_, err := startTestWebhooks(nil, k)
 	assert.Nil(err)
 
 	k.stop <- true
@@ -199,7 +204,7 @@ func TestStartStopKafkaPreRunError(t *testing.T) {
 
 	k := newTestKafkaComon()
 	k.validateConfErr = fmt.Errorf("pop")
-	_, err := startTestWebhooks([]string{}, k)
+	_, err := startTestWebhooks(nil, k)
 	assert.Errorf(err, "pop")
 }
 
@@ -260,7 +265,7 @@ func sendTestTransaction(assert *assert.Assertions, msgBytes []byte, contentType
 	log.SetLevel(log.DebugLevel)
 
 	k := newTestKafkaComon()
-	w, err := startTestWebhooks([]string{}, k)
+	w, err := startTestWebhooks(nil, k)
 	assert.Nil(err)
 
 	wg := &sync.WaitGroup{}
@@ -374,7 +379,7 @@ func TestProducerErrorLoopPanicsOnBadErrStructure(t *testing.T) {
 	assert := assert.New(t)
 
 	k := newTestKafkaComon()
-	w, err := startTestWebhooks([]string{}, k)
+	w, err := startTestWebhooks(nil, k)
 	assert.Nil(err)
 
 	go func() {
@@ -399,7 +404,7 @@ func TestProducerErrorLoopPanicsOnBadMsgStructure(t *testing.T) {
 	assert := assert.New(t)
 
 	k := newTestKafkaComon()
-	w, err := startTestWebhooks([]string{}, k)
+	w, err := startTestWebhooks(nil, k)
 	assert.Nil(err)
 
 	go func() {
@@ -560,7 +565,7 @@ func TestConsumerMessagesLoopCallsReplyProcessorWithEmptyPayload(t *testing.T) {
 	assert := assert.New(t)
 
 	k := newTestKafkaComon()
-	w, err := startTestWebhooks([]string{}, k)
+	w, err := startTestWebhooks(nil, k)
 	assert.Nil(err)
 
 	wg := &sync.WaitGroup{}

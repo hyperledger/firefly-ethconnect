@@ -254,7 +254,7 @@ func TestConnectMongoDBIndexCreationFailure(t *testing.T) {
 
 func testReplyCall(assert *assert.Assertions, coll MongoCollection, url string) (resp *http.Response) {
 	k := newTestKafkaComon()
-	w, _ := startTestWebhooks([]string{}, k)
+	w, _ := startTestWebhooks(nil, k)
 	w.mongo = coll
 	resp, httpErr := http.Get(url)
 	if httpErr != nil {
@@ -268,7 +268,7 @@ func testReplyCall(assert *assert.Assertions, coll MongoCollection, url string) 
 func TestGetReplyNoStore(t *testing.T) {
 	assert := assert.New(t)
 	var nilMongo MongoCollection
-	resp := testReplyCall(assert, nilMongo, "http://localhost:8080/reply/ABCDEFG")
+	resp := testReplyCall(assert, nilMongo, fmt.Sprintf("http://localhost:%d/reply/ABCDEFG", lastPort))
 	assert.Equal(405, resp.StatusCode)
 }
 
@@ -276,7 +276,7 @@ func TestGetReplyMissing(t *testing.T) {
 	assert := assert.New(t)
 	mockCol := &mockCollection{}
 	mockCol.mockQuery.oneErr = mgo.ErrNotFound
-	resp := testReplyCall(assert, mockCol, "http://localhost:8080/reply/ABCDEFG")
+	resp := testReplyCall(assert, mockCol, fmt.Sprintf("http://localhost:%d/reply/ABCDEFG", lastPort))
 	assert.Equal(404, resp.StatusCode)
 }
 
@@ -284,14 +284,14 @@ func TestGetReplyError(t *testing.T) {
 	assert := assert.New(t)
 	mockCol := &mockCollection{}
 	mockCol.mockQuery.oneErr = fmt.Errorf("pop")
-	resp := testReplyCall(assert, mockCol, "http://localhost:8080/reply/ABCDEFG")
+	resp := testReplyCall(assert, mockCol, fmt.Sprintf("http://localhost:%d/reply/ABCDEFG", lastPort))
 	assert.Equal(500, resp.StatusCode)
 }
 
 func TestGetReplyOK(t *testing.T) {
 	assert := assert.New(t)
 	mockCol := &mockCollection{}
-	resp := testReplyCall(assert, mockCol, "http://localhost:8080/reply/ABCDEFG")
+	resp := testReplyCall(assert, mockCol, fmt.Sprintf("http://localhost:%d/reply/ABCDEFG", lastPort))
 	assert.Equal(200, resp.StatusCode)
 }
 
@@ -303,14 +303,14 @@ func TestGetReplyUnSerializable(t *testing.T) {
 		unserializable[false] = "going to happen"
 		(*result.(*map[string]interface{}))["key"] = unserializable
 	}
-	resp := testReplyCall(assert, mockCol, "http://localhost:8080/reply/ABCDEFG")
+	resp := testReplyCall(assert, mockCol, fmt.Sprintf("http://localhost:%d/reply/ABCDEFG", lastPort))
 	assert.Equal(500, resp.StatusCode)
 }
 
 func TestGetRepliesNoStore(t *testing.T) {
 	assert := assert.New(t)
 	var nilMongo MongoCollection
-	resp := testReplyCall(assert, nilMongo, "http://localhost:8080/replies")
+	resp := testReplyCall(assert, nilMongo, fmt.Sprintf("http://localhost:%d/replies", lastPort))
 	assert.Equal(405, resp.StatusCode)
 }
 
@@ -318,7 +318,7 @@ func TestGetRepliesMissing(t *testing.T) {
 	assert := assert.New(t)
 	mockCol := &mockCollection{}
 	mockCol.mockQuery.allErr = mgo.ErrNotFound
-	resp := testReplyCall(assert, mockCol, "http://localhost:8080/replies")
+	resp := testReplyCall(assert, mockCol, fmt.Sprintf("http://localhost:%d/replies", lastPort))
 	assert.Equal(404, resp.StatusCode)
 }
 
@@ -326,21 +326,21 @@ func TestGetRepliesError(t *testing.T) {
 	assert := assert.New(t)
 	mockCol := &mockCollection{}
 	mockCol.mockQuery.allErr = fmt.Errorf("pop")
-	resp := testReplyCall(assert, mockCol, "http://localhost:8080/replies")
+	resp := testReplyCall(assert, mockCol, fmt.Sprintf("http://localhost:%d/replies", lastPort))
 	assert.Equal(500, resp.StatusCode)
 }
 
 func TestGetRepliesDefaultLimit(t *testing.T) {
 	assert := assert.New(t)
 	mockCol := &mockCollection{}
-	resp := testReplyCall(assert, mockCol, "http://localhost:8080/replies")
+	resp := testReplyCall(assert, mockCol, fmt.Sprintf("http://localhost:%d/replies", lastPort))
 	assert.Equal(200, resp.StatusCode)
 }
 
 func TestGetRepliesCustomSkipLimit(t *testing.T) {
 	assert := assert.New(t)
 	mockCol := &mockCollection{}
-	resp := testReplyCall(assert, mockCol, "http://localhost:8080/replies?limit=50&skip=10")
+	resp := testReplyCall(assert, mockCol, fmt.Sprintf("http://localhost:%d/replies?limit=50&skip=10", lastPort))
 	assert.Equal(50, mockCol.mockQuery.limit)
 	assert.Equal(10, mockCol.mockQuery.skip)
 	assert.Equal(200, resp.StatusCode)
@@ -349,7 +349,7 @@ func TestGetRepliesCustomSkipLimit(t *testing.T) {
 func TestGetRepliesInvalidSkipLimit(t *testing.T) {
 	assert := assert.New(t)
 	mockCol := &mockCollection{}
-	resp := testReplyCall(assert, mockCol, "http://localhost:8080/replies?limit=bad&skip=ness")
+	resp := testReplyCall(assert, mockCol, fmt.Sprintf("http://localhost:%d/replies?limit=bad&skip=ness", lastPort))
 	assert.Equal(10, mockCol.mockQuery.limit)
 	assert.Equal(0, mockCol.mockQuery.skip)
 	assert.Equal(200, resp.StatusCode)
@@ -358,7 +358,7 @@ func TestGetRepliesInvalidSkipLimit(t *testing.T) {
 func TestGetRepliesExcessiveLimit(t *testing.T) {
 	assert := assert.New(t)
 	mockCol := &mockCollection{}
-	resp := testReplyCall(assert, mockCol, "http://localhost:8080/replies?limit=1000")
+	resp := testReplyCall(assert, mockCol, fmt.Sprintf("http://localhost:%d/replies?limit=1000", lastPort))
 	assert.Equal(100, mockCol.mockQuery.limit)
 	assert.Equal(0, mockCol.mockQuery.skip)
 	assert.Equal(200, resp.StatusCode)

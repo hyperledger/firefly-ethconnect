@@ -114,13 +114,13 @@ func startTestWebhooks(testArgs []string, kafka *testKafkaCommon) (*WebhooksBrid
 	}
 	cmd.SetArgs(testArgs)
 	webhookExecuteError.Store(errors.New("none"))
-	go func() {
+	go func(cmd *cobra.Command) {
 		err := cmd.Execute()
 		log.Infof("Kafka webhooks completed. Err=%s", err)
 		if err != nil {
 			webhookExecuteError.Store(err)
 		}
-	}()
+	}(cmd)
 	status := -1
 	startTime := time.Now()
 	err := webhookExecuteError.Load().(error)

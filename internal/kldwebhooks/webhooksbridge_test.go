@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -87,6 +88,8 @@ func (k *testKafkaCommon) Producer() kldkafka.KafkaProducer {
 
 var webhookExecuteError atomic.Value
 
+var lastPort = 9000
+
 func newTestKafkaComon() *testKafkaCommon {
 	log.SetLevel(log.DebugLevel)
 	kafka := &testKafkaCommon{}
@@ -105,33 +108,33 @@ func startTestWebhooks(testArgs []string, kafka *testKafkaCommon) (*WebhooksBrid
 	w := NewWebhooksBridge()
 	w.kafka = kafka
 	cmd := w.CobraInit()
+	if testArgs == nil {
+		testArgs = []string{"-l", strconv.Itoa(lastPort)}
+		lastPort++
+	}
 	cmd.SetArgs(testArgs)
-	webhookExecuteError.Store(errors.New("none")) // We can't store nil in the atomic Value
-	go func() {
+	webhookExecuteError.Store(errors.New("none"))
+	go func(cmd *cobra.Command) {
 		err := cmd.Execute()
 		log.Infof("Kafka webhooks completed. Err=%s", err)
 		if err != nil {
 			webhookExecuteError.Store(err)
 		}
-	}()
+	}(cmd)
 	status := -1
-	var err error
-	for (err == nil || err.Error() == "none") && status != 200 {
+	startTime := time.Now()
+	err := webhookExecuteError.Load().(error)
+	for status != 200 && err.Error() == "none" && time.Now().Sub(startTime) < (4*time.Second) {
+		time.Sleep(50 * time.Millisecond)
 		statusURL := fmt.Sprintf("http://localhost:%d/status", w.conf.HTTP.Port)
 		resp, httpErr := http.Get(statusURL)
 		if httpErr == nil {
 			status = resp.StatusCode
 		}
-		errI := webhookExecuteError.Load()
-		if errI != nil {
-			err = errI.(error)
-		}
+		err = webhookExecuteError.Load().(error)
 		log.Infof("Waiting for Webhook server to start (URL=%s Status=%d HTTPErr=%s Err=%s)", statusURL, status, httpErr, err)
-		if status != 200 {
-			time.Sleep(10 * time.Millisecond)
-		}
 	}
-	if err != nil && err.Error() == "none" {
+	if err.Error() == "none" {
 		err = nil
 	}
 	return w, err
@@ -158,10 +161,11 @@ func TestStartStopDefaultArgs(t *testing.T) {
 	assert := assert.New(t)
 
 	k := newTestKafkaComon()
-	w, err := startTestWebhooks([]string{}, k)
+	port := lastPort
+	w, err := startTestWebhooks(nil, k)
 	assert.Nil(err)
 
-	assert.Equal(8080, w.conf.HTTP.Port)    // default
+	assert.Equal(port, w.conf.HTTP.Port)    // default
 	assert.Equal("", w.conf.HTTP.LocalAddr) // default
 
 	k.stop <- true
@@ -186,7 +190,7 @@ func TestStartStopKafkaInitDelay(t *testing.T) {
 
 	k := newTestKafkaComon()
 	k.kafkaInitDelay = 500
-	_, err := startTestWebhooks([]string{}, k)
+	_, err := startTestWebhooks(nil, k)
 	assert.Nil(err)
 
 	k.stop <- true
@@ -197,11 +201,15 @@ func TestStartStopKafkaPreRunError(t *testing.T) {
 
 	k := newTestKafkaComon()
 	k.validateConfErr = fmt.Errorf("pop")
-	_, err := startTestWebhooks([]string{}, k)
+	_, err := startTestWebhooks(nil, k)
 	assert.Errorf(err, "pop")
 }
 
 func assertSentResp(assert *assert.Assertions, resp *http.Response, ack bool) {
+	assert.NotNil(resp)
+	if resp == nil {
+		return
+	}
 	assert.Equal(200, resp.StatusCode)
 	replyBytes, err := ioutil.ReadAll(resp.Body)
 	assert.Nil(err)
@@ -254,7 +262,7 @@ func sendTestTransaction(assert *assert.Assertions, msgBytes []byte, contentType
 	log.SetLevel(log.DebugLevel)
 
 	k := newTestKafkaComon()
-	w, err := startTestWebhooks([]string{}, k)
+	w, err := startTestWebhooks(nil, k)
 	assert.Nil(err)
 
 	wg := &sync.WaitGroup{}
@@ -267,14 +275,18 @@ func sendTestTransaction(assert *assert.Assertions, msgBytes []byte, contentType
 			msgs = append(msgs, msgBytes)
 
 			// Send an ack or an err
-			if sendErr != nil {
-				k.kafkaFactory.Producer.MockErrors <- &sarama.ProducerError{
-					Msg: msg,
-					Err: sendErr,
+			k.kafkaFactory.Producer.CloseSync.Lock()
+			if !k.kafkaFactory.Producer.Closed {
+				if sendErr != nil {
+					k.kafkaFactory.Producer.MockErrors <- &sarama.ProducerError{
+						Msg: msg,
+						Err: sendErr,
+					}
+				} else {
+					k.kafkaFactory.Producer.MockSuccesses <- msg
 				}
-			} else {
-				k.kafkaFactory.Producer.MockSuccesses <- msg
 			}
+			k.kafkaFactory.Producer.CloseSync.Unlock()
 		}
 		wg.Done()
 	}()
@@ -364,7 +376,7 @@ func TestProducerErrorLoopPanicsOnBadErrStructure(t *testing.T) {
 	assert := assert.New(t)
 
 	k := newTestKafkaComon()
-	w, err := startTestWebhooks([]string{}, k)
+	w, err := startTestWebhooks(nil, k)
 	assert.Nil(err)
 
 	go func() {
@@ -389,7 +401,7 @@ func TestProducerErrorLoopPanicsOnBadMsgStructure(t *testing.T) {
 	assert := assert.New(t)
 
 	k := newTestKafkaComon()
-	w, err := startTestWebhooks([]string{}, k)
+	w, err := startTestWebhooks(nil, k)
 	assert.Nil(err)
 
 	go func() {
@@ -550,7 +562,7 @@ func TestConsumerMessagesLoopCallsReplyProcessorWithEmptyPayload(t *testing.T) {
 	assert := assert.New(t)
 
 	k := newTestKafkaComon()
-	w, err := startTestWebhooks([]string{}, k)
+	w, err := startTestWebhooks(nil, k)
 	assert.Nil(err)
 
 	wg := &sync.WaitGroup{}

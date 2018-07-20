@@ -15,6 +15,8 @@
 package kldkafka
 
 import (
+	"sync"
+
 	"github.com/Shopify/sarama"
 	cluster "github.com/bsm/sarama-cluster"
 )
@@ -82,10 +84,14 @@ type MockKafkaProducer struct {
 	MockInput     chan *sarama.ProducerMessage
 	MockSuccesses chan *sarama.ProducerMessage
 	MockErrors    chan *sarama.ProducerError
+	Closed        bool
+	CloseSync     sync.Mutex
 }
 
 // AsyncClose - mock
 func (p *MockKafkaProducer) AsyncClose() {
+	p.CloseSync.Lock()
+	defer p.CloseSync.Unlock()
 	if p.MockInput != nil {
 		close(p.MockInput)
 	}
@@ -95,6 +101,7 @@ func (p *MockKafkaProducer) AsyncClose() {
 	if p.MockErrors != nil {
 		close(p.MockErrors)
 	}
+	p.Closed = true
 }
 
 // Input - mock

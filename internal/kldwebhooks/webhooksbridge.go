@@ -391,23 +391,32 @@ func (w *WebhooksBridge) Start() (err error) {
 	}
 
 	// Wait until Kafka is up before we listen
+	running := true
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		for w.kafka.Producer() == nil {
+		for w.kafka.Producer() == nil && running {
 			time.Sleep(500)
 		}
-		log.Printf("Listening on %s", w.srv.Addr)
-		if err = w.srv.ListenAndServe(); err != nil {
-			return
+		if running {
+			log.Printf("Listening on %s", w.srv.Addr)
+			if err := w.srv.ListenAndServe(); err != nil {
+				log.Errorf("Listening ended with: %s", err)
+			}
 		}
+		wg.Done()
 	}()
 
 	// Defer to KafkaCommon processing
 	err = w.kafka.Start()
 
 	// Ensure we shutdown the server
+	log.Infof("Shutting down Webhooks server")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	w.srv.Shutdown(ctx)
 	defer cancel()
 
+	running = false
+	wg.Wait()
 	return
 }

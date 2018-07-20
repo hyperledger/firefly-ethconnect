@@ -202,6 +202,10 @@ func TestStartStopKafkaPreRunError(t *testing.T) {
 }
 
 func assertSentResp(assert *assert.Assertions, resp *http.Response, ack bool) {
+	assert.NotNil(resp)
+	if resp == nil {
+		return
+	}
 	assert.Equal(200, resp.StatusCode)
 	replyBytes, err := ioutil.ReadAll(resp.Body)
 	assert.Nil(err)

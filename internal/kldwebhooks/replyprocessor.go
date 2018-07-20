@@ -17,10 +17,15 @@ package kldwebhooks
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"reflect"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/globalsign/mgo"
+	"github.com/globalsign/mgo/bson"
+	"github.com/julienschmidt/httprouter"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
@@ -42,13 +47,44 @@ func (m *mgoWrapper) Connect(url string) (err error) {
 }
 
 func (m *mgoWrapper) GetCollection(database string, collection string) MongoCollection {
-	return m.session.DB(database).C(collection)
+	return &collWrapper{coll: m.session.DB(database).C(collection)}
 }
 
 // MongoCollection is the subset of mgo that we use, allowing stubbing
 type MongoCollection interface {
 	Insert(...interface{}) error
 	Create(info *mgo.CollectionInfo) error
+	EnsureIndex(index mgo.Index) error
+	Find(query interface{}) MongoQuery
+}
+
+type collWrapper struct {
+	coll *mgo.Collection
+}
+
+func (m *collWrapper) Insert(docs ...interface{}) error {
+	return m.coll.Insert(docs)
+}
+
+func (m *collWrapper) Create(info *mgo.CollectionInfo) error {
+	return m.coll.Create(info)
+}
+
+func (m *collWrapper) EnsureIndex(index mgo.Index) error {
+	return m.coll.EnsureIndex(index)
+}
+
+func (m *collWrapper) Find(query interface{}) MongoQuery {
+	return m.coll.Find(query)
+}
+
+// MongoQuery is the subset of mgo that we use, allowing stubbing
+type MongoQuery interface {
+	Limit(n int) *mgo.Query
+	Skip(n int) *mgo.Query
+	Sort(fields ...string) *mgo.Query
+	All(result interface{}) error
+	One(result interface{}) error
 }
 
 func (w *WebhooksBridge) connectMongoDB(mongo MongoDatabase) (err error) {
@@ -68,6 +104,19 @@ func (w *WebhooksBridge) connectMongoDB(mongo MongoDatabase) (err error) {
 	}); collErr != nil {
 		log.Infof("MongoDB collection exists: %s", err)
 	}
+
+	index := mgo.Index{
+		Key:        []string{"receivedAt"},
+		Unique:     false,
+		DropDups:   false,
+		Background: true,
+		Sparse:     true,
+	}
+	if err = w.mongo.EnsureIndex(index); err != nil {
+		err = fmt.Errorf("Unable to create index: %s", err)
+		return
+	}
+
 	log.Infof("Connected to MongoDB on %s DB=%s Collection=%s", w.conf.MongoDB.URL, w.conf.MongoDB.Database, w.conf.MongoDB.Collection)
 	return
 }
@@ -103,8 +152,8 @@ func (w *WebhooksBridge) processReply(msgBytes []byte) {
 	}
 
 	// The one field we require is the original ID (as it's the key in MongoDB)
-	requestId := getString(headers, "requestId")
-	if requestId == "" {
+	requestID := getString(headers, "requestId")
+	if requestID == "" {
 		log.Errorf("Failed to extract headers.requestId from '%s'", string(msgBytes))
 		return
 	}
@@ -116,11 +165,12 @@ func (w *WebhooksBridge) processReply(msgBytes []byte) {
 	} else {
 		result = getString(parsedMsg, "transactionHash")
 	}
-	log.Infof("Received reply message. requestId='%s' reqOffset='%s' type='%s': %s", requestId, reqOffset, msgType, result)
+	log.Infof("Received reply message. requestId='%s' reqOffset='%s' type='%s': %s", requestID, reqOffset, msgType, result)
 
 	// Insert the receipt into MongoDB
-	if requestId != "" && w.mongo != nil {
-		parsedMsg["_id"] = requestId
+	if requestID != "" && w.mongo != nil {
+		parsedMsg["receivedAt"] = time.Now().UnixNano() / int64(time.Millisecond)
+		parsedMsg["_id"] = requestID
 		if err := w.mongo.Insert(parsedMsg); err != nil {
 			log.Errorf("Failed to insert '%s' into mongodb: %s", string(msgBytes), err)
 		} else {
@@ -135,4 +185,96 @@ func (w *WebhooksBridge) ConsumerMessagesLoop(consumer kldkafka.KafkaConsumer, p
 		w.processReply(msg.Value)
 	}
 	wg.Done()
+}
+
+// getReplies handles a HTTP request for recent replies
+func (w *WebhooksBridge) getReplies(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+
+	res.Header().Set("Content-Type", "application/json")
+	if w.mongo == nil {
+		errReply(res, fmt.Errorf("Receipt store not enabled"), 405)
+		return
+	}
+
+	// Set skip and limit
+	query := w.mongo.Find(bson.M{})
+	query.Sort("-receivedAt")
+	limit := 10 // default the limit
+	log.Debugf("GET /replies: limit=%s skip=%s", req.FormValue("limit"), req.FormValue("skip"))
+	if customLimit, err := strconv.ParseInt(req.FormValue("limit"), 10, 32); err == nil {
+		if int(customLimit) > w.conf.MongoDB.QueryLimit {
+			limit = w.conf.MongoDB.QueryLimit
+		} else if customLimit > 0 {
+			limit = int(customLimit)
+		}
+	} else {
+		log.Warnf("Ignoring invalid limit %s: %s", req.FormValue("limit"), err)
+	}
+	query.Limit(limit)
+	if skip, err := strconv.ParseInt(req.FormValue("skip"), 10, 32); err == nil && skip > 0 {
+		query.Skip(int(skip))
+	} else {
+		log.Warnf("Ignoring invalid skip %s: %s", req.FormValue("skip"), err)
+	}
+
+	// Perform the query
+	results := make([]map[string]interface{}, limit)
+	if err := query.All(results); err == mgo.ErrNotFound {
+		errReply(res, fmt.Errorf("No replies found"), 404)
+		log.Infof("GET /replies: No replies found")
+		return
+	} else if err != nil {
+		log.Errorf("GET /replies: Error querying replies: %s", err)
+		errReply(res, fmt.Errorf("Error querying replies"), 500)
+		return
+	} else {
+		log.Infof("GET /replies: %d replies found", len(results))
+	}
+
+	// Serialize and return
+	resBytes, err := json.Marshal(results)
+	if err != nil {
+		log.Errorf("Error serializing replies: %s", err)
+		errReply(res, fmt.Errorf("Error serializing replies"), 500)
+		return
+	}
+	res.WriteHeader(200)
+	res.Write(resBytes)
+
+}
+
+// getReply handles a HTTP request for an individual reply
+func (w *WebhooksBridge) getReply(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+
+	res.Header().Set("Content-Type", "application/json")
+	if w.mongo == nil {
+		errReply(res, fmt.Errorf("Receipt store not enabled"), 405)
+		return
+	}
+
+	id := params.ByName("id")
+	query := w.mongo.Find(bson.M{"_id": id})
+	result := make(map[string]interface{})
+	if err := query.One(result); err == mgo.ErrNotFound {
+		errReply(res, fmt.Errorf("Reply not found"), 404)
+		log.Infof("GET /reply/%s: Reply not found", id)
+		return
+	} else if err != nil {
+		log.Errorf("GET /reply/%s: Error querying reply: %s", id, err)
+		errReply(res, fmt.Errorf("Error querying reply"), 500)
+		return
+	} else {
+		log.Infof("GET /reply/%s: Reply found", id)
+	}
+
+	// Serialize and return
+	resBytes, err := json.Marshal(result)
+	if err != nil {
+		log.Errorf("Error serializing receipts: %s", err)
+		errReply(res, fmt.Errorf("Error serializing receipts"), 500)
+		return
+	}
+	res.WriteHeader(200)
+	res.Write(resBytes)
+
 }

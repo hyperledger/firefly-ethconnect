@@ -33,6 +33,7 @@ deps:
 		$(GOGET) github.com/icza/dyno
 		$(GOGET) gopkg.in/yaml.v2
 		$(GOGET) github.com/globalsign/mgo
+		$(GOGET) github.com/julienschmidt/httprouter
 
 build-linux:
 		GOOS=linux GOARCH=amd64 $(GOBUILD) -o $(BINARY_UNIX) -v

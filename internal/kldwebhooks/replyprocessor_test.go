@@ -17,10 +17,12 @@ package kldwebhooks
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/globalsign/mgo"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
@@ -41,10 +43,12 @@ func (m *mockMongo) GetCollection(database string, collection string) MongoColle
 }
 
 type mockCollection struct {
-	inserted  map[string]interface{}
-	insertErr error
-	collInfo  *mgo.CollectionInfo
-	collErr   error
+	inserted       map[string]interface{}
+	insertErr      error
+	collInfo       *mgo.CollectionInfo
+	collErr        error
+	ensureIndexErr error
+	mockQuery      mockQuery
 }
 
 func (m *mockCollection) Insert(payloads ...interface{}) error {
@@ -55,6 +59,50 @@ func (m *mockCollection) Insert(payloads ...interface{}) error {
 func (m *mockCollection) Create(info *mgo.CollectionInfo) error {
 	m.collInfo = info
 	return m.collErr
+}
+
+func (m *mockCollection) Find(query interface{}) MongoQuery {
+	return &m.mockQuery
+}
+
+func (m *mockCollection) EnsureIndex(index mgo.Index) error {
+	return m.ensureIndexErr
+}
+
+type mockQuery struct {
+	allErr        error
+	oneErr        error
+	resultWranger func(interface{})
+	limit         int
+	skip          int
+}
+
+func (m *mockQuery) Limit(n int) *mgo.Query {
+	m.limit = n
+	return nil
+}
+
+func (m *mockQuery) Skip(n int) *mgo.Query {
+	m.skip = n
+	return nil
+}
+
+func (m *mockQuery) Sort(fields ...string) *mgo.Query {
+	return nil
+}
+
+func (m *mockQuery) All(result interface{}) error {
+	if m.resultWranger != nil {
+		m.resultWranger(result)
+	}
+	return m.allErr
+}
+
+func (m *mockQuery) One(result interface{}) error {
+	if m.resultWranger != nil {
+		m.resultWranger(result)
+	}
+	return m.oneErr
 }
 
 func TestReplyProcessorWithValidReply(t *testing.T) {
@@ -192,4 +240,139 @@ func TestConnectMongoDBConnectCollectionExists(t *testing.T) {
 	w.conf.MongoDB.URL = "mongodb://localhost:27017"
 	err := w.connectMongoDB(mockMongo)
 	assert.Nil(err)
+}
+
+func TestConnectMongoDBIndexCreationFailure(t *testing.T) {
+	assert := assert.New(t)
+	w := NewWebhooksBridge()
+	mockMongo := &mockMongo{}
+	mockMongo.collection.ensureIndexErr = fmt.Errorf("crack")
+	w.conf.MongoDB.URL = "mongodb://localhost:27017"
+	err := w.connectMongoDB(mockMongo)
+	assert.Regexp("Unable to create index: crack", err.Error())
+}
+
+func testReplyCall(assert *assert.Assertions, coll MongoCollection, url string) (resp *http.Response) {
+	k := newTestKafkaComon()
+	w, _ := startTestWebhooks([]string{}, k)
+	w.mongo = coll
+	resp, httpErr := http.Get(url)
+	if httpErr != nil {
+		log.Errorf("HTTP error for %s: %+v", url, httpErr)
+	}
+	assert.Nil(httpErr)
+	k.stop <- true
+	return resp
+}
+
+func TestGetReplyNoStore(t *testing.T) {
+	assert := assert.New(t)
+	var nilMongo MongoCollection
+	resp := testReplyCall(assert, nilMongo, "http://localhost:8080/reply/ABCDEFG")
+	assert.Equal(405, resp.StatusCode)
+}
+
+func TestGetReplyMissing(t *testing.T) {
+	assert := assert.New(t)
+	mockCol := &mockCollection{}
+	mockCol.mockQuery.oneErr = mgo.ErrNotFound
+	resp := testReplyCall(assert, mockCol, "http://localhost:8080/reply/ABCDEFG")
+	assert.Equal(404, resp.StatusCode)
+}
+
+func TestGetReplyError(t *testing.T) {
+	assert := assert.New(t)
+	mockCol := &mockCollection{}
+	mockCol.mockQuery.oneErr = fmt.Errorf("pop")
+	resp := testReplyCall(assert, mockCol, "http://localhost:8080/reply/ABCDEFG")
+	assert.Equal(500, resp.StatusCode)
+}
+
+func TestGetReplyOK(t *testing.T) {
+	assert := assert.New(t)
+	mockCol := &mockCollection{}
+	resp := testReplyCall(assert, mockCol, "http://localhost:8080/reply/ABCDEFG")
+	assert.Equal(200, resp.StatusCode)
+}
+
+func TestGetReplyUnSerializable(t *testing.T) {
+	assert := assert.New(t)
+	mockCol := &mockCollection{}
+	mockCol.mockQuery.resultWranger = func(result interface{}) {
+		unserializable := make(map[bool]interface{})
+		unserializable[false] = "going to happen"
+		result.(map[string]interface{})["key"] = unserializable
+	}
+	resp := testReplyCall(assert, mockCol, "http://localhost:8080/reply/ABCDEFG")
+	assert.Equal(500, resp.StatusCode)
+}
+
+func TestGetRepliesNoStore(t *testing.T) {
+	assert := assert.New(t)
+	var nilMongo MongoCollection
+	resp := testReplyCall(assert, nilMongo, "http://localhost:8080/replies")
+	assert.Equal(405, resp.StatusCode)
+}
+
+func TestGetRepliesMissing(t *testing.T) {
+	assert := assert.New(t)
+	mockCol := &mockCollection{}
+	mockCol.mockQuery.allErr = mgo.ErrNotFound
+	resp := testReplyCall(assert, mockCol, "http://localhost:8080/replies")
+	assert.Equal(404, resp.StatusCode)
+}
+
+func TestGetRepliesError(t *testing.T) {
+	assert := assert.New(t)
+	mockCol := &mockCollection{}
+	mockCol.mockQuery.allErr = fmt.Errorf("pop")
+	resp := testReplyCall(assert, mockCol, "http://localhost:8080/replies")
+	assert.Equal(500, resp.StatusCode)
+}
+
+func TestGetRepliesUnSerializable(t *testing.T) {
+	assert := assert.New(t)
+	mockCol := &mockCollection{}
+	mockCol.mockQuery.resultWranger = func(result interface{}) {
+		unserializable := make(map[interface{}]interface{})
+		unserializable[false] = "going to happen"
+		result.([]map[string]interface{})[0] = make(map[string]interface{})
+		result.([]map[string]interface{})[0]["key"] = unserializable
+	}
+	resp := testReplyCall(assert, mockCol, "http://localhost:8080/replies")
+	assert.Equal(500, resp.StatusCode)
+}
+
+func TestGetRepliesDefaultLimit(t *testing.T) {
+	assert := assert.New(t)
+	mockCol := &mockCollection{}
+	resp := testReplyCall(assert, mockCol, "http://localhost:8080/replies")
+	assert.Equal(200, resp.StatusCode)
+}
+
+func TestGetRepliesCustomSkipLimit(t *testing.T) {
+	assert := assert.New(t)
+	mockCol := &mockCollection{}
+	resp := testReplyCall(assert, mockCol, "http://localhost:8080/replies?limit=50&skip=10")
+	assert.Equal(50, mockCol.mockQuery.limit)
+	assert.Equal(10, mockCol.mockQuery.skip)
+	assert.Equal(200, resp.StatusCode)
+}
+
+func TestGetRepliesInvalidSkipLimit(t *testing.T) {
+	assert := assert.New(t)
+	mockCol := &mockCollection{}
+	resp := testReplyCall(assert, mockCol, "http://localhost:8080/replies?limit=bad&skip=ness")
+	assert.Equal(10, mockCol.mockQuery.limit)
+	assert.Equal(0, mockCol.mockQuery.skip)
+	assert.Equal(200, resp.StatusCode)
+}
+
+func TestGetRepliesExcessiveLimit(t *testing.T) {
+	assert := assert.New(t)
+	mockCol := &mockCollection{}
+	resp := testReplyCall(assert, mockCol, "http://localhost:8080/replies?limit=1000")
+	assert.Equal(100, mockCol.mockQuery.limit)
+	assert.Equal(0, mockCol.mockQuery.skip)
+	assert.Equal(200, resp.StatusCode)
 }

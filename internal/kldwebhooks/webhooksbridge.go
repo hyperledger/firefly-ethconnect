@@ -30,6 +30,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/icza/dyno"
+	"github.com/julienschmidt/httprouter"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
@@ -52,6 +53,7 @@ type WebhooksBridgeConf struct {
 		Database   string `json:"database"`
 		Collection string `json:"collection"`
 		MaxDocs    int    `json:"maxDocs"`
+		QueryLimit int    `json:"queryLimit"`
 	} `json:"mongodb"`
 	HTTP struct {
 		LocalAddr string             `json:"localAddr"`
@@ -87,6 +89,9 @@ func (w *WebhooksBridge) ValidateConf() (err error) {
 	if !kldutils.AllOrNoneReqd(w.conf.MongoDB.URL, w.conf.MongoDB.Database, w.conf.MongoDB.Collection) {
 		err = fmt.Errorf("MongoDB URL, Database and Collection name must be specified to enable the receipt store")
 		return
+	}
+	if w.conf.MongoDB.QueryLimit < 1 {
+		w.conf.MongoDB.QueryLimit = 100
 	}
 	return
 }
@@ -134,6 +139,7 @@ func (w *WebhooksBridge) CobraInit() (cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&w.conf.MongoDB.Database, "mongodb-database", "d", os.Getenv("MONGODB_DATABASE"), "MongoDB receipt store database")
 	cmd.Flags().StringVarP(&w.conf.MongoDB.Collection, "mongodb-receipt-collection", "r", os.Getenv("MONGODB_COLLECTION"), "MongoDB receipt store collection")
 	cmd.Flags().IntVarP(&w.conf.MongoDB.MaxDocs, "mongodb-receipt-maxdocs", "x", kldutils.DefInt("MONGODB_MAXDOCS", 0), "Receipt store capped size (new collections only)")
+	cmd.Flags().IntVarP(&w.conf.MongoDB.QueryLimit, "mongodb-query-limit", "q", kldutils.DefInt("MONGODB_MAXDOCS", 0), "Maximum docs to return on a rest call (cap on limit)")
 	return
 }
 
@@ -247,11 +253,11 @@ func msgSentReply(res http.ResponseWriter, ack bool, msg *sarama.ProducerMessage
 	return
 }
 
-func (w *WebhooksBridge) webhookHandlerWithAck(res http.ResponseWriter, req *http.Request) {
+func (w *WebhooksBridge) webhookHandlerWithAck(res http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	w.webhookHandler(res, req, true)
 }
 
-func (w *WebhooksBridge) webhookHandlerNoAck(res http.ResponseWriter, req *http.Request) {
+func (w *WebhooksBridge) webhookHandlerNoAck(res http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	w.webhookHandler(res, req, false)
 }
 
@@ -352,18 +358,21 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 	}
 }
 
-func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Request) {
+func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	okReply(res)
 }
 
 // Start kicks off the HTTP and Kafka listeners
 func (w *WebhooksBridge) Start() (err error) {
 
-	mux := http.NewServeMux()
-	mux.Handle("/", http.HandlerFunc(w.webhookHandlerNoAck)) // Default on base URL
-	mux.Handle("/hook", http.HandlerFunc(w.webhookHandlerWithAck))
-	mux.Handle("/fasthook", http.HandlerFunc(w.webhookHandlerNoAck))
-	mux.Handle("/status", http.HandlerFunc(w.statusHandler))
+	router := httprouter.New()
+	router.POST("/", w.webhookHandlerNoAck) // Default on base URL
+	router.POST("/hook", w.webhookHandlerWithAck)
+	router.POST("/fasthook", w.webhookHandlerNoAck)
+	router.GET("/status", w.statusHandler)
+	router.GET("/replies", w.getReplies)
+	router.GET("/replies/:id", w.getReply)
+	router.GET("/reply/:id", w.getReply)
 
 	tlsConfig, err := kldutils.CreateTLSConfiguration(&w.conf.HTTP.TLS)
 	if err != nil {
@@ -377,7 +386,7 @@ func (w *WebhooksBridge) Start() (err error) {
 	w.srv = &http.Server{
 		Addr:           fmt.Sprintf("%s:%d", w.conf.HTTP.LocalAddr, w.conf.HTTP.Port),
 		TLSConfig:      tlsConfig,
-		Handler:        mux,
+		Handler:        router,
 		MaxHeaderBytes: MaxHeaderSize,
 	}
 

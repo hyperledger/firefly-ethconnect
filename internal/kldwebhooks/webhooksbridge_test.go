@@ -302,7 +302,6 @@ func sendTestTransaction(assert *assert.Assertions, msgBytes []byte, contentType
 }
 
 func TestWebhookHandlerJSONSendTransaction(t *testing.T) {
-
 	assert := assert.New(t)
 
 	msg := kldmessages.SendTransaction{}
@@ -376,10 +375,13 @@ func TestProducerErrorLoopPanicsOnBadErrStructure(t *testing.T) {
 	}()
 
 	wg := &sync.WaitGroup{}
+	wg.Add(1)
 	assert.Panics(func() {
+		defer wg.Done()
 		w.ProducerErrorLoop(k.kafkaFactory.Consumer, k.kafkaFactory.Producer, wg)
 	})
 
+	wg.Wait()
 	k.stop <- true
 }
 
@@ -397,10 +399,13 @@ func TestProducerErrorLoopPanicsOnBadMsgStructure(t *testing.T) {
 	}()
 
 	wg := &sync.WaitGroup{}
+	wg.Add(1)
 	assert.Panics(func() {
+		defer wg.Done()
 		w.ProducerSuccessLoop(k.kafkaFactory.Consumer, k.kafkaFactory.Producer, wg)
 	})
 
+	wg.Wait()
 	k.stop <- true
 }
 

@@ -16,17 +16,60 @@ package kldwebhooks
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"sync"
 
+	"github.com/globalsign/mgo"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
 )
 
+// MongoDatabase is a subset of mgo that we use, allowing stubbing
+type MongoDatabase interface {
+	Connect(url string) error
+	GetCollection(database string, collection string) MongoCollection
+}
+
+type mgoWrapper struct {
+	session *mgo.Session
+}
+
+func (m *mgoWrapper) Connect(url string) (err error) {
+	m.session, err = mgo.Dial(url)
+	return
+}
+
+func (m *mgoWrapper) GetCollection(database string, collection string) MongoCollection {
+	return m.session.DB(database).C(collection)
+}
+
 // MongoCollection is the subset of mgo that we use, allowing stubbing
 type MongoCollection interface {
 	Insert(...interface{}) error
+	Create(info *mgo.CollectionInfo) error
+}
+
+func (w *WebhooksBridge) connectMongoDB(mongo MongoDatabase) (err error) {
+	if w.conf.MongoDB.URL == "" {
+		log.Debugf("No MongoDB URL configured. Receipt store disabled")
+		return
+	}
+	err = mongo.Connect(w.conf.MongoDB.URL)
+	if err != nil {
+		err = fmt.Errorf("Unable to connect to MongoDB: %s", err)
+		return
+	}
+	w.mongo = mongo.GetCollection(w.conf.MongoDB.Database, w.conf.MongoDB.Collection)
+	if collErr := w.mongo.Create(&mgo.CollectionInfo{
+		Capped:  (w.conf.MongoDB.MaxDocs > 0),
+		MaxDocs: w.conf.MongoDB.MaxDocs,
+	}); collErr != nil {
+		log.Infof("MongoDB collection exists: %s", err)
+	}
+	log.Infof("Connected to MongoDB on %s DB=%s Collection=%s", w.conf.MongoDB.URL, w.conf.MongoDB.Database, w.conf.MongoDB.Collection)
+	return
 }
 
 // getString is a helper to safely extract strings from generic interface maps

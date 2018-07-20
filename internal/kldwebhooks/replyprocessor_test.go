@@ -20,20 +20,41 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/globalsign/mgo"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 )
 
+type mockMongo struct {
+	connErr    error
+	collection mockCollection
+}
+
+func (m *mockMongo) Connect(url string) (err error) {
+	return m.connErr
+}
+
+func (m *mockMongo) GetCollection(database string, collection string) MongoCollection {
+	return &m.collection
+}
+
 type mockCollection struct {
 	inserted  map[string]interface{}
 	insertErr error
+	collInfo  *mgo.CollectionInfo
+	collErr   error
 }
 
 func (m *mockCollection) Insert(payloads ...interface{}) error {
 	m.inserted = payloads[0].(map[string]interface{})
 	return m.insertErr
+}
+
+func (m *mockCollection) Create(info *mgo.CollectionInfo) error {
+	m.collInfo = info
+	return m.collErr
 }
 
 func TestReplyProcessorWithValidReply(t *testing.T) {
@@ -130,4 +151,45 @@ func TestReplyProcessorInsertError(t *testing.T) {
 
 	assert.NotNil(mockCollection.inserted)
 
+}
+
+func TestConnectMongoDBConnectFailure(t *testing.T) {
+	assert := assert.New(t)
+	w := NewWebhooksBridge()
+	mockMongo := &mockMongo{connErr: fmt.Errorf("bang")}
+	w.conf.MongoDB.URL = "mongodb://localhost:27017"
+	err := w.connectMongoDB(mockMongo)
+	assert.Regexp("Unable to connect to MongoDB: bang", err.Error())
+}
+
+func TestConnectMongoDBConnectCreateCollection(t *testing.T) {
+	assert := assert.New(t)
+	w := NewWebhooksBridge()
+	mockMongo := &mockMongo{}
+	w.conf.MongoDB.URL = "mongodb://localhost:27017"
+	err := w.connectMongoDB(mockMongo)
+	assert.Nil(err)
+	assert.False(mockMongo.collection.collInfo.Capped)
+}
+
+func TestConnectMongoDBConnectCreateCappedCollection(t *testing.T) {
+	assert := assert.New(t)
+	w := NewWebhooksBridge()
+	mockMongo := &mockMongo{}
+	w.conf.MongoDB.URL = "mongodb://localhost:27017"
+	w.conf.MongoDB.MaxDocs = 1000
+	err := w.connectMongoDB(mockMongo)
+	assert.Nil(err)
+	assert.True(mockMongo.collection.collInfo.Capped)
+	assert.Equal(1000, mockMongo.collection.collInfo.MaxDocs)
+}
+
+func TestConnectMongoDBConnectCollectionExists(t *testing.T) {
+	assert := assert.New(t)
+	w := NewWebhooksBridge()
+	mockMongo := &mockMongo{}
+	mockMongo.collection.collErr = fmt.Errorf("snap")
+	w.conf.MongoDB.URL = "mongodb://localhost:27017"
+	err := w.connectMongoDB(mockMongo)
+	assert.Nil(err)
 }

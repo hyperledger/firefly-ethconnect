@@ -29,7 +29,6 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/Shopify/sarama"
-	"github.com/globalsign/mgo"
 	"github.com/icza/dyno"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
@@ -52,6 +51,7 @@ type WebhooksBridgeConf struct {
 		URL        string `json:"url"`
 		Database   string `json:"database"`
 		Collection string `json:"collection"`
+		MaxDocs    int    `json:"maxDocs"`
 	} `json:"mongodb"`
 	HTTP struct {
 		LocalAddr string             `json:"localAddr"`
@@ -133,6 +133,7 @@ func (w *WebhooksBridge) CobraInit() (cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&w.conf.MongoDB.URL, "mongodb-url", "m", os.Getenv("MONGODB_URL"), "MongoDB URL for a receipt store")
 	cmd.Flags().StringVarP(&w.conf.MongoDB.Database, "mongodb-database", "d", os.Getenv("MONGODB_DATABASE"), "MongoDB receipt store database")
 	cmd.Flags().StringVarP(&w.conf.MongoDB.Collection, "mongodb-receipt-collection", "r", os.Getenv("MONGODB_COLLECTION"), "MongoDB receipt store collection")
+	cmd.Flags().IntVarP(&w.conf.MongoDB.MaxDocs, "mongodb-receipt-maxdocs", "x", kldutils.DefInt("MONGODB_MAXDOCS", 0), "Receipt store capped size (new collections only)")
 	return
 }
 
@@ -355,21 +356,6 @@ func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Reques
 	okReply(res)
 }
 
-func (w *WebhooksBridge) connectMongoDB() (err error) {
-	if w.conf.MongoDB.URL == "" {
-		log.Debugf("No MongoDB URL configured. Receipt store disabled")
-		return
-	}
-	session, err := mgo.Dial(w.conf.MongoDB.URL)
-	if err != nil {
-		err = fmt.Errorf("Unable to connect to MongoDB: %s", err)
-		return
-	}
-	w.mongo = session.DB(w.conf.MongoDB.Database).C(w.conf.MongoDB.Collection)
-	log.Infof("Connected to MongoDB on %s DB=%s Collection=%s", w.conf.MongoDB.URL, w.conf.MongoDB.Database, w.conf.MongoDB.Collection)
-	return
-}
-
 // Start kicks off the HTTP and Kafka listeners
 func (w *WebhooksBridge) Start() (err error) {
 
@@ -384,7 +370,7 @@ func (w *WebhooksBridge) Start() (err error) {
 		return
 	}
 
-	if err = w.connectMongoDB(); err != nil {
+	if err = w.connectMongoDB(&mgoWrapper{}); err != nil {
 		return
 	}
 

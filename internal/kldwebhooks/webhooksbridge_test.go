@@ -127,6 +127,7 @@ func startTestWebhooks(testArgs []string, kafka *testKafkaCommon) (*WebhooksBrid
 		if errI != nil {
 			err = errI.(error)
 		}
+		time.Sleep(50 * time.Millisecond)
 		log.Infof("Waiting for Webhook server to start (URL=%s Status=%d HTTPErr=%s Err=%s)", statusURL, status, httpErr, err)
 		if status != 200 {
 			time.Sleep(10 * time.Millisecond)

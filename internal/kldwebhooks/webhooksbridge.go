@@ -405,6 +405,7 @@ func (w *WebhooksBridge) Start() (err error) {
 	err = w.kafka.Start()
 
 	// Ensure we shutdown the server
+	log.Infof("Shutting down Webhooks server")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	w.srv.Shutdown(ctx)
 	defer cancel()

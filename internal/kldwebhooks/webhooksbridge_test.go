@@ -113,7 +113,7 @@ func startTestWebhooks(testArgs []string, kafka *testKafkaCommon) (*WebhooksBrid
 		lastPort++
 	}
 	cmd.SetArgs(testArgs)
-	webhookExecuteError.Store(errors.New("none")) // We can't store nil in the atomic Value
+	webhookExecuteError.Store(errors.New("none"))
 	go func() {
 		err := cmd.Execute()
 		log.Infof("Kafka webhooks completed. Err=%s", err)
@@ -123,21 +123,18 @@ func startTestWebhooks(testArgs []string, kafka *testKafkaCommon) (*WebhooksBrid
 	}()
 	status := -1
 	startTime := time.Now()
-	var err error
-	for status != 200 && err == nil && time.Now().Sub(startTime) < (4*time.Second) {
+	err := webhookExecuteError.Load().(error)
+	for status != 200 && err.Error() == "none" && time.Now().Sub(startTime) < (4*time.Second) {
 		time.Sleep(50 * time.Millisecond)
 		statusURL := fmt.Sprintf("http://localhost:%d/status", w.conf.HTTP.Port)
 		resp, httpErr := http.Get(statusURL)
 		if httpErr == nil {
 			status = resp.StatusCode
 		}
-		errI := webhookExecuteError.Load()
-		if errI != nil {
-			err = errI.(error)
-		}
+		err = webhookExecuteError.Load().(error)
 		log.Infof("Waiting for Webhook server to start (URL=%s Status=%d HTTPErr=%s Err=%s)", statusURL, status, httpErr, err)
 	}
-	if err != nil && err.Error() == "none" {
+	if err.Error() == "none" {
 		err = nil
 	}
 	return w, err

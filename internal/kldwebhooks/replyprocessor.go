@@ -63,7 +63,7 @@ type collWrapper struct {
 }
 
 func (m *collWrapper) Insert(docs ...interface{}) error {
-	return m.coll.Insert(docs)
+	return m.coll.Insert(docs...)
 }
 
 func (m *collWrapper) Create(info *mgo.CollectionInfo) error {
@@ -76,6 +76,17 @@ func (m *collWrapper) EnsureIndex(index mgo.Index) error {
 
 func (m *collWrapper) Find(query interface{}) MongoQuery {
 	return m.coll.Find(query)
+}
+
+type errMsg struct {
+	Message string `json:"error"`
+}
+
+func errReply(res http.ResponseWriter, err error, status int) {
+	reply, _ := json.Marshal(&errMsg{Message: err.Error()})
+	res.WriteHeader(status)
+	res.Write(reply)
+	return
 }
 
 // MongoQuery is the subset of mgo that we use, allowing stubbing
@@ -123,7 +134,6 @@ func (w *WebhooksBridge) connectMongoDB(mongo MongoDatabase) (err error) {
 
 // getString is a helper to safely extract strings from generic interface maps
 func getString(genericMap map[string]interface{}, key string) string {
-	log.Infof("genericMap: %+v", genericMap)
 	if val, exists := genericMap[key]; exists {
 		if reflect.TypeOf(val).Kind() == reflect.String {
 			return val.(string)
@@ -187,6 +197,18 @@ func (w *WebhooksBridge) ConsumerMessagesLoop(consumer kldkafka.KafkaConsumer, p
 	wg.Done()
 }
 
+func marshalAndReply(res http.ResponseWriter, result interface{}) {
+	// Serialize and return
+	resBytes, err := json.Marshal(result)
+	if err != nil {
+		log.Errorf("Error serializing receipts: %s", err)
+		errReply(res, fmt.Errorf("Error serializing receipts"), 500)
+		return
+	}
+	res.WriteHeader(200)
+	res.Write(resBytes)
+}
+
 // getReplies handles a HTTP request for recent replies
 func (w *WebhooksBridge) getReplies(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 
@@ -200,26 +222,31 @@ func (w *WebhooksBridge) getReplies(res http.ResponseWriter, req *http.Request, 
 	query := w.mongo.Find(bson.M{})
 	query.Sort("-receivedAt")
 	limit := 10 // default the limit
-	log.Debugf("GET /replies: limit=%s skip=%s", req.FormValue("limit"), req.FormValue("skip"))
-	if customLimit, err := strconv.ParseInt(req.FormValue("limit"), 10, 32); err == nil {
-		if int(customLimit) > w.conf.MongoDB.QueryLimit {
-			limit = w.conf.MongoDB.QueryLimit
-		} else if customLimit > 0 {
-			limit = int(customLimit)
+	limitStr := req.FormValue("limit")
+	if limitStr != "" {
+		if customLimit, err := strconv.ParseInt(limitStr, 10, 32); err == nil {
+			if int(customLimit) > w.conf.MongoDB.QueryLimit {
+				limit = w.conf.MongoDB.QueryLimit
+			} else if customLimit > 0 {
+				limit = int(customLimit)
+			}
+		} else {
+			log.Warnf("Ignoring invalid limit %s: %s", limitStr, err)
 		}
-	} else {
-		log.Warnf("Ignoring invalid limit %s: %s", req.FormValue("limit"), err)
 	}
 	query.Limit(limit)
-	if skip, err := strconv.ParseInt(req.FormValue("skip"), 10, 32); err == nil && skip > 0 {
-		query.Skip(int(skip))
-	} else {
-		log.Warnf("Ignoring invalid skip %s: %s", req.FormValue("skip"), err)
+	skipStr := req.FormValue("skip")
+	if skipStr != "" {
+		if skip, err := strconv.ParseInt(skipStr, 10, 32); err == nil && skip > 0 {
+			query.Skip(int(skip))
+		} else {
+			log.Warnf("Ignoring invalid skip %s: %s", skipStr, err)
+		}
 	}
 
 	// Perform the query
-	results := make([]map[string]interface{}, limit)
-	if err := query.All(results); err == mgo.ErrNotFound {
+	results := make([]map[string]interface{}, 0, limit)
+	if err := query.All(&results); err == mgo.ErrNotFound {
 		errReply(res, fmt.Errorf("No replies found"), 404)
 		log.Infof("GET /replies: No replies found")
 		return
@@ -228,18 +255,10 @@ func (w *WebhooksBridge) getReplies(res http.ResponseWriter, req *http.Request, 
 		errReply(res, fmt.Errorf("Error querying replies"), 500)
 		return
 	} else {
-		log.Infof("GET /replies: %d replies found", len(results))
+		log.Infof("GET /replies: %d replies returned", len(results))
 	}
 
-	// Serialize and return
-	resBytes, err := json.Marshal(results)
-	if err != nil {
-		log.Errorf("Error serializing replies: %s", err)
-		errReply(res, fmt.Errorf("Error serializing replies"), 500)
-		return
-	}
-	res.WriteHeader(200)
-	res.Write(resBytes)
+	marshalAndReply(res, results)
 
 }
 
@@ -255,7 +274,7 @@ func (w *WebhooksBridge) getReply(res http.ResponseWriter, req *http.Request, pa
 	id := params.ByName("id")
 	query := w.mongo.Find(bson.M{"_id": id})
 	result := make(map[string]interface{})
-	if err := query.One(result); err == mgo.ErrNotFound {
+	if err := query.One(&result); err == mgo.ErrNotFound {
 		errReply(res, fmt.Errorf("Reply not found"), 404)
 		log.Infof("GET /reply/%s: Reply not found", id)
 		return
@@ -267,14 +286,6 @@ func (w *WebhooksBridge) getReply(res http.ResponseWriter, req *http.Request, pa
 		log.Infof("GET /reply/%s: Reply found", id)
 	}
 
-	// Serialize and return
-	resBytes, err := json.Marshal(result)
-	if err != nil {
-		log.Errorf("Error serializing receipts: %s", err)
-		errReply(res, fmt.Errorf("Error serializing receipts"), 500)
-		return
-	}
-	res.WriteHeader(200)
-	res.Write(resBytes)
+	marshalAndReply(res, result)
 
 }

@@ -301,7 +301,7 @@ func TestGetReplyUnSerializable(t *testing.T) {
 	mockCol.mockQuery.resultWranger = func(result interface{}) {
 		unserializable := make(map[bool]interface{})
 		unserializable[false] = "going to happen"
-		result.(map[string]interface{})["key"] = unserializable
+		(*result.(*map[string]interface{}))["key"] = unserializable
 	}
 	resp := testReplyCall(assert, mockCol, "http://localhost:8080/reply/ABCDEFG")
 	assert.Equal(500, resp.StatusCode)
@@ -326,19 +326,6 @@ func TestGetRepliesError(t *testing.T) {
 	assert := assert.New(t)
 	mockCol := &mockCollection{}
 	mockCol.mockQuery.allErr = fmt.Errorf("pop")
-	resp := testReplyCall(assert, mockCol, "http://localhost:8080/replies")
-	assert.Equal(500, resp.StatusCode)
-}
-
-func TestGetRepliesUnSerializable(t *testing.T) {
-	assert := assert.New(t)
-	mockCol := &mockCollection{}
-	mockCol.mockQuery.resultWranger = func(result interface{}) {
-		unserializable := make(map[interface{}]interface{})
-		unserializable[false] = "going to happen"
-		result.([]map[string]interface{})[0] = make(map[string]interface{})
-		result.([]map[string]interface{})[0]["key"] = unserializable
-	}
 	resp := testReplyCall(assert, mockCol, "http://localhost:8080/replies")
 	assert.Equal(500, resp.StatusCode)
 }

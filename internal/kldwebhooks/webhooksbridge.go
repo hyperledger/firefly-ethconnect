@@ -207,13 +207,13 @@ func (w *WebhooksBridge) ProducerSuccessLoop(consumer kldkafka.KafkaConsumer, pr
 	wg.Done()
 }
 
-type errMsg struct {
+type hookErrMsg struct {
 	Sent    bool   `json:"sent"`
 	Message string `json:"error"`
 }
 
-func errReply(res http.ResponseWriter, err error, status int) {
-	reply, _ := json.Marshal(&errMsg{Message: err.Error()})
+func hookErrReply(res http.ResponseWriter, err error, status int) {
+	reply, _ := json.Marshal(&hookErrMsg{Message: err.Error()})
 	res.WriteHeader(status)
 	res.Write(reply)
 	return
@@ -264,12 +264,12 @@ func (w *WebhooksBridge) webhookHandlerNoAck(res http.ResponseWriter, req *http.
 func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Request, ack bool) {
 
 	if req.ContentLength > MaxPayloadSize {
-		errReply(res, fmt.Errorf("Message exceeds maximum allowable size"), 400)
+		hookErrReply(res, fmt.Errorf("Message exceeds maximum allowable size"), 400)
 		return
 	}
 	payloadToForward, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		errReply(res, fmt.Errorf("Unable to read input data: %s", err), 400)
+		hookErrReply(res, fmt.Errorf("Unable to read input data: %s", err), 400)
 		return
 	}
 
@@ -284,21 +284,21 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 		yamlGenericPayload := make(map[interface{}]interface{})
 		err := yaml.Unmarshal(payloadToForward, &yamlGenericPayload)
 		if err != nil {
-			errReply(res, fmt.Errorf("Unable to parse YAML: %s", err), 400)
+			hookErrReply(res, fmt.Errorf("Unable to parse YAML: %s", err), 400)
 			return
 		}
 		genericPayload = dyno.ConvertMapI2MapS(yamlGenericPayload).(map[string]interface{})
 		// Reseialize back to JSON
 		payloadToForward, err = json.Marshal(&genericPayload)
 		if err != nil {
-			errReply(res, fmt.Errorf("Unable to reserialize YAML payload as JSON: %s", err), 500)
+			hookErrReply(res, fmt.Errorf("Unable to reserialize YAML payload as JSON: %s", err), 500)
 			return
 		}
 	} else {
 		genericPayload = make(map[string]interface{})
 		err := json.Unmarshal(payloadToForward, &genericPayload)
 		if err != nil {
-			errReply(res, fmt.Errorf("Unable to parse JSON: %s", err), 400)
+			hookErrReply(res, fmt.Errorf("Unable to parse JSON: %s", err), 400)
 			return
 		}
 	}
@@ -307,12 +307,12 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 	// The rest of the validation is performed by the bridge listening to Kafka
 	headers, exists := genericPayload["headers"]
 	if !exists || reflect.TypeOf(headers).Kind() != reflect.Map {
-		errReply(res, fmt.Errorf("Invalid message - missing 'headers' (or not an object)"), 400)
+		hookErrReply(res, fmt.Errorf("Invalid message - missing 'headers' (or not an object)"), 400)
 		return
 	}
 	msgType, exists := headers.(map[string]interface{})["type"]
 	if !exists || reflect.TypeOf(msgType).Kind() != reflect.String {
-		errReply(res, fmt.Errorf("Invalid message - missing 'headers.type' (or not a string)"), 400)
+		hookErrReply(res, fmt.Errorf("Invalid message - missing 'headers.type' (or not a string)"), 400)
 		return
 	}
 	var key string
@@ -320,13 +320,13 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 	case kldmessages.MsgTypeDeployContract, kldmessages.MsgTypeSendTransaction:
 		from, exists := genericPayload["from"]
 		if !exists || reflect.TypeOf(from).Kind() != reflect.String {
-			errReply(res, fmt.Errorf("Invalid message - missing 'from' (or not a string)"), 400)
+			hookErrReply(res, fmt.Errorf("Invalid message - missing 'from' (or not a string)"), 400)
 			return
 		}
 		key = from.(string)
 		break
 	default:
-		errReply(res, fmt.Errorf("Invalid message type: %s", msgType), 400)
+		hookErrReply(res, fmt.Errorf("Invalid message type: %s", msgType), 400)
 		return
 	}
 
@@ -349,7 +349,7 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 	if ack {
 		successMsg, err := w.waitForSend(msgID)
 		if err != nil {
-			errReply(res, fmt.Errorf("Failed to deliver message to Kafka: %s", err), 502)
+			hookErrReply(res, fmt.Errorf("Failed to deliver message to Kafka: %s", err), 502)
 			return
 		}
 		msgSentReply(res, ack, successMsg)

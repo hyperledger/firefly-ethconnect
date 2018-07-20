@@ -249,8 +249,8 @@ func TestSingleMessageWithReply(t *testing.T) {
 	}
 	assert.NotEmpty(replySent.Headers.ID)
 	assert.NotEqual(msgContext1.Headers().ID, replySent.Headers.ID)
-	assert.Equal(msgContext1.Headers().ID, replySent.Headers.OrigID)
-	assert.Equal("in-topic:5:500", replySent.Headers.OrigMsg)
+	assert.Equal(msgContext1.Headers().ID, replySent.Headers.ReqID)
+	assert.Equal("in-topic:5:500", replySent.Headers.ReqOffset)
 	assert.Equal("data", replySent.Headers.Context.(map[string]interface{})["some"])
 
 	// Shut down

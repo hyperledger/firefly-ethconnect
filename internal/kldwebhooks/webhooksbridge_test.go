@@ -115,8 +115,9 @@ func startTestWebhooks(testArgs []string, kafka *testKafkaCommon) (*WebhooksBrid
 		}
 	}()
 	status := -1
+	startTime := time.Now()
 	var err error
-	for (err == nil || err.Error() == "none") && status != 200 {
+	for status != 200 && time.Now().Sub(startTime) < (4*time.Second) {
 		statusURL := fmt.Sprintf("http://localhost:%d/status", w.conf.HTTP.Port)
 		resp, httpErr := http.Get(statusURL)
 		if httpErr == nil {

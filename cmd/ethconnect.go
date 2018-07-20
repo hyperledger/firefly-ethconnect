@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"reflect"
 	"strings"
-	"sync"
 
 	"gopkg.in/yaml.v2"
 
@@ -135,38 +135,42 @@ func startServer() (err error) {
 		return
 	}
 
-	var wg sync.WaitGroup
+	var doneCases []reflect.SelectCase
+	var bridges []string
 	for name, conf := range serverConfig.KafkaBridges {
+		bridges = append(bridges, name)
 		kafkaBridge := kldkafka.NewKafkaBridge()
 		kafkaBridge.SetConf(conf)
 		if err := kafkaBridge.ValidateConf(); err != nil {
 			return err
 		}
-		wg.Add(1)
+		doneCases = append(doneCases, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(kafkaBridge.Done)})
 		go func(name string) {
 			log.Infof("Starting Kafka->Ethereum bridge '%s'", name)
 			if err := kafkaBridge.Start(); err != nil {
 				log.Errorf("Kafka->Ethereum bridge failed: %s", err)
 			}
-			wg.Done()
 		}(name)
 	}
 	for name, conf := range serverConfig.WebhooksBridges {
+		bridges = append(bridges, name)
 		webhooksBridge := kldwebhooks.NewWebhooksBridge()
 		webhooksBridge.SetConf(conf)
 		if err := webhooksBridge.ValidateConf(); err != nil {
 			return err
 		}
-		wg.Add(1)
+		doneCases = append(doneCases, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(webhooksBridge.Done)})
 		go func(name string) {
 			log.Infof("Starting Webhooks->Kafka bridge '%s'", name)
 			if err := webhooksBridge.Start(); err != nil {
 				log.Errorf("Webhooks->Kafka bridge failed: %s", err)
 			}
-			wg.Done()
 		}(name)
 	}
-	wg.Wait()
+
+	// Terminate all on the first
+	log.Infof("Waiting for any bridge to complete: %s", bridges)
+	reflect.Select(doneCases)
 
 	return
 }

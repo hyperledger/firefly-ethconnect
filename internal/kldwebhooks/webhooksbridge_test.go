@@ -61,6 +61,10 @@ func (k *testKafkaCommon) Start() error {
 	return k.startErr
 }
 
+func (k *testKafkaCommon) Stop() {
+	k.stop <- true
+}
+
 func (k *testKafkaCommon) CobraInit(cmd *cobra.Command) {
 	k.cobraInitCalled = true
 }
@@ -168,7 +172,7 @@ func TestStartStopDefaultArgs(t *testing.T) {
 	assert.Equal(port, w.conf.HTTP.Port)    // default
 	assert.Equal("", w.conf.HTTP.LocalAddr) // default
 
-	k.stop <- true
+	w.Stop()
 }
 
 func TestStartStopCustomArgs(t *testing.T) {
@@ -182,7 +186,7 @@ func TestStartStopCustomArgs(t *testing.T) {
 	assert.Equal("127.0.0.1", w.conf.HTTP.LocalAddr)
 	assert.Equal("127.0.0.1:8081", w.srv.Addr)
 
-	k.stop <- true
+	w.Stop()
 }
 
 func TestStartStopKafkaInitDelay(t *testing.T) {
@@ -190,10 +194,10 @@ func TestStartStopKafkaInitDelay(t *testing.T) {
 
 	k := newTestKafkaComon()
 	k.kafkaInitDelay = 500
-	_, err := startTestWebhooks(nil, k)
+	w, err := startTestWebhooks(nil, k)
 	assert.Nil(err)
 
-	k.stop <- true
+	w.Stop()
 }
 
 func TestStartStopKafkaPreRunError(t *testing.T) {
@@ -307,7 +311,7 @@ func sendTestTransaction(assert *assert.Assertions, msgBytes []byte, contentType
 	}
 	assert.Nil(httpErr)
 
-	k.stop <- true
+	w.Stop()
 	wg.Wait()
 
 	return resp, msgs
@@ -394,7 +398,7 @@ func TestProducerErrorLoopPanicsOnBadErrStructure(t *testing.T) {
 	})
 
 	wg.Wait()
-	k.stop <- true
+	w.Stop()
 }
 
 func TestProducerErrorLoopPanicsOnBadMsgStructure(t *testing.T) {
@@ -418,7 +422,7 @@ func TestProducerErrorLoopPanicsOnBadMsgStructure(t *testing.T) {
 	})
 
 	wg.Wait()
-	k.stop <- true
+	w.Stop()
 }
 
 func TestWebhookHandlerJSONDeployContract(t *testing.T) {
@@ -578,7 +582,7 @@ func TestConsumerMessagesLoopCallsReplyProcessorWithEmptyPayload(t *testing.T) {
 		Value: []byte(""),
 	}
 
-	k.stop <- true
+	w.Stop()
 	wg.Wait()
 
 }

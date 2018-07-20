@@ -51,6 +51,7 @@ type KafkaCommon interface {
 	ValidateConf() error
 	CobraInit(cmd *cobra.Command)
 	Start() error
+	Stop()
 	Conf() *KafkaCommonConf
 	Producer() KafkaProducer
 }
@@ -237,6 +238,11 @@ func (k *kafkaCommon) startConsumer() (err error) {
 
 	log.Infof("Kafka Created consumer")
 	return
+}
+
+// Stop stops it
+func (k *kafkaCommon) Stop() {
+	k.signals <- os.Interrupt
 }
 
 // Start kicks off the bridge

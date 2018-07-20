@@ -46,6 +46,10 @@ func (k *testKafkaCommon) Start() error {
 	return k.startErr
 }
 
+func (k *testKafkaCommon) Stop() {
+	return
+}
+
 func (k *testKafkaCommon) CobraInit(cmd *cobra.Command) {
 	k.cobraInitCalled = true
 }
@@ -107,6 +111,20 @@ func newTestKafkaBridge() (k *KafkaBridge, kafkaCmd *cobra.Command) {
 	kafkaCmd = k.CobraInit()
 	return k, kafkaCmd
 }
+
+func execAndWait(k *KafkaBridge, kafkaCmd *cobra.Command) (err error) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		err = kafkaCmd.Execute()
+		log.Infof("KafkaCmd completed")
+		wg.Done()
+	}()
+	<-k.Done
+	wg.Wait()
+	return
+}
+
 func TestExecuteBridgeWithIncompleteArgs(t *testing.T) {
 	assert := assert.New(t)
 
@@ -120,7 +138,7 @@ func TestExecuteBridgeWithIncompleteArgs(t *testing.T) {
 
 	testArgs = append(testArgs, []string{"--tx-timeout", "1"}...)
 	kafkaCmd.SetArgs(testArgs)
-	err = kafkaCmd.Execute()
+	execAndWait(k, kafkaCmd)
 	// Bumped up to minimum
 	assert.Equal(10, k.conf.MaxTXWaitTime)
 }
@@ -145,7 +163,7 @@ func TestDefIntWithBadEnvVar(t *testing.T) {
 
 	k, kafkaCmd := newTestKafkaBridge()
 	kafkaCmd.SetArgs(kbMinWorkingArgs)
-	err := kafkaCmd.Execute()
+	err := execAndWait(k, kafkaCmd)
 
 	assert.Nil(err)
 	assert.Equal(10, k.conf.MaxInFlight)
@@ -159,7 +177,7 @@ func TestDefIntWithGoodEnvVar(t *testing.T) {
 
 	k, kafkaCmd := newTestKafkaBridge()
 	kafkaCmd.SetArgs(kbMinWorkingArgs)
-	err := kafkaCmd.Execute()
+	err := execAndWait(k, kafkaCmd)
 
 	assert.Nil(err)
 	assert.Equal(123, k.conf.MaxInFlight)
@@ -169,9 +187,9 @@ func TestExecuteWithBadRPCURL(t *testing.T) {
 	assert := assert.New(t)
 
 	args := []string{"-r", "!!!bad!!!"}
-	_, kafkaCmd := newTestKafkaBridge()
+	k, kafkaCmd := newTestKafkaBridge()
 	kafkaCmd.SetArgs(args)
-	err := kafkaCmd.Execute()
+	err := execAndWait(k, kafkaCmd)
 
 	assert.Regexp("connect", err.Error())
 

@@ -19,7 +19,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"sync"
 	"syscall"
 	"testing"
@@ -102,7 +101,7 @@ func startTestKafkaCommon(assert *assert.Assertions, testArgs []string, f *MockK
 func execKafkaCommonWithArgs(assert *assert.Assertions, testArgs []string, f *MockKafkaFactory) (k *kafkaCommon, err error) {
 	k, wg, err := startTestKafkaCommon(assert, testArgs, f)
 	if err == nil {
-		k.signals <- os.Interrupt
+		k.Stop()
 	}
 	wg.Wait()
 	return
@@ -357,7 +356,7 @@ func TestConsumerErrorLoopLogsAndContinues(t *testing.T) {
 	f.Consumer.MockErrors <- fmt.Errorf("fizzle")
 
 	// Shut down
-	k.signals <- os.Interrupt
+	k.Stop()
 	wg.Wait()
 }
 
@@ -373,6 +372,6 @@ func TestConsumerNotificationsLoop(t *testing.T) {
 	f.Consumer.MockNotifications <- &cluster.Notification{}
 
 	// Shut down
-	k.signals <- os.Interrupt
+	k.Stop()
 	wg.Wait()
 }

@@ -64,6 +64,7 @@ type WebhooksBridgeConf struct {
 
 // WebhooksBridge receives messages over HTTP POST and sends them to Kafka
 type WebhooksBridge struct {
+	Done        chan bool
 	conf        WebhooksBridgeConf
 	kafka       kldkafka.KafkaCommon
 	srv         *http.Server
@@ -103,6 +104,7 @@ func NewWebhooksBridge() (w *WebhooksBridge) {
 		pendingMsgs: make(map[string]bool),
 		successMsgs: make(map[string]*sarama.ProducerMessage),
 		failedMsgs:  make(map[string]error),
+		Done:        make(chan bool),
 	}
 	kf := &kldkafka.SaramaKafkaFactory{}
 	w.kafka = kldkafka.NewKafkaCommon(kf, &w.conf.Kafka, w)
@@ -364,6 +366,9 @@ func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Reques
 
 // Start kicks off the HTTP and Kafka listeners
 func (w *WebhooksBridge) Start() (err error) {
+	defer func() {
+		w.Done <- true
+	}()
 
 	router := httprouter.New()
 	router.POST("/", w.webhookHandlerNoAck) // Default on base URL
@@ -419,4 +424,9 @@ func (w *WebhooksBridge) Start() (err error) {
 	running = false
 	wg.Wait()
 	return
+}
+
+// Stop stops it
+func (w *WebhooksBridge) Stop() {
+	w.kafka.Stop()
 }

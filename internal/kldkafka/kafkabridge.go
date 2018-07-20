@@ -42,6 +42,7 @@ type KafkaBridgeConf struct {
 
 // KafkaBridge receives messages from Kafka and dispatches them to go-ethereum over JSON/RPC
 type KafkaBridge struct {
+	Done         chan bool
 	conf         KafkaBridgeConf
 	kafka        KafkaCommon
 	rpc          *rpc.Client
@@ -302,6 +303,7 @@ func (c msgContext) Encode() ([]byte, error) {
 func NewKafkaBridge() *KafkaBridge {
 	mp := newMsgProcessor()
 	k := &KafkaBridge{
+		Done:         make(chan bool),
 		processor:    mp,
 		inFlight:     make(map[string]*msgContext),
 		inFlightCond: sync.NewCond(&sync.Mutex{}),
@@ -397,6 +399,11 @@ func (k *KafkaBridge) connect() (err error) {
 
 // Start kicks off the bridge
 func (k *KafkaBridge) Start() (err error) {
+	log.Infof("Kafka bridge starting")
+	defer func() {
+		log.Infof("Kafka bridge complete")
+		k.Done <- true
+	}()
 
 	// Connect the RPC URL
 	if err = k.connect(); err != nil {
@@ -406,4 +413,9 @@ func (k *KafkaBridge) Start() (err error) {
 	// Defer to KafkaCommon processing
 	err = k.kafka.Start()
 	return
+}
+
+// Stop stops the bridge
+func (k *KafkaBridge) Stop() {
+	k.kafka.Stop()
 }

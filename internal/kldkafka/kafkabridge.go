@@ -121,7 +121,7 @@ type msgContext struct {
 	timeReceived   time.Time
 	producer       KafkaProducer
 	requestCommon  kldmessages.RequestCommon
-	origMsg        string
+	reqOffset      string
 	saramaMsg      *sarama.ConsumerMessage
 	key            string
 	bridge         *KafkaBridge
@@ -139,7 +139,7 @@ type msgContext struct {
 func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage, producer KafkaProducer) (pCtx *msgContext, err error) {
 	ctx := msgContext{
 		timeReceived: time.Now(),
-		origMsg:      fmt.Sprintf("%s:%d:%d", msg.Topic, msg.Partition, msg.Offset),
+		reqOffset:    fmt.Sprintf("%s:%d:%d", msg.Topic, msg.Partition, msg.Offset),
 		saramaMsg:    msg,
 		bridge:       k,
 		producer:     producer,
@@ -147,7 +147,7 @@ func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage, producer Kafka
 	// If the mesage is already in our inflight map, we've got a redelivery from Kafka.
 	// We ignore it, as we'll already do the ack.
 	var alreadyInflight bool
-	if pCtx, alreadyInflight = k.inFlight[ctx.origMsg]; alreadyInflight {
+	if pCtx, alreadyInflight = k.inFlight[ctx.reqOffset]; alreadyInflight {
 		log.Infof("Message already in-flight: %s", pCtx)
 		// Return nil to idicate to caller not to duplicate process
 		return nil, nil
@@ -157,7 +157,7 @@ func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage, producer Kafka
 	// Messages are only removed from the inflight map when a response is sent, so it
 	// is very important that the consumer of the wrapped context object calls Reply
 	pCtx = &ctx
-	k.inFlight[ctx.origMsg] = pCtx
+	k.inFlight[ctx.reqOffset] = pCtx
 	log.Infof("Message now in-flight: %s", pCtx)
 	// Attempt to process the headers from the original message,
 	// which could fail. In which case we still have a msgContext inflight
@@ -225,7 +225,7 @@ func (k *KafkaBridge) setInFlightComplete(ctx *msgContext, consumer KafkaConsume
 	if canMark {
 		// Remove all the ready-to-acks from the in-flight list
 		for i := 0; i < len(readyToAck); i++ {
-			delete(k.inFlight, readyToAck[i].origMsg)
+			delete(k.inFlight, readyToAck[i].reqOffset)
 		}
 		// Update the offset
 		highestOffset := readyToAck[len(readyToAck)-1].saramaMsg
@@ -259,9 +259,9 @@ func (c *msgContext) Reply(replyMessage kldmessages.ReplyWithHeaders) {
 	c.replyType = replyHeaders.MsgType
 	replyHeaders.ID = kldutils.UUIDv4()
 	replyHeaders.Context = c.requestCommon.Headers.Context
-	replyHeaders.OrigID = c.requestCommon.Headers.ID
-	replyHeaders.OrigMsg = c.origMsg
-	replyHeaders.OrigMsg = c.origMsg
+	replyHeaders.ReqID = c.requestCommon.Headers.ID
+	replyHeaders.ReqOffset = c.reqOffset
+	replyHeaders.ReqOffset = c.reqOffset
 	replyHeaders.Received = c.timeReceived.Format(time.RFC3339)
 	c.replyTime = time.Now()
 	replyHeaders.Elapsed = c.replyTime.Sub(c.timeReceived).Seconds()
@@ -270,16 +270,16 @@ func (c *msgContext) Reply(replyMessage kldmessages.ReplyWithHeaders) {
 	c.producer.Input() <- &sarama.ProducerMessage{
 		Topic:    c.bridge.kafka.Conf().TopicOut,
 		Key:      sarama.StringEncoder(c.key),
-		Metadata: c.origMsg,
+		Metadata: c.reqOffset,
 		Value:    c,
 	}
 	return
 }
 
 func (c *msgContext) String() string {
-	retval := fmt.Sprintf("MsgContext[%s:%s origMsg=%s complete=%t received=%s",
+	retval := fmt.Sprintf("MsgContext[%s:%s reqOffset=%s complete=%t received=%s",
 		c.requestCommon.Headers.MsgType, c.requestCommon.Headers.ID,
-		c.origMsg, c.complete, c.timeReceived.Format(time.RFC3339))
+		c.reqOffset, c.complete, c.timeReceived.Format(time.RFC3339))
 	if c.replyType != "" {
 		retval += fmt.Sprintf(" replied=%s replyType=%s",
 			c.replyTime.Format(time.RFC3339), c.replyType)
@@ -352,9 +352,9 @@ func (k *KafkaBridge) ProducerErrorLoop(consumer KafkaConsumer, producer KafkaPr
 		// to drive retry logic. In the future we might consider recreating the
 		// producer and attempting to resend the message a number of times -
 		// keeping a retry counter on the msgContext object
-		origMsg := err.Msg.Metadata.(string)
-		ctx := k.inFlight[origMsg]
-		log.Errorf("Kafka producer failed for reply %s to origMsg %s: %s", ctx, origMsg, err)
+		reqOffset := err.Msg.Metadata.(string)
+		ctx := k.inFlight[reqOffset]
+		log.Errorf("Kafka producer failed for reply %s to reqOffset %s: %s", ctx, reqOffset, err)
 		panic(err)
 		// k.inFlightCond.L.Unlock() - unreachable while we have a panic
 	}
@@ -366,8 +366,8 @@ func (k *KafkaBridge) ProducerSuccessLoop(consumer KafkaConsumer, producer Kafka
 	log.Debugf("Kafka producer successes loop started")
 	for msg := range producer.Successes() {
 		k.inFlightCond.L.Lock()
-		origMsg := msg.Metadata.(string)
-		if ctx, ok := k.inFlight[origMsg]; ok {
+		reqOffset := msg.Metadata.(string)
+		if ctx, ok := k.inFlight[reqOffset]; ok {
 			log.Infof("Reply sent: %s", ctx)
 			// While still holding the lock, add this to the completed list
 			k.setInFlightComplete(ctx, consumer)
@@ -375,7 +375,7 @@ func (k *KafkaBridge) ProducerSuccessLoop(consumer KafkaConsumer, producer Kafka
 			k.inFlightCond.Broadcast()
 		} else {
 			// This should never happen. Represents a logic bug that must be diagnosed.
-			err := fmt.Errorf("Received confirmation for message not in in-flight map: %s", origMsg)
+			err := fmt.Errorf("Received confirmation for message not in in-flight map: %s", reqOffset)
 			panic(err)
 		}
 		k.inFlightCond.L.Unlock()

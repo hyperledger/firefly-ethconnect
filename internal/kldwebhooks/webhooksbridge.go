@@ -30,6 +30,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/icza/dyno"
+	"github.com/julienschmidt/httprouter"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
@@ -46,8 +47,15 @@ const (
 
 // WebhooksBridgeConf defines the YAML config structure for a webhooks bridge instance
 type WebhooksBridgeConf struct {
-	Kafka kldkafka.KafkaCommonConf `json:"kafka"`
-	HTTP  struct {
+	Kafka   kldkafka.KafkaCommonConf `json:"kafka"`
+	MongoDB struct {
+		URL        string `json:"url"`
+		Database   string `json:"database"`
+		Collection string `json:"collection"`
+		MaxDocs    int    `json:"maxDocs"`
+		QueryLimit int    `json:"queryLimit"`
+	} `json:"mongodb"`
+	HTTP struct {
 		LocalAddr string             `json:"localAddr"`
 		Port      int                `json:"port"`
 		TLS       kldutils.TLSConfig `json:"tls"`
@@ -63,6 +71,7 @@ type WebhooksBridge struct {
 	pendingMsgs map[string]bool
 	successMsgs map[string]*sarama.ProducerMessage
 	failedMsgs  map[string]error
+	mongo       MongoCollection
 }
 
 // Conf gets the config for this bridge
@@ -77,7 +86,13 @@ func (w *WebhooksBridge) SetConf(conf *WebhooksBridgeConf) {
 
 // ValidateConf validates the config
 func (w *WebhooksBridge) ValidateConf() (err error) {
-	// No validation currently
+	if !kldutils.AllOrNoneReqd(w.conf.MongoDB.URL, w.conf.MongoDB.Database, w.conf.MongoDB.Collection) {
+		err = fmt.Errorf("MongoDB URL, Database and Collection name must be specified to enable the receipt store")
+		return
+	}
+	if w.conf.MongoDB.QueryLimit < 1 {
+		w.conf.MongoDB.QueryLimit = 100
+	}
 	return
 }
 
@@ -120,15 +135,12 @@ func (w *WebhooksBridge) CobraInit() (cmd *cobra.Command) {
 	w.kafka.CobraInit(cmd)
 	cmd.Flags().StringVarP(&w.conf.HTTP.LocalAddr, "listen-addr", "L", os.Getenv("WEBHOOKS_LISTEN_ADDR"), "Local address to listen on")
 	cmd.Flags().IntVarP(&w.conf.HTTP.Port, "listen-port", "l", kldutils.DefInt("WEBHOOKS_LISTEN_PORT", 8080), "Port to listen on")
+	cmd.Flags().StringVarP(&w.conf.MongoDB.URL, "mongodb-url", "m", os.Getenv("MONGODB_URL"), "MongoDB URL for a receipt store")
+	cmd.Flags().StringVarP(&w.conf.MongoDB.Database, "mongodb-database", "d", os.Getenv("MONGODB_DATABASE"), "MongoDB receipt store database")
+	cmd.Flags().StringVarP(&w.conf.MongoDB.Collection, "mongodb-receipt-collection", "r", os.Getenv("MONGODB_COLLECTION"), "MongoDB receipt store collection")
+	cmd.Flags().IntVarP(&w.conf.MongoDB.MaxDocs, "mongodb-receipt-maxdocs", "x", kldutils.DefInt("MONGODB_MAXDOCS", 0), "Receipt store capped size (new collections only)")
+	cmd.Flags().IntVarP(&w.conf.MongoDB.QueryLimit, "mongodb-query-limit", "q", kldutils.DefInt("MONGODB_MAXDOCS", 0), "Maximum docs to return on a rest call (cap on limit)")
 	return
-}
-
-// ConsumerMessagesLoop - consume replies
-func (w *WebhooksBridge) ConsumerMessagesLoop(consumer kldkafka.KafkaConsumer, producer kldkafka.KafkaProducer, wg *sync.WaitGroup) {
-	for msg := range consumer.Messages() {
-		log.Infof("Webhooks received reply: %s", msg)
-	}
-	wg.Done()
 }
 
 func (w *WebhooksBridge) setMsgPending(msgID string) {
@@ -195,13 +207,13 @@ func (w *WebhooksBridge) ProducerSuccessLoop(consumer kldkafka.KafkaConsumer, pr
 	wg.Done()
 }
 
-type errMsg struct {
+type hookErrMsg struct {
 	Sent    bool   `json:"sent"`
 	Message string `json:"error"`
 }
 
-func errReply(res http.ResponseWriter, err error, status int) {
-	reply, _ := json.Marshal(&errMsg{Message: err.Error()})
+func hookErrReply(res http.ResponseWriter, err error, status int) {
+	reply, _ := json.Marshal(&hookErrMsg{Message: err.Error()})
 	res.WriteHeader(status)
 	res.Write(reply)
 	return
@@ -241,23 +253,23 @@ func msgSentReply(res http.ResponseWriter, ack bool, msg *sarama.ProducerMessage
 	return
 }
 
-func (w *WebhooksBridge) webhookHandlerWithAck(res http.ResponseWriter, req *http.Request) {
+func (w *WebhooksBridge) webhookHandlerWithAck(res http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	w.webhookHandler(res, req, true)
 }
 
-func (w *WebhooksBridge) webhookHandlerNoAck(res http.ResponseWriter, req *http.Request) {
+func (w *WebhooksBridge) webhookHandlerNoAck(res http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	w.webhookHandler(res, req, false)
 }
 
 func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Request, ack bool) {
 
 	if req.ContentLength > MaxPayloadSize {
-		errReply(res, fmt.Errorf("Message exceeds maximum allowable size"), 400)
+		hookErrReply(res, fmt.Errorf("Message exceeds maximum allowable size"), 400)
 		return
 	}
 	payloadToForward, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		errReply(res, fmt.Errorf("Unable to read input data: %s", err), 400)
+		hookErrReply(res, fmt.Errorf("Unable to read input data: %s", err), 400)
 		return
 	}
 
@@ -272,21 +284,21 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 		yamlGenericPayload := make(map[interface{}]interface{})
 		err := yaml.Unmarshal(payloadToForward, &yamlGenericPayload)
 		if err != nil {
-			errReply(res, fmt.Errorf("Unable to parse YAML: %s", err), 400)
+			hookErrReply(res, fmt.Errorf("Unable to parse YAML: %s", err), 400)
 			return
 		}
 		genericPayload = dyno.ConvertMapI2MapS(yamlGenericPayload).(map[string]interface{})
 		// Reseialize back to JSON
 		payloadToForward, err = json.Marshal(&genericPayload)
 		if err != nil {
-			errReply(res, fmt.Errorf("Unable to reserialize YAML payload as JSON: %s", err), 500)
+			hookErrReply(res, fmt.Errorf("Unable to reserialize YAML payload as JSON: %s", err), 500)
 			return
 		}
 	} else {
 		genericPayload = make(map[string]interface{})
 		err := json.Unmarshal(payloadToForward, &genericPayload)
 		if err != nil {
-			errReply(res, fmt.Errorf("Unable to parse JSON: %s", err), 400)
+			hookErrReply(res, fmt.Errorf("Unable to parse JSON: %s", err), 400)
 			return
 		}
 	}
@@ -295,12 +307,12 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 	// The rest of the validation is performed by the bridge listening to Kafka
 	headers, exists := genericPayload["headers"]
 	if !exists || reflect.TypeOf(headers).Kind() != reflect.Map {
-		errReply(res, fmt.Errorf("Invalid message - missing 'headers' (or not an object)"), 400)
+		hookErrReply(res, fmt.Errorf("Invalid message - missing 'headers' (or not an object)"), 400)
 		return
 	}
 	msgType, exists := headers.(map[string]interface{})["type"]
 	if !exists || reflect.TypeOf(msgType).Kind() != reflect.String {
-		errReply(res, fmt.Errorf("Invalid message - missing 'headers.type' (or not a string)"), 400)
+		hookErrReply(res, fmt.Errorf("Invalid message - missing 'headers.type' (or not a string)"), 400)
 		return
 	}
 	var key string
@@ -308,13 +320,13 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 	case kldmessages.MsgTypeDeployContract, kldmessages.MsgTypeSendTransaction:
 		from, exists := genericPayload["from"]
 		if !exists || reflect.TypeOf(from).Kind() != reflect.String {
-			errReply(res, fmt.Errorf("Invalid message - missing 'from' (or not a string)"), 400)
+			hookErrReply(res, fmt.Errorf("Invalid message - missing 'from' (or not a string)"), 400)
 			return
 		}
 		key = from.(string)
 		break
 	default:
-		errReply(res, fmt.Errorf("Invalid message type: %s", msgType), 400)
+		hookErrReply(res, fmt.Errorf("Invalid message type: %s", msgType), 400)
 		return
 	}
 
@@ -337,7 +349,7 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 	if ack {
 		successMsg, err := w.waitForSend(msgID)
 		if err != nil {
-			errReply(res, fmt.Errorf("Failed to deliver message to Kafka: %s", err), 502)
+			hookErrReply(res, fmt.Errorf("Failed to deliver message to Kafka: %s", err), 502)
 			return
 		}
 		msgSentReply(res, ack, successMsg)
@@ -346,28 +358,35 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 	}
 }
 
-func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Request) {
+func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	okReply(res)
 }
 
 // Start kicks off the HTTP and Kafka listeners
 func (w *WebhooksBridge) Start() (err error) {
 
-	mux := http.NewServeMux()
-	mux.Handle("/", http.HandlerFunc(w.webhookHandlerNoAck)) // Default on base URL
-	mux.Handle("/hook", http.HandlerFunc(w.webhookHandlerWithAck))
-	mux.Handle("/fasthook", http.HandlerFunc(w.webhookHandlerNoAck))
-	mux.Handle("/status", http.HandlerFunc(w.statusHandler))
+	router := httprouter.New()
+	router.POST("/", w.webhookHandlerNoAck) // Default on base URL
+	router.POST("/hook", w.webhookHandlerWithAck)
+	router.POST("/fasthook", w.webhookHandlerNoAck)
+	router.GET("/status", w.statusHandler)
+	router.GET("/replies", w.getReplies)
+	router.GET("/replies/:id", w.getReply)
+	router.GET("/reply/:id", w.getReply)
 
 	tlsConfig, err := kldutils.CreateTLSConfiguration(&w.conf.HTTP.TLS)
 	if err != nil {
 		return
 	}
 
+	if err = w.connectMongoDB(&mgoWrapper{}); err != nil {
+		return
+	}
+
 	w.srv = &http.Server{
 		Addr:           fmt.Sprintf("%s:%d", w.conf.HTTP.LocalAddr, w.conf.HTTP.Port),
 		TLSConfig:      tlsConfig,
-		Handler:        mux,
+		Handler:        router,
 		MaxHeaderBytes: MaxHeaderSize,
 	}
 

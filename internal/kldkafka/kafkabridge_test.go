@@ -410,34 +410,46 @@ func TestAddInflightMessageBadMessage(t *testing.T) {
 func TestProducerErrorLoopPanics(t *testing.T) {
 	assert := assert.New(t)
 
-	k, _, _, mockProducer, wg := setupMocks()
+	k, _, mockConsumer, mockProducer, wg := setupMocks()
 
+	wg.Add(2)
 	go func() {
 		mockProducer.MockErrors <- &sarama.ProducerError{
 			Err: fmt.Errorf("pop"),
 			Msg: &sarama.ProducerMessage{},
 		}
+		wg.Done()
 	}()
 
 	assert.Panics(func() {
 		k.ProducerErrorLoop(nil, mockProducer, wg)
 	})
 
+	mockProducer.AsyncClose()
+	mockConsumer.Close()
+	wg.Wait()
+
 }
 
 func TestProducerSuccessLoopPanicsMsgNotInflight(t *testing.T) {
 	assert := assert.New(t)
 
-	k, _, _, mockProducer, wg := setupMocks()
+	k, _, mockConsumer, mockProducer, wg := setupMocks()
 
+	wg.Add(2)
 	go func() {
 		mockProducer.MockSuccesses <- &sarama.ProducerMessage{
 			Metadata: "badness",
 		}
+		wg.Done()
 	}()
 
 	assert.Panics(func() {
 		k.ProducerSuccessLoop(nil, mockProducer, wg)
 	})
+
+	mockProducer.AsyncClose()
+	mockConsumer.Close()
+	wg.Wait()
 
 }

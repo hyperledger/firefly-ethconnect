@@ -344,6 +344,7 @@ func (k *KafkaBridge) ConsumerMessagesLoop(consumer KafkaConsumer, producer Kafk
 // ProducerErrorLoop - goroutine to process producer errors
 func (k *KafkaBridge) ProducerErrorLoop(consumer KafkaConsumer, producer KafkaProducer, wg *sync.WaitGroup) {
 	log.Debugf("Kafka producer error loop started")
+	defer wg.Done()
 	for err := range producer.Errors() {
 		k.inFlightCond.L.Lock()
 		// If we fail to send a reply, this is significant. We have a request in flight
@@ -358,12 +359,12 @@ func (k *KafkaBridge) ProducerErrorLoop(consumer KafkaConsumer, producer KafkaPr
 		panic(err)
 		// k.inFlightCond.L.Unlock() - unreachable while we have a panic
 	}
-	wg.Done()
 }
 
 // ProducerSuccessLoop - goroutine to process producer successes
 func (k *KafkaBridge) ProducerSuccessLoop(consumer KafkaConsumer, producer KafkaProducer, wg *sync.WaitGroup) {
 	log.Debugf("Kafka producer successes loop started")
+	defer wg.Done()
 	for msg := range producer.Successes() {
 		k.inFlightCond.L.Lock()
 		reqOffset := msg.Metadata.(string)
@@ -380,7 +381,6 @@ func (k *KafkaBridge) ProducerSuccessLoop(consumer KafkaConsumer, producer Kafka
 		}
 		k.inFlightCond.L.Unlock()
 	}
-	wg.Done()
 }
 
 func (k *KafkaBridge) connect() (err error) {

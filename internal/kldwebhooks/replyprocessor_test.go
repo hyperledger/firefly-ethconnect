@@ -18,13 +18,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"testing"
 
+	"github.com/Shopify/sarama"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/globalsign/mgo"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 )
@@ -362,4 +365,33 @@ func TestGetRepliesExcessiveLimit(t *testing.T) {
 	assert.Equal(100, mockCol.mockQuery.limit)
 	assert.Equal(0, mockCol.mockQuery.skip)
 	assert.Equal(200, resp.StatusCode)
+}
+
+func TestConsumerMessagesLoopCallsReplyProcessorWithEmptyPayload(t *testing.T) {
+	assert := assert.New(t)
+
+	k := newTestKafkaComon()
+	w, err := startTestWebhooks(nil, k)
+	assert.Nil(err)
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	consumer, _ := k.kafkaFactory.NewConsumer(k)
+	producer, _ := k.kafkaFactory.NewProducer(k)
+
+	go func() {
+		w.ConsumerMessagesLoop(consumer, producer, wg)
+	}()
+
+	consumer.(*kldkafka.MockKafkaConsumer).MockMessages <- &sarama.ConsumerMessage{
+		Partition: 3,
+		Offset:    12345,
+		Value:     []byte(""),
+	}
+
+	k.stop <- true
+	wg.Wait()
+
+	assert.Equal(int64(12345), consumer.(*kldkafka.MockKafkaConsumer).OffsetsByPartition[3])
+
 }

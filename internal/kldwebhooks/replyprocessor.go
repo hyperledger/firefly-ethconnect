@@ -193,6 +193,9 @@ func (w *WebhooksBridge) processReply(msgBytes []byte) {
 func (w *WebhooksBridge) ConsumerMessagesLoop(consumer kldkafka.KafkaConsumer, producer kldkafka.KafkaProducer, wg *sync.WaitGroup) {
 	for msg := range consumer.Messages() {
 		w.processReply(msg.Value)
+
+		// Regardless of outcome, we ack
+		consumer.MarkOffset(msg, "")
 	}
 	wg.Done()
 }

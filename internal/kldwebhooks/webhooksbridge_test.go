@@ -557,28 +557,3 @@ func TestWebhookHandlerTooBig(t *testing.T) {
 	assertErrResp(assert, resp, 400, "Message exceeds maximum allowable size")
 	assert.Equal(0, len(replyMsgs))
 }
-
-func TestConsumerMessagesLoopCallsReplyProcessorWithEmptyPayload(t *testing.T) {
-	assert := assert.New(t)
-
-	k := newTestKafkaComon()
-	w, err := startTestWebhooks(nil, k)
-	assert.Nil(err)
-
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	consumer, _ := k.kafkaFactory.NewConsumer(k)
-	producer, _ := k.kafkaFactory.NewProducer(k)
-
-	go func() {
-		w.ConsumerMessagesLoop(consumer, producer, wg)
-	}()
-
-	consumer.(*kldkafka.MockKafkaConsumer).MockMessages <- &sarama.ConsumerMessage{
-		Value: []byte(""),
-	}
-
-	k.stop <- true
-	wg.Wait()
-
-}

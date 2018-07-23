@@ -190,7 +190,7 @@ func (w *WebhooksBridge) ProducerErrorLoop(consumer kldkafka.KafkaConsumer, prod
 func (w *WebhooksBridge) ProducerSuccessLoop(consumer kldkafka.KafkaConsumer, producer kldkafka.KafkaProducer, wg *sync.WaitGroup) {
 	log.Debugf("Webhooks listening for successful sends to Kafka")
 	for msg := range producer.Successes() {
-		log.Infof("Webhooks sent message ok: %s", msg)
+		log.Infof("Webhooks sent message ok: %s", msg.Metadata)
 		if msg.Metadata == nil {
 			// This should not be possible
 			panic(fmt.Errorf("Sent message did not contain metadata: %+v", msg))
@@ -267,7 +267,7 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 		hookErrReply(res, fmt.Errorf("Message exceeds maximum allowable size"), 400)
 		return
 	}
-	payloadToForward, err := ioutil.ReadAll(req.Body)
+	originalPayload, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		hookErrReply(res, fmt.Errorf("Unable to read input data: %s", err), 400)
 		return
@@ -282,21 +282,15 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 	log.Infof("Received message 'Content-Type: %s' Length: %d", contentType, req.ContentLength)
 	if contentType == "application/x-yaml" || contentType == "text/yaml" {
 		yamlGenericPayload := make(map[interface{}]interface{})
-		err := yaml.Unmarshal(payloadToForward, &yamlGenericPayload)
+		err := yaml.Unmarshal(originalPayload, &yamlGenericPayload)
 		if err != nil {
 			hookErrReply(res, fmt.Errorf("Unable to parse YAML: %s", err), 400)
 			return
 		}
 		genericPayload = dyno.ConvertMapI2MapS(yamlGenericPayload).(map[string]interface{})
-		// Reseialize back to JSON
-		payloadToForward, err = json.Marshal(&genericPayload)
-		if err != nil {
-			hookErrReply(res, fmt.Errorf("Unable to reserialize YAML payload as JSON: %s", err), 500)
-			return
-		}
 	} else {
 		genericPayload = make(map[string]interface{})
-		err := json.Unmarshal(payloadToForward, &genericPayload)
+		err := json.Unmarshal(originalPayload, &genericPayload)
 		if err != nil {
 			hookErrReply(res, fmt.Errorf("Unable to parse JSON: %s", err), 400)
 			return
@@ -336,8 +330,15 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 	if ack {
 		w.setMsgPending(msgID)
 	}
+	// Reseialize back to JSON with the headers
+	payloadToForward, err := json.Marshal(&genericPayload)
+	if err != nil {
+		hookErrReply(res, fmt.Errorf("Unable to reserialize YAML payload as JSON: %s", err), 500)
+		return
+	}
 
-	log.Debugf("Forwarding message to Kafka bridge: %s", payloadToForward)
+	log.Infof("Forwarding message to Kafka bridge. MsgID: %s Type: %s", msgID, msgType)
+	log.Debugf("Message payload: %s", payloadToForward)
 	sentMsg := &sarama.ProducerMessage{
 		Topic:    w.kafka.Conf().TopicOut,
 		Key:      sarama.StringEncoder(key),

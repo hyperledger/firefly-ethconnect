@@ -271,7 +271,6 @@ func sendTestTransaction(assert *assert.Assertions, msgBytes []byte, contentType
 	go func() {
 		for msg := range k.kafkaFactory.Producer.MockInput {
 			msgBytes, _ := msg.Value.Encode()
-			log.Infof("Message sent by webhook bridge: %s", string(msgBytes))
 			msgs = append(msgs, msgBytes)
 
 			// Send an ack or an err
@@ -326,6 +325,7 @@ func TestWebhookHandlerJSONSendTransaction(t *testing.T) {
 	forwardedMessage := kldmessages.SendTransaction{}
 	json.Unmarshal(replyMsgs[0], &forwardedMessage)
 	assert.Equal(kldmessages.MsgTypeSendTransaction, forwardedMessage.Headers.MsgType)
+	assert.NotEmpty(forwardedMessage.Headers.ID)
 }
 
 func TestWebhookHandlerJSONSendTransactionNoAck(t *testing.T) {

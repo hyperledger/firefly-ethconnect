@@ -321,11 +321,11 @@ func TestTypeNotYetSupported(t *testing.T) {
 	var tx Txn
 	var m abi.Method
 	m.Inputs = append(m.Inputs, abi.Argument{Name: "random", Type: abi.Type{Type: reflect.TypeOf(t)}})
-	_, err := tx.generateTypedArgs([]interface{}{"abc"}, m)
+	_, err := tx.generateTypedArgs([]interface{}{"abc"}, &m)
 	assert.Regexp("Type '.*' is not yet supported", err)
 }
 
-func TestSendTxn(t *testing.T) {
+func TestSendTxnABIParam(t *testing.T) {
 	assert := assert.New(t)
 
 	var msg kldmessages.SendTransaction
@@ -383,6 +383,154 @@ func TestSendTxn(t *testing.T) {
 	assert.Regexp("0xe5537abb000000000000000000000000000000000000000000000000000000000000007b000000000000000000000000000000000000000000000000000000000000007b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000aa983ad2a0e0ed8ac639277f37be42f2a5d2618c00000000000000000000000000000000000000000000000000000000000000036162630000000000000000000000000000000000000000000000000000000000", jsonSent["data"])
 }
 
+func TestSendTxnInlineParam(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{}
+
+	param1 := make(map[string]interface{})
+	msg.Parameters = append(msg.Parameters, param1)
+	param1["type"] = "uint8"
+	param1["value"] = "123"
+
+	param2 := make(map[string]interface{})
+	msg.Parameters = append(msg.Parameters, param2)
+	param2["type"] = "int256"
+	param2["value"] = float64(123)
+
+	param3 := make(map[string]interface{})
+	msg.Parameters = append(msg.Parameters, param3)
+	param3["type"] = "string"
+	param3["value"] = "abc"
+
+	param4 := make(map[string]interface{})
+	msg.Parameters = append(msg.Parameters, param4)
+	param4["type"] = "address"
+	param4["value"] = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+
+	msg.Method = kldmessages.ABIMethod{
+		Name: "testFunc",
+	}
+	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	tx, err := NewSendTxn(&msg)
+	assert.Nil(err)
+	msgBytes, _ := json.Marshal(&msg)
+	log.Infof(string(msgBytes))
+
+	rpc := testRPCClient{}
+
+	tx.Send(&rpc)
+	assert.Equal("eth_sendTransaction", rpc.capturedMethod)
+	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
+	var jsonSent map[string]interface{}
+	json.Unmarshal(jsonBytesSent, &jsonSent)
+	assert.Equal("0x7b", jsonSent["nonce"])
+	assert.Equal("0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", jsonSent["from"])
+	assert.Equal("0x1c8", jsonSent["gas"])
+	assert.Equal("0x0", jsonSent["gasPrice"])
+	assert.Equal("0x315", jsonSent["value"])
+	assert.Regexp("0xe5537abb000000000000000000000000000000000000000000000000000000000000007b000000000000000000000000000000000000000000000000000000000000007b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000aa983ad2a0e0ed8ac639277f37be42f2a5d2618c00000000000000000000000000000000000000000000000000000000000000036162630000000000000000000000000000000000000000000000000000000000", jsonSent["data"])
+}
+
+func TestSendTxnInlineBadParamType(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{}
+
+	param1 := make(map[string]interface{})
+	msg.Parameters = append(msg.Parameters, param1)
+	param1["type"] = "badness"
+	param1["value"] = "123"
+
+	msg.Method = kldmessages.ABIMethod{
+		Name: "testFunc",
+	}
+	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	_, err := NewSendTxn(&msg)
+	assert.Regexp("Param 0: Unable to map badness to etherueum type", err.Error())
+}
+
+func TestSendTxnInlineMissingParamType(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{}
+
+	param1 := make(map[string]interface{})
+	msg.Parameters = append(msg.Parameters, param1)
+	param1["value"] = "123"
+
+	msg.Method = kldmessages.ABIMethod{
+		Name: "testFunc",
+	}
+	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	_, err := NewSendTxn(&msg)
+	assert.Regexp("Param 0: supplied as an object must have 'type' and 'value' fields", err.Error())
+}
+
+func TestSendTxnInlineMissingParamValue(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{}
+
+	param1 := make(map[string]interface{})
+	msg.Parameters = append(msg.Parameters, param1)
+	param1["type"] = "uint256"
+
+	msg.Method = kldmessages.ABIMethod{
+		Name: "testFunc",
+	}
+	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	_, err := NewSendTxn(&msg)
+	assert.Regexp("Param 0: supplied as an object must have 'type' and 'value' fields", err.Error())
+}
+
+func TestSendTxnInlineBadTypeType(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{}
+
+	param1 := make(map[string]interface{})
+	msg.Parameters = append(msg.Parameters, param1)
+	param1["type"] = false
+	param1["value"] = "abcde"
+
+	msg.Method = kldmessages.ABIMethod{
+		Name: "testFunc",
+	}
+	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	_, err := NewSendTxn(&msg)
+	assert.Regexp("Param 0: supplied as an object must be string", err.Error())
+}
 func TestSendTxnBadInputType(t *testing.T) {
 	assert := assert.New(t)
 

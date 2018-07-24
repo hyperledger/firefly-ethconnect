@@ -70,7 +70,7 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract) (pTX *Txn, err error)
 	}
 
 	// Build correctly typed args for the ethereum call
-	typedArgs, err := pTX.generateTypedArgs(msg.Parameters, compiledSolidity.ABI.Constructor)
+	typedArgs, err := pTX.generateTypedArgs(msg.Parameters, &compiledSolidity.ABI.Constructor)
 	if err != nil {
 		return
 	}
@@ -107,7 +107,7 @@ func NewSendTxn(msg *kldmessages.SendTransaction) (pTX *Txn, err error) {
 	}
 
 	// Build correctly typed args for the ethereum call
-	typedArgs, err := pTX.generateTypedArgs(msg.Parameters, *methodABI)
+	typedArgs, err := pTX.generateTypedArgs(msg.Parameters, methodABI)
 	if err != nil {
 		return
 	}
@@ -315,8 +315,58 @@ func processIntVal(typedArgs []interface{}, methodName string, idx int, required
 	return
 }
 
+// flattenParams flattens an array of parameters of the form
+// [{"value":"val1","type":"uint256"},{"value":"val2","type":"uint256"}]
+// into ["val1","val2"], and updates the abi.Method declaration with any
+// types specified.
+// If a flat structure is passed in, then there are no changes.
+// A mix is tollerated by the code, but no usecase is known for that.
+func (tx *Txn) flattenParams(origParams []interface{}, method *abi.Method) (params []interface{}, err error) {
+	// Allows us to support
+	params = make([]interface{}, len(origParams))
+	for i, unflattened := range origParams {
+		if reflect.TypeOf(unflattened).Kind() != reflect.Map {
+			// No change needed
+			params[i] = unflattened
+		} else {
+			// We need to flatten
+			mapParam := unflattened.(map[string]interface{}) // safe case as we came in from JSON only
+			var value, typeStr interface{}
+			var exists bool
+			if value, exists = mapParam["value"]; exists {
+				typeStr, exists = mapParam["type"]
+			}
+			if !exists {
+				err = fmt.Errorf("Param %d: supplied as an object must have 'type' and 'value' fields", i)
+				return
+			}
+			if reflect.TypeOf(typeStr).Kind() != reflect.String {
+				err = fmt.Errorf("Param %d: supplied as an object must be string", i)
+				return
+			}
+			params[i] = value
+			// Set the type
+			var ethType abi.Type
+			if ethType, err = abi.NewType(typeStr.(string)); err != nil {
+				err = fmt.Errorf("Param %d: Unable to map %s to etherueum type: %s", i, typeStr, err)
+				return
+			}
+			for len(method.Inputs) <= i {
+				method.Inputs = append(method.Inputs, abi.Argument{})
+			}
+			method.Inputs[i].Type = ethType
+		}
+	}
+	return
+}
+
 // GenerateTypedArgs parses string arguments into a range of types to pass to the ABI call
-func (tx *Txn) generateTypedArgs(params []interface{}, method abi.Method) (typedArgs []interface{}, err error) {
+func (tx *Txn) generateTypedArgs(origParams []interface{}, method *abi.Method) (typedArgs []interface{}, err error) {
+
+	params, err := tx.flattenParams(origParams, method)
+	if err != nil {
+		return
+	}
 
 	methodName := method.Name
 	if methodName == "" {

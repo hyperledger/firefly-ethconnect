@@ -29,7 +29,6 @@ deps:
 		$(GOGET) github.com/Shopify/sarama
 		$(GOGET) github.com/nu7hatch/gouuid
 		$(GOGET) github.com/stretchr/testify/assert
-		$(GOGET) github.com/golang/mock/gomock
 		$(GOGET) github.com/icza/dyno
 		$(GOGET) gopkg.in/yaml.v2
 		$(GOGET) github.com/globalsign/mgo

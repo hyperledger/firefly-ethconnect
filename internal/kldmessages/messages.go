@@ -105,8 +105,9 @@ type transactionCommon struct {
 // SendTransaction message instructs the bridge to install a contract
 type SendTransaction struct {
 	transactionCommon
-	To     string    `json:"to"`
-	Method ABIMethod `json:"method"`
+	To         string    `json:"to"`
+	Method     ABIMethod `json:"method"`
+	MethodName string    `json:"methodName,omitempty"`
 }
 
 // DeployContract message instructs the bridge to install a contract

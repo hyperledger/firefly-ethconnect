@@ -65,10 +65,8 @@ var serverCmdConfig struct {
 }
 
 var rootCmd = &cobra.Command{
-	Use: "ethconnect [sub]",
-	Short: "Connectivity Bridge for Ethereum permissioned chains\n" +
-		"Copyright (C) 2018 Kaleido, a ConsenSys business\n" +
-		"Licensed under the Apache License, Version 2.0",
+	Use:   "ethconnect [sub]",
+	Short: "Connectivity Bridge for Ethereum permissioned chains",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		initLogging(rootConfig.DebugLevel)
 	},

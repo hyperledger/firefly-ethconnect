@@ -409,9 +409,7 @@ func TestSendTxnInlineParam(t *testing.T) {
 	param4["type"] = "address"
 	param4["value"] = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 
-	msg.Method = kldmessages.ABIMethod{
-		Name: "testFunc",
-	}
+	msg.MethodName = "testFunc"
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
 	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 	msg.Nonce = "123"
@@ -554,7 +552,7 @@ func TestSendTxnBadInputType(t *testing.T) {
 	assert.Regexp("ABI input 0: Unable to map param1 to etherueum type: unsupported arg type:", err.Error())
 }
 
-func TestSendTxnMissingMethodName(t *testing.T) {
+func TestSendTxnMissingMethod(t *testing.T) {
 	assert := assert.New(t)
 
 	var msg kldmessages.SendTransaction
@@ -567,7 +565,7 @@ func TestSendTxnMissingMethodName(t *testing.T) {
 	msg.Gas = "456"
 	msg.GasPrice = "789"
 	_, err := NewSendTxn(&msg)
-	assert.Regexp("Method name must be supplied in 'method.name'", err.Error())
+	assert.Regexp("Method missing", err.Error())
 }
 func TestSendTxnBadFrom(t *testing.T) {
 	assert := assert.New(t)

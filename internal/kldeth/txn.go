@@ -97,13 +97,21 @@ func NewSendTxn(msg *kldmessages.SendTransaction) (pTX *Txn, err error) {
 	var tx Txn
 	pTX = &tx
 
+	var methodABI *abi.Method
 	if msg.Method.Name == "" {
-		err = fmt.Errorf("Method name must be supplied in 'method.name'")
-		return
-	}
-	methodABI, err := genMethodABI(&msg.Method)
-	if err != nil {
-		return
+		if msg.MethodName != "" {
+			methodABI = &abi.Method{
+				Name: msg.MethodName,
+			}
+		} else {
+			err = fmt.Errorf("Method missing - must provide inline 'param' type/value pairs with a 'methodName', or an ABI in 'method'")
+			return
+		}
+	} else {
+		methodABI, err = genMethodABI(&msg.Method)
+		if err != nil {
+			return
+		}
 	}
 
 	// Build correctly typed args for the ethereum call

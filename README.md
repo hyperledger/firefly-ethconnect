@@ -19,7 +19,6 @@ applications & middleware.
 For example to allow connectivity from an Enterprise Service Bus (ESB) or other
 Enterprise Application Integration (EAI) tier, or applications running in a
 Java EE Application Server.
-Provides Key Management System (KMS) integration for signing transactions.
 
 ![kaleido-io/ethconnect](ethconnect.png)
 
@@ -40,3 +39,46 @@ This code is distributed under the [Apache 2 license](LICENSE).
 
 > The code statically links to code distributed under the LGPL license.
 
+## Example payloads
+
+YAML to deploy a contract
+
+```yaml
+headers:
+  type: DeployContract
+from: '0xb480F96c0a3d6E9e9a263e4665a39bFa6c4d01E8'
+params:
+  - 12345
+gas: 1000000
+solidity: |-
+  pragma solidity ^0.4.17;
+  
+  contract simplestorage {
+     uint public storedData;
+  
+     function simplestorage(uint initVal) public {
+        storedData = initVal;
+     }
+  
+     function set(uint x) public {
+        storedData = x;
+     }
+  
+     function get() public constant returns (uint retVal) {
+        return storedData;
+     }
+  }
+```
+
+YAML to submit a transaction
+```yaml
+headers:
+  type: SendTransaction
+from: 0xb480F96c0a3d6E9e9a263e4665a39bFa6c4d01E8
+to: 0xe1a078b9e2b145d0a7387f09277c6ae1d9470771
+params:
+  - value: 4276993775
+    type: uint256
+gas: 1000000
+methodName: set
+```

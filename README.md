@@ -20,7 +20,7 @@ For example to allow connectivity from an Enterprise Service Bus (ESB) or other
 Enterprise Application Integration (EAI) tier, or applications running in a
 Java EE Application Server.
 
-![kaleido-io/ethconnect](ethconnect.png)
+[![kaleido-io/ethconnect](ethconnect.png)](ethconnect.pdf)
 
 Technology support currently includes:
 - Messaging
@@ -122,32 +122,61 @@ many of which are LGPL licensed.
 
 ## Why Messaging?
 
-So you ask, if the goal is simplicity, why not just put a simplified HTTP API in front
-of JSON/RPC and be done with it?
+So you ask, if the goal is simplicity, why not just put the simple HTTP API in front of JSON/RPC and be done with it?
 
-There are some challenges in Enterprise grade Blockchain solutions (particularly in high throughput permissioned/private chains) that cannot be solved by a stateless
-HTTP bridging layer alone.
+There are some challenges in Enterprise grade Blockchain solutions (particularly in high throughput permissioned/private chains) that cannot be solved by a stateless HTTP bridging layer alone.
 
-### The asynchronous nature of transactions
+So for Kaleido, we started with a robust Messaging tier and layered the HTTP interface on top.
 
-Transactions can take many seconds or minutes (depending on the backlog and block period) between submission and a receipt being available.
+## The asynchronous nature of Ethereum transactions
 
-An Ethereum Blockchain using a byzantine fault tolerant consensus algorithm
-such can be tuned to a high throughput in the hundreds of txns/second, and
-give finality of those transactions once they are committed to blocks.
-However, the _latency_ of those transactions will be high.
+Ethereum transactions can take many seconds or minutes (depending on the backlog and block period) from submission until they make it into a block, and a receipt is available. Each individual node in Ethereum provides a built-in simple pool where transactions can be pooled while waiting to enter a block.
 
-Equally spikes in workload might occur that create a queue of transactions that need to be drip-fed into the Ethereum network at a lower rate.
+Connecting a synchronous blocking HTTP interface directly to an inherently asynchronous system like this can cause problems. The HTTP requester times out waiting for a response, but has no way to know if it should retry or if the transaction will eventually succeed. It cannot cancel the request.
 
-Connecting a synchronous blocking HTTP interface directly to an inherently asynchronous system causes problems. The HTTP request times out, but the caller has no way to 
-revoke the request that has already been submitted. It does not know if it should retry
-or if the transaction will eventually succeed. It cannot cancel it.
+Providing a Messaging layer with at-least-once delivery and message ordering, allows the asynchronous nature of Ethereum to be reflected back to the remote application.
 
-This is fundamentally why the JSON/RPC API has separate calls to submit transactions, and check for receipts. The Ethereuem nodes hence have a queue built into them. However, this queue is a finite buffer, and constrained to an individual node. Messaging allows us to provide the same benefits in high throughput scalable Enterprise system.
+Applications that have their own state stores are able to communicate over Messaging / Kafka with trivially simple JSON payloads to stream transactions into a scalable set of Ethereum nodes, and process the replies as they occur. The application can scale horizontally. Applications can also be decoupled from the Ethereum network with an integration technology like an Enterprise Service Bus (ESB).
 
-### Scale and message ordering
+When spikes in workload occur that create a large queue of transactions that need to be fed into the Ethereum network at a lower rate, the kaleido-io/ethconnect bridge feeds them in at an optimal rate.
 
-The built-in queuing within an Ethereum node is based upon the concept of a `nonce`, which must be incremented by exactly one each time a transaction is submitted from the same
-Ethereum address.
+### Ethereum Webhooks and the REST Receipt Store (MongoDB)
+
+Another key goal of having a robust Messaging layer under the covers is that the most trivial application can send messages into Ethereum reliably.
+
+- `POST` a [trivial YAML/JSON payload](#yaml-to-submit-a-transaction)
+  - to `/hook` to complete once the message is confirmed by Kafka (0.5s - tunable)
+  - to `/fasthook` to complete immediately when the message is sent to Kafka
+- Get an _immediate_ receipt
+   - No need to wait many seconds for a block to be cut
+   - No need to have complex retry handling
+
+This is ideal for Applications, Integration-as-a-Service (IaaS) platforms, and built-in SaaS integrations that support Webhooks for event submission.
+
+However, SaaS administrators and end-users still need to be able to track down what happened for a particular transaction, to diagnose problems, and correlate details of the Ethereum transaction with the business event.
+
+So kaleido-io/ethereum comes with a built-in receipt store, backed by MongoDB. It listens reliably for the replies over Kafka, and inserts each of them into the Database.
+
+It provides a trivially simple REST API:
+- `GET` `/reply/a789940d-710b-489f-477f-dc9aaa0aef77` to look for an individual reply
+- `GET` `/replies` to list the replies
+  - Ordered by time _received_ (not the order submitted) - listing the newest first
+  - `limit` and `skip` query parameters can be used to paginate the results
+
+A capped collection can be used in MongoDB to limit the storage. For example to store only the last 1000 replies received.
+
+### Scale and message ordering - nonce management
+
+The transaction pooling/execution logic within an Ethereum node is based upon the concept of a `nonce`, which must be incremented exactly once each time a transaction is submitted from the same Ethereum address. There can be no gaps in the nonce values, or messages build up in the `queued transaction` pool waiting for the gap to be filled. This allows for deterministic ordering of transactions sent by the same sender.
+
+The management of this `nonce` pushes complexity back to the application tier - especially for horizontally scaled Enterprise applications sending many transactions using the same sender. By using an ordered Messaging stream to submit messages into the Ethereum network, many applications are able to delegate this complexity to kaleido-io/ethconnect.
+
+The kaleido-io/ethconnect bridge contains all the logic necessary to communicate with the node to determine the next nonce, and also to cope with multiple requests being in flight within the same block, for the same sender (including [with IBFT](https://github.com/ethereum/EIPs/issues/650#issuecomment-360085474)).
+
+If a sender needs to achieve exactly-once delivery of transactions (vs. at-least-once) it is still necessary to allocate the nonce within the application and pass it into kaleido-io/ethconnect in the payload.  This allows the sender to control allocation of nonces using its internal state store / locking.
+
+Given many Enterprise scenarios involve writing hashed proofs of completion of an off-chain transaction to a shared ledger (vs. performing the actual transaction on the chain), at-least-once delivery is sufficient in a wide range of cases. Smart Contracts can simply re-store the proof.
 
 ## Why Kafka?
+
+We selected Kafka 

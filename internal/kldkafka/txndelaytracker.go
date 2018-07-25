@@ -38,8 +38,10 @@ const (
 	MaxDelay = 10 * time.Second
 	// Factor - exponential backoff factor
 	Factor = 1.3
-	// InitialDelayFraction - faction of average to use for initial delay
-	InitialDelayFraction = 0.4
+	// InitialDelayFraction - start with a large faction of the current average
+	InitialDelayFraction = 0.8
+	// FirstRetryFraction - then retry with exponential backoff using a fraction of that initial delay
+	FirstRetryDelayFraction = 0.15
 	// TracerFrequency - run an aggressive txn every X txns, and reset average
 	TracerFrequency = 25
 	// TracerDivisor - when a tracer runs, it runs at this division of the average
@@ -82,8 +84,7 @@ func (d *txnDelayTracker) GetInitialDelay() (delay time.Duration) {
 
 // GetRetryDelay - calculates the delay for a particular retry
 func (d *txnDelayTracker) GetRetryDelay(initialDelay time.Duration, retry int) (delay time.Duration) {
-	millis := float64(initialDelay.Nanoseconds()) / float64(time.Millisecond)
-	delay = time.Duration(millis) * time.Millisecond
+	millis := FirstRetryDelayFraction * (float64(initialDelay.Nanoseconds()) / float64(time.Millisecond))
 	for i := 0; i < retry; i++ {
 		millis = millis * Factor
 		delay = time.Duration(millis) * time.Millisecond

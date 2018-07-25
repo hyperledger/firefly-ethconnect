@@ -53,13 +53,13 @@ func TestTxnDelayTrackerExponentialBackoff(t *testing.T) {
 	assert := assert.New(t)
 
 	d := NewTxnDelayTracker()
+	d.ReportSuccess(5 * time.Second)
 	initDelay := d.GetInitialDelay()
-	assert.Equal(MinDelay, initDelay)
 
-	lastDelay := initDelay
+	var lastDelay time.Duration
 	for i := 1; i <= 20; i++ {
 		delay := d.GetRetryDelay(initDelay, i)
-		log.Infof("InitDelay=%05.2fs Factor=%05.2f Retry=%02d Delay=%05.2fs", initDelay.Seconds(), Factor, i, delay.Seconds())
+		log.Infof("InitDelay=%05.2fs FirstRetryFactor=%05.2f Factor=%05.2f Retry=%02d Delay=%05.2fs", initDelay.Seconds(), FirstRetryDelayFraction, Factor, i, delay.Seconds())
 		assert.True(delay > lastDelay || delay == MaxDelay)
 		lastDelay = delay
 	}

@@ -112,11 +112,7 @@ func readServerConfig() (serverConfig *ServerConfig, err error) {
 		}
 		genericPayload := dyno.ConvertMapI2MapS(yamlGenericPayload).(map[string]interface{})
 		// Reseialize back to JSON
-		confBytes, err = json.Marshal(&genericPayload)
-		if err != nil {
-			err = fmt.Errorf("Unable to reserialize YAML payload as JSON: %s", err)
-			return
-		}
+		confBytes, _ = json.Marshal(&genericPayload)
 	}
 	serverConfig = &ServerConfig{}
 	err = json.Unmarshal(confBytes, serverConfig)

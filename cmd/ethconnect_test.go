@@ -159,3 +159,16 @@ func TestExecuteServerWithJSON(t *testing.T) {
 
 	assert.Equal(0, osExit)
 }
+
+func TestExecuteServerWithBadYAML(t *testing.T) {
+	assert := assert.New(t)
+
+	exampleConfYAML, _ := ioutil.TempFile("", "testYAML")
+	defer syscall.Unlink(exampleConfYAML.Name())
+	ioutil.WriteFile(exampleConfYAML.Name(), []byte("%"), 0644)
+
+	rootCmd.SetArgs([]string{"server", "-f", exampleConfYAML.Name()})
+	osExit := Execute()
+
+	assert.Equal(1, osExit)
+}

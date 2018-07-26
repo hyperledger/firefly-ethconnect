@@ -51,3 +51,31 @@ func TestDefInt(t *testing.T) {
 	assert.Equal(54321, val)
 
 }
+
+func TestMarshalToYAML(t *testing.T) {
+	assert := assert.New(t)
+
+	var testStruct struct {
+		FieldOne string  `json:"fieldOne"`
+		FieldTwo float64 `json:"fieldTwo"`
+	}
+	testStruct.FieldOne = "val1"
+	testStruct.FieldTwo = 222222
+
+	val, err := MarshalToYAML(&testStruct)
+	assert.Nil(err)
+	assert.Equal("fieldOne: val1\nfieldTwo: 222222\n", string(val))
+
+}
+
+func TestMarshalToYAMLUnSerialziable(t *testing.T) {
+	assert := assert.New(t)
+
+	var testStruct struct {
+		NotJSONable map[interface{}]interface{} `json:"impossible"`
+	}
+	testStruct.NotJSONable = make(map[interface{}]interface{})
+
+	_, err := MarshalToYAML(&testStruct)
+	assert.Regexp("json: unsupported type", err)
+}

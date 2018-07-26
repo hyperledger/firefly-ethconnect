@@ -132,7 +132,11 @@ func TestExecuteServerWithYAML(t *testing.T) {
 
 	rootCmd.SetArgs([]string{"server", "-f", exampleConfYAML.Name()})
 	osExit := Execute()
+	assert.Equal(0, osExit)
 
+	// Print out the yaml too
+	rootCmd.SetArgs([]string{"server", "-f", exampleConfYAML.Name(), "-Y"})
+	osExit = Execute()
 	assert.Equal(0, osExit)
 }
 

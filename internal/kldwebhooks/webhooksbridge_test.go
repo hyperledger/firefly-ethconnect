@@ -105,7 +105,8 @@ func newTestKafkaComon() *testKafkaCommon {
 // It returns once it's reached kafka initialization successfully, or errored during initialization
 func startTestWebhooks(testArgs []string, kafka *testKafkaCommon) (*WebhooksBridge, error) {
 	log.SetLevel(log.DebugLevel)
-	w := NewWebhooksBridge()
+	var printYAML = false
+	w := NewWebhooksBridge(&printYAML)
 	w.kafka = kafka
 	cmd := w.CobraInit()
 	if testArgs == nil {
@@ -142,7 +143,8 @@ func startTestWebhooks(testArgs []string, kafka *testKafkaCommon) (*WebhooksBrid
 
 func TestNewWebhooksBridge(t *testing.T) {
 	assert := assert.New(t)
-	w := NewWebhooksBridge()
+	var printYAML = false
+	w := NewWebhooksBridge(&printYAML)
 	var conf WebhooksBridgeConf
 	conf.HTTP.LocalAddr = "127.0.0.1"
 	w.SetConf(&conf)
@@ -151,7 +153,8 @@ func TestNewWebhooksBridge(t *testing.T) {
 
 func TestValidateConfInvalidArgs(t *testing.T) {
 	assert := assert.New(t)
-	w := NewWebhooksBridge()
+	var printYAML = false
+	w := NewWebhooksBridge(&printYAML)
 	w.conf.MongoDB.URL = "mongodb://localhost:27017"
 	err := w.ValidateConf()
 	assert.Regexp("MongoDB URL, Database and Collection name must be specified to enable the receipt store", err.Error())
@@ -169,6 +172,19 @@ func TestStartStopDefaultArgs(t *testing.T) {
 	assert.Equal("", w.conf.HTTP.LocalAddr) // default
 
 	k.stop <- true
+}
+
+func TestPrintYaml(t *testing.T) {
+	assert := assert.New(t)
+
+	var printYAML = true
+	w := NewWebhooksBridge(&printYAML)
+	w.printYAML = &printYAML
+	w.kafka = &testKafkaCommon{}
+	cmd := w.CobraInit()
+	cmd.SetArgs([]string{"-l", "8001"})
+	err := cmd.Execute()
+	assert.Nil(err)
 }
 
 func TestStartStopCustomArgs(t *testing.T) {

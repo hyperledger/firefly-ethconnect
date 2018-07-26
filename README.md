@@ -28,7 +28,8 @@ Technology support currently includes:
 - Messaging
   - Apache Kafka - https://kafka.apache.org/
 - Webhooks
-  - Simple POST of a transaction over HTTP in YAML/JSON queued to Kafka for processing
+  - Simple `POST` of a transaction over HTTP in YAML/JSON queued to Kafka for processing
+  - REST store to query results (backed by MongoDB)
 
 Under development:
 

@@ -64,6 +64,7 @@ type WebhooksBridgeConf struct {
 
 // WebhooksBridge receives messages over HTTP POST and sends them to Kafka
 type WebhooksBridge struct {
+	printYAML   *bool
 	conf        WebhooksBridgeConf
 	kafka       kldkafka.KafkaCommon
 	srv         *http.Server
@@ -97,8 +98,9 @@ func (w *WebhooksBridge) ValidateConf() (err error) {
 }
 
 // NewWebhooksBridge constructor
-func NewWebhooksBridge() (w *WebhooksBridge) {
+func NewWebhooksBridge(printYAML *bool) (w *WebhooksBridge) {
 	w = &WebhooksBridge{
+		printYAML:   printYAML,
 		sendCond:    sync.NewCond(&sync.Mutex{}),
 		pendingMsgs: make(map[string]bool),
 		successMsgs: make(map[string]*sarama.ProducerMessage),
@@ -365,6 +367,12 @@ func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Reques
 
 // Start kicks off the HTTP and Kafka listeners
 func (w *WebhooksBridge) Start() (err error) {
+
+	if *w.printYAML {
+		b, err := kldutils.MarshalToYAML(&w.conf)
+		print("# YAML Configuration snippet for Webhooks->Kafka bridge\n" + string(b))
+		return err
+	}
 
 	router := httprouter.New()
 	router.POST("/", w.webhookHandlerNoAck) // Default on base URL

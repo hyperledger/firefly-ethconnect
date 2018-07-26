@@ -15,8 +15,11 @@
 package kldutils
 
 import (
+	"encoding/json"
 	"os"
 	"strconv"
+
+	"gopkg.in/yaml.v2"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -47,4 +50,18 @@ func DefInt(envVarName string, defValue int) int {
 		return defValue
 	}
 	return int(parsedInt)
+}
+
+// MarshalToYAML marshals a JSON annotated structure into YAML, by first going to JSON
+func MarshalToYAML(conf interface{}) (yamlBytes []byte, err error) {
+	var jsonBytes []byte
+	if jsonBytes, err = json.Marshal(conf); err != nil {
+		return
+	}
+	jsonAsMap := make(map[string]interface{})
+	if err = json.Unmarshal(jsonBytes, &jsonAsMap); err != nil {
+		return
+	}
+	yamlBytes, err = yaml.Marshal(&jsonAsMap)
+	return
 }

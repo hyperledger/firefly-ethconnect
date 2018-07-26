@@ -42,6 +42,7 @@ type KafkaBridgeConf struct {
 
 // KafkaBridge receives messages from Kafka and dispatches them to go-ethereum over JSON/RPC
 type KafkaBridge struct {
+	printYAML    *bool
 	conf         KafkaBridgeConf
 	kafka        KafkaCommon
 	rpc          *rpc.Client
@@ -299,9 +300,10 @@ func (c msgContext) Encode() ([]byte, error) {
 }
 
 // NewKafkaBridge creates a new KafkaBridge
-func NewKafkaBridge() *KafkaBridge {
+func NewKafkaBridge(printYAML *bool) *KafkaBridge {
 	mp := newMsgProcessor()
 	k := &KafkaBridge{
+		printYAML:    printYAML,
 		processor:    mp,
 		inFlight:     make(map[string]*msgContext),
 		inFlightCond: sync.NewCond(&sync.Mutex{}),
@@ -397,6 +399,12 @@ func (k *KafkaBridge) connect() (err error) {
 
 // Start kicks off the bridge
 func (k *KafkaBridge) Start() (err error) {
+
+	if *k.printYAML {
+		b, err := kldutils.MarshalToYAML(&k.conf)
+		print("# YAML Configuration snippet for Kafka->Ethereum bridge\n" + string(b))
+		return err
+	}
 
 	// Connect the RPC URL
 	if err = k.connect(); err != nil {

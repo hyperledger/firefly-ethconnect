@@ -111,7 +111,8 @@ func (m *mockQuery) One(result interface{}) error {
 func TestReplyProcessorWithValidReply(t *testing.T) {
 	assert := assert.New(t)
 
-	w := NewWebhooksBridge()
+	var printYAML = false
+	w := NewWebhooksBridge(&printYAML)
 	mockCollection := &mockCollection{}
 	w.mongo = mockCollection
 
@@ -134,7 +135,8 @@ func TestReplyProcessorWithValidReply(t *testing.T) {
 func TestReplyProcessorWithErrorReply(t *testing.T) {
 	assert := assert.New(t)
 
-	w := NewWebhooksBridge()
+	var printYAML = false
+	w := NewWebhooksBridge(&printYAML)
 	mockCollection := &mockCollection{}
 	w.mongo = mockCollection
 
@@ -159,7 +161,8 @@ func TestReplyProcessorWithErrorReply(t *testing.T) {
 func TestReplyProcessorMissingHeaders(t *testing.T) {
 	assert := assert.New(t)
 
-	w := NewWebhooksBridge()
+	var printYAML = false
+	w := NewWebhooksBridge(&printYAML)
 	mockCollection := &mockCollection{}
 	w.mongo = mockCollection
 
@@ -174,7 +177,8 @@ func TestReplyProcessorMissingHeaders(t *testing.T) {
 func TestReplyProcessorMissingRequestId(t *testing.T) {
 	assert := assert.New(t)
 
-	w := NewWebhooksBridge()
+	var printYAML = false
+	w := NewWebhooksBridge(&printYAML)
 	mockCollection := &mockCollection{}
 	w.mongo = mockCollection
 
@@ -190,7 +194,8 @@ func TestReplyProcessorMissingRequestId(t *testing.T) {
 func TestReplyProcessorInsertError(t *testing.T) {
 	assert := assert.New(t)
 
-	w := NewWebhooksBridge()
+	var printYAML = false
+	w := NewWebhooksBridge(&printYAML)
 	mockCollection := &mockCollection{insertErr: fmt.Errorf("pop")}
 	w.mongo = mockCollection
 
@@ -206,7 +211,8 @@ func TestReplyProcessorInsertError(t *testing.T) {
 
 func TestConnectMongoDBConnectFailure(t *testing.T) {
 	assert := assert.New(t)
-	w := NewWebhooksBridge()
+	var printYAML = false
+	w := NewWebhooksBridge(&printYAML)
 	mockMongo := &mockMongo{connErr: fmt.Errorf("bang")}
 	w.conf.MongoDB.URL = "mongodb://localhost:27017"
 	err := w.connectMongoDB(mockMongo)
@@ -215,7 +221,8 @@ func TestConnectMongoDBConnectFailure(t *testing.T) {
 
 func TestConnectMongoDBConnectCreateCollection(t *testing.T) {
 	assert := assert.New(t)
-	w := NewWebhooksBridge()
+	var printYAML = false
+	w := NewWebhooksBridge(&printYAML)
 	mockMongo := &mockMongo{}
 	w.conf.MongoDB.URL = "mongodb://localhost:27017"
 	err := w.connectMongoDB(mockMongo)
@@ -225,7 +232,8 @@ func TestConnectMongoDBConnectCreateCollection(t *testing.T) {
 
 func TestConnectMongoDBConnectCreateCappedCollection(t *testing.T) {
 	assert := assert.New(t)
-	w := NewWebhooksBridge()
+	var printYAML = false
+	w := NewWebhooksBridge(&printYAML)
 	mockMongo := &mockMongo{}
 	w.conf.MongoDB.URL = "mongodb://localhost:27017"
 	w.conf.MongoDB.MaxDocs = 1000
@@ -237,7 +245,8 @@ func TestConnectMongoDBConnectCreateCappedCollection(t *testing.T) {
 
 func TestConnectMongoDBConnectCollectionExists(t *testing.T) {
 	assert := assert.New(t)
-	w := NewWebhooksBridge()
+	var printYAML = false
+	w := NewWebhooksBridge(&printYAML)
 	mockMongo := &mockMongo{}
 	mockMongo.collection.collErr = fmt.Errorf("snap")
 	w.conf.MongoDB.URL = "mongodb://localhost:27017"
@@ -247,7 +256,8 @@ func TestConnectMongoDBConnectCollectionExists(t *testing.T) {
 
 func TestConnectMongoDBIndexCreationFailure(t *testing.T) {
 	assert := assert.New(t)
-	w := NewWebhooksBridge()
+	var printYAML = false
+	w := NewWebhooksBridge(&printYAML)
 	mockMongo := &mockMongo{}
 	mockMongo.collection.ensureIndexErr = fmt.Errorf("crack")
 	w.conf.MongoDB.URL = "mongodb://localhost:27017"

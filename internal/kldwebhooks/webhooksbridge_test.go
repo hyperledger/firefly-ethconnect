@@ -538,7 +538,7 @@ func TestWebhookHandlerBadYAML(t *testing.T) {
 	assert := assert.New(t)
 
 	resp, replyMsgs := sendTestTransaction(assert, []byte("!badness!"), "application/x-yaml", nil, true)
-	assertErrResp(assert, resp, 400, "Unable to parse YAML")
+	assertErrResp(assert, resp, 400, "Unable to parse as YAML or JSON")
 	assert.Equal(0, len(replyMsgs))
 }
 
@@ -547,7 +547,7 @@ func TestWebhookHandlerBadJSON(t *testing.T) {
 	assert := assert.New(t)
 
 	resp, replyMsgs := sendTestTransaction(assert, []byte("badness"), "application/json", nil, true)
-	assertErrResp(assert, resp, 400, "Unable to parse JSON")
+	assertErrResp(assert, resp, 400, "Unable to parse as YAML or JSON")
 	assert.Equal(0, len(replyMsgs))
 }
 

@@ -64,6 +64,7 @@ type WebhooksBridgeConf struct {
 
 // WebhooksBridge receives messages over HTTP POST and sends them to Kafka
 type WebhooksBridge struct {
+	printYAML   *bool
 	conf        WebhooksBridgeConf
 	kafka       kldkafka.KafkaCommon
 	srv         *http.Server
@@ -97,8 +98,9 @@ func (w *WebhooksBridge) ValidateConf() (err error) {
 }
 
 // NewWebhooksBridge constructor
-func NewWebhooksBridge() (w *WebhooksBridge) {
+func NewWebhooksBridge(printYAML *bool) (w *WebhooksBridge) {
 	w = &WebhooksBridge{
+		printYAML:   printYAML,
 		sendCond:    sync.NewCond(&sync.Mutex{}),
 		pendingMsgs: make(map[string]bool),
 		successMsgs: make(map[string]*sarama.ProducerMessage),
@@ -136,7 +138,7 @@ func (w *WebhooksBridge) CobraInit() (cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&w.conf.HTTP.LocalAddr, "listen-addr", "L", os.Getenv("WEBHOOKS_LISTEN_ADDR"), "Local address to listen on")
 	cmd.Flags().IntVarP(&w.conf.HTTP.Port, "listen-port", "l", kldutils.DefInt("WEBHOOKS_LISTEN_PORT", 8080), "Port to listen on")
 	cmd.Flags().StringVarP(&w.conf.MongoDB.URL, "mongodb-url", "m", os.Getenv("MONGODB_URL"), "MongoDB URL for a receipt store")
-	cmd.Flags().StringVarP(&w.conf.MongoDB.Database, "mongodb-database", "d", os.Getenv("MONGODB_DATABASE"), "MongoDB receipt store database")
+	cmd.Flags().StringVarP(&w.conf.MongoDB.Database, "mongodb-database", "D", os.Getenv("MONGODB_DATABASE"), "MongoDB receipt store database")
 	cmd.Flags().StringVarP(&w.conf.MongoDB.Collection, "mongodb-receipt-collection", "r", os.Getenv("MONGODB_COLLECTION"), "MongoDB receipt store collection")
 	cmd.Flags().IntVarP(&w.conf.MongoDB.MaxDocs, "mongodb-receipt-maxdocs", "x", kldutils.DefInt("MONGODB_MAXDOCS", 0), "Receipt store capped size (new collections only)")
 	cmd.Flags().IntVarP(&w.conf.MongoDB.QueryLimit, "mongodb-query-limit", "q", kldutils.DefInt("MONGODB_MAXDOCS", 0), "Maximum docs to return on a rest call (cap on limit)")
@@ -365,6 +367,12 @@ func (w *WebhooksBridge) statusHandler(res http.ResponseWriter, req *http.Reques
 
 // Start kicks off the HTTP and Kafka listeners
 func (w *WebhooksBridge) Start() (err error) {
+
+	if *w.printYAML {
+		b, err := kldutils.MarshalToYAML(&w.conf)
+		print("# YAML Configuration snippet for Webhooks->Kafka bridge\n" + string(b))
+		return err
+	}
 
 	router := httprouter.New()
 	router.POST("/", w.webhookHandlerNoAck) // Default on base URL

@@ -131,6 +131,8 @@ type TransactionReceipt struct {
 	From                 *common.Address `json:"from"`
 	GasUsedStr           string          `json:"gasUsed"`
 	GasUsedHex           *hexutil.Big    `json:"gasUsedHex"`
+	NonceStr             string          `json:"nonce"`
+	NonceHex             *hexutil.Uint64 `json:"nonceHex"`
 	StatusStr            string          `json:"status"`
 	StatusHex            *hexutil.Big    `json:"statusHex"`
 	To                   *common.Address `json:"to"`
@@ -144,6 +146,7 @@ type ErrorReply struct {
 	ReplyCommon
 	ErrorMessage    string `json:"errorMessage,omitempty"`
 	OriginalMessage string `json:"requestPayload,omitempty"`
+	TXHash          string `json:"transactionHash,omitempty"`
 }
 
 // NewErrorReply is a helper to construct an error message

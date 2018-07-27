@@ -258,6 +258,8 @@ func TestOnDeployContractMessageGoodTxnMined(t *testing.T) {
 	assert.Equal("0xba25be62a5c55d4ad1d5520268806a8730a4de5e", replyMsgMap["from"])
 	assert.Equal("345678", replyMsgMap["gasUsed"])
 	assert.Equal("0x5464e", replyMsgMap["gasUsedHex"])
+	assert.Equal("123", replyMsgMap["nonce"])
+	assert.Equal("0x7b", replyMsgMap["nonceHex"])
 	assert.Equal("1", replyMsgMap["status"])
 	assert.Equal("0x1", replyMsgMap["statusHex"])
 	assert.Equal("0xd7fac2bce408ed7c6ded07a32038b1f79c2b27d3", replyMsgMap["to"])

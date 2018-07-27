@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
+
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
@@ -239,6 +241,9 @@ func (p *msgProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 		if receipt.GasUsed != nil {
 			reply.GasUsedStr = receipt.GasUsed.ToInt().Text(10)
 		}
+		nonceHex := hexutil.Uint64(iTX.nonce)
+		reply.NonceHex = &nonceHex
+		reply.NonceStr = strconv.FormatInt(iTX.nonce, 10)
 		reply.StatusHex = receipt.Status
 		if receipt.Status != nil {
 			reply.StatusStr = receipt.Status.ToInt().Text(10)

@@ -87,7 +87,8 @@ func (p *testKafkaMsgProcessor) OnMessage(msg MsgContext) {
 func TestNewKafkaBridge(t *testing.T) {
 	assert := assert.New(t)
 
-	bridge := NewKafkaBridge()
+	var printYAML = false
+	bridge := NewKafkaBridge(&printYAML)
 	var conf KafkaBridgeConf
 	conf.RPC.URL = "http://example.com"
 	bridge.SetConf(&conf)
@@ -99,7 +100,8 @@ func TestNewKafkaBridge(t *testing.T) {
 
 func newTestKafkaBridge() (k *KafkaBridge, kafkaCmd *cobra.Command) {
 	log.SetLevel(log.DebugLevel)
-	k = NewKafkaBridge()
+	var printYAML = false
+	k = NewKafkaBridge(&printYAML)
 	k.kafka = &testKafkaCommon{}
 	k.processor = &testKafkaMsgProcessor{
 		messages: make(chan MsgContext),
@@ -163,6 +165,18 @@ func TestDefIntWithGoodEnvVar(t *testing.T) {
 
 	assert.Nil(err)
 	assert.Equal(123, k.conf.MaxInFlight)
+}
+
+func TestPrintYAML(t *testing.T) {
+	assert := assert.New(t)
+
+	k, kafkaCmd := newTestKafkaBridge()
+
+	*k.printYAML = true
+	kafkaCmd.SetArgs(kbMinWorkingArgs)
+	err := kafkaCmd.Execute()
+
+	assert.Nil(err)
 }
 
 func TestExecuteWithBadRPCURL(t *testing.T) {

@@ -26,6 +26,7 @@ import (
 
 	"github.com/icza/dyno"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
+	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	"github.com/kaleido-io/ethconnect/internal/kldwebhooks"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -57,6 +58,7 @@ func initLogging(debugLevel int) {
 
 var rootConfig struct {
 	DebugLevel int
+	PrintYAML  bool
 }
 
 var serverCmdConfig struct {
@@ -129,9 +131,16 @@ func startServer() (err error) {
 		return
 	}
 
+	if rootConfig.PrintYAML {
+		b, err := kldutils.MarshalToYAML(&serverConfig)
+		print("# Full YAML configuration processed from supplied file\n" + string(b))
+		return err
+	}
+
+	var dontPrintYaml = false
 	var wg sync.WaitGroup
 	for name, conf := range serverConfig.KafkaBridges {
-		kafkaBridge := kldkafka.NewKafkaBridge()
+		kafkaBridge := kldkafka.NewKafkaBridge(&dontPrintYaml)
 		kafkaBridge.SetConf(conf)
 		if err := kafkaBridge.ValidateConf(); err != nil {
 			return err
@@ -146,7 +155,7 @@ func startServer() (err error) {
 		}(name)
 	}
 	for name, conf := range serverConfig.WebhooksBridges {
-		webhooksBridge := kldwebhooks.NewWebhooksBridge()
+		webhooksBridge := kldwebhooks.NewWebhooksBridge(&dontPrintYaml)
 		webhooksBridge.SetConf(conf)
 		if err := webhooksBridge.ValidateConf(); err != nil {
 			return err
@@ -167,14 +176,15 @@ func startServer() (err error) {
 
 func init() {
 	rootCmd.PersistentFlags().IntVarP(&rootConfig.DebugLevel, "debug", "d", 1, "0=error, 1=info, 2=debug")
+	rootCmd.PersistentFlags().BoolVarP(&rootConfig.PrintYAML, "print-yaml-confg", "Y", false, "Print YAML config snippet and exit")
 
 	serverCmd := initServer()
 	rootCmd.AddCommand(serverCmd)
 
-	kafkaBridge := kldkafka.NewKafkaBridge()
+	kafkaBridge := kldkafka.NewKafkaBridge(&rootConfig.PrintYAML)
 	rootCmd.AddCommand(kafkaBridge.CobraInit())
 
-	webhooksBridge := kldwebhooks.NewWebhooksBridge()
+	webhooksBridge := kldwebhooks.NewWebhooksBridge(&rootConfig.PrintYAML)
 	rootCmd.AddCommand(webhooksBridge.CobraInit())
 }
 

@@ -2,6 +2,29 @@
 
 [![Coverage report](https://codecov.io/gh/kaleido-io/ethconnect/branch/master/graph/badge.svg)](https://codecov.io/gh/kaleido-io/ethconnect)
 
+- [github.com/kaleido-io/ethconnect](#githubcomkaleido-ioethconnect)
+  - [About kaleido-io/ethconnect](#about-kaleido-ioethconnect)
+  - [License](#license)
+  - [Example payloads](#example-payloads)
+    - [YAML to submit a transaction](#yaml-to-submit-a-transaction)
+    - [YAML to deploy a contract](#yaml-to-deploy-a-contract)
+  - [Why put a Web / Messaging API in front of an Ethereum node?](#why-put-a-web--messaging-api-in-front-of-an-ethereum-node)
+  - [Why Messaging?](#why-messaging)
+  - [The asynchronous nature of Ethereum transactions](#the-asynchronous-nature-of-ethereum-transactions)
+    - [Ethereum Webhooks and the REST Receipt Store (MongoDB)](#ethereum-webhooks-and-the-rest-receipt-store-mongodb)
+    - [Nonce management for Scale and Message Ordering](#nonce-management-for-scale-and-message-ordering)
+  - [Why Kafka?](#why-kafka)
+  - [Topics](#topics)
+  - [Messages](#messages)
+    - [Example transaction receipt](#example-transaction-receipt)
+    - [Example error](#example-error)
+  - [Running the Bridge](#running-the-bridge)
+    - [Installation](#installation)
+    - [Ways to run](#ways-to-run)
+    - [Running the Kafka->Ethereum bridge via cmdline params](#running-the-kafka-ethereum-bridge-via-cmdline-params)
+    - [Running the Webhooks->Kafka bridge via cmdline params](#running-the-webhooks-kafka-bridge-via-cmdline-params)
+    - [Example server YAML definition](#example-server-yaml-definition)
+
 ## About kaleido-io/ethconnect
 
 Open Source component that is used as part of [Kaleido Connect](https://kaleido.io).
@@ -41,29 +64,6 @@ Under development:
 This code is distributed under the [Apache 2 license](LICENSE).
 
 > The code statically links to code distributed under the LGPL license.
-
-## Table of Contents
-
-- [github.com/kaleido-io/ethconnect](#githubcomkaleido-ioethconnect)
-  - [About kaleido-io/ethconnect](#about-kaleido-ioethconnect)
-  - [License](#license)
-  - [Table of Contents](#table-of-contents)
-  - [Example payloads](#example-payloads)
-    - [YAML to submit a transaction](#yaml-to-submit-a-transaction)
-    - [YAML to deploy a contract](#yaml-to-deploy-a-contract)
-  - [Why put a Web / Messaging API in front of an Ethereum node?](#why-put-a-web--messaging-api-in-front-of-an-ethereum-node)
-  - [Why Messaging?](#why-messaging)
-  - [The asynchronous nature of Ethereum transactions](#the-asynchronous-nature-of-ethereum-transactions)
-    - [Ethereum Webhooks and the REST Receipt Store (MongoDB)](#ethereum-webhooks-and-the-rest-receipt-store-mongodb)
-    - [Scale and message ordering - nonce management](#scale-and-message-ordering---nonce-management)
-  - [Why Kafka?](#why-kafka)
-  - [Topic & Messages](#topic--messages)
-  - [Running the Bridge](#running-the-bridge)
-    - [Installation](#installation)
-    - [Ways to run](#ways-to-run)
-    - [Example server YAML definition](#example-server-yaml-definition)
-    - [Running the Kafka->Ethereum bridge via cmdline params](#running-the-kafka-ethereum-bridge-via-cmdline-params)
-    - [Running the Webhooks->Kafka bridge via cmdline params](#running-the-webhooks-kafka-bridge-via-cmdline-params)
 
 ## Example payloads
 
@@ -173,13 +173,12 @@ Another key goal of having a robust Messaging layer under the covers is that the
 - `POST` a [trivial YAML/JSON payload](#yaml-to-submit-a-transaction)
   - to `/hook` to complete once the message is confirmed by Kafka (0.5s - tunable)
   - to `/fasthook` to complete immediately when the message is sent to Kafka
-- Get an _immediate_ receipt
-   - No need to wait many seconds for a block to be cut
-   - No need to have complex retry handling
+- Receive back an `id` for the request straight away
+   - Let the bridge do the retry polling to get the Ethereum receipt once a block is cut
 
 This is ideal for Applications, Integration-as-a-Service (IaaS) platforms, and built-in SaaS integrations that support Webhooks for event submission.
 
-However, SaaS administrators and end-users still need to be able to track down what happened for a particular transaction, to diagnose problems, and correlate details of the Ethereum transaction with the business event.
+However, SaaS administrators and end-users still need to be able to track down what happened for a particular transaction, to diagnose problems, and correlate details of the Ethereum transaction with the business event. See [Messages](#messages) below for details of the responses stored in the Receipt store.
 
 So kaleido-io/ethereum comes with a built-in receipt store, backed by MongoDB. It listens reliably for the replies over Kafka, and inserts each of them into the Database.
 
@@ -191,17 +190,44 @@ It provides a trivially simple REST API:
 
 A capped collection can be used in MongoDB to limit the storage. For example to store only the last 1000 replies received.
 
-### Scale and message ordering - nonce management
+### Nonce management for Scale and Message Ordering
 
-The transaction pooling/execution logic within an Ethereum node is based upon the concept of a `nonce`, which must be incremented exactly once each time a transaction is submitted from the same Ethereum address. There can be no gaps in the nonce values, or messages build up in the `queued transaction` pool waiting for the gap to be filled. This allows for deterministic ordering of transactions sent by the same sender.
+The transaction pooling/execution logic within an Ethereum node is based upon the concept of a `nonce`, which must be incremented exactly once each time a transaction is submitted from the same Ethereum address. There can be no gaps in the nonce values, or messages build up in the `queued transaction` pool waiting for the gap to be filled (which is the responsibility of the
+sender to fill). This allows for deterministic ordering of transactions sent by the same sender.
 
 The management of this `nonce` pushes complexity back to the application tier - especially for horizontally scaled Enterprise applications sending many transactions using the same sender. By using an ordered Messaging stream to submit messages into the Ethereum network, many applications are able to delegate this complexity to kaleido-io/ethconnect.
 
 The kaleido-io/ethconnect bridge contains all the logic necessary to communicate with the node to determine the next nonce, and also to cope with multiple requests being in flight within the same block, for the same sender (including [with IBFT](https://github.com/ethereum/EIPs/issues/650#issuecomment-360085474)).
 
+When using the bridge, an application can submit simple YAML/JSON formatted transactions
+in a highly parallel way across many instances using the same sender address to the bridge 
+over HTTPS/Kafka _without_ a nonce. Then through ordered message delivery and nonce management
+code within the kaleido-io/ethconnect bridge it will be assigned a nonce and submitted
+into the Ethereum node.
+
 If a sender needs to achieve exactly-once delivery of transactions (vs. at-least-once) it is still necessary to allocate the nonce within the application and pass it into kaleido-io/ethconnect in the payload.  This allows the sender to control allocation of nonces using its internal state store / locking.
 
-Given many Enterprise scenarios involve writing hashed proofs of completion of an off-chain transaction to a shared ledger (vs. performing the actual transaction on the chain), at-least-once delivery is sufficient in a wide range of cases. Smart Contracts can simply re-store the proof.
+> There's a good summary of at-least-once vs. exactly-once semantics in the [Akka documentation](https://doc.akka.io/docs/akka/current/general/message-delivery-reliability.html?language=scala#discussion-what-does-at-most-once-mean-)
+
+Given many Enterprise scenarios involve writing hashed proofs of completion of an off-chain transaction to a shared ledger (vs. performing the actual transaction on the chain), at-least-once delivery is sufficient in a wide range of cases. Smart Contracts can be implemented in an idempotent way, to re-store or discard the proof if submitted twice.
+
+An `idempotent` interface is one that can be called multiple times with the same input,
+and achieve the same result. By example, if you were using an interface on an online
+shopping system and clicked the `Complete order` button twice, you could tell if their
+interface was idempotent by whether you received one parcel at your house (idempotent)
+or two (not idempotent).
+
+In the case of storing a hashed proof of an external event, this can be achieved quite
+trivially. Some examples as follows:
+- The hash itself is a key into a map, and if on submission it is already
+  found in the map the duplicate submission is discarded (if the other parts of the
+  proof such as the originating address or metadata differ, this should be flagged
+  as an error).
+- There is a transaction identifier known to all external parties to the off-chain
+  transaction, and this is used as a key into a map of transactions.
+- In a voting scenario with multiple signed copies of a proof being submitted,
+  the public address of each sender (whether an Ethereum address, or
+  other off-chain cryptography) is used as a key into a map of votes.
 
 ## Why Kafka?
 
@@ -209,7 +235,7 @@ We selected Kafka as the first Messaging platform (and built a multi-tenant secu
 - Transactions can be sprayed across partitions, while retaining order of the transactions for a particular sender. Allowing independent and dynamic scaling of the application, kaleido-io/ethconnect bridge and Go-ethereum node components.
 - The modern replication based cloud-native and continuously available architecture is ideal for the Kaleido platform, and is likely to be a good fit for the modern Microservice architectures that are common in Blockchain projects.
 
-## Topic & Messages
+## Topics
 
 The topic usage is very simple:
 - One topic delivering messages into the bridge
@@ -222,7 +248,11 @@ The topic usage is very simple:
   - If configured, the Webhook->Kafka bridge listens to this topic with a consumer group
   - The Webhook->Kafka bridge marks the offset of each message after inserting into MongoDB (if the receipt store is configured)
 
-An example successful reply message:
+## Messages
+
+### Example transaction receipt
+
+An example successful `TransactionSuccess` reply message, which indicates a transaction receipt was obtained, and the status of that transaction was `1` (a similar payload with `header.type` set to `TransactionFailure` is returned if EVM execution is unsuccessful):
 ```json
 {
   "headers": {
@@ -241,6 +271,8 @@ An example successful reply message:
   "from": "0xb480f96c0a3d6e9e9a263e4665a39bfa6c4d01e8",
   "gasUsed": "26817",
   "gasUsedHex": "0x68c1",
+  "nonce": "458",
+  "nonceHex": "0x1cA",
   "status": "1",
   "statusHex": "0x1",
   "to": "0x6287111c39df2ff2aaa367f0b062f2dd86e3bcaa",
@@ -256,6 +288,31 @@ The MongoDB receipt store adds two additional fields, used to retrieve the entri
   "_id": "a789940d-710b-489f-477f-dc9aaa0aef77",
   "receivedAt": 1532520942884
 }
+```
+
+### Example error
+
+In the case that the Kafka->Ethereum is unable to submit a transaction and obtain an
+Ethereum receipt, an `Error` reply is sent back. This includes details of the error,
+as well as the full original payload sent (will always be JSON).
+
+The request payload is provided, because in cases where a transaction receipt is not
+obtained, it could be impossible to obtain the original transaction details from the
+blockchain.
+
+```json
+{
+        "errorMessage": "unknown account",
+        "headers": {
+            "id": "8d94a12e-ec63-4463-6c41-348e050e9044",
+            "requestId": "f53c73e9-2512-4e91-6e2c-faec0e138716",
+            "requestOffset": "u0d7zazjno-u0aopxc5lf-requests:0:4",
+            "timeElapsed": 0.001892497,
+            "timeReceived": "2018-07-27T12:20:50Z",
+            "type": "Error"
+        },
+        "requestPayload": "{\"from\":\"0x2942a3BE3599FbE25939e60eE3a137f10E09FD1e\",\"gas\":1000000,\"headers\":{\"id\":\"f53c73e9-2512-4e91-6e2c-faec0e138716\",\"type\":\"SendTransaction\"},\"methodName\":\"set\",\"params\":[{\"type\":\"uint256\",\"value\":4276993775}],\"to\":\"0xe1a078b9e2b145d0a7387f09277c6ae1d9470771\"}"
+    }
 ```
 
 ## Running the Bridge
@@ -274,9 +331,91 @@ go get github.com/kaleido-io/ethconnect
 
 You can run a single bridge using simple commandline options, which is ideal for exploring the configuration options. Or you can use a YAML server definition to run multiple modes in single process.
 
+### Running the Kafka->Ethereum bridge via cmdline params
+
+```sh
+$ ./ethconnect kafka --help
+Copyright (C) 2018 Kaleido, a ConsenSys business
+Licensed under the Apache License, Version 2.0
+Version:  (Build Date: )
+
+Kafka->Ethereum (JSON/RPC) Bridge
+
+Usage:
+  ethconnect kafka [flags]
+
+Flags:
+  -b, --brokers stringArray      Comma-separated list of bootstrap brokers
+  -i, --clientid string          Client ID (or generated UUID)
+  -g, --consumer-group string    Client ID (or generated UUID)
+  -h, --help                     help for kafka
+  -m, --maxinflight int          Maximum messages to hold in-flight
+  -r, --rpc-url string           JSON/RPC URL for Ethereum node
+  -p, --sasl-password string     Password for SASL authentication
+  -u, --sasl-username string     Username for SASL authentication
+  -C, --tls-cacerts string       CA certificates file (or host CAs will be used)
+  -c, --tls-clientcerts string   A client certificate file, for mutual TLS auth
+  -k, --tls-clientkey string     A client private key file, for mutual TLS auth
+  -e, --tls-enabled              Encrypt network connection with TLS (SSL)
+  -z, --tls-insecure             Disable verification of TLS certificate chain
+  -t, --topic-in string          Topic to listen to
+  -T, --topic-out string         Topic to send events to
+  -x, --tx-timeout int           Maximum wait time for an individual transaction (seconds)
+
+Global Flags:
+  -d, --debug int   0=error, 1=info, 2=debug (default 1)
+  -Y, --print-yaml-confg   Print YAML config snippet and exit
+```
+
+### Running the Webhooks->Kafka bridge via cmdline params
+
+```
+$ethconnect webhooks --help
+Copyright (C) 2018 Kaleido, a ConsenSys business
+Licensed under the Apache License, Version 2.0
+Version:  (Build Date: )
+
+Webhooks->Kafka Bridge
+
+Usage:
+  ethconnect webhooks [flags]
+
+Flags:
+  -b, --brokers stringArray                 Comma-separated list of bootstrap brokers
+  -i, --clientid string                     Client ID (or generated UUID)
+  -g, --consumer-group string               Client ID (or generated UUID)
+  -h, --help                                help for webhooks
+  -L, --listen-addr string                  Local address to listen on
+  -l, --listen-port int                     Port to listen on (default 8080)
+  -D, --mongodb-database string             MongoDB receipt store database
+  -q, --mongodb-query-limit int             Maximum docs to return on a rest call (cap on limit)
+  -r, --mongodb-receipt-collection string   MongoDB receipt store collection
+  -x, --mongodb-receipt-maxdocs int         Receipt store capped size (new collections only)
+  -m, --mongodb-url string                  MongoDB URL for a receipt store
+  -p, --sasl-password string                Password for SASL authentication
+  -u, --sasl-username string                Username for SASL authentication
+  -C, --tls-cacerts string                  CA certificates file (or host CAs will be used)
+  -c, --tls-clientcerts string              A client certificate file, for mutual TLS auth
+  -k, --tls-clientkey string                A client private key file, for mutual TLS auth
+  -e, --tls-enabled                         Encrypt network connection with TLS (SSL)
+  -z, --tls-insecure                        Disable verification of TLS certificate chain
+  -t, --topic-in string                     Topic to listen to
+  -T, --topic-out string                    Topic to send events to
+
+Global Flags:
+  -d, --debug int   0=error, 1=info, 2=debug (default 1)
+  -Y, --print-yaml-confg   Print YAML config snippet and exit
+```
+
 ### Example server YAML definition
 
-The below example shows how to run both a Webhooks->Kafka and Kafka->Ethereum bridge in a single process. The server will exit if either bridge fails.
+The below example shows how to run both a Webhooks->Kafka and Kafka->Ethereum bridge
+in a single process.
+
+The server will exit if either bridge stops.
+
+You can use the `-Y, --print-yaml-config` option on the `kafka` and `webhooks` command
+lines to print out a YAML snippet with detailed configuration - such as TLS mutual auth settings, not included in the example below.
 
 ```yaml
 kafka:
@@ -321,78 +460,4 @@ webhooks:
       tls:
         enabled: true
       consumerGroup: "example-webhoooksto-kafka-cg"
-```
-
-### Running the Kafka->Ethereum bridge via cmdline params
-
-```sh
-$ ./ethconnect kafka --help
-Copyright (C) 2018 Kaleido, a ConsenSys business
-Licensed under the Apache License, Version 2.0
-Version:  (Build Date: )
-
-Kafka->Ethereum (JSON/RPC) Bridge
-
-Usage:
-  ethconnect kafka [flags]
-
-Flags:
-  -b, --brokers stringArray      Comma-separated list of bootstrap brokers
-  -i, --clientid string          Client ID (or generated UUID)
-  -g, --consumer-group string    Client ID (or generated UUID)
-  -h, --help                     help for kafka
-  -m, --maxinflight int          Maximum messages to hold in-flight
-  -r, --rpc-url string           JSON/RPC URL for Ethereum node
-  -p, --sasl-password string     Password for SASL authentication
-  -u, --sasl-username string     Username for SASL authentication
-  -C, --tls-cacerts string       CA certificates file (or host CAs will be used)
-  -c, --tls-clientcerts string   A client certificate file, for mutual TLS auth
-  -k, --tls-clientkey string     A client private key file, for mutual TLS auth
-  -e, --tls-enabled              Encrypt network connection with TLS (SSL)
-  -z, --tls-insecure             Disable verification of TLS certificate chain
-  -t, --topic-in string          Topic to listen to
-  -T, --topic-out string         Topic to send events to
-  -x, --tx-timeout int           Maximum wait time for an individual transaction (seconds)
-
-Global Flags:
-  -d, --debug int   0=error, 1=info, 2=debug (default 1)
-```
-
-### Running the Webhooks->Kafka bridge via cmdline params
-
-```
-$ethconnect webhooks --help
-Copyright (C) 2018 Kaleido, a ConsenSys business
-Licensed under the Apache License, Version 2.0
-Version:  (Build Date: )
-
-Webhooks->Kafka Bridge
-
-Usage:
-  ethconnect webhooks [flags]
-
-Flags:
-  -b, --brokers stringArray                 Comma-separated list of bootstrap brokers
-  -i, --clientid string                     Client ID (or generated UUID)
-  -g, --consumer-group string               Client ID (or generated UUID)
-  -h, --help                                help for webhooks
-  -L, --listen-addr string                  Local address to listen on
-  -l, --listen-port int                     Port to listen on (default 8080)
-  -D, --mongodb-database string             MongoDB receipt store database
-  -q, --mongodb-query-limit int             Maximum docs to return on a rest call (cap on limit)
-  -r, --mongodb-receipt-collection string   MongoDB receipt store collection
-  -x, --mongodb-receipt-maxdocs int         Receipt store capped size (new collections only)
-  -m, --mongodb-url string                  MongoDB URL for a receipt store
-  -p, --sasl-password string                Password for SASL authentication
-  -u, --sasl-username string                Username for SASL authentication
-  -C, --tls-cacerts string                  CA certificates file (or host CAs will be used)
-  -c, --tls-clientcerts string              A client certificate file, for mutual TLS auth
-  -k, --tls-clientkey string                A client private key file, for mutual TLS auth
-  -e, --tls-enabled                         Encrypt network connection with TLS (SSL)
-  -z, --tls-insecure                        Disable verification of TLS certificate chain
-  -t, --topic-in string                     Topic to listen to
-  -T, --topic-out string                    Topic to send events to
-
-Global Flags:
-  -d, --debug int   0=error, 1=info, 2=debug (default 1)
 ```

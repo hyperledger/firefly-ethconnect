@@ -146,6 +146,7 @@ type ErrorReply struct {
 	ReplyCommon
 	ErrorMessage    string `json:"errorMessage,omitempty"`
 	OriginalMessage string `json:"requestPayload,omitempty"`
+	TXHash          string `json:"transactionHash,omitempty"`
 }
 
 // NewErrorReply is a helper to construct an error message

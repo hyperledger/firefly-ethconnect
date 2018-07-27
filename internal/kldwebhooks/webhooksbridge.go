@@ -282,21 +282,27 @@ func (w *WebhooksBridge) webhookHandler(res http.ResponseWriter, req *http.Reque
 	var genericPayload map[string]interface{}
 	contentType := strings.ToLower(req.Header.Get("Content-type"))
 	log.Infof("Received message 'Content-Type: %s' Length: %d", contentType, req.ContentLength)
-	if contentType == "application/x-yaml" || contentType == "text/yaml" {
-		yamlGenericPayload := make(map[interface{}]interface{})
-		err := yaml.Unmarshal(originalPayload, &yamlGenericPayload)
-		if err != nil {
-			hookErrReply(res, fmt.Errorf("Unable to parse YAML: %s", err), 400)
-			return
-		}
-		genericPayload = dyno.ConvertMapI2MapS(yamlGenericPayload).(map[string]interface{})
-	} else {
+
+	// Unless explicitly declared as YAML, try JSON first
+	var unmarshalledAsJSON = false
+	if contentType != "application/x-yaml" && contentType != "text/yaml" {
 		genericPayload = make(map[string]interface{})
 		err := json.Unmarshal(originalPayload, &genericPayload)
 		if err != nil {
-			hookErrReply(res, fmt.Errorf("Unable to parse JSON: %s", err), 400)
+			log.Debugf("Payload is not valid JSON - trying YAML: %s", err)
+		} else {
+			unmarshalledAsJSON = true
+		}
+	}
+	// Try YAML if content-type is set, or if JSON fails
+	if !unmarshalledAsJSON {
+		yamlGenericPayload := make(map[interface{}]interface{})
+		err := yaml.Unmarshal(originalPayload, &yamlGenericPayload)
+		if err != nil {
+			hookErrReply(res, fmt.Errorf("Unable to parse as YAML or JSON: %s", err), 400)
 			return
 		}
+		genericPayload = dyno.ConvertMapI2MapS(yamlGenericPayload).(map[string]interface{})
 	}
 
 	// Check we understand the type, and can get the key.

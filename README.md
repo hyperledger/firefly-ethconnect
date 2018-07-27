@@ -24,6 +24,10 @@
     - [Running the Kafka->Ethereum bridge via cmdline params](#running-the-kafka-ethereum-bridge-via-cmdline-params)
     - [Running the Webhooks->Kafka bridge via cmdline params](#running-the-webhooks-kafka-bridge-via-cmdline-params)
     - [Example server YAML definition](#example-server-yaml-definition)
+  - [Tuning](#tuning)
+    - [Maximum messages to hold in-flight (maxinflight)](#maximum-messages-to-hold-in-flight-maxinflight)
+    - [Maximum wait time for an individual transaction (tx-timeout)](#maximum-wait-time-for-an-individual-transaction-tx-timeout)
+  - [Contributing](#contributing)
 
 ## About kaleido-io/ethconnect
 
@@ -203,7 +207,7 @@ When using the bridge, an application can submit simple YAML/JSON formatted tran
 in a highly parallel way across many instances using the same sender address to the bridge 
 over HTTPS/Kafka _without_ a nonce. Then through ordered message delivery and nonce management
 code within the kaleido-io/ethconnect bridge it will be assigned a nonce and submitted
-into the Ethereum node.
+into the Ethereum node. The nonce assigned is returned by the bridge in the reply.
 
 If a sender needs to achieve exactly-once delivery of transactions (vs. at-least-once) it is still necessary to allocate the nonce within the application and pass it into kaleido-io/ethconnect in the payload.  This allows the sender to control allocation of nonces using its internal state store / locking.
 
@@ -236,6 +240,8 @@ We selected Kafka as the first Messaging platform (and built a multi-tenant secu
 - The modern replication based cloud-native and continuously available architecture is ideal for the Kaleido platform, and is likely to be a good fit for the modern Microservice architectures that are common in Blockchain projects.
 
 ## Topics
+
+[![kaleido-io/ethconnect - Topics](ethconnect_topics.png)](ethconnect.pdf)
 
 The topic usage is very simple:
 - One topic delivering messages into the bridge
@@ -281,6 +287,10 @@ An example successful `TransactionSuccess` reply message, which indicates a tran
   "transactionIndexHex": "0x0"
 }
 ```
+
+Numeric values are supplied in two formats for convenience of different receiving applications:
+- Simple numeric values, wrapped in strings to handle the potential of big integers
+- Hex values encoded identically to the native JSON/RPC interface
 
 The MongoDB receipt store adds two additional fields, used to retrieve the entries efficient on the REST interface:
 ```json
@@ -461,3 +471,65 @@ webhooks:
         enabled: true
       consumerGroup: "example-webhoooksto-kafka-cg"
 ```
+
+## Tuning
+
+The following tuning parameters are currently exposed on the Kafka->Ethereum bridge:
+
+### Maximum messages to hold in-flight (maxinflight)
+
+This is the maximum number of messages that will be re-submitted if a bridge is
+terminated while processing messages.
+
+In order for the bridge to get high performance by packing many transactions into a
+single block (blocks might only be cut every few seconds), the bridge needs to hold a
+number of 'in-flight' messages from Kafka that have been submitted into the Ethereum
+node, but not yet made it into a block.
+
+An individual instance of the Kafka-Ethereum bridge will receive messages in order from
+one or more Kafka topic partitions. Each message needs to be checked, then submitted
+into Ethereum. Some might immediate error, and others will be ordered into blocks.
+The Ethereum node does not order necessarily order transactions into blocks in the order
+they were sent (apart from for a single sender, where the nonce is used as discussed above).
+However, Kafka maintains a single `offset` for each partition that is the point at which
+messages will be redelivered to the bridge if it fails.
+
+So the bridge does not `mark` the Kafka `offset` complete until **all** replies up to
+that offset have been successfully written to the reply topic (with either a transaction
+receipt or an error).
+
+### Maximum wait time for an individual transaction (tx-timeout)
+
+This is the maximum amount of time to wait for an _individual_ transaction to enter a block
+after submission before sending a Kafka error reply back to the sender.
+
+It is possible to submit transactions into Ethereum that will be accepted, but will never
+make it into a block:
+- Transactions that require funding, where the funds are not available (pending transactions)
+- Transactions with explicitly set nonce values, that are not the next to be executed (queued transactions)
+
+When transactions are being submitted from multiple nodes into a chain, it is also possible 
+for a build-up of transactions to occur such that it can take a significant amount of time
+to get a transaction into a block.
+
+In the case of a timeout, the transaction hash will be sent back in the `Error` reply
+so that an administrator can later check the state of the transaction in the node.
+
+## Contributing
+
+We encourage you to fork this repository to make changes, and customize/extend the
+tool for your specific use case. We also encourage pull requests to the Kaleido
+hosted repository.
+
+As the community around this OSS project evolves, we will flesh out a full CONTRIBUTING.md.
+
+For now here are some guidelines when submitting PRs:
+- Provide a description of the function, and why it would be generally useful to others
+- If you incorporate code from other projects/authors, you must list this in your contribution,
+  and the license under which that code was provided. GPL/LGPL source code contributions cannot be accepted into this repository.
+- Avoid changing default behavior - instead provide a new option to enable different behavior
+- Perform a `make` locally, which will execute the same build as occurs in Travis
+- Ensure code coverage does not drop below the 95% threshold enforced by the Travis build
+- Be patient to the fact that additional testing (regression and non-functional
+  performance/stress tests) are performed by Kaleido on this component, and might gate
+  inclusion of changes into `master`

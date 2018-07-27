@@ -36,6 +36,7 @@ import (
 type errorReply struct {
 	status int
 	err    error
+	txHash string
 }
 
 type testMsgContext struct {
@@ -76,10 +77,10 @@ var goodSendTxnJSON = "{" +
 func (r *testRPC) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
 	r.calls = append(r.calls, method)
 	if method == "eth_sendTransaction" {
-		result = r.ethSendTransactionResult
+		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethSendTransactionResult))
 		return r.ethSendTransactionErr
 	} else if method == "eth_getTransactionCount" {
-		result = r.ethGetTransactionCountResult
+		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethGetTransactionCountResult))
 		return r.ethGetTransactionCountErr
 	} else if method == "eth_getTransactionReceipt" {
 		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethGetTransactionReceiptResult))
@@ -109,10 +110,15 @@ func (c *testMsgContext) Unmarshal(msg interface{}) error {
 }
 
 func (c *testMsgContext) SendErrorReply(status int, err error) {
+	c.SendErrorReplyWithTX(status, err, "")
+}
+
+func (c *testMsgContext) SendErrorReplyWithTX(status int, err error, txHash string) {
 	log.Infof("Sending error reply. Status=%d Err=%s", status, err)
 	c.errorRepies = append(c.errorRepies, &errorReply{
 		status: status,
 		err:    err,
+		txHash: txHash,
 	})
 }
 
@@ -397,11 +403,12 @@ func TestOnSendTransactionMessageBadJSON(t *testing.T) {
 func TestOnSendTransactionMessageTxnTimeout(t *testing.T) {
 	assert := assert.New(t)
 
+	txHash := "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b"
 	msgProcessor := newMsgProcessor()
 	testMsgContext := &testMsgContext{}
 	testMsgContext.jsonMsg = goodSendTxnJSON
 	testRPC := &testRPC{
-		ethSendTransactionResult: "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b",
+		ethSendTransactionResult: txHash,
 	}
 	msgProcessor.Init(testRPC, 1)                       // configured in seconds for real world
 	msgProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
@@ -415,6 +422,7 @@ func TestOnSendTransactionMessageTxnTimeout(t *testing.T) {
 	assert.Equal("eth_getTransactionReceipt", testRPC.calls[1])
 
 	assert.Regexp("Timed out waiting for transaction receipt", testMsgContext.errorRepies[0].err.Error())
+	assert.Equal(txHash, testMsgContext.errorRepies[0].txHash)
 
 }
 

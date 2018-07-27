@@ -208,9 +208,9 @@ func (p *msgProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 
 	if timedOut {
 		if err != nil {
-			iTX.msgContext.SendErrorReply(500, fmt.Errorf("Error obtaining transaction receipt (%d retries): %s", retries, err))
+			iTX.msgContext.SendErrorReplyWithTX(500, fmt.Errorf("Error obtaining transaction receipt (%d retries): %s", retries, err), iTX.tx.Hash)
 		} else {
-			iTX.msgContext.SendErrorReply(408, fmt.Errorf("Timed out waiting for transaction receipt"))
+			iTX.msgContext.SendErrorReplyWithTX(408, fmt.Errorf("Timed out waiting for transaction receipt"), iTX.tx.Hash)
 		}
 	} else {
 		// Update the stats

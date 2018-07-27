@@ -111,6 +111,8 @@ type MsgContext interface {
 	Unmarshal(msg interface{}) error
 	// Send an error reply
 	SendErrorReply(status int, err error)
+	// Send an error reply
+	SendErrorReplyWithTX(status int, err error, txHash string)
 	// Send a reply that can be marshaled into bytes.
 	// Sets all the common headers on behalf of the caller, based on the request context
 	Reply(replyMsg kldmessages.ReplyWithHeaders)
@@ -249,8 +251,13 @@ func (c *msgContext) Unmarshal(msg interface{}) (err error) {
 }
 
 func (c *msgContext) SendErrorReply(status int, err error) {
+	c.SendErrorReplyWithTX(status, err, "")
+}
+
+func (c *msgContext) SendErrorReplyWithTX(status int, err error, txHash string) {
 	log.Warnf("Failed to process message %s: %s", c, err)
 	errMsg := kldmessages.NewErrorReply(err, c.saramaMsg.Value)
+	errMsg.TXHash = txHash
 	c.Reply(errMsg)
 }
 

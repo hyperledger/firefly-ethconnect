@@ -137,7 +137,7 @@ contracts and sending transactions, because it is:
 - Asynchronous in nature, needing polling to obtain a transaction receipt
 - Based on Recursive Length Prefix (RLP) encoding of payloads
 
-Instead thick client libraries such as [web3.js](https://github.com/ethereum/web3.js/) (web3j)[https://github.com/web3j/web3j], (web3.py)[https://github.com/ethereum/web3.py], (Nethereum)[https://github.com/Nethereum/Nethereum] and [ethjs](https://github.com/ethjs/ethjs) are used to submit transactions.
+Instead thick client libraries such as [web3.js](https://github.com/ethereum/web3.js/), [web3j](https://github.com/web3j/web3j), [web3.py](https://github.com/ethereum/web3.py), [Nethereum](https://github.com/Nethereum/Nethereum) and [ethjs](https://github.com/ethjs/ethjs) are used to submit transactions.
 
 These thick client libraries perform many of the same functions as kaleido-io/ethconnect, simplifying submission of transactions, receipt checking,
 nonce management etc.

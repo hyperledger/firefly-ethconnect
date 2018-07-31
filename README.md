@@ -129,7 +129,7 @@ solidity: |-
 The JSON/RPC specification exposed natively by Go-ethereum and other Ethereum
 protocol implementations, provides a rich low-level API for interfacing with
 the node. It is usually exposed over HTTP (as well as IPC) so can be connected
-over a network, and have security layered in front of it (as has been down within
+over a network, and have security layered in front of it (as has been done within
 the Kaleido platform).
 
 However, applications seldom code directly to the JSON/RPC API when deploying

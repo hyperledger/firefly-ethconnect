@@ -145,14 +145,13 @@ nonce management etc.
 In the modern world of Microservice architectures, having a simple, efficient 
 and stateless REST API to submit transactions is a desirable alternative. A small self-contained, optimized, and independently scalable layer that can exposing a simple API that can be consumed by any application, programming language, or Integration tool.
 
-e.g. making it trivial to submit transactions. No coding required, just open up Postman and send in a trivial piece of YAML copied from a README like this one.
+e.g. making it trivial to submit transactions. No coding required, just open up [Postman](https://www.getpostman.com/) and send in some YAML or JSON copied from a README like this one.
 
-In an Enterprise context, the availability of simple standardized interfaces like HTTP and Kafka means applications and integration tools (a common ESB or other EAI tooling) can be hooked up trivially. No need to insert complex code libraries into applications,
-many of which are LGPL licensed.
+In an Enterprise context, the availability of standardized interfaces like HTTP and Kafka means applications and integration tools (a common ESB or other EAI tooling) can be hooked up easily. No need to insert complex code libraries into applications, many of which are LGPL licensed.
 
 ## Why Messaging?
 
-So you ask, if the goal is simplicity, why not just put the simple HTTP API in front of JSON/RPC and be done with it?
+So you ask, if the goal is simplicity, why not just put the HTTP API in front of JSON/RPC and be done with it?
 
 There are some challenges in Enterprise grade Blockchain solutions (particularly in high throughput permissioned/private chains) that cannot be solved by a stateless HTTP bridging layer alone.
 
@@ -160,19 +159,19 @@ So for Kaleido, we started with a robust Messaging tier and layered the HTTP int
 
 ## The asynchronous nature of Ethereum transactions
 
-Ethereum transactions can take many seconds or minutes (depending on the backlog and block period) from submission until they make it into a block, and a receipt is available. Each individual node in Ethereum provides a built-in simple pool where transactions can be pooled while waiting to enter a block.
+Ethereum transactions can take many seconds or minutes (depending on the backlog and block period) from submission until they make it into a block, and a receipt is available. Each individual node in Ethereum provides a built-in pool where transactions can be buffered while waiting to enter a block.
 
 Connecting a synchronous blocking HTTP interface directly to an inherently asynchronous system like this can cause problems. The HTTP requester times out waiting for a response, but has no way to know if it should retry or if the transaction will eventually succeed. It cannot cancel the request.
 
 Providing a Messaging layer with at-least-once delivery and message ordering, allows the asynchronous nature of Ethereum to be reflected back to the remote application.
 
-Applications that have their own state stores are able to communicate over Messaging / Kafka with trivially simple JSON payloads to stream transactions into a scalable set of Ethereum nodes, and process the replies as they occur. The application can scale horizontally. Applications can also be decoupled from the Ethereum network with an integration technology like an Enterprise Service Bus (ESB).
+Applications that have their own state stores are able to communicate over Messaging / Kafka with simple JSON payloads to stream transactions into a scalable set of Ethereum nodes, and process the replies as they occur. The application can scale horizontally. Applications can also be decoupled from the Ethereum network with an integration technology like an Enterprise Service Bus (ESB).
 
 When spikes in workload occur that create a large queue of transactions that need to be fed into the Ethereum network at a lower rate, the kaleido-io/ethconnect bridge feeds them in at an optimal rate.
 
 ### Ethereum Webhooks and the REST Receipt Store (MongoDB)
 
-Another key goal of having a robust Messaging layer under the covers is that the most trivial application can send messages into Ethereum reliably.
+Another key goal of having a robust Messaging layer under the covers is that any application can send messages into Ethereum reliably.
 
 - `POST` a [trivial YAML/JSON payload](#yaml-to-submit-a-transaction)
   - to `/hook` to complete once the message is confirmed by Kafka (0.5s - tunable)

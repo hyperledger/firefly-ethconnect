@@ -164,9 +164,7 @@ func (p *msgProcessor) newInflightWrapper(msgContext MsgContext, suppliedFrom st
 	// which will be ok as long as we're the only JSON/RPC writing to
 	// this address. But if we're competing with other transactions
 	// we need to accept the possibility of 'nonce too low'
-	// use 'pending' here instead of 'latest' to take into account the
-	// transactions that are still pending in the txpool
-	inflight.nonce, err = kldeth.GetTransactionCount(p.rpc, &from, "pending")
+	inflight.nonce, err = kldeth.GetTransactionCount(p.rpc, &from, "latest")
 	return
 }
 

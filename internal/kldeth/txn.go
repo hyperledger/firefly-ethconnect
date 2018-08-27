@@ -36,10 +36,11 @@ import (
 // Txn wraps an ethereum transaction, along with the logic to send it over
 // JSON/RPC to a node
 type Txn struct {
-	From    common.Address
-	EthTX   *types.Transaction
-	Hash    string
-	Receipt TxnReceipt
+	NodeAssignNonce bool
+	From            common.Address
+	EthTX           *types.Transaction
+	Hash            string
+	Receipt         TxnReceipt
 }
 
 // TxnReceipt is the receipt obtained over JSON/RPC from the ethereum client
@@ -168,10 +169,13 @@ func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgG
 		return
 	}
 
-	nonce, err := msgNonce.Int64()
-	if err != nil {
-		err = fmt.Errorf("Converting supplied 'nonce' to integer: %s", err)
-		return
+	var nonce int64
+	if msgNonce != "" {
+		nonce, err = msgNonce.Int64()
+		if err != nil {
+			err = fmt.Errorf("Converting supplied 'nonce' to integer: %s", err)
+			return
+		}
 	}
 
 	value := big.NewInt(0)

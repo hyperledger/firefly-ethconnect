@@ -38,11 +38,12 @@ type MsgProcessor interface {
 }
 
 type inflightTxn struct {
-	from       string // normalized to 0x prefix and lower case
-	nonce      int64
-	msgContext MsgContext
-	tx         *kldeth.Txn
-	wg         sync.WaitGroup
+	from            string // normalized to 0x prefix and lower case
+	nodeAssignNonce bool
+	nonce           int64
+	msgContext      MsgContext
+	tx              *kldeth.Txn
+	wg              sync.WaitGroup
 }
 
 func (i *inflightTxn) nonceNumber() json.Number {
@@ -63,6 +64,7 @@ type msgProcessor struct {
 	inflightTxns       map[string][]*inflightTxn
 	inflightTxnDelayer TxnDelayTracker
 	rpc                kldeth.RPCClient
+	conf               *KafkaBridgeConf
 }
 
 func newMsgProcessor() *msgProcessor {
@@ -70,6 +72,7 @@ func newMsgProcessor() *msgProcessor {
 		inflightTxnsLock:   &sync.Mutex{},
 		inflightTxns:       make(map[string][]*inflightTxn),
 		inflightTxnDelayer: NewTxnDelayTracker(),
+		conf:               &KafkaBridgeConf{},
 	}
 }
 
@@ -160,11 +163,22 @@ func (p *msgProcessor) newInflightWrapper(msgContext MsgContext, suppliedFrom st
 		return
 	}
 
-	// Otherwise we need to do a dirty read from the ethereum client,
-	// which will be ok as long as we're the only JSON/RPC writing to
-	// this address. But if we're competing with other transactions
-	// we need to accept the possibility of 'nonce too low'
-	inflight.nonce, err = kldeth.GetTransactionCount(p.rpc, &from, "latest")
+	// We want to submit this transaction with the next nonce in the chain.
+	// If this is a node-signed transaction, then we can ask the node
+	// to simply use the next available nonce.
+	// We provide an override to force the Go code to always assign the nonce.
+	if !p.conf.PredictNonces {
+		inflight.nodeAssignNonce = true
+	} else {
+		// Alternatively (will be required when we support externally signed tranactions)
+		// we can do a dirty read from the node of the highest comitted
+		// transaction. This will be ok as long as we're the only JSON/RPC writing to
+		// this address. But if we're competing with other transactions
+		// we need to accept the possibility of 'replacement transaction underpriced'
+		// (or if gas price is being varied by the submitter the potential of
+		// overwriting a transcation)
+		inflight.nonce, err = kldeth.GetTransactionCount(p.rpc, &from, "pending")
+	}
 	return
 }
 
@@ -295,6 +309,7 @@ func (p *msgProcessor) OnDeployContractMessage(msgContext MsgContext, msg *kldme
 		msgContext.SendErrorReply(400, err)
 		return
 	}
+	tx.NodeAssignNonce = inflightWrapper.nodeAssignNonce
 
 	if err = tx.Send(p.rpc); err != nil {
 		msgContext.SendErrorReply(400, err)
@@ -318,6 +333,7 @@ func (p *msgProcessor) OnSendTransactionMessage(msgContext MsgContext, msg *kldm
 		msgContext.SendErrorReply(400, err)
 		return
 	}
+	tx.NodeAssignNonce = inflightWrapper.nodeAssignNonce
 
 	if err = tx.Send(p.rpc); err != nil {
 		msgContext.SendErrorReply(400, err)

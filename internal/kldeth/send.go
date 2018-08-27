@@ -45,13 +45,13 @@ func (tx *Txn) Send(rpc RPCClient) error {
 }
 
 type sendTxArgs struct {
-	Nonce    hexutil.Uint64 `json:"nonce"`
-	From     string         `json:"from"`
-	To       string         `json:"to,omitempty"`
-	Gas      hexutil.Uint64 `json:"gas"`
-	GasPrice hexutil.Big    `json:"gasPrice"`
-	Value    hexutil.Big    `json:"value"`
-	Data     *hexutil.Bytes `json:"data"`
+	Nonce    *hexutil.Uint64 `json:"nonce,omitempty"`
+	From     string          `json:"from"`
+	To       string          `json:"to,omitempty"`
+	Gas      hexutil.Uint64  `json:"gas"`
+	GasPrice hexutil.Big     `json:"gasPrice"`
+	Value    hexutil.Big     `json:"value"`
+	Data     *hexutil.Bytes  `json:"data"`
 	// EEA spec extensions
 	PrivateFrom string   `json:"privateFrom,omitempty"`
 	PrivateFor  []string `json:"privateFor,omitempty"`
@@ -60,8 +60,13 @@ type sendTxArgs struct {
 // sendUnsignedTxn sends a transaction for internal signing by the node
 func (tx *Txn) sendUnsignedTxn(ctx context.Context, rpc RPCClient) (string, error) {
 	data := hexutil.Bytes(tx.EthTX.Data())
+	var nonce *hexutil.Uint64
+	if !tx.NodeAssignNonce {
+		hexNonce := hexutil.Uint64(tx.EthTX.Nonce())
+		nonce = &hexNonce
+	}
 	args := sendTxArgs{
-		Nonce:    hexutil.Uint64(tx.EthTX.Nonce()),
+		Nonce:    nonce,
 		From:     tx.From.Hex(),
 		Gas:      hexutil.Uint64(tx.EthTX.Gas()),
 		GasPrice: hexutil.Big(*tx.EthTX.GasPrice()),

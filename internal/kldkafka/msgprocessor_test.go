@@ -69,7 +69,6 @@ var goodDeployTxnJSON = "{" +
 var goodSendTxnJSON = "{" +
 	"  \"headers\":{\"type\": \"SendTransaction\"}," +
 	"  \"from\":\"" + testFromAddr + "\"," +
-	"  \"nonce\":\"123\"," +
 	"  \"gas\":\"123\"," +
 	"  \"method\":{\"name\":\"test\"}" +
 	"}"
@@ -315,6 +314,7 @@ func TestOnDeployContractMessageFailedToGetNonce(t *testing.T) {
 	assert := assert.New(t)
 
 	msgProcessor := newMsgProcessor()
+	msgProcessor.conf.AlwaysManageNonce = true
 	testMsgContext := &testMsgContext{}
 	testMsgContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"DeployContract\"}," +
@@ -400,6 +400,7 @@ func TestOnSendTransactionMessageBadJSON(t *testing.T) {
 	assert.Regexp("invalid character", testMsgContext.errorRepies[0].err.Error())
 
 }
+
 func TestOnSendTransactionMessageTxnTimeout(t *testing.T) {
 	assert := assert.New(t)
 
@@ -447,6 +448,7 @@ func TestOnSendTransactionMessageFailedToGetNonce(t *testing.T) {
 	assert := assert.New(t)
 
 	msgProcessor := newMsgProcessor()
+	msgProcessor.conf.AlwaysManageNonce = true
 	testMsgContext := &testMsgContext{}
 	testMsgContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +

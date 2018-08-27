@@ -167,7 +167,7 @@ func (p *msgProcessor) newInflightWrapper(msgContext MsgContext, suppliedFrom st
 	// If this is a node-signed transaction, then we can ask the node
 	// to simply use the next available nonce.
 	// We provide an override to force the Go code to always assign the nonce.
-	if !p.conf.AlwaysManageNonce {
+	if !p.conf.PredictNonces {
 		inflight.nodeAssignNonce = true
 	} else {
 		// Alternatively (will be required when we support externally signed tranactions)

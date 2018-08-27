@@ -314,7 +314,7 @@ func TestOnDeployContractMessageFailedToGetNonce(t *testing.T) {
 	assert := assert.New(t)
 
 	msgProcessor := newMsgProcessor()
-	msgProcessor.conf.AlwaysManageNonce = true
+	msgProcessor.conf.PredictNonces = true
 	testMsgContext := &testMsgContext{}
 	testMsgContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"DeployContract\"}," +
@@ -448,7 +448,7 @@ func TestOnSendTransactionMessageFailedToGetNonce(t *testing.T) {
 	assert := assert.New(t)
 
 	msgProcessor := newMsgProcessor()
-	msgProcessor.conf.AlwaysManageNonce = true
+	msgProcessor.conf.PredictNonces = true
 	testMsgContext := &testMsgContext{}
 	testMsgContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +

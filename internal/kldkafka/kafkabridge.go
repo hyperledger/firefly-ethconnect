@@ -35,6 +35,7 @@ type KafkaBridgeConf struct {
 	Kafka         KafkaCommonConf `json:"kafka"`
 	MaxInFlight   int             `json:"maxInFlight"`
 	MaxTXWaitTime int             `json:"maxTXWaitTime"`
+	PredictNonces bool            `json:"alwaysManageNonce"`
 	RPC           struct {
 		URL string `json:"url"`
 	} `json:"rpc"`
@@ -100,6 +101,7 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 	cmd.Flags().IntVarP(&k.conf.MaxInFlight, "maxinflight", "m", kldutils.DefInt("KAFKA_MAX_INFLIGHT", 0), "Maximum messages to hold in-flight")
 	cmd.Flags().StringVarP(&k.conf.RPC.URL, "rpc-url", "r", os.Getenv("ETH_RPC_URL"), "JSON/RPC URL for Ethereum node")
 	cmd.Flags().IntVarP(&k.conf.MaxTXWaitTime, "tx-timeout", "x", kldutils.DefInt("ETH_TX_TIMEOUT", 0), "Maximum wait time for an individual transaction (seconds)")
+	cmd.Flags().BoolVarP(&k.conf.PredictNonces, "predict-nonces", "P", false, "Predict the next nonce before sending (default=false for node-signed txns)")
 	return
 }
 
@@ -315,6 +317,7 @@ func NewKafkaBridge(printYAML *bool) *KafkaBridge {
 		inFlight:     make(map[string]*msgContext),
 		inFlightCond: sync.NewCond(&sync.Mutex{}),
 	}
+	mp.conf = &k.conf // Inherit our configuration in the processor
 	k.kafka = NewKafkaCommon(&SaramaKafkaFactory{}, &k.conf.Kafka, k)
 	return k
 }

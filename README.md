@@ -359,7 +359,7 @@ Flags:
   -g, --consumer-group string    Client ID (or generated UUID)
   -h, --help                     help for kafka
   -m, --maxinflight int          Maximum messages to hold in-flight
-  -P, --predict-nonces           Predict the next nonce before sending txns (default=false for mode-signed txns)
+  -P, --predict-nonces           Predict the next nonce before sending txns (default=false for node-signed txns)
   -r, --rpc-url string           JSON/RPC URL for Ethereum node
   -p, --sasl-password string     Password for SASL authentication
   -u, --sasl-username string     Username for SASL authentication

@@ -164,6 +164,7 @@ func (k *kafkaCommon) connect() (err error) {
 	clientConf.Producer.Return.Errors = true
 	clientConf.Producer.RequiredAcks = sarama.WaitForLocal
 	clientConf.Producer.Flush.Frequency = 500 * time.Millisecond
+	clientConf.Metadata.Retry.Backoff = 2 * time.Second
 	clientConf.Consumer.Return.Errors = true
 	clientConf.Group.Return.Notifications = true
 	clientConf.Net.TLS.Enable = (tlsConfig != nil)

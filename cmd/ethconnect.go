@@ -20,7 +20,6 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
-	"sync"
 
 	"gopkg.in/yaml.v2"
 
@@ -137,22 +136,22 @@ func startServer() (err error) {
 		return err
 	}
 
+	anyRoutineFinished := make(chan bool)
+
 	var dontPrintYaml = false
-	var wg sync.WaitGroup
 	for name, conf := range serverConfig.KafkaBridges {
 		kafkaBridge := kldkafka.NewKafkaBridge(&dontPrintYaml)
 		kafkaBridge.SetConf(conf)
 		if err := kafkaBridge.ValidateConf(); err != nil {
 			return err
 		}
-		wg.Add(1)
-		go func(name string) {
+		go func(name string, anyRoutineFinished chan bool) {
 			log.Infof("Starting Kafka->Ethereum bridge '%s'", name)
 			if err := kafkaBridge.Start(); err != nil {
 				log.Errorf("Kafka->Ethereum bridge failed: %s", err)
 			}
-			wg.Done()
-		}(name)
+			anyRoutineFinished <- true
+		}(name, anyRoutineFinished)
 	}
 	for name, conf := range serverConfig.WebhooksBridges {
 		webhooksBridge := kldwebhooks.NewWebhooksBridge(&dontPrintYaml)
@@ -160,16 +159,17 @@ func startServer() (err error) {
 		if err := webhooksBridge.ValidateConf(); err != nil {
 			return err
 		}
-		wg.Add(1)
-		go func(name string) {
+		go func(name string, anyRoutineFinished chan bool) {
 			log.Infof("Starting Webhooks->Kafka bridge '%s'", name)
 			if err := webhooksBridge.Start(); err != nil {
 				log.Errorf("Webhooks->Kafka bridge failed: %s", err)
 			}
-			wg.Done()
-		}(name)
+			anyRoutineFinished <- true
+		}(name, anyRoutineFinished)
 	}
-	wg.Wait()
+
+	// Terminate when ANY routine fails (do not wait for them all to complete)
+	<-anyRoutineFinished
 
 	return
 }

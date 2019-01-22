@@ -143,7 +143,7 @@ func genMethodABI(jsonABI *kldmessages.ABIMethod) (method *abi.Method, err error
 		jsonInput := jsonABI.Inputs[i]
 		var arg abi.Argument
 		arg.Name = jsonInput.Name
-		if arg.Type, err = abi.NewType(jsonInput.Type); err != nil {
+		if arg.Type, err = abi.NewType(jsonInput.Type, []abi.ArgumentMarshaling{}); err != nil {
 			err = fmt.Errorf("ABI input %d: Unable to map %s to etherueum type: %s", i, jsonInput.Name, err)
 			return
 		}
@@ -153,7 +153,7 @@ func genMethodABI(jsonABI *kldmessages.ABIMethod) (method *abi.Method, err error
 		jsonOutput := jsonABI.Outputs[i]
 		var arg abi.Argument
 		arg.Name = jsonOutput.Name
-		if arg.Type, err = abi.NewType(jsonOutput.Type); err != nil {
+		if arg.Type, err = abi.NewType(jsonOutput.Type, []abi.ArgumentMarshaling{}); err != nil {
 			err = fmt.Errorf("ABI output %d: Unable to map %s to etherueum type: %s", i, jsonOutput.Name, err)
 			return
 		}
@@ -359,7 +359,7 @@ func (tx *Txn) flattenParams(origParams []interface{}, method *abi.Method) (para
 			params[i] = value
 			// Set the type
 			var ethType abi.Type
-			if ethType, err = abi.NewType(typeStr.(string)); err != nil {
+			if ethType, err = abi.NewType(typeStr.(string), []abi.ArgumentMarshaling{}); err != nil {
 				err = fmt.Errorf("Param %d: Unable to map %s to etherueum type: %s", i, typeStr, err)
 				return
 			}

@@ -8,5 +8,5 @@ before_install:
 after_success:
   - bash <(curl -s https://codecov.io/bash)
 go:
-  - "1.10.x"
+  - "1.11.x"
 

@@ -2,9 +2,7 @@ language: go
 env:
   - BUILD_VERSION=travis-CI
 before_install:
-  - sudo add-apt-repository -y ppa:ethereum/ethereum
-  - sudo apt-get update
-  - sudo apt-get install --allow-unauthenticated -y solc
+  - sudo curl -Lo /usr/local/bin/solc https://github.com/ethereum/solidity/releases/download/v0.4.25/solc-static-linux
 after_success:
   - bash <(curl -s https://codecov.io/bash)
 go:

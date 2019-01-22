@@ -1,5 +1,4 @@
- # Go parameters
-VGO=vgo
+VGO=go # Set to vgo if building in Go 1.10
 BINARY_NAME=ethconnect
 BINARY_UNIX=$(BINARY_NAME)-tux
 BINARY_MAC=$(BINARY_NAME)-mac

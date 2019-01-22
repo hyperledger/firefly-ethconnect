@@ -37,21 +37,21 @@ type testKafkaGoRoutines struct{}
 
 func (g *testKafkaGoRoutines) ConsumerMessagesLoop(consumer KafkaConsumer, producer KafkaProducer, wg *sync.WaitGroup) {
 	for msg := range consumer.Messages() {
-		log.Infof("msg: ", msg)
+		log.Infof("msg: %+v", msg)
 	}
 	wg.Done()
 }
 
 func (g *testKafkaGoRoutines) ProducerErrorLoop(consumer KafkaConsumer, producer KafkaProducer, wg *sync.WaitGroup) {
 	for err := range producer.Errors() {
-		log.Infof("err: ", err)
+		log.Infof("err: %s", err)
 	}
 	wg.Done()
 }
 
 func (g *testKafkaGoRoutines) ProducerSuccessLoop(consumer KafkaConsumer, producer KafkaProducer, wg *sync.WaitGroup) {
 	for msg := range producer.Successes() {
-		log.Infof("msg: ", msg)
+		log.Infof("msg: %+v", msg)
 	}
 	wg.Done()
 }

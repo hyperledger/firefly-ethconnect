@@ -20,6 +20,7 @@
     - [Example error](#example-error)
   - [Running the Bridge](#running-the-bridge)
     - [Installation](#installation)
+  - [Development environment](#development-environment)
     - [Ways to run](#ways-to-run)
     - [Running the Kafka->Ethereum bridge via cmdline params](#running-the-kafka-ethereum-bridge-via-cmdline-params)
     - [Running the Webhooks->Kafka bridge via cmdline params](#running-the-webhooks-kafka-bridge-via-cmdline-params)
@@ -330,10 +331,23 @@ Whether you are running a Kaleido permissioned chain and want to use an instance
 
 ### Installation
 
-Requires [Go 1.10](https://golang.org/dl/) or later
+Requires [Go 1.11](https://golang.org/dl/) or later to install with `go get`
 
 ```sh
 go get github.com/kaleido-io/ethconnect
+```
+
+## Development environment
+
+With Go 1.11 or later simply use
+```sh
+make
+```
+
+Can be built from source using Go 1.10 using `vgo`.
+```sh
+go get -u golang.org/x/vgo
+VGO=vgo make -e
 ```
 
 ### Ways to run

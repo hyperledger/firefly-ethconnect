@@ -463,7 +463,7 @@ func TestWebhookHandlerYAMLDeployContract(t *testing.T) {
 		"  type: DeployContract\n" +
 		"from: '0x4b098809E68C88e26442491c57866b7D4852216c'\n" +
 		"solidity: |-\n" +
-		"  pragma solidity ^0.4.17;\n" +
+		"  pragma solidity >=0.4.22 <0.6.0;\n" +
 		"  \n" +
 		"  contract simplestorage {\n" +
 		"    uint public storedData;\n" +

@@ -106,20 +106,20 @@ params:
   - 12345
 gas: 1000000
 solidity: |-
-  pragma solidity ^0.4.17;
-  
+  pragma solidity >=0.4.22 <0.6.0;
+
   contract simplestorage {
      uint public storedData;
-  
+
      function simplestorage(uint initVal) public {
         storedData = initVal;
      }
-  
+
      function set(uint x) public {
         storedData = x;
      }
-  
-     function get() public constant returns (uint retVal) {
+
+     function get() public view returns (uint retVal) {
         return storedData;
      }
   }
@@ -143,7 +143,7 @@ Instead thick client libraries such as [web3.js](https://github.com/ethereum/web
 These thick client libraries perform many of the same functions as kaleido-io/ethconnect, simplifying submission of transactions, receipt checking,
 nonce management etc.
 
-In the modern world of Microservice architectures, having a simple, efficient 
+In the modern world of Microservice architectures, having a simple, efficient
 and stateless REST API to submit transactions is a desirable alternative. A small self-contained, optimized, and independently scalable layer that can exposing a simple API that can be consumed by any application, programming language, or Integration tool.
 
 e.g. making it trivial to submit transactions. No coding required, just open up [Postman](https://www.getpostman.com/) and send in some YAML or JSON copied from a README like this one.
@@ -204,7 +204,7 @@ The management of this `nonce` pushes complexity back to the application tier - 
 The kaleido-io/ethconnect bridge contains all the logic necessary to communicate with the node to determine the next nonce, and also to cope with multiple requests being in flight within the same block, for the same sender (including [with IBFT](https://github.com/ethereum/EIPs/issues/650#issuecomment-360085474)).
 
 When using the bridge, an application can submit simple YAML/JSON formatted transactions
-in a highly parallel way across many instances using the same sender address to the bridge 
+in a highly parallel way across many instances using the same sender address to the bridge
 over HTTPS/Kafka _without_ a nonce. Then through ordered message delivery and nonce management
 code within the kaleido-io/ethconnect bridge it will be assigned a nonce and submitted
 into the Ethereum node. The nonce assigned is returned by the bridge in the reply.
@@ -522,7 +522,7 @@ make it into a block:
 - Transactions that require funding, where the funds are not available (pending transactions)
 - Transactions with explicitly set nonce values, that are not the next to be executed (queued transactions)
 
-When transactions are being submitted from multiple nodes into a chain, it is also possible 
+When transactions are being submitted from multiple nodes into a chain, it is also possible
 for a build-up of transactions to occur such that it can take a significant amount of time
 to get a transaction into a block.
 

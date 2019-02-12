@@ -60,7 +60,7 @@ const testFromAddr = "0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1"
 
 var goodDeployTxnJSON = "{" +
 	"  \"headers\":{\"type\": \"DeployContract\"}," +
-	"  \"solidity\":\"pragma solidity ^0.4.17; contract t {constructor() public {}}\"," +
+	"  \"solidity\":\"pragma solidity >=0.4.22 <0.6.0; contract t {constructor() public {}}\"," +
 	"  \"from\":\"" + testFromAddr + "\"," +
 	"  \"nonce\":\"123\"," +
 	"  \"gas\":\"123\"" +

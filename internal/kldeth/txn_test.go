@@ -40,8 +40,8 @@ func (r *testRPCClient) CallContext(ctx context.Context, result interface{}, met
 }
 
 const (
-	simpleStorage = "pragma solidity ^0.4.17;\n\ncontract simplestorage {\nuint public storedData;\n\nfunction simplestorage(uint initVal) public {\nstoredData = initVal;\n}\n\nfunction set(uint x) public {\nstoredData = x;\n}\n\nfunction get() public constant returns (uint retVal) {\nreturn storedData;\n}\n}"
-	twoContracts  = "pragma solidity ^0.4.17;\n\ncontract contract1 {function f1() public constant returns (uint retVal) {\nreturn 1;\n}\n}\n\ncontract contract2 {function f2() public constant returns (uint retVal) {\nreturn 2;\n}\n}"
+	simpleStorage = "pragma solidity >=0.4.22 <0.6.0;\n\ncontract simplestorage {\nuint public storedData;\n\nconstructor(uint initVal) public {\nstoredData = initVal;\n}\n\nfunction set(uint x) public {\nstoredData = x;\n}\n\nfunction get() public view returns (uint retVal) {\nreturn storedData;\n}\n}"
+	twoContracts  = "pragma solidity >=0.4.22 <0.6.0;\n\ncontract contract1 {function f1() public pure returns (uint retVal) {\nreturn 1;\n}\n}\n\ncontract contract2 {function f2() public pure returns (uint retVal) {\nreturn 2;\n}\n}"
 )
 
 func TestNewContractDeployTxnSimpleStorage(t *testing.T) {
@@ -227,7 +227,7 @@ func testComplexParam(t *testing.T, solidityType string, val interface{}, expect
 	assert := assert.New(t)
 
 	var msg kldmessages.DeployContract
-	msg.Solidity = "pragma solidity ^0.4.17; contract test {constructor(" + solidityType + " p1) public {}}"
+	msg.Solidity = "pragma solidity >=0.4.22 <0.6.0; contract test {constructor(" + solidityType + " p1) public {}}"
 	msg.Parameters = []interface{}{val}
 	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 	msg.Nonce = "123"
@@ -281,18 +281,18 @@ func TestSolidityIntParamConversion(t *testing.T) {
 }
 
 func TestSolidityIntArrayParamConversion(t *testing.T) {
-	testComplexParam(t, "int8[]", []float64{123, 456, 789}, "")
-	testComplexParam(t, "int8[]", []float64{}, "")
-	testComplexParam(t, "int256[]", []float64{123, 456, 789}, "")
-	testComplexParam(t, "int256[]", []float64{}, "")
-	testComplexParam(t, "int256[]", float64(123), "Must supply an array")
-	testComplexParam(t, "uint8[]", []string{"123"}, "")
-	testComplexParam(t, "uint8[]", []string{"abc"}, "Could not be converted to a number")
+	testComplexParam(t, "int8[] memory", []float64{123, 456, 789}, "")
+	testComplexParam(t, "int8[] memory", []float64{}, "")
+	testComplexParam(t, "int256[] memory", []float64{123, 456, 789}, "")
+	testComplexParam(t, "int256[] memory", []float64{}, "")
+	testComplexParam(t, "int256[] memory", float64(123), "Must supply an array")
+	testComplexParam(t, "uint8[] memory", []string{"123"}, "")
+	testComplexParam(t, "uint8[] memory", []string{"abc"}, "Could not be converted to a number")
 }
 
 func TestSolidityStringParamConversion(t *testing.T) {
-	testComplexParam(t, "string", "ok", "")
-	testComplexParam(t, "string", float64(5), "Must supply a string")
+	testComplexParam(t, "string memory", "ok", "")
+	testComplexParam(t, "string memory", float64(5), "Must supply a string")
 }
 
 func TestSolidityBoolParamConversion(t *testing.T) {

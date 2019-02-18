@@ -221,6 +221,9 @@ func TestSingleMessageWithReply(t *testing.T) {
 	msg1.Headers.Context = &msg1Ctx
 	msg1.Headers.Account = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 	msg1bytes, err := json.Marshal(&msg1)
+	if err != nil {
+		log.Fatal(err)
+	}
 	log.Infof("Sent message: %s", string(msg1bytes))
 
 	mockConsumer.MockMessages <- &sarama.ConsumerMessage{
@@ -283,6 +286,9 @@ func TestSingleMessageWithErrorReply(t *testing.T) {
 	msg1.Headers.MsgType = "TestSingleMessageWithErrorReply"
 	msg1.Headers.Account = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 	msg1bytes, err := json.Marshal(&msg1)
+	if err != nil {
+		log.Fatal(err)
+	}
 	log.Infof("Sent message: %s", string(msg1bytes))
 	mockConsumer.MockMessages <- &sarama.ConsumerMessage{Value: msg1bytes}
 

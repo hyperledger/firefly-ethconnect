@@ -13,6 +13,7 @@ require (
 	github.com/ethereum/go-ethereum v1.8.20
 	github.com/globalsign/mgo v0.0.0-20181015135952-eeefdecb41b8
 	github.com/go-stack/stack v1.8.0 // indirect
+	github.com/gojp/goreportcard v0.0.0-20190208100704-f0d0f6c59608 // indirect
 	github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db // indirect
 	github.com/icza/dyno v0.0.0-20180601094105-0c96289f9585
 	github.com/julienschmidt/httprouter v1.2.0

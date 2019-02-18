@@ -1,6 +1,7 @@
 # github.com/kaleido-io/ethconnect
 
 [![Coverage report](https://codecov.io/gh/kaleido-io/ethconnect/branch/master/graph/badge.svg)](https://codecov.io/gh/kaleido-io/ethconnect)
+[![Go Report Card](https://goreportcard.com/badge/kaleido-io/ethconnect)](https://goreportcard.com/report/github.com/kaleido-io/ethconnect)
 
 - [github.com/kaleido-io/ethconnect](#githubcomkaleido-ioethconnect)
   - [About kaleido-io/ethconnect](#about-kaleido-ioethconnect)

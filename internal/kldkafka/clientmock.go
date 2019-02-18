@@ -54,7 +54,7 @@ func (f *MockKafkaFactory) NewClient(k KafkaCommon, clientConf *cluster.Config) 
 // Brokers - mock
 func (f *MockKafkaFactory) Brokers() []*sarama.Broker {
 	return []*sarama.Broker{
-		&sarama.Broker{},
+		{},
 	}
 }
 

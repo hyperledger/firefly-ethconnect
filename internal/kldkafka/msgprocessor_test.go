@@ -470,7 +470,7 @@ func TestOnSendTransactionMessageInflightNonce(t *testing.T) {
 
 	msgProcessor := newMsgProcessor()
 	msgProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] =
-		[]*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
+		[]*inflightTxn{{nonce: 100}, {nonce: 101}}
 	testMsgContext := &testMsgContext{}
 	testMsgContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +

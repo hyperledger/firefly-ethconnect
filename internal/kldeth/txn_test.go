@@ -333,25 +333,25 @@ func TestSendTxnABIParam(t *testing.T) {
 	msg.Method = kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "param1",
 				Type: "uint8",
 			},
-			kldmessages.ABIParam{
+			{
 				Name: "param2",
 				Type: "int256",
 			},
-			kldmessages.ABIParam{
+			{
 				Name: "param3",
 				Type: "string",
 			},
-			kldmessages.ABIParam{
+			{
 				Name: "param4",
 				Type: "address",
 			},
 		},
 		Outputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "ret1",
 				Type: "uint256",
 			},
@@ -588,13 +588,13 @@ func TestSendTxnBadInputType(t *testing.T) {
 	msg.Method = kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "param1",
 				Type: "badness",
 			},
 		},
 		Outputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "ret1",
 				Type: "uint256",
 			},
@@ -627,13 +627,13 @@ func TestSendTxnBadFrom(t *testing.T) {
 	msg.Method = kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "param1",
 				Type: "uint8",
 			},
 		},
 		Outputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "ret1",
 				Type: "uint256",
 			},
@@ -657,13 +657,13 @@ func TestSendTxnBadTo(t *testing.T) {
 	msg.Method = kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "param1",
 				Type: "uint8",
 			},
 		},
 		Outputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "ret1",
 				Type: "uint256",
 			},
@@ -686,13 +686,13 @@ func TestSendTxnBadOutputType(t *testing.T) {
 	msg.Method = kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "param1",
 				Type: "uint256",
 			},
 		},
 		Outputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "ret1",
 				Type: "badness",
 			},
@@ -710,13 +710,13 @@ func TestSendBadParams(t *testing.T) {
 	msg.Method = kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "param1",
 				Type: "int8",
 			},
 		},
 		Outputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "ret1",
 				Type: "uint256",
 			},
@@ -734,13 +734,13 @@ func TestSendTxnPackError(t *testing.T) {
 	msg.Method = kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "param1",
 				Type: "bytes1",
 			},
 		},
 		Outputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "ret1",
 				Type: "uint256",
 			},

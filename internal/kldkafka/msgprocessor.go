@@ -171,7 +171,7 @@ func (p *msgProcessor) newInflightWrapper(msgContext MsgContext, suppliedFrom st
 		inflight.nodeAssignNonce = true
 	} else {
 		// Alternatively (will be required when we support externally signed tranactions)
-		// we can do a dirty read from the node of the highest comitted
+		// we can do a dirty read from the node of the highest committed
 		// transaction. This will be ok as long as we're the only JSON/RPC writing to
 		// this address. But if we're competing with other transactions
 		// we need to accept the possibility of 'replacement transaction underpriced'

@@ -66,7 +66,7 @@ type txnDelayTracker struct {
 }
 
 // GetInitialDelay - returns an initial duration, which might be the
-// current moving average, or might be artifically low to send in a
+// current moving average, or might be artificially low to send in a
 // tracer
 func (d *txnDelayTracker) GetInitialDelay() (delay time.Duration) {
 	// We start with a fraction of the average

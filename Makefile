@@ -4,7 +4,7 @@ BINARY_UNIX=$(BINARY_NAME)-tux
 BINARY_MAC=$(BINARY_NAME)-mac
 BINARY_WIN=$(BINARY_NAME)-win
 
-all: deps build test report
+all: deps build test
 build: 
 		$(VGO) build -ldflags "-X main.buildDate=`date -u +\"%Y-%m-%dT%H:%M:%SZ\"` -X main.buildVersion=$(BUILD_VERSION)" -tags=prod -o $(BINARY_NAME) -v
 test:
@@ -26,5 +26,3 @@ build-mac:
 build-win:
 		GOOS=windows GOARCH=amd64 $(VGO) build -o $(BINARY_WIN) -v
 
-report:
-	goreportcard-cli -v -t 95

@@ -3,6 +3,7 @@ module github.com/kaleido-io/ethconnect
 require (
 	github.com/DataDog/zstd v1.3.5 // indirect
 	github.com/Shopify/sarama v1.20.1
+	github.com/alecthomas/gometalinter v3.0.0+incompatible
 	github.com/allegro/bigcache v1.1.0 // indirect
 	github.com/aristanetworks/goarista v0.0.0-20190121184617-8f049bdb8feb // indirect
 	github.com/bsm/sarama-cluster v2.1.15+incompatible
@@ -13,6 +14,7 @@ require (
 	github.com/ethereum/go-ethereum v1.8.20
 	github.com/globalsign/mgo v0.0.0-20181015135952-eeefdecb41b8
 	github.com/go-stack/stack v1.8.0 // indirect
+	github.com/gojp/goreportcard v0.0.0-20190208100704-f0d0f6c59608 // indirect
 	github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db // indirect
 	github.com/icza/dyno v0.0.0-20180601094105-0c96289f9585
 	github.com/julienschmidt/httprouter v1.2.0

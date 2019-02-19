@@ -4,7 +4,7 @@ env:
 before_install:
   - sudo curl -Lo /usr/local/bin/solc https://github.com/ethereum/solidity/releases/download/v0.4.25/solc-static-linux
   - sudo chmod 755 /usr/local/bin/solc
-  - curl -L https://git.io/vp6lP | bash -s -- -b $GOBIN
+  - curl -L https://git.io/vp6lP | bash -s -- -b $GOPATH/bin
 after_success:
   - bash <(curl -s https://codecov.io/bash)
 go:

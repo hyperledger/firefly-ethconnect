@@ -3,7 +3,6 @@ module github.com/kaleido-io/ethconnect
 require (
 	github.com/DataDog/zstd v1.3.5 // indirect
 	github.com/Shopify/sarama v1.20.1
-	github.com/alecthomas/gometalinter v3.0.0+incompatible
 	github.com/allegro/bigcache v1.1.0 // indirect
 	github.com/aristanetworks/goarista v0.0.0-20190121184617-8f049bdb8feb // indirect
 	github.com/bsm/sarama-cluster v2.1.15+incompatible

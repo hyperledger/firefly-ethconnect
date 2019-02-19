@@ -4,8 +4,7 @@ env:
 before_install:
   - sudo curl -Lo /usr/local/bin/solc https://github.com/ethereum/solidity/releases/download/v0.4.25/solc-static-linux
   - sudo chmod 755 /usr/local/bin/solc
-  - go get github.com/alecthomas/gometalinter
-  - gometalinter --install --update
+  - curl -L https://git.io/vp6lP | bash -s -- -b $GOBIN
 after_success:
   - bash <(curl -s https://codecov.io/bash)
 go:

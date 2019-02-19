@@ -3,6 +3,7 @@ BINARY_NAME=ethconnect
 BINARY_UNIX=$(BINARY_NAME)-tux
 BINARY_MAC=$(BINARY_NAME)-mac
 BINARY_WIN=$(BINARY_NAME)-win
+REPORT_TARGET=95
 
 all: deps build test report
 build: 
@@ -18,7 +19,8 @@ run:
 		./$(BINARY_NAME)
 deps:
 		$(VGO) get
-
+		$(VGO) get github.com/gojp/goreportcard/cmd/goreportcard-cli
+		
 build-linux:
 		GOOS=linux GOARCH=amd64 $(VGO) build -o $(BINARY_UNIX) -v
 build-mac:
@@ -27,5 +29,4 @@ build-win:
 		GOOS=windows GOARCH=amd64 $(VGO) build -o $(BINARY_WIN) -v
 
 report:
-		go get github.com/gojp/goreportcard/cmd/goreportcard-cli
-		goreportcard-cli -v -t 95
+		goreportcard-cli -v -t $(REPORT_TARGET)

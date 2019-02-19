@@ -340,8 +340,11 @@ go get github.com/kaleido-io/ethconnect
 
 ## Development environment
 
+> You will need solidity binary `solc`: [Installation](https://solidity.readthedocs.io/en/v0.4.24/installing-solidity.html#binary-packages)
+
 With Go 1.11 or later simply use
 ```sh
+export GO111MODULE=on
 make
 ```
 

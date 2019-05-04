@@ -1,4 +1,4 @@
-// Copyright 2018 Kaleido, a ConsenSys business
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+	"github.com/kaleido-io/ethconnect/internal/kldtx"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -71,15 +72,15 @@ func (k *testKafkaCommon) Producer() KafkaProducer {
 }
 
 type testKafkaMsgProcessor struct {
-	messages chan MsgContext
+	messages chan kldtx.TxnContext
 	rpc      kldeth.RPCClient
 }
 
-func (p *testKafkaMsgProcessor) Init(rpc kldeth.RPCClient, maxTXWaitTime int) {
+func (p *testKafkaMsgProcessor) Init(rpc kldeth.RPCClient) {
 	p.rpc = rpc
 }
 
-func (p *testKafkaMsgProcessor) OnMessage(msg MsgContext) {
+func (p *testKafkaMsgProcessor) OnMessage(msg kldtx.TxnContext) {
 	log.Infof("Dispatched message context to processor: %s", msg)
 	p.messages <- msg
 	return
@@ -104,7 +105,7 @@ func newTestKafkaBridge() (k *KafkaBridge, kafkaCmd *cobra.Command) {
 	k = NewKafkaBridge(&printYAML)
 	k.kafka = &testKafkaCommon{}
 	k.processor = &testKafkaMsgProcessor{
-		messages: make(chan MsgContext),
+		messages: make(chan kldtx.TxnContext),
 	}
 	kafkaCmd = k.CobraInit()
 	return k, kafkaCmd
@@ -334,7 +335,7 @@ func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 	}()
 
 	// 10 messages should be sent into the processor
-	var msgContexts []MsgContext
+	var msgContexts []kldtx.TxnContext
 	for i := 0; i < 10; i++ {
 		msgContext := <-processor.messages
 		log.Infof("Processor passed %s", msgContext.Headers().ID)
@@ -344,7 +345,7 @@ func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 	assert.Equal(10, len(k.inFlight))
 
 	// Send the replies for the first 10
-	go func(msgContexts []MsgContext) {
+	go func(msgContexts []kldtx.TxnContext) {
 		for _, msgContext := range msgContexts {
 			reply := kldmessages.ReplyCommon{}
 			msgContext.Reply(&reply)
@@ -358,7 +359,7 @@ func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 	}
 
 	// 10 more messages should be sent into the processor
-	msgContexts = []MsgContext{}
+	msgContexts = []kldtx.TxnContext{}
 	for i := 10; i < 20; i++ {
 		msgContext := <-processor.messages
 		log.Infof("Processor passed %s", msgContext.Headers().ID)
@@ -370,7 +371,7 @@ func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 	// Send the replies for the next 10 - in reverse order
 	var wg1 sync.WaitGroup
 	wg1.Add(1)
-	go func(msgContexts []MsgContext) {
+	go func(msgContexts []kldtx.TxnContext) {
 		for i := (len(msgContexts) - 1); i >= 0; i-- {
 			msgContext := msgContexts[i]
 			reply := kldmessages.ReplyCommon{}

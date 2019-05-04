@@ -1,4 +1,4 @@
-// Copyright 2018 Kaleido, a ConsenSys business
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,23 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package kldwebhooks
+package kldrest
 
 import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"strconv"
+	"net/http/httptest"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/julienschmidt/httprouter"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
@@ -86,14 +85,10 @@ func (k *testKafkaCommon) Producer() kldkafka.KafkaProducer {
 	return producer
 }
 
-var webhookExecuteError atomic.Value
-
-var lastPort = 9000
-
 func newTestKafkaComon() *testKafkaCommon {
 	log.SetLevel(log.DebugLevel)
 	kafka := &testKafkaCommon{}
-	kafka.startTime = time.Now()
+	kafka.startTime = time.Now().UTC()
 	kafka.stop = make(chan bool)
 	kafka.kafkaFactory = kldkafka.NewMockKafkaFactory()
 	kafka.kafkaFactory.NewProducer(kafka)
@@ -101,124 +96,17 @@ func newTestKafkaComon() *testKafkaCommon {
 	return kafka
 }
 
-// startTestWebhooks creates a Webhooks instance with a Cobra command wrapper, and executes it
-// It returns once it's reached kafka initialization successfully, or errored during initialization
-func startTestWebhooks(testArgs []string, kafka *testKafkaCommon) (*WebhooksBridge, error) {
-	log.SetLevel(log.DebugLevel)
-	var printYAML = false
-	w := NewWebhooksBridge(&printYAML)
-	w.kafka = kafka
-	cmd := w.CobraInit()
-	if testArgs == nil {
-		testArgs = []string{"-l", strconv.Itoa(lastPort)}
-		lastPort++
-	}
-	cmd.SetArgs(testArgs)
-	webhookExecuteError.Store(errors.New("none"))
-	go func(cmd *cobra.Command) {
-		err := cmd.Execute()
-		log.Infof("Kafka webhooks completed. Err=%s", err)
-		if err != nil {
-			webhookExecuteError.Store(err)
-		}
-	}(cmd)
-	status := -1
-	startTime := time.Now()
-	err := webhookExecuteError.Load().(error)
-	for status != 200 && err.Error() == "none" && time.Now().Sub(startTime) < (4*time.Second) {
-		time.Sleep(50 * time.Millisecond)
-		statusURL := fmt.Sprintf("http://localhost:%d/status", w.conf.HTTP.Port)
-		resp, httpErr := http.Get(statusURL)
-		if httpErr == nil {
-			status = resp.StatusCode
-		}
-		err = webhookExecuteError.Load().(error)
-		log.Infof("Waiting for Webhook server to start (URL=%s Status=%d HTTPErr=%s Err=%s)", statusURL, status, httpErr, err)
-	}
-	if err.Error() == "none" {
-		err = nil
-	}
-	return w, err
-}
-
-func TestNewWebhooksBridge(t *testing.T) {
-	assert := assert.New(t)
-	var printYAML = false
-	w := NewWebhooksBridge(&printYAML)
-	var conf WebhooksBridgeConf
-	conf.HTTP.LocalAddr = "127.0.0.1"
-	w.SetConf(&conf)
-	assert.Equal("127.0.0.1", w.Conf().HTTP.LocalAddr)
-}
-
-func TestValidateConfInvalidArgs(t *testing.T) {
-	assert := assert.New(t)
-	var printYAML = false
-	w := NewWebhooksBridge(&printYAML)
-	w.conf.MongoDB.URL = "mongodb://localhost:27017"
-	err := w.ValidateConf()
-	assert.Regexp("MongoDB URL, Database and Collection name must be specified to enable the receipt store", err.Error())
-}
-
-func TestStartStopDefaultArgs(t *testing.T) {
-	assert := assert.New(t)
-
+func newTestWebhooks() (*webhooks, *webhooksKafka, *testKafkaCommon, *httptest.Server) {
+	p := &memoryReceipts{}
+	r := newReceiptStore(&ReceiptStoreConf{}, p, nil)
 	k := newTestKafkaComon()
-	port := lastPort
-	w, err := startTestWebhooks(nil, k)
-	assert.Nil(err)
-
-	assert.Equal(port, w.conf.HTTP.Port)    // default
-	assert.Equal("", w.conf.HTTP.LocalAddr) // default
-
-	k.stop <- true
-}
-
-func TestPrintYaml(t *testing.T) {
-	assert := assert.New(t)
-
-	var printYAML = true
-	w := NewWebhooksBridge(&printYAML)
-	w.printYAML = &printYAML
-	w.kafka = &testKafkaCommon{}
-	cmd := w.CobraInit()
-	cmd.SetArgs([]string{"-l", "8001"})
-	err := cmd.Execute()
-	assert.Nil(err)
-}
-
-func TestStartStopCustomArgs(t *testing.T) {
-	assert := assert.New(t)
-
-	k := newTestKafkaComon()
-	w, err := startTestWebhooks([]string{"-l", "8081", "-L", "127.0.0.1"}, k)
-	assert.Nil(err)
-
-	assert.Equal(8081, w.conf.HTTP.Port)
-	assert.Equal("127.0.0.1", w.conf.HTTP.LocalAddr)
-	assert.Equal("127.0.0.1:8081", w.srv.Addr)
-
-	k.stop <- true
-}
-
-func TestStartStopKafkaInitDelay(t *testing.T) {
-	assert := assert.New(t)
-
-	k := newTestKafkaComon()
-	k.kafkaInitDelay = 500
-	_, err := startTestWebhooks(nil, k)
-	assert.Nil(err)
-
-	k.stop <- true
-}
-
-func TestStartStopKafkaPreRunError(t *testing.T) {
-	assert := assert.New(t)
-
-	k := newTestKafkaComon()
-	k.validateConfErr = fmt.Errorf("pop")
-	_, err := startTestWebhooks(nil, k)
-	assert.Errorf(err, "pop")
+	wk := newWebhooksKafkaBase(r)
+	wk.kafka = k
+	w := newWebhooks(wk, nil)
+	router := &httprouter.Router{}
+	w.addRoutes(router)
+	ts := httptest.NewServer(router)
+	return w, wk, k, ts
 }
 
 func assertSentResp(assert *assert.Assertions, resp *http.Response, ack bool) {
@@ -230,7 +118,7 @@ func assertSentResp(assert *assert.Assertions, resp *http.Response, ack bool) {
 	replyBytes, err := ioutil.ReadAll(resp.Body)
 	assert.Nil(err)
 	if resp.StatusCode == 200 {
-		var replyMsg sentMsg
+		var replyMsg kldmessages.AsyncSentMsg
 		err = json.Unmarshal(replyBytes, &replyMsg)
 		assert.Nil(err)
 		assert.Equal(true, replyMsg.Sent)
@@ -239,24 +127,7 @@ func assertSentResp(assert *assert.Assertions, resp *http.Response, ack bool) {
 			assert.NotEmpty(replyMsg.Msg)
 		}
 	} else {
-		var replyMsg errMsg
-		err = json.Unmarshal(replyBytes, &replyMsg)
-		assert.Nil(err)
-		log.Errorf("Error from server: %s", replyMsg.Message)
-	}
-}
-
-func assertOKResp(assert *assert.Assertions, resp *http.Response) {
-	assert.Equal(200, resp.StatusCode)
-	replyBytes, err := ioutil.ReadAll(resp.Body)
-	assert.Nil(err)
-	if resp.StatusCode == 200 {
-		var replyMsg okMsg
-		err = json.Unmarshal(replyBytes, &replyMsg)
-		assert.Nil(err)
-		assert.Equal(true, replyMsg.OK)
-	} else {
-		var replyMsg errMsg
+		var replyMsg restError
 		err = json.Unmarshal(replyBytes, &replyMsg)
 		assert.Nil(err)
 		log.Errorf("Error from server: %s", replyMsg.Message)
@@ -267,7 +138,7 @@ func assertErrResp(assert *assert.Assertions, resp *http.Response, status int, m
 	assert.Equal(status, resp.StatusCode)
 	replyBytes, err := ioutil.ReadAll(resp.Body)
 	assert.Nil(err)
-	var replyMsg errMsg
+	var replyMsg restError
 	err = json.Unmarshal(replyBytes, &replyMsg)
 	assert.Nil(err)
 	assert.Regexp(msg, replyMsg.Message)
@@ -276,10 +147,9 @@ func assertErrResp(assert *assert.Assertions, resp *http.Response, status int, m
 func sendTestTransaction(assert *assert.Assertions, msgBytes []byte, contentType string, sendErr error, ack bool) (*http.Response, [][]byte) {
 
 	log.SetLevel(log.DebugLevel)
-
-	k := newTestKafkaComon()
-	w, err := startTestWebhooks(nil, k)
-	assert.Nil(err)
+	_, wk, k, ts := newTestWebhooks()
+	defer ts.Close()
+	go k.Start()
 
 	wg := &sync.WaitGroup{}
 	wg.Add(3)
@@ -306,19 +176,19 @@ func sendTestTransaction(assert *assert.Assertions, msgBytes []byte, contentType
 		wg.Done()
 	}()
 
-	go w.ProducerSuccessLoop(k.kafkaFactory.Consumer, k.kafkaFactory.Producer, wg)
-	go w.ProducerErrorLoop(k.kafkaFactory.Consumer, k.kafkaFactory.Producer, wg)
+	go wk.ProducerSuccessLoop(k.kafkaFactory.Consumer, k.kafkaFactory.Producer, wg)
+	go wk.ProducerErrorLoop(k.kafkaFactory.Consumer, k.kafkaFactory.Producer, wg)
 
 	var url string
 	if ack {
-		url = fmt.Sprintf("http://localhost:%d/hook", w.conf.HTTP.Port)
+		url = fmt.Sprintf("%s/hook", ts.URL)
 	} else {
-		url = fmt.Sprintf("http://localhost:%d/fasthook", w.conf.HTTP.Port)
+		url = fmt.Sprintf("%s/fasthook", ts.URL)
 
 	}
 	resp, httpErr := http.Post(url, contentType, bytes.NewReader(msgBytes))
-	if err != nil {
-		log.Errorf("HTTP error for %s: %+v", url, err)
+	if httpErr != nil {
+		log.Errorf("HTTP error for %s: %+v", url, httpErr)
 	}
 	assert.Nil(httpErr)
 
@@ -391,9 +261,10 @@ func TestWebhookHandlerJSONSendFailedToKafkaNoAck(t *testing.T) {
 func TestProducerErrorLoopPanicsOnBadErrStructure(t *testing.T) {
 	assert := assert.New(t)
 
-	k := newTestKafkaComon()
-	w, err := startTestWebhooks(nil, k)
-	assert.Nil(err)
+	log.SetLevel(log.DebugLevel)
+	_, wk, k, ts := newTestWebhooks()
+	defer ts.Close()
+	go k.Start()
 
 	go func() {
 		k.kafkaFactory.Producer.MockErrors <- &sarama.ProducerError{
@@ -406,7 +277,7 @@ func TestProducerErrorLoopPanicsOnBadErrStructure(t *testing.T) {
 	wg.Add(1)
 	assert.Panics(func() {
 		defer wg.Done()
-		w.ProducerErrorLoop(k.kafkaFactory.Consumer, k.kafkaFactory.Producer, wg)
+		wk.ProducerErrorLoop(k.kafkaFactory.Consumer, k.kafkaFactory.Producer, wg)
 	})
 
 	wg.Wait()
@@ -416,9 +287,10 @@ func TestProducerErrorLoopPanicsOnBadErrStructure(t *testing.T) {
 func TestProducerErrorLoopPanicsOnBadMsgStructure(t *testing.T) {
 	assert := assert.New(t)
 
-	k := newTestKafkaComon()
-	w, err := startTestWebhooks(nil, k)
-	assert.Nil(err)
+	log.SetLevel(log.DebugLevel)
+	_, wk, k, ts := newTestWebhooks()
+	defer ts.Close()
+	go k.Start()
 
 	go func() {
 		k.kafkaFactory.Producer.MockSuccesses <- &sarama.ProducerMessage{
@@ -430,7 +302,7 @@ func TestProducerErrorLoopPanicsOnBadMsgStructure(t *testing.T) {
 	wg.Add(1)
 	assert.Panics(func() {
 		defer wg.Done()
-		w.ProducerSuccessLoop(k.kafkaFactory.Consumer, k.kafkaFactory.Producer, wg)
+		wk.ProducerSuccessLoop(k.kafkaFactory.Consumer, k.kafkaFactory.Producer, wg)
 	})
 
 	wg.Wait()
@@ -568,8 +440,38 @@ func TestWebhookHandlerTooBig(t *testing.T) {
 	assert := assert.New(t)
 
 	// Build a 1MB payload
-	msgBytes := make([]byte, 1024*1024)
+	msgBytes := make([]byte, 1025*1024)
 	resp, replyMsgs := sendTestTransaction(assert, msgBytes, "application/json", nil, true)
 	assertErrResp(assert, resp, 400, "Message exceeds maximum allowable size")
 	assert.Equal(0, len(replyMsgs))
+}
+
+func TestConsumerMessagesLoopCallsReplyProcessorWithEmptyPayload(t *testing.T) {
+	assert := assert.New(t)
+
+	log.SetLevel(log.DebugLevel)
+	_, wk, k, ts := newTestWebhooks()
+	defer ts.Close()
+	go k.Start()
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	consumer, _ := k.kafkaFactory.NewConsumer(k)
+	producer, _ := k.kafkaFactory.NewProducer(k)
+
+	go func() {
+		wk.ConsumerMessagesLoop(consumer, producer, wg)
+	}()
+
+	consumer.(*kldkafka.MockKafkaConsumer).MockMessages <- &sarama.ConsumerMessage{
+		Partition: 3,
+		Offset:    12345,
+		Value:     []byte(""),
+	}
+
+	k.stop <- true
+	wg.Wait()
+
+	assert.Equal(int64(12345), consumer.(*kldkafka.MockKafkaConsumer).OffsetsByPartition[3])
+
 }

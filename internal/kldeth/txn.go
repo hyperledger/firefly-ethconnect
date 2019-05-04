@@ -1,4 +1,4 @@
-// Copyright 2018 Kaleido, a ConsenSys business
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 package kldeth
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -64,42 +65,184 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract) (pTX *Txn, err error)
 	var tx Txn
 	pTX = &tx
 
-	// Compile the solidity contract
-	compiledSolidity, err := CompileContract(msg.Solidity, msg.ContractName)
-	if err != nil {
+	var compiled *CompiledSolidity
+
+	if msg.Compiled != nil && msg.ABI != nil {
+		compiled = &CompiledSolidity{
+			Compiled: msg.Compiled,
+			ABI:      &msg.ABI.ABI,
+		}
+	} else if msg.Solidity != "" {
+		// Compile the solidity contract
+		if compiled, err = CompileContract(msg.Solidity, msg.ContractName, msg.CompilerVersion); err != nil {
+			return
+		}
+	} else {
+		err = fmt.Errorf("Missing Compliled Code + ABI, or Solidity")
 		return
 	}
 
 	// Build correctly typed args for the ethereum call
-	typedArgs, err := pTX.generateTypedArgs(msg.Parameters, &compiledSolidity.ABI.Constructor)
+	typedArgs, err := pTX.generateTypedArgs(msg.Parameters, &compiled.ABI.Constructor)
 	if err != nil {
 		return
 	}
 
 	// Pack the arguments
-	packedCall, err := compiledSolidity.ABI.Pack("", typedArgs...)
+	packedCall, err := compiled.ABI.Pack("", typedArgs...)
 	if err != nil {
 		err = fmt.Errorf("Packing arguments for constructor: %s", err)
 		return
 	}
 
 	// Join the EVM bytecode with the packed call
-	data := append(compiledSolidity.Compiled, packedCall...)
+	data := append(compiled.Compiled, packedCall...)
 
 	// Generate the ethereum transaction
 	err = pTX.genEthTransaction(msg.From, "", msg.Nonce, msg.Value, msg.Gas, msg.GasPrice, data)
 	return
 }
 
-// NewSendTxn builds a new ethereum transaction from the supplied
-// SendTranasction message
-func NewSendTxn(msg *kldmessages.SendTransaction) (pTX *Txn, err error) {
+// CallMethod performs eth_call to return data from the chain
+func CallMethod(rpc RPCClient, from, addr string, value json.Number, methodABI *abi.Method, msgParams []interface{}) (map[string]interface{}, error) {
+	log.Debugf("Calling method: %+v %+v", methodABI, msgParams)
+	tx, err := buildTX(from, addr, "", value, "", "", methodABI, msgParams)
+	if err != nil {
+		return nil, err
+	}
+	retBytes, err := tx.Call(rpc)
+	if err != nil {
+		return nil, err
+	}
+	if retBytes == nil {
+		return nil, nil
+	}
+	return processRLPBytes(methodABI, retBytes)
+}
 
-	var tx Txn
-	pTX = &tx
+func addErrorToRetval(retval map[string]interface{}, retBytes []byte, rawRetval interface{}, err error) {
+	log.Warnf(err.Error())
+	retval["rlp"] = hex.EncodeToString(retBytes)
+	retval["raw"] = rawRetval
+	retval["error"] = err.Error()
+}
+
+func processRLPBytes(methodABI *abi.Method, retBytes []byte) (map[string]interface{}, error) {
+	retval := make(map[string]interface{})
+	rawRetval, err := methodABI.Outputs.UnpackValues(retBytes)
+	if err != nil {
+		addErrorToRetval(retval, retBytes, rawRetval, fmt.Errorf("Failed to unpack values: %s", err))
+		return nil, err
+	}
+	if err = processOutputs(methodABI, rawRetval, retval); err != nil {
+		addErrorToRetval(retval, retBytes, rawRetval, err)
+	}
+	return retval, nil
+}
+
+func processOutputs(methodABI *abi.Method, rawRetval []interface{}, retval map[string]interface{}) error {
+	numOutputs := len(methodABI.Outputs)
+	if numOutputs > 0 {
+		if len(rawRetval) != numOutputs {
+			return fmt.Errorf("Expected %d in JSON/RPC response. Received %d: %+v", len(rawRetval), numOutputs, rawRetval)
+		}
+		for idx, output := range methodABI.Outputs {
+			if err := genOutput(idx, retval, output, rawRetval[idx]); err != nil {
+				return err
+			}
+		}
+	} else if rawRetval != nil {
+		return fmt.Errorf("Expected nil in JSON/RPC response. Received: %+v", rawRetval)
+	}
+	return nil
+}
+
+func genOutput(idx int, retval map[string]interface{}, output abi.Argument, rawValue interface{}) (err error) {
+	// Match the swagger in how we name the outputs
+	argName := output.Name
+	if argName == "" {
+		argName = "output"
+		if idx != 0 {
+			argName += strconv.Itoa(idx)
+		}
+	}
+	retval[argName], err = mapOutput(argName, output.Type.String(), &output.Type, rawValue)
+	return
+}
+
+func mapOutput(argName, argType string, t *abi.Type, rawValue interface{}) (interface{}, error) {
+	rawType := reflect.TypeOf(rawValue)
+	switch t.T {
+	case abi.IntTy, abi.UintTy:
+		kind := rawType.Kind()
+		if kind == reflect.Ptr && rawType.String() == "*big.Int" {
+			return reflect.ValueOf(rawValue).Interface().(*big.Int).String(), nil
+		} else if kind == reflect.Int ||
+			kind == reflect.Int8 ||
+			kind == reflect.Int16 ||
+			kind == reflect.Int32 ||
+			kind == reflect.Int64 {
+			return strconv.FormatInt(reflect.ValueOf(rawValue).Int(), 10), nil
+		} else if kind == reflect.Uint ||
+			kind == reflect.Uint8 ||
+			kind == reflect.Uint16 ||
+			kind == reflect.Uint32 ||
+			kind == reflect.Uint64 {
+			return strconv.FormatUint(reflect.ValueOf(rawValue).Uint(), 10), nil
+		} else {
+			return nil, fmt.Errorf("Expected number type in JSON/RPC response for %s (%s). Received %s",
+				argName, argType, rawType.Kind())
+		}
+	case abi.BoolTy:
+		if rawType.Kind() != reflect.Bool {
+			return nil, fmt.Errorf("Expected boolean in JSON/RPC response for %s (%s). Received %s",
+				argName, argType, rawType.Kind())
+		}
+		return rawValue, nil
+	case abi.StringTy:
+		if rawType.Kind() != reflect.String {
+			return nil, fmt.Errorf("Expected string array in JSON/RPC response for %s (%s). Received %s",
+				argName, argType, rawType.Kind())
+		}
+		return reflect.ValueOf(rawValue).Interface().(string), nil
+	case abi.BytesTy, abi.FixedBytesTy, abi.AddressTy:
+		if (rawType.Kind() != reflect.Array && rawType.Kind() != reflect.Slice) || rawType.Elem().Kind() != reflect.Uint8 {
+			return nil, fmt.Errorf("Expected []byte array in JSON/RPC response for %s (%s). Received %s",
+				argName, argType, rawType.Kind())
+		}
+		s := reflect.ValueOf(rawValue)
+		arrayVal := make([]byte, s.Len())
+		for i := 0; i < s.Len(); i++ {
+			arrayVal[i] = byte(s.Index(i).Uint())
+		}
+		return common.ToHex(arrayVal), nil
+	case abi.SliceTy, abi.ArrayTy:
+		if rawType.Kind() != reflect.Slice {
+			return nil, fmt.Errorf("Expected slice in JSON/RPC response for %s (%s). Received %s",
+				argName, argType, rawType.Kind())
+		}
+		s := reflect.ValueOf(rawValue)
+		arrayVal := make([]interface{}, 0, s.Len())
+		for i := 0; i < s.Len(); i++ {
+			mapped, err := mapOutput(argName, argType, t.Elem, s.Index(i).Interface())
+			if err != nil {
+				return nil, err
+			}
+			arrayVal = append(arrayVal, mapped)
+		}
+		return arrayVal, nil
+	default:
+		return nil, fmt.Errorf("Unable to process type for %s (%s). Received %s",
+			argName, argType, rawType.Kind())
+	}
+}
+
+// NewSendTxn builds a new ethereum transactio`n from the supplied
+// SendTranasction message
+func NewSendTxn(msg *kldmessages.SendTransaction) (tx *Txn, err error) {
 
 	var methodABI *abi.Method
-	if msg.Method.Name == "" {
+	if msg.Method == nil || msg.Method.Name == "" {
 		if msg.MethodName != "" {
 			methodABI = &abi.Method{
 				Name: msg.MethodName,
@@ -109,14 +252,20 @@ func NewSendTxn(msg *kldmessages.SendTransaction) (pTX *Txn, err error) {
 			return
 		}
 	} else {
-		methodABI, err = genMethodABI(&msg.Method)
+		methodABI, err = genMethodABI(msg.Method)
 		if err != nil {
 			return
 		}
 	}
 
+	return buildTX(msg.From, msg.To, msg.Nonce, msg.Value, msg.Gas, msg.GasPrice, methodABI, msg.Parameters)
+}
+
+func buildTX(msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json.Number, methodABI *abi.Method, params []interface{}) (tx *Txn, err error) {
+	tx = &Txn{}
+
 	// Build correctly typed args for the ethereum call
-	typedArgs, err := pTX.generateTypedArgs(msg.Parameters, methodABI)
+	typedArgs, err := tx.generateTypedArgs(params, methodABI)
 	if err != nil {
 		return
 	}
@@ -125,14 +274,15 @@ func NewSendTxn(msg *kldmessages.SendTransaction) (pTX *Txn, err error) {
 	packedArgs, err := methodABI.Inputs.Pack(typedArgs...)
 	if err != nil {
 		err = fmt.Errorf("Packing arguments for method '%s': %s", methodABI.Name, err)
+		log.Errorf("Attempted to pack args %+v: %s", typedArgs, err)
 		return
 	}
 	methodID := methodABI.Id()
-	log.Infof("Method Name=%s ID=%x PackedArgs=%x", msg.Method.Name, methodID, packedArgs)
+	log.Infof("Method Name=%s ID=%x PackedArgs=%x", methodABI.Name, methodID, packedArgs)
 	packedCall := append(methodID, packedArgs...)
 
 	// Generate the ethereum transaction
-	err = pTX.genEthTransaction(msg.From, msg.To, msg.Nonce, msg.Value, msg.Gas, msg.GasPrice, packedCall)
+	err = tx.genEthTransaction(msgFrom, msgTo, msgNonce, msgValue, msgGas, msgGasPrice, packedCall)
 	return
 }
 
@@ -164,9 +314,11 @@ func genMethodABI(jsonABI *kldmessages.ABIMethod) (method *abi.Method, err error
 
 func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json.Number, data []byte) (err error) {
 
-	tx.From, err = kldutils.StrToAddress("from", msgFrom)
-	if err != nil {
-		return
+	if msgFrom != "" {
+		tx.From, err = kldutils.StrToAddress("from", msgFrom)
+		if err != nil {
+			return
+		}
 	}
 
 	var nonce int64
@@ -186,10 +338,13 @@ func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgG
 		}
 	}
 
-	gas, err := msgGas.Int64()
-	if err != nil {
-		err = fmt.Errorf("Converting supplied 'gas' to integer: %s", err)
-		return
+	var gas int64
+	if msgGas != "" {
+		gas, err = msgGas.Int64()
+		if err != nil {
+			err = fmt.Errorf("Converting supplied 'gas' to integer: %s", err)
+			return
+		}
 	}
 
 	gasPrice := big.NewInt(0)

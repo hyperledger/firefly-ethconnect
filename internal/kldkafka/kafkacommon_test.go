@@ -1,4 +1,4 @@
-// Copyright 2018 Kaleido, a ConsenSys business
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -57,6 +57,7 @@ func (g *testKafkaGoRoutines) ProducerSuccessLoop(consumer KafkaConsumer, produc
 }
 
 var kcMinWorkingArgs = []string{
+	"-b", "broker1",
 	"-t", "in-topic",
 	"-T", "out-topic",
 	"-g", "test-group",
@@ -132,7 +133,7 @@ func TestExecuteWithIncompleteArgs(t *testing.T) {
 	assert.Equal("No consumer group specified", err.Error())
 	testArgs = append(testArgs, []string{"-g", "test-group"}...)
 
-	testArgs = append(testArgs, []string{"--tls-clientcerts", "/some/file"}...)
+	testArgs = append(testArgs, []string{"-b", "broker1", "--tls-clientcerts", "/some/file"}...)
 	_, err = execKafkaCommonWithArgs(assert, testArgs, f)
 	assert.Equal("Client private key and certificate must both be provided for mutual auth", err.Error())
 	testArgs = append(testArgs, []string{"--tls-clientkey", "somekey"}...)
@@ -182,7 +183,7 @@ func TestExecuteWithNoTLS(t *testing.T) {
 	k, err := execKafkaCommonWithArgs(assert, kcMinWorkingArgs, f)
 	assert.NotNil(k.Producer())
 
-	assert.Equal(nil, err)
+	assert.NoError(err)
 	assert.Equal(true, f.ClientConf.Producer.Return.Successes)
 	assert.Equal(true, f.ClientConf.Producer.Return.Errors)
 	assert.Equal(sarama.WaitForLocal, f.ClientConf.Producer.RequiredAcks)
@@ -200,6 +201,7 @@ func TestExecuteWithSASL(t *testing.T) {
 
 	f := NewMockKafkaFactory()
 	_, err := execKafkaCommonWithArgs(assert, []string{
+		"-b", "broker1",
 		"-t", "in-topic",
 		"-T", "out-topic",
 		"-g", "test-group",
@@ -218,6 +220,7 @@ func TestExecuteWithDefaultTLSAndClientID(t *testing.T) {
 
 	f := NewMockKafkaFactory()
 	_, err := execKafkaCommonWithArgs(assert, []string{
+		"-b", "broker1",
 		"-t", "in-topic",
 		"-T", "out-topic",
 		"-g", "test-group",
@@ -299,6 +302,7 @@ func TestExecuteWithSelfSignedMutualAuth(t *testing.T) {
 	ioutil.WriteFile(testCACertFile.Name(), testCertData, 0644)
 
 	mutualTLSArgs := []string{
+		"-b", "broker1",
 		"-t", "in-topic",
 		"-T", "out-topic",
 		"-g", "test-group",

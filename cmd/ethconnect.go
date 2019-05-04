@@ -1,4 +1,4 @@
-// Copyright 2018 Kaleido, a ConsenSys business
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,13 +20,14 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v2"
 
 	"github.com/icza/dyno"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
+	"github.com/kaleido-io/ethconnect/internal/kldrest"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
-	"github.com/kaleido-io/ethconnect/internal/kldwebhooks"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -35,12 +36,17 @@ import (
 // to run with a set of individual commands as goroutines
 // (rather than the simple commandline mode that runs a single command)
 type ServerConfig struct {
-	KafkaBridges    map[string]*kldkafka.KafkaBridgeConf       `json:"kafka"`
-	WebhooksBridges map[string]*kldwebhooks.WebhooksBridgeConf `json:"webhooks"`
+	KafkaBridges map[string]*kldkafka.KafkaBridgeConf `json:"kafka"`
+	Webhooks     map[string]*kldrest.RESTGatewayConf  `json:"webhooks"`
+	RESTGateways map[string]*kldrest.RESTGatewayConf  `json:"rest"`
 }
 
 func initLogging(debugLevel int) {
-	log.SetFormatter(&log.TextFormatter{FullTimestamp: true})
+	log.SetFormatter(&log.TextFormatter{
+		FullTimestamp:   true,
+		TimestampFormat: time.RFC3339,
+		DisableSorting:  true,
+	})
 	switch debugLevel {
 	case 0:
 		log.SetLevel(log.ErrorLevel)
@@ -153,16 +159,23 @@ func startServer() (err error) {
 			anyRoutineFinished <- true
 		}(name, anyRoutineFinished)
 	}
-	for name, conf := range serverConfig.WebhooksBridges {
-		webhooksBridge := kldwebhooks.NewWebhooksBridge(&dontPrintYaml)
-		webhooksBridge.SetConf(conf)
-		if err := webhooksBridge.ValidateConf(); err != nil {
+	// Merge in legacy named 'webbhooks' configs
+	if serverConfig.RESTGateways == nil {
+		serverConfig.RESTGateways = make(map[string]*kldrest.RESTGatewayConf)
+	}
+	for name, conf := range serverConfig.Webhooks {
+		serverConfig.RESTGateways[name] = conf
+	}
+	for name, conf := range serverConfig.RESTGateways {
+		restGateway := kldrest.NewRESTGateway(&dontPrintYaml)
+		restGateway.SetConf(conf)
+		if err := restGateway.ValidateConf(); err != nil {
 			return err
 		}
 		go func(name string, anyRoutineFinished chan bool) {
-			log.Infof("Starting Webhooks->Kafka bridge '%s'", name)
-			if err := webhooksBridge.Start(); err != nil {
-				log.Errorf("Webhooks->Kafka bridge failed: %s", err)
+			log.Infof("Starting REST gateway '%s'", name)
+			if err := restGateway.Start(); err != nil {
+				log.Errorf("REST gateway failed: %s", err)
 			}
 			anyRoutineFinished <- true
 		}(name, anyRoutineFinished)
@@ -184,8 +197,9 @@ func init() {
 	kafkaBridge := kldkafka.NewKafkaBridge(&rootConfig.PrintYAML)
 	rootCmd.AddCommand(kafkaBridge.CobraInit())
 
-	webhooksBridge := kldwebhooks.NewWebhooksBridge(&rootConfig.PrintYAML)
-	rootCmd.AddCommand(webhooksBridge.CobraInit())
+	restGateway := kldrest.NewRESTGateway(&rootConfig.PrintYAML)
+	rootCmd.AddCommand(restGateway.CobraInit("webhooks")) // for backwards compatibility
+	rootCmd.AddCommand(restGateway.CobraInit("rest"))
 }
 
 // Execute is called by the main method of the package

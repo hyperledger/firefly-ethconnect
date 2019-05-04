@@ -1,4 +1,4 @@
-// Copyright 2018 Kaleido, a ConsenSys business
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -122,10 +122,11 @@ func TestExecuteServerWithYAML(t *testing.T) {
 			"    topicOut: out2\n"+
 			"    rpc:\n"+
 			"      url: http://ethereum1\n"+
-			"webhooks:\n"+
+			"webhooks: # legacy naming\n"+
 			"  wbridge1:\n"+
 			"    http:\n"+
 			"      port: 1234\n"+
+			"rest:\n"+
 			"  wbridge2:\n"+
 			"    http:\n"+
 			"      port: 5678\n"), 0644)
@@ -153,6 +154,27 @@ func TestExecuteServerWithJSON(t *testing.T) {
 		"      \"url\": \"http://ethereum1\"\n" +
 		"      }\n" +
 		"    }\n" +
+		"  }\n" +
+		"}\n"
+	ioutil.WriteFile(exampleConfYAML.Name(), []byte(testJSON), 0644)
+
+	log.Infof("JSON: %s", testJSON)
+	rootCmd.SetArgs([]string{"server", "-t", "json", "-f", exampleConfYAML.Name()})
+	osExit := Execute()
+
+	assert.Equal(0, osExit)
+}
+
+func TestExecuteServerWithIncompleteKafka(t *testing.T) {
+	assert := assert.New(t)
+
+	exampleConfYAML, _ := ioutil.TempFile("", "testJSON")
+	defer syscall.Unlink(exampleConfYAML.Name())
+	testJSON := "{ \"kafka\": {\n" +
+		"  \"kbridge1\": {\n" +
+		"    \"topicIn\": \"in1\",\n" +
+		"    \"topicOut\": \"out1\"\n" +
+		"   }\n" +
 		"  }\n" +
 		"}\n"
 	ioutil.WriteFile(exampleConfYAML.Name(), []byte(testJSON), 0644)

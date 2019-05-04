@@ -1,4 +1,4 @@
-// Copyright 2018 Kaleido, a ConsenSys business
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,28 +17,25 @@ package kldkafka
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+	"github.com/kaleido-io/ethconnect/internal/kldtx"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-// KafkaBridgeConf defines the YAML config structure for a webhooks bridge instance
+// KafkaBridgeConf defines the YAML config structure for a Kafka bridge instance
 type KafkaBridgeConf struct {
-	Kafka         KafkaCommonConf `json:"kafka"`
-	MaxInFlight   int             `json:"maxInFlight"`
-	MaxTXWaitTime int             `json:"maxTXWaitTime"`
-	PredictNonces bool            `json:"alwaysManageNonce"`
-	RPC           struct {
-		URL string `json:"url"`
-	} `json:"rpc"`
+	Kafka       KafkaCommonConf `json:"kafka"`
+	MaxInFlight int             `json:"maxInFlight"`
+	kldtx.TxnProcessorConf
+	kldeth.RPCConf
 }
 
 // KafkaBridge receives messages from Kafka and dispatches them to go-ethereum over JSON/RPC
@@ -46,8 +43,8 @@ type KafkaBridge struct {
 	printYAML    *bool
 	conf         KafkaBridgeConf
 	kafka        KafkaCommon
-	rpc          *rpc.Client
-	processor    MsgProcessor
+	rpc          kldeth.RPCClient
+	processor    kldtx.TxnProcessor
 	inFlight     map[string]*msgContext
 	inFlightCond *sync.Cond
 }
@@ -73,7 +70,7 @@ func (k *KafkaBridge) ValidateConf() (err error) {
 		}
 		k.conf.MaxTXWaitTime = 10
 	}
-	if k.conf.MaxInFlight == 0 {
+	if k.conf.MaxInFlight <= 0 {
 		k.conf.MaxInFlight = 10
 	}
 	return
@@ -98,28 +95,10 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 		},
 	}
 	k.kafka.CobraInit(cmd)
+	kldeth.CobraInitRPC(cmd, &k.conf.RPCConf)
+	kldtx.CobraInitTxnProcessor(cmd, &k.conf.TxnProcessorConf)
 	cmd.Flags().IntVarP(&k.conf.MaxInFlight, "maxinflight", "m", kldutils.DefInt("KAFKA_MAX_INFLIGHT", 0), "Maximum messages to hold in-flight")
-	cmd.Flags().StringVarP(&k.conf.RPC.URL, "rpc-url", "r", os.Getenv("ETH_RPC_URL"), "JSON/RPC URL for Ethereum node")
-	cmd.Flags().IntVarP(&k.conf.MaxTXWaitTime, "tx-timeout", "x", kldutils.DefInt("ETH_TX_TIMEOUT", 0), "Maximum wait time for an individual transaction (seconds)")
-	cmd.Flags().BoolVarP(&k.conf.PredictNonces, "predict-nonces", "P", false, "Predict the next nonce before sending (default=false for node-signed txns)")
 	return
-}
-
-// MsgContext is passed for each message that arrives at the bridge
-type MsgContext interface {
-	// Get the headers of the message
-	Headers() *kldmessages.CommonHeaders
-	// Unmarshal the supplied message into a give type
-	Unmarshal(msg interface{}) error
-	// Send an error reply
-	SendErrorReply(status int, err error)
-	// Send an error reply
-	SendErrorReplyWithTX(status int, err error, txHash string)
-	// Send a reply that can be marshaled into bytes.
-	// Sets all the common headers on behalf of the caller, based on the request context
-	Reply(replyMsg kldmessages.ReplyWithHeaders)
-	// Get a string summary
-	String() string
 }
 
 type msgContext struct {
@@ -143,7 +122,7 @@ type msgContext struct {
 // * Caller holds the inFlightCond mutex, and has already checked for capacity *
 func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage, producer KafkaProducer) (pCtx *msgContext, err error) {
 	ctx := msgContext{
-		timeReceived: time.Now(),
+		timeReceived: time.Now().UTC(),
 		reqOffset:    fmt.Sprintf("%s:%d:%d", msg.Topic, msg.Partition, msg.Offset),
 		saramaMsg:    msg,
 		bridge:       k,
@@ -272,8 +251,8 @@ func (c *msgContext) Reply(replyMessage kldmessages.ReplyWithHeaders) {
 	replyHeaders.ReqID = c.requestCommon.Headers.ID
 	replyHeaders.ReqOffset = c.reqOffset
 	replyHeaders.ReqOffset = c.reqOffset
-	replyHeaders.Received = c.timeReceived.Format(time.RFC3339)
-	c.replyTime = time.Now()
+	replyHeaders.Received = c.timeReceived.UTC().Format(time.RFC3339Nano)
+	c.replyTime = time.Now().UTC()
 	replyHeaders.Elapsed = c.replyTime.Sub(c.timeReceived).Seconds()
 	c.replyBytes, _ = json.Marshal(replyMessage)
 	log.Infof("Sending reply: %s", c)
@@ -289,10 +268,10 @@ func (c *msgContext) Reply(replyMessage kldmessages.ReplyWithHeaders) {
 func (c *msgContext) String() string {
 	retval := fmt.Sprintf("MsgContext[%s:%s reqOffset=%s complete=%t received=%s",
 		c.requestCommon.Headers.MsgType, c.requestCommon.Headers.ID,
-		c.reqOffset, c.complete, c.timeReceived.Format(time.RFC3339))
+		c.reqOffset, c.complete, c.timeReceived.UTC().Format(time.RFC3339Nano))
 	if c.replyType != "" {
 		retval += fmt.Sprintf(" replied=%s replyType=%s",
-			c.replyTime.Format(time.RFC3339), c.replyType)
+			c.replyTime.UTC().Format(time.RFC3339Nano), c.replyType)
 	}
 	retval += "]"
 	return retval
@@ -310,14 +289,12 @@ func (c msgContext) Encode() ([]byte, error) {
 
 // NewKafkaBridge creates a new KafkaBridge
 func NewKafkaBridge(printYAML *bool) *KafkaBridge {
-	mp := newMsgProcessor()
 	k := &KafkaBridge{
 		printYAML:    printYAML,
-		processor:    mp,
 		inFlight:     make(map[string]*msgContext),
 		inFlightCond: sync.NewCond(&sync.Mutex{}),
 	}
-	mp.conf = &k.conf // Inherit our configuration in the processor
+	k.processor = kldtx.NewTxnProcessor(&k.conf.TxnProcessorConf)
 	k.kafka = NewKafkaCommon(&SaramaKafkaFactory{}, &k.conf.Kafka, k)
 	return k
 }
@@ -397,13 +374,10 @@ func (k *KafkaBridge) ProducerSuccessLoop(consumer KafkaConsumer, producer Kafka
 
 func (k *KafkaBridge) connect() (err error) {
 	// Connect the client
-	if k.rpc, err = rpc.Dial(k.conf.RPC.URL); err != nil {
-		err = fmt.Errorf("JSON/RPC connection to %s failed: %s", k.conf.RPC.URL, err)
+	if k.rpc, err = kldeth.RPCConnect(&k.conf.RPC); err != nil {
 		return
 	}
-	k.processor.Init(k.rpc, k.conf.MaxTXWaitTime)
-	log.Debug("JSON/RPC connected. URL=", k.conf.RPC.URL)
-
+	k.processor.Init(k.rpc)
 	return
 }
 

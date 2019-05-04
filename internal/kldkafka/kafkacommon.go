@@ -1,4 +1,4 @@
-// Copyright 2018 Kaleido, a ConsenSys business
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -90,17 +90,22 @@ func (k *kafkaCommon) Producer() KafkaProducer {
 }
 
 // ValidateConf performs common Cobra PreRunE logic for Kafka related commands
-func (k *kafkaCommon) ValidateConf() (err error) {
-	if k.conf.TopicOut == "" {
+func (k *kafkaCommon) ValidateConf() error {
+	return KafkaValidateConf(k.conf)
+}
+
+// KafkaValidateConf validates supplied configuration
+func KafkaValidateConf(kconf *KafkaCommonConf) (err error) {
+	if kconf.TopicOut == "" {
 		return fmt.Errorf("No output topic specified for bridge to send events to")
 	}
-	if k.conf.TopicIn == "" {
+	if kconf.TopicIn == "" {
 		return fmt.Errorf("No input topic specified for bridge to listen to")
 	}
-	if k.conf.ConsumerGroup == "" {
+	if kconf.ConsumerGroup == "" {
 		return fmt.Errorf("No consumer group specified")
 	}
-	if !kldutils.AllOrNoneReqd(k.conf.SASL.Username, k.conf.SASL.Password) {
+	if !kldutils.AllOrNoneReqd(kconf.SASL.Username, kconf.SASL.Password) {
 		err = fmt.Errorf("Username and Password must both be provided for SASL")
 		return
 	}
@@ -109,21 +114,29 @@ func (k *kafkaCommon) ValidateConf() (err error) {
 
 // CobraInit performs common Cobra init for Kafka related commands
 func (k *kafkaCommon) CobraInit(cmd *cobra.Command) {
+	KafkaCommonCobraInit(cmd, k.conf)
+}
+
+// KafkaCommonCobraInit commandline common parameter init for Kafka
+func KafkaCommonCobraInit(cmd *cobra.Command, kconf *KafkaCommonConf) {
 	defBrokerList := strings.Split(os.Getenv("KAFKA_BROKERS"), ",")
+	if len(defBrokerList) == 1 && defBrokerList[0] == "" {
+		defBrokerList = []string{}
+	}
 	defTLSenabled, _ := strconv.ParseBool(os.Getenv("KAFKA_TLS_ENABLED"))
 	defTLSinsecure, _ := strconv.ParseBool(os.Getenv("KAFKA_TLS_INSECURE"))
-	cmd.Flags().StringArrayVarP(&k.conf.Brokers, "brokers", "b", defBrokerList, "Comma-separated list of bootstrap brokers")
-	cmd.Flags().StringVarP(&k.conf.ClientID, "clientid", "i", os.Getenv("KAFKA_CLIENT_ID"), "Client ID (or generated UUID)")
-	cmd.Flags().StringVarP(&k.conf.ConsumerGroup, "consumer-group", "g", os.Getenv("KAFKA_CONSUMER_GROUP"), "Client ID (or generated UUID)")
-	cmd.Flags().StringVarP(&k.conf.TopicIn, "topic-in", "t", os.Getenv("KAFKA_TOPIC_IN"), "Topic to listen to")
-	cmd.Flags().StringVarP(&k.conf.TopicOut, "topic-out", "T", os.Getenv("KAFKA_TOPIC_OUT"), "Topic to send events to")
-	cmd.Flags().StringVarP(&k.conf.TLS.ClientCertsFile, "tls-clientcerts", "c", os.Getenv("KAFKA_TLS_CLIENT_CERT"), "A client certificate file, for mutual TLS auth")
-	cmd.Flags().StringVarP(&k.conf.TLS.ClientKeyFile, "tls-clientkey", "k", os.Getenv("KAFKA_TLS_CLIENT_KEY"), "A client private key file, for mutual TLS auth")
-	cmd.Flags().StringVarP(&k.conf.TLS.CACertsFile, "tls-cacerts", "C", os.Getenv("KAFKA_TLS_CA_CERTS"), "CA certificates file (or host CAs will be used)")
-	cmd.Flags().BoolVarP(&k.conf.TLS.Enabled, "tls-enabled", "e", defTLSenabled, "Encrypt network connection with TLS (SSL)")
-	cmd.Flags().BoolVarP(&k.conf.TLS.InsecureSkipVerify, "tls-insecure", "z", defTLSinsecure, "Disable verification of TLS certificate chain")
-	cmd.Flags().StringVarP(&k.conf.SASL.Username, "sasl-username", "u", os.Getenv("KAFKA_SASL_USERNAME"), "Username for SASL authentication")
-	cmd.Flags().StringVarP(&k.conf.SASL.Password, "sasl-password", "p", os.Getenv("KAFKA_SASL_PASSWORD"), "Password for SASL authentication")
+	cmd.Flags().StringArrayVarP(&kconf.Brokers, "brokers", "b", defBrokerList, "Comma-separated list of bootstrap brokers")
+	cmd.Flags().StringVarP(&kconf.ClientID, "clientid", "i", os.Getenv("KAFKA_CLIENT_ID"), "Client ID (or generated UUID)")
+	cmd.Flags().StringVarP(&kconf.ConsumerGroup, "consumer-group", "g", os.Getenv("KAFKA_CONSUMER_GROUP"), "Client ID (or generated UUID)")
+	cmd.Flags().StringVarP(&kconf.TopicIn, "topic-in", "t", os.Getenv("KAFKA_TOPIC_IN"), "Topic to listen to")
+	cmd.Flags().StringVarP(&kconf.TopicOut, "topic-out", "T", os.Getenv("KAFKA_TOPIC_OUT"), "Topic to send events to")
+	cmd.Flags().StringVarP(&kconf.TLS.ClientCertsFile, "tls-clientcerts", "c", os.Getenv("KAFKA_TLS_CLIENT_CERT"), "A client certificate file, for mutual TLS auth")
+	cmd.Flags().StringVarP(&kconf.TLS.ClientKeyFile, "tls-clientkey", "k", os.Getenv("KAFKA_TLS_CLIENT_KEY"), "A client private key file, for mutual TLS auth")
+	cmd.Flags().StringVarP(&kconf.TLS.CACertsFile, "tls-cacerts", "C", os.Getenv("KAFKA_TLS_CA_CERTS"), "CA certificates file (or host CAs will be used)")
+	cmd.Flags().BoolVarP(&kconf.TLS.Enabled, "tls-enabled", "e", defTLSenabled, "Encrypt network connection with TLS (SSL)")
+	cmd.Flags().BoolVarP(&kconf.TLS.InsecureSkipVerify, "tls-insecure", "z", defTLSinsecure, "Disable verification of TLS certificate chain")
+	cmd.Flags().StringVarP(&kconf.SASL.Username, "sasl-username", "u", os.Getenv("KAFKA_SASL_USERNAME"), "Username for SASL authentication")
+	cmd.Flags().StringVarP(&kconf.SASL.Password, "sasl-password", "p", os.Getenv("KAFKA_SASL_PASSWORD"), "Password for SASL authentication")
 	return
 }
 
@@ -145,6 +158,12 @@ func (s saramaLogger) Println(v ...interface{}) {
 }
 
 func (k *kafkaCommon) connect() (err error) {
+
+	log.Debugf("Kafka Bootstrap brokers: %s", k.conf.Brokers)
+	if len(k.conf.Brokers) == 0 || k.conf.Brokers[0] == "" {
+		err = fmt.Errorf("No Kafka brokers configured")
+		return
+	}
 
 	sarama.Logger = k.saramaLogger
 	clientConf := cluster.NewConfig()
@@ -175,7 +194,6 @@ func (k *kafkaCommon) connect() (err error) {
 	}
 	log.Debugf("Kafka ClientID: %s", clientConf.ClientID)
 
-	log.Debugf("Kafka Bootstrap brokers: %s", k.conf.Brokers)
 	if k.client, err = k.factory.NewClient(k, clientConf); err != nil {
 		log.Errorf("Failed to create Kafka client: %s", err)
 		return

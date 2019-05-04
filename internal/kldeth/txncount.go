@@ -1,4 +1,4 @@
-// Copyright 2018 Kaleido, a ConsenSys business
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import (
 
 // GetTransactionCount gets the transaction count for an address
 func GetTransactionCount(rpc RPCClient, addr *common.Address, blockNumber string) (int64, error) {
-	start := time.Now()
+	start := time.Now().UTC()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -35,7 +35,7 @@ func GetTransactionCount(rpc RPCClient, addr *common.Address, blockNumber string
 	if err := rpc.CallContext(ctx, &txnCount, "eth_getTransactionCount", addr, blockNumber); err != nil {
 		return 0, err
 	}
-	callTime := time.Now().Sub(start)
+	callTime := time.Now().UTC().Sub(start)
 	log.Debugf("eth_getTransactionCount(%x,latest)=%d [%.2fs]", addr, txnCount, callTime.Seconds())
 	return int64(txnCount), nil
 }

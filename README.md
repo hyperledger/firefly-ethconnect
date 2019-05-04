@@ -3,7 +3,7 @@
 [![codecov](https://codecov.io/gh/kaleido-io/ethconnect-2.0/branch/master/graph/badge.svg?token=RWlSbY389z)](https://codecov.io/gh/kaleido-io/ethconnect-2.0)
 
 - [github.com/kaleido-io/ethconnect-2.0](#githubcomkaleido-ioethconnect-20)
-  - [About kaleido-io/ethconnect](#about-kaleido-ioethconnect)
+  - [Kaleido's Ethconnect REST Gateway](#kaleidos-ethconnect-rest-gateway)
   - [License](#license)
   - [Example payloads](#example-payloads)
     - [YAML to submit a transaction](#yaml-to-submit-a-transaction)
@@ -30,9 +30,7 @@
     - [Maximum wait time for an individual transaction (tx-timeout)](#maximum-wait-time-for-an-individual-transaction-tx-timeout)
   - [Contributing](#contributing)
 
-## About kaleido-io/ethconnect
-
-Open Source component that is used as part of [Kaleido Connect](https://kaleido.io).
+## Kaleido's Ethconnect REST Gateway
 
 A Web and Messaging API, taking the hassle out of submitting Ethereum transactions:
 - Solidity compilation

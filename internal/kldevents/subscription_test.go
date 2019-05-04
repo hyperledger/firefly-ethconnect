@@ -15,7 +15,6 @@
 package kldevents
 
 import (
-	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -42,15 +41,13 @@ func TestCreateWebhookSub(t *testing.T) {
 	assert.NoError(err)
 	assert.NotEmpty(s.info.ID)
 
-	var s1 subscriptionInfo
-	infoBytes, _ := kv.Get(s.info.ID)
-	err = json.Unmarshal(infoBytes, &s1)
+	s1, err := restoreSubscription(kv, s.info.ID)
 	assert.NoError(err)
 
-	assert.Equal(s.info.ID, s1.ID)
-	assert.Equal(*event, *s1.Event)
-	assert.Equal("webhook", s1.Action.Type)
-	assert.Equal("http://hello/world", s1.Action.Webhook.URL)
+	assert.Equal(s.info.ID, s1.info.ID)
+	assert.Equal(*event, *s1.info.Event)
+	assert.Equal("webhook", s1.info.Action.Type)
+	assert.Equal("http://hello/world", s1.info.Action.Webhook.URL)
 	assert.Equal(event.Id(), s.info.Filter.Topics[0][0])
 }
 
@@ -75,6 +72,21 @@ func TestCreateWebhookSubWithAddr(t *testing.T) {
 	assert.NotEmpty(s.info.ID)
 	assert.Equal(event.Id(), s.info.Filter.Topics[0][0])
 	assert.Equal(*event, *s.info.Event)
+}
+
+func TestRestoreSubscriptionMissing(t *testing.T) {
+	assert := assert.New(t)
+	kv := newMockKV()
+	kv.err = fmt.Errorf("pop")
+	_, err := restoreSubscription(kv, "missing")
+	assert.EqualError(err, "Failed to read subscription from key value store: pop")
+}
+
+func TestRestoreSubscriptionBad(t *testing.T) {
+	assert := assert.New(t)
+	kv := newMockKV()
+	_, err := restoreSubscription(kv, "bad data")
+	assert.EqualError(err, "Failed to restore subscription from key value store: unexpected end of JSON input")
 }
 
 func TestCreateSubscriptionNoEvent(t *testing.T) {

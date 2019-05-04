@@ -22,6 +22,7 @@ import (
 
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -103,8 +104,10 @@ func newSubscription(kv kvStore, addr *kldeth.Address, event *kldeth.ABIEvent, a
 		info: i,
 		kv:   kv,
 	}
+	addrStr := "nil"
 	if addr != nil {
 		f.Addresses = []kldeth.Address{*addr}
+		addrStr = addr.String()
 	}
 	if event == nil || event.Name == "" {
 		return nil, fmt.Errorf("Solidity event name must be specified")
@@ -119,5 +122,21 @@ func newSubscription(kv kvStore, addr *kldeth.Address, event *kldeth.ABIEvent, a
 	if err := kv.Put(i.ID, infoBytes); err != nil {
 		return nil, fmt.Errorf("Failed to store subscription info: %s", err)
 	}
+	log.Infof("Created subscription %s - address:%s topic:%s event:%s", i.ID, addrStr, event, event.Id())
 	return s, nil
+}
+
+func restoreSubscription(kv kvStore, key string) (*subscription, error) {
+	infoBytes, err := kv.Get(key)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to read subscription from key value store: %s", err)
+	}
+	var i subscriptionInfo
+	if err := json.Unmarshal(infoBytes, &i); err != nil {
+		return nil, fmt.Errorf("Failed to restore subscription from key value store: %s", err)
+	}
+	return &subscription{
+		kv:   kv,
+		info: &i,
+	}, nil
 }

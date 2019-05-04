@@ -1,8 +1,8 @@
-# github.com/kaleido-io/ethconnect
+# github.com/kaleido-io/ethconnect-2.0
 
-[![Coverage report](https://codecov.io/gh/kaleido-io/ethconnect-2.0/branch/master/graph/badge.svg)](https://codecov.io/gh/kaleido-io/ethconnect-2.0)
+[![codecov](https://codecov.io/gh/kaleido-io/ethconnect-2.0/branch/master/graph/badge.svg?token=RWlSbY389z)](https://codecov.io/gh/kaleido-io/ethconnect-2.0)
 
-- [github.com/kaleido-io/ethconnect](#githubcomkaleido-ioethconnect)
+- [github.com/kaleido-io/ethconnect-2.0](#githubcomkaleido-ioethconnect-20)
   - [About kaleido-io/ethconnect](#about-kaleido-ioethconnect)
   - [License](#license)
   - [Example payloads](#example-payloads)

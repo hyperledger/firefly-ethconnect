@@ -28,7 +28,6 @@
   - [Tuning](#tuning)
     - [Maximum messages to hold in-flight (maxinflight)](#maximum-messages-to-hold-in-flight-maxinflight)
     - [Maximum wait time for an individual transaction (tx-timeout)](#maximum-wait-time-for-an-individual-transaction-tx-timeout)
-  - [Contributing](#contributing)
 
 ## Kaleido's Ethconnect REST Gateway
 
@@ -527,22 +526,3 @@ to get a transaction into a block.
 
 In the case of a timeout, the transaction hash will be sent back in the `Error` reply
 so that an administrator can later check the state of the transaction in the node.
-
-## Contributing
-
-We encourage you to fork this repository to make changes, and customize/extend the
-tool for your specific use case. We also encourage pull requests to the Kaleido
-hosted repository.
-
-As the community around this OSS project evolves, we will flesh out a full CONTRIBUTING.md.
-
-For now here are some guidelines when submitting PRs:
-- Provide a description of the function, and why it would be generally useful to others
-- If you incorporate code from other projects/authors, you must list this in your contribution,
-  and the license under which that code was provided. GPL/LGPL source code contributions cannot be accepted into this repository.
-- Avoid changing default behavior - instead provide a new option to enable different behavior
-- Perform a `make` locally, which will execute the same build as occurs in Travis
-- Ensure code coverage does not drop below the 95% threshold enforced by the Travis build
-- Be patient to the fact that additional testing (regression and non-functional
-  performance/stress tests) are performed by Kaleido on this component, and might gate
-  inclusion of changes into `master`

@@ -1,0 +1,1221 @@
+{
+  "schemes": [
+    "http"
+  ],
+  "swagger": "2.0",
+  "info": {
+    "description": "Implementation of the basic standard token. https://eips.ethereum.org/EIPS/eip-20 Originally based on code by FirstBlood: https://github.com/Firstbloodio/token/blob/master/smart_contract/FirstBloodToken.sol * This implementation emits additional Approval events, allowing applications to reconstruct the allowance status for all accounts just by listening to said events. Note that this isn't required by the specification, and other compliant implementations may not do it.",
+    "title": "erc20",
+    "version": "1.0"
+  },
+  "host": "localhost:80",
+  "basePath": "/contracts/erc20",
+  "paths": {
+    "/": {
+      "post": {
+        "consumes": [
+          "application/json",
+          "application/x-yaml"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "constructor",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/constructor_inputs"
+            }
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/syncParam"
+          },
+          {
+            "$ref": "#/parameters/callParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/constructor_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/{address}/allowance": {
+      "get": {
+        "description": "Function to check the amount of tokens that an owner allowed to a spender.",
+        "produces": [
+          "application/json"
+        ],
+        "summary": "allowance(address,address)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "address: address The address which owns the funds.",
+            "name": "owner",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "address: address The address which will spend the funds.",
+            "name": "spender",
+            "in": "query",
+            "required": true
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A uint256 specifying the amount of tokens still available for the spender.",
+            "schema": {
+              "$ref": "#/definitions/allowance_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "description": "Function to check the amount of tokens that an owner allowed to a spender.",
+        "consumes": [
+          "application/json",
+          "application/x-yaml"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "allowance(address,address)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/allowance_inputs"
+            }
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/syncParam"
+          },
+          {
+            "$ref": "#/parameters/callParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A uint256 specifying the amount of tokens still available for the spender.",
+            "schema": {
+              "$ref": "#/definitions/allowance_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/{address}/approve": {
+      "get": {
+        "description": "Approve the passed address to spend the specified amount of tokens on behalf of msg.sender. Beware that changing an allowance with this method brings the risk that someone may use both the old and the new allowance by unfortunate transaction ordering. One possible solution to mitigate this race condition is to first reduce the spender's allowance to 0 and set the desired value afterwards: https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729",
+        "produces": [
+          "application/json"
+        ],
+        "summary": "approve(address,uint256)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "address: The address which will spend the funds.",
+            "name": "spender",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "uint256: The amount of tokens to be spent.",
+            "name": "value",
+            "in": "query",
+            "required": true
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/approve_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "description": "Approve the passed address to spend the specified amount of tokens on behalf of msg.sender. Beware that changing an allowance with this method brings the risk that someone may use both the old and the new allowance by unfortunate transaction ordering. One possible solution to mitigate this race condition is to first reduce the spender's allowance to 0 and set the desired value afterwards: https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729",
+        "consumes": [
+          "application/json",
+          "application/x-yaml"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "approve(address,uint256)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/approve_inputs"
+            }
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/syncParam"
+          },
+          {
+            "$ref": "#/parameters/callParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/approve_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/{address}/balanceOf": {
+      "get": {
+        "description": "Gets the balance of the specified address.",
+        "produces": [
+          "application/json"
+        ],
+        "summary": "balanceOf(address)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "address: The address to query the balance of.",
+            "name": "owner",
+            "in": "query",
+            "required": true
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A uint256 representing the amount owned by the passed address.",
+            "schema": {
+              "$ref": "#/definitions/balanceOf_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "description": "Gets the balance of the specified address.",
+        "consumes": [
+          "application/json",
+          "application/x-yaml"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "balanceOf(address)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/balanceOf_inputs"
+            }
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/syncParam"
+          },
+          {
+            "$ref": "#/parameters/callParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A uint256 representing the amount owned by the passed address.",
+            "schema": {
+              "$ref": "#/definitions/balanceOf_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/{address}/decreaseAllowance": {
+      "get": {
+        "description": "Decrease the amount of tokens that an owner allowed to a spender. approve should be called when _allowed[msg.sender][spender] == 0. To decrement allowed value is better to use this function to avoid 2 calls (and wait until the first transaction is mined) From MonolithDAO Token.sol Emits an Approval event.",
+        "produces": [
+          "application/json"
+        ],
+        "summary": "decreaseAllowance(address,uint256)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "address: The address which will spend the funds.",
+            "name": "spender",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "uint256: The amount of tokens to decrease the allowance by.",
+            "name": "subtractedValue",
+            "in": "query",
+            "required": true
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/decreaseAllowance_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "description": "Decrease the amount of tokens that an owner allowed to a spender. approve should be called when _allowed[msg.sender][spender] == 0. To decrement allowed value is better to use this function to avoid 2 calls (and wait until the first transaction is mined) From MonolithDAO Token.sol Emits an Approval event.",
+        "consumes": [
+          "application/json",
+          "application/x-yaml"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "decreaseAllowance(address,uint256)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/decreaseAllowance_inputs"
+            }
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/syncParam"
+          },
+          {
+            "$ref": "#/parameters/callParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/decreaseAllowance_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/{address}/increaseAllowance": {
+      "get": {
+        "description": "Increase the amount of tokens that an owner allowed to a spender. approve should be called when _allowed[msg.sender][spender] == 0. To increment allowed value is better to use this function to avoid 2 calls (and wait until the first transaction is mined) From MonolithDAO Token.sol Emits an Approval event.",
+        "produces": [
+          "application/json"
+        ],
+        "summary": "increaseAllowance(address,uint256)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "address: The address which will spend the funds.",
+            "name": "spender",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "uint256: The amount of tokens to increase the allowance by.",
+            "name": "addedValue",
+            "in": "query",
+            "required": true
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/increaseAllowance_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "description": "Increase the amount of tokens that an owner allowed to a spender. approve should be called when _allowed[msg.sender][spender] == 0. To increment allowed value is better to use this function to avoid 2 calls (and wait until the first transaction is mined) From MonolithDAO Token.sol Emits an Approval event.",
+        "consumes": [
+          "application/json",
+          "application/x-yaml"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "increaseAllowance(address,uint256)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/increaseAllowance_inputs"
+            }
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/syncParam"
+          },
+          {
+            "$ref": "#/parameters/callParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/increaseAllowance_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/{address}/totalSupply": {
+      "get": {
+        "description": "Total number of tokens in existence.",
+        "produces": [
+          "application/json"
+        ],
+        "summary": "totalSupply()",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/totalSupply_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "description": "Total number of tokens in existence.",
+        "consumes": [
+          "application/json",
+          "application/x-yaml"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "totalSupply()",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/totalSupply_inputs"
+            }
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/syncParam"
+          },
+          {
+            "$ref": "#/parameters/callParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/totalSupply_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/{address}/transfer": {
+      "get": {
+        "description": "Transfer token to a specified address.",
+        "produces": [
+          "application/json"
+        ],
+        "summary": "transfer(address,uint256)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "address: The address to transfer to.",
+            "name": "to",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "uint256: The amount to be transferred.",
+            "name": "value",
+            "in": "query",
+            "required": true
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/transfer_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "description": "Transfer token to a specified address.",
+        "consumes": [
+          "application/json",
+          "application/x-yaml"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "transfer(address,uint256)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/transfer_inputs"
+            }
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/syncParam"
+          },
+          {
+            "$ref": "#/parameters/callParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/transfer_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/{address}/transferFrom": {
+      "get": {
+        "description": "Transfer tokens from one address to another. Note that while this function emits an Approval event, this is not required as per the specification, and other compliant implementations may not emit the event.",
+        "produces": [
+          "application/json"
+        ],
+        "summary": "transferFrom(address,address,uint256)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "address: address The address which you want to send tokens from",
+            "name": "from",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "address: address The address which you want to transfer to",
+            "name": "to",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "uint256: uint256 the amount of tokens to be transferred",
+            "name": "value",
+            "in": "query",
+            "required": true
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/transferFrom_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "description": "Transfer tokens from one address to another. Note that while this function emits an Approval event, this is not required as per the specification, and other compliant implementations may not emit the event.",
+        "consumes": [
+          "application/json",
+          "application/x-yaml"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "transferFrom(address,address,uint256)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/transferFrom_inputs"
+            }
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/syncParam"
+          },
+          {
+            "$ref": "#/parameters/callParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/transferFrom_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "allowance_inputs": {
+      "properties": {
+        "owner": {
+          "description": "address: address The address which owns the funds.",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{40}$"
+        },
+        "spender": {
+          "description": "address: address The address which will spend the funds.",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{40}$"
+        }
+      }
+    },
+    "allowance_outputs": {
+      "properties": {
+        "output": {
+          "description": "uint256",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        }
+      }
+    },
+    "approve_inputs": {
+      "properties": {
+        "spender": {
+          "description": "address: The address which will spend the funds.",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{40}$"
+        },
+        "value": {
+          "description": "uint256: The amount of tokens to be spent.",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        }
+      }
+    },
+    "approve_outputs": {
+      "properties": {
+        "output": {
+          "description": "bool",
+          "type": "boolean"
+        }
+      }
+    },
+    "balanceOf_inputs": {
+      "properties": {
+        "owner": {
+          "description": "address: The address to query the balance of.",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{40}$"
+        }
+      }
+    },
+    "balanceOf_outputs": {
+      "properties": {
+        "output": {
+          "description": "uint256",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        }
+      }
+    },
+    "constructor_inputs": {},
+    "constructor_outputs": {},
+    "decreaseAllowance_inputs": {
+      "properties": {
+        "spender": {
+          "description": "address: The address which will spend the funds.",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{40}$"
+        },
+        "subtractedValue": {
+          "description": "uint256: The amount of tokens to decrease the allowance by.",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        }
+      }
+    },
+    "decreaseAllowance_outputs": {
+      "properties": {
+        "output": {
+          "description": "bool",
+          "type": "boolean"
+        }
+      }
+    },
+    "error": {
+      "properties": {
+        "error": {
+          "description": "Error message",
+          "type": "string"
+        }
+      }
+    },
+    "increaseAllowance_inputs": {
+      "properties": {
+        "addedValue": {
+          "description": "uint256: The amount of tokens to increase the allowance by.",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        },
+        "spender": {
+          "description": "address: The address which will spend the funds.",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{40}$"
+        }
+      }
+    },
+    "increaseAllowance_outputs": {
+      "properties": {
+        "output": {
+          "description": "bool",
+          "type": "boolean"
+        }
+      }
+    },
+    "totalSupply_inputs": {},
+    "totalSupply_outputs": {
+      "properties": {
+        "output": {
+          "description": "uint256",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        }
+      }
+    },
+    "transferFrom_inputs": {
+      "properties": {
+        "from": {
+          "description": "address: address The address which you want to send tokens from",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{40}$"
+        },
+        "to": {
+          "description": "address: address The address which you want to transfer to",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{40}$"
+        },
+        "value": {
+          "description": "uint256: uint256 the amount of tokens to be transferred",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        }
+      }
+    },
+    "transferFrom_outputs": {
+      "properties": {
+        "output": {
+          "description": "bool",
+          "type": "boolean"
+        }
+      }
+    },
+    "transfer_inputs": {
+      "properties": {
+        "to": {
+          "description": "address: The address to transfer to.",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{40}$"
+        },
+        "value": {
+          "description": "uint256: The amount to be transferred.",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        }
+      }
+    },
+    "transfer_outputs": {
+      "properties": {
+        "output": {
+          "description": "bool",
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "parameters": {
+    "callParam": {
+      "type": "boolean",
+      "description": "Perform a read-only call with the same parameters that would be used to invoke, and return result - 'x-kaleido-call' header can also be used",
+      "name": "kld-call",
+      "in": "query",
+      "allowEmptyValue": true
+    },
+    "fromParam": {
+      "type": "string",
+      "description": "The 'from' address - 'x-kaleido-from' header can also be used",
+      "name": "kld-from",
+      "in": "query"
+    },
+    "gasParam": {
+      "type": "integer",
+      "description": "Gas to send with the transaction (auto-calculated if not set) - 'x-kaleido-gas' header can also be used",
+      "name": "kld-gas",
+      "in": "query",
+      "allowEmptyValue": true
+    },
+    "gaspriceParam": {
+      "type": "integer",
+      "description": "Gas Price offered - 'x-kaleido-gasprice' header can also be used",
+      "name": "kld-gasprice",
+      "in": "query",
+      "allowEmptyValue": true
+    },
+    "syncParam": {
+      "type": "boolean",
+      "default": true,
+      "description": "Block the HTTP request until the tx is mined (does not store the receipt) - 'x-kaleido-sync' header can also be used",
+      "name": "kld-sync",
+      "in": "query",
+      "allowEmptyValue": true
+    },
+    "valueParam": {
+      "type": "integer",
+      "description": "Value to send with the transaction - 'x-kaleido-value' header can also be used",
+      "name": "kld-value",
+      "in": "query",
+      "allowEmptyValue": true
+    }
+  }
+}

@@ -7,24 +7,41 @@ require (
 	github.com/aristanetworks/goarista v0.0.0-20190121184617-8f049bdb8feb // indirect
 	github.com/bsm/sarama-cluster v2.1.15+incompatible
 	github.com/deckarep/golang-set v1.7.1 // indirect
+	github.com/dsnet/compress v0.0.1 // indirect
 	github.com/eapache/go-resiliency v1.1.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20180814174437-776d5712da21 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
 	github.com/ethereum/go-ethereum v1.8.20
 	github.com/globalsign/mgo v0.0.0-20181015135952-eeefdecb41b8
+	github.com/go-openapi/jsonreference v0.17.0
+	github.com/go-openapi/spec v0.19.0
 	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db // indirect
+	github.com/hashicorp/golang-lru v0.5.1 // indirect
 	github.com/icza/dyno v0.0.0-20180601094105-0c96289f9585
 	github.com/julienschmidt/httprouter v1.2.0
+	github.com/mholt/archiver v3.1.1+incompatible
+	github.com/mitchellh/mapstructure v1.1.2
 	github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d
+	github.com/nwaples/rardecode v1.0.0 // indirect
+	github.com/onsi/ginkgo v1.8.0 // indirect
+	github.com/onsi/gomega v1.5.0 // indirect
+	github.com/opentracing/opentracing-go v1.1.0 // indirect
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a // indirect
 	github.com/rs/cors v1.6.0 // indirect
 	github.com/sirupsen/logrus v1.3.0
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/pflag v1.0.3 // indirect
+	github.com/sqs/goreturns v0.0.0-20181028201513-538ac6014518 // indirect
 	github.com/stretchr/testify v1.2.2
-	github.com/syndtr/goleveldb v0.0.0-20181128100959-b001fa50d6b2 // indirect
-	golang.org/x/net v0.0.0-20190119204137-ed066c81e75e // indirect
+	github.com/syndtr/goleveldb v0.0.0-20181128100959-b001fa50d6b2
+	github.com/tidwall/gjson v1.2.1
+	github.com/tidwall/match v1.0.1 // indirect
+	github.com/tidwall/pretty v0.0.0-20190325153808-1166b9ac2b65 // indirect
+	github.com/xdg/scram v0.0.0-20180814205039-7eeb5667e42c // indirect
+	github.com/xdg/stringprep v1.0.0 // indirect
+	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
+	golang.org/x/tools v0.0.0-20190425222832-ad9eeb80039a // indirect
 	gopkg.in/yaml.v2 v2.2.2
 )

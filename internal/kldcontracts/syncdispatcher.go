@@ -1,0 +1,109 @@
+// Copyright 2019 Kaleido
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+//     http://www.apache.org/licenses/LICENSE-2.0
+
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package kldcontracts
+
+import (
+	"fmt"
+	"reflect"
+	"time"
+
+	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+	"github.com/kaleido-io/ethconnect/internal/kldtx"
+	"github.com/kaleido-io/ethconnect/internal/kldutils"
+	log "github.com/sirupsen/logrus"
+)
+
+type syncDispatcher struct {
+	processor kldtx.TxnProcessor
+}
+
+func newSyncDispatcher(processor kldtx.TxnProcessor) rest2EthSyncDispatcher {
+	return &syncDispatcher{
+		processor: processor,
+	}
+}
+
+type syncTxInflight struct {
+	d              *syncDispatcher
+	replyProcessor rest2EthReplyProcessor
+	timeReceived   time.Time
+	sendMsg        *kldmessages.SendTransaction
+	deployMsg      *kldmessages.DeployContract
+}
+
+func (t *syncTxInflight) Headers() *kldmessages.CommonHeaders {
+	if t.deployMsg != nil {
+		return &t.deployMsg.Headers
+	}
+	return &t.sendMsg.Headers
+}
+
+func (t *syncTxInflight) Unmarshal(msg interface{}) error {
+	var retMsg interface{}
+	if t.deployMsg != nil {
+		retMsg = t.deployMsg
+	} else {
+		retMsg = t.sendMsg
+	}
+	if reflect.TypeOf(msg) != reflect.TypeOf(retMsg) {
+		log.Errorf("Type mismatch: %s != %s", reflect.TypeOf(msg), reflect.TypeOf(retMsg))
+		return fmt.Errorf("Unexpected condition (message types do not match when processing)")
+	}
+	reflect.ValueOf(msg).Elem().Set(reflect.ValueOf(retMsg).Elem())
+	return nil
+}
+
+func (t *syncTxInflight) SendErrorReply(status int, err error) {
+	t.replyProcessor.ReplyWithError(err)
+}
+
+func (t *syncTxInflight) SendErrorReplyWithTX(status int, err error, txHash string) {
+	t.SendErrorReply(status, fmt.Errorf("TX %s: %s", txHash, err))
+}
+
+func (t *syncTxInflight) Reply(replyMessage kldmessages.ReplyWithHeaders) {
+	headers := t.Headers()
+	replyHeaders := replyMessage.ReplyHeaders()
+	replyHeaders.ID = kldutils.UUIDv4()
+	replyHeaders.Context = headers.Context
+	replyHeaders.ReqID = headers.ID
+	replyHeaders.Received = t.timeReceived.UTC().Format(time.RFC3339Nano)
+	replyTime := time.Now().UTC()
+	replyHeaders.Elapsed = replyTime.Sub(t.timeReceived).Seconds()
+	t.replyProcessor.ReplyWithReceipt(replyMessage)
+}
+
+func (t *syncTxInflight) String() string {
+	headers := t.Headers()
+	return fmt.Sprintf("MsgContext[%s/%s]", headers.MsgType, headers.ID)
+}
+
+func (d *syncDispatcher) DispatchSendTransactionSync(msg *kldmessages.SendTransaction, replyProcessor rest2EthReplyProcessor) {
+	ctx := &syncTxInflight{
+		replyProcessor: replyProcessor,
+		timeReceived:   time.Now().UTC(),
+		sendMsg:        msg,
+	}
+	d.processor.OnMessage(ctx)
+}
+
+func (d *syncDispatcher) DispatchDeployContractSync(msg *kldmessages.DeployContract, replyProcessor rest2EthReplyProcessor) {
+	ctx := &syncTxInflight{
+		replyProcessor: replyProcessor,
+		timeReceived:   time.Now().UTC(),
+		deployMsg:      msg,
+	}
+	d.processor.OnMessage(ctx)
+}

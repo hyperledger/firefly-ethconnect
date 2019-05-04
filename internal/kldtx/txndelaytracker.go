@@ -1,4 +1,4 @@
-// Copyright 2018 Kaleido, a ConsenSys business
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 // Moving average logic builds upon
 // https://github.com/RobinUS2/golang-moving-average/blob/master/d.go
 
-package kldkafka
+package kldtx
 
 import (
 	"time"
@@ -112,7 +112,7 @@ func (d *txnDelayTracker) ReportSuccess(timeTaken time.Duration) {
 
 	// Average is in miliseconds
 	d.add(val)
-	log.Debugf("Average transaction time to receipt: %.2fms", d.avg())
+	log.Infof("Obtained receipt after %.2fms - average time to receipt: %.2fms", val, d.avg())
 }
 
 func (d *txnDelayTracker) avg() float64 {

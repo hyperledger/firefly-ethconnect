@@ -1,0 +1,724 @@
+{
+  "schemes": [
+    "http",
+    "https"
+  ],
+  "swagger": "2.0",
+  "info": {
+    "description": "Challenges the swagger generator to use lots of types",
+    "title": "lotsOfTypes",
+    "version": "1.0"
+  },
+  "host": "localhost",
+  "basePath": "/contracts/0x0123456789abcdef0123456789abcdef0123456",
+  "paths": {
+    "/echoTypes1": {
+      "get": {
+        "description": "Echo back some types",
+        "produces": [
+          "application/json"
+        ],
+        "summary": "echoTypes1(uint8,bytes,uint256[],bytes1[],bytes32,bool[],address[])",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "uint8: Parameter 1",
+            "name": "param1",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "bytes: Parameter 2",
+            "name": "param2",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "uint256[]: Parameter 3",
+            "name": "param3",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "bytes1[]: Parameter 4",
+            "name": "param4",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "bytes32: Parameter 5",
+            "name": "param5",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "bool[]: Parameter 6",
+            "name": "param6",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "address[]: Parameter 7",
+            "name": "param7",
+            "in": "query",
+            "required": true
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "all of the individual input parameters",
+            "schema": {
+              "$ref": "#/definitions/echoTypes1_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "description": "Echo back some types",
+        "consumes": [
+          "application/json",
+          "application/x-yaml"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "echoTypes1(uint8,bytes,uint256[],bytes1[],bytes32,bool[],address[])",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/echoTypes1_inputs"
+            }
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/syncParam"
+          },
+          {
+            "$ref": "#/parameters/callParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "all of the individual input parameters",
+            "schema": {
+              "$ref": "#/definitions/echoTypes1_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/echoTypes2": {
+      "get": {
+        "description": "Echo back some more types",
+        "produces": [
+          "application/json"
+        ],
+        "summary": "echoTypes2(string,int256[],bool,bytes1,address,bytes4,uint256)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "string: Parameter 1",
+            "name": "param1",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "int256[]: Parameter 2",
+            "name": "param2",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "bool: Parameter 3",
+            "name": "param3",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "bytes1: Parameter 4",
+            "name": "param4",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "address: Parameter 5",
+            "name": "param5",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "bytes4: Parameter 6",
+            "name": "param6",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "uint256",
+            "name": "param7",
+            "in": "query",
+            "required": true
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "all of the individual input parameters",
+            "schema": {
+              "$ref": "#/definitions/echoTypes2_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "description": "Echo back some more types",
+        "consumes": [
+          "application/json",
+          "application/x-yaml"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "echoTypes2(string,int256[],bool,bytes1,address,bytes4,uint256)",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/echoTypes2_inputs"
+            }
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/syncParam"
+          },
+          {
+            "$ref": "#/parameters/callParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "all of the individual input parameters",
+            "schema": {
+              "$ref": "#/definitions/echoTypes2_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/undocumentedWrites": {
+      "get": {
+        "produces": [
+          "application/json"
+        ],
+        "summary": "undocumentedWrites(uint256,uint256,uint256,uint256,uint256,bool)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "uint256",
+            "name": "param1",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "uint256",
+            "name": "param2",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "uint256",
+            "name": "param3",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "uint256",
+            "name": "param4",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "uint256",
+            "name": "param5",
+            "in": "query",
+            "required": true
+          },
+          {
+            "type": "string",
+            "description": "bool",
+            "name": "param6",
+            "in": "query",
+            "required": true
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/undocumentedWrites_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      },
+      "post": {
+        "consumes": [
+          "application/json",
+          "application/x-yaml"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "undocumentedWrites(uint256,uint256,uint256,uint256,uint256,bool)",
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/undocumentedWrites_inputs"
+            }
+          },
+          {
+            "$ref": "#/parameters/fromParam"
+          },
+          {
+            "$ref": "#/parameters/valueParam"
+          },
+          {
+            "$ref": "#/parameters/gasParam"
+          },
+          {
+            "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/syncParam"
+          },
+          {
+            "$ref": "#/parameters/callParam"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/undocumentedWrites_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "echoTypes1_inputs": {
+      "properties": {
+        "param1": {
+          "description": "uint8: Parameter 1",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        },
+        "param2": {
+          "description": "bytes: Parameter 2",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]+$"
+        },
+        "param3": {
+          "description": "uint256[]: Parameter 3",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^-?[0-9]+$"
+          }
+        },
+        "param4": {
+          "description": "bytes1[]: Parameter 4",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(0x)?[a-fA-F0-9]{2}$"
+          }
+        },
+        "param5": {
+          "description": "bytes32: Parameter 5",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{64}$"
+        },
+        "param6": {
+          "description": "bool[]: Parameter 6",
+          "type": "array",
+          "items": {
+            "type": "boolean"
+          }
+        },
+        "param7": {
+          "description": "address[]: Parameter 7",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(0x)?[a-fA-F0-9]{40}$"
+          }
+        }
+      }
+    },
+    "echoTypes1_outputs": {
+      "properties": {
+        "retval1": {
+          "description": "uint8",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        },
+        "retval2": {
+          "description": "bytes",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]+$"
+        },
+        "retval3": {
+          "description": "uint256[]",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^-?[0-9]+$"
+          }
+        },
+        "retval4": {
+          "description": "bytes1[]",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(0x)?[a-fA-F0-9]{2}$"
+          }
+        },
+        "retval5": {
+          "description": "bytes32",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{64}$"
+        },
+        "retval6": {
+          "description": "bool[]",
+          "type": "array",
+          "items": {
+            "type": "boolean"
+          }
+        },
+        "retval7": {
+          "description": "address[]",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(0x)?[a-fA-F0-9]{40}$"
+          }
+        }
+      }
+    },
+    "echoTypes2_inputs": {
+      "properties": {
+        "param1": {
+          "description": "string: Parameter 1",
+          "type": "string"
+        },
+        "param2": {
+          "description": "int256[]: Parameter 2",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^-?[0-9]+$"
+          }
+        },
+        "param3": {
+          "description": "bool: Parameter 3",
+          "type": "boolean"
+        },
+        "param4": {
+          "description": "bytes1: Parameter 4",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{2}$"
+        },
+        "param5": {
+          "description": "address: Parameter 5",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{40}$"
+        },
+        "param6": {
+          "description": "bytes4: Parameter 6",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{8}$"
+        },
+        "param7": {
+          "description": "uint256",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        }
+      }
+    },
+    "echoTypes2_outputs": {
+      "properties": {
+        "retval1": {
+          "description": "string",
+          "type": "string"
+        },
+        "retval2": {
+          "description": "int256[]",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^-?[0-9]+$"
+          }
+        },
+        "retval3": {
+          "description": "bool",
+          "type": "boolean"
+        },
+        "retval4": {
+          "description": "bytes1",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{2}$"
+        },
+        "retval5": {
+          "description": "address",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{40}$"
+        },
+        "retval6": {
+          "description": "bytes4",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{8}$"
+        },
+        "retval7": {
+          "description": "uint256",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        }
+      }
+    },
+    "error": {
+      "properties": {
+        "error": {
+          "description": "Error message",
+          "type": "string"
+        }
+      }
+    },
+    "undocumentedWrites_inputs": {
+      "properties": {
+        "param1": {
+          "description": "uint256",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        },
+        "param2": {
+          "description": "uint256",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        },
+        "param3": {
+          "description": "uint256",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        },
+        "param4": {
+          "description": "uint256",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        },
+        "param5": {
+          "description": "uint256",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        },
+        "param6": {
+          "description": "bool",
+          "type": "boolean"
+        }
+      }
+    },
+    "undocumentedWrites_outputs": {
+      "properties": {
+        "output": {
+          "description": "uint256",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        },
+        "output1": {
+          "description": "uint256",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        },
+        "output2": {
+          "description": "uint256",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        },
+        "output3": {
+          "description": "uint256",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        },
+        "output4": {
+          "description": "uint256",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        },
+        "output5": {
+          "description": "bool",
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "parameters": {
+    "callParam": {
+      "type": "boolean",
+      "description": "Perform a read-only call with the same parameters that would be used to invoke, and return result - 'x-kaleido-call' header can also be used",
+      "name": "kld-call",
+      "in": "query",
+      "allowEmptyValue": true
+    },
+    "fromParam": {
+      "type": "string",
+      "description": "The 'from' address - 'x-kaleido-from' header can also be used",
+      "name": "kld-from",
+      "in": "query"
+    },
+    "gasParam": {
+      "type": "integer",
+      "description": "Gas to send with the transaction (auto-calculated if not set) - 'x-kaleido-gas' header can also be used",
+      "name": "kld-gas",
+      "in": "query",
+      "allowEmptyValue": true
+    },
+    "gaspriceParam": {
+      "type": "integer",
+      "description": "Gas Price offered - 'x-kaleido-gasprice' header can also be used",
+      "name": "kld-gasprice",
+      "in": "query",
+      "allowEmptyValue": true
+    },
+    "syncParam": {
+      "type": "boolean",
+      "default": true,
+      "description": "Block the HTTP request until the tx is mined (does not store the receipt) - 'x-kaleido-sync' header can also be used",
+      "name": "kld-sync",
+      "in": "query",
+      "allowEmptyValue": true
+    },
+    "valueParam": {
+      "type": "integer",
+      "description": "Value to send with the transaction - 'x-kaleido-value' header can also be used",
+      "name": "kld-value",
+      "in": "query",
+      "allowEmptyValue": true
+    }
+  }
+}

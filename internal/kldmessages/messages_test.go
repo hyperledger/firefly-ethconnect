@@ -1,4 +1,4 @@
-// Copyright 2018 Kaleido, a ConsenSys business
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -88,4 +88,18 @@ func TestErrorMessageForUnparsableBinaryData(t *testing.T) {
 	json.Unmarshal(marshaledErrMsg, &unmarshaledErrMsg)
 	assert.Equal("pop", unmarshaledErrMsg.ErrorMessage)
 	assert.Equal("\u0000\ufffd\ufffd\ufffd\ufffd", unmarshaledErrMsg.OriginalMessage)
+}
+
+func TestIsReceiptForReceipt(t *testing.T) {
+	assert := assert.New(t)
+	var m ReplyWithHeaders
+	m = &TransactionReceipt{}
+	assert.NotNil(m.IsReceipt())
+}
+
+func TestIsReceiptForError(t *testing.T) {
+	assert := assert.New(t)
+	var m ReplyWithHeaders
+	m = &ErrorReply{}
+	assert.Nil(m.IsReceipt())
 }

@@ -1,7 +1,6 @@
 # github.com/kaleido-io/ethconnect
 
 [![Coverage report](https://codecov.io/gh/kaleido-io/ethconnect/branch/master/graph/badge.svg)](https://codecov.io/gh/kaleido-io/ethconnect)
-[![Go Report Card](https://goreportcard.com/badge/kaleido-io/ethconnect)](https://goreportcard.com/report/github.com/kaleido-io/ethconnect)
 
 - [github.com/kaleido-io/ethconnect](#githubcomkaleido-ioethconnect)
   - [About kaleido-io/ethconnect](#about-kaleido-ioethconnect)
@@ -359,8 +358,8 @@ You can run a single bridge using simple commandline options, which is ideal for
 
 ```sh
 $ ./ethconnect kafka --help
-Copyright (C) 2018 Kaleido, a ConsenSys business
-Licensed under the Apache License, Version 2.0
+Copyright (C) 2018, 2019 Kaleido
+For License details see https://kaleido.io/terms-of-service/
 Version:  (Build Date: )
 
 Kafka->Ethereum (JSON/RPC) Bridge
@@ -396,8 +395,9 @@ Global Flags:
 
 ```
 $ethconnect webhooks --help
-Copyright (C) 2018 Kaleido, a ConsenSys business
-Licensed under the Apache License, Version 2.0
+Copyright (C) 2018, 2019 Kaleido
+For License details see https://kaleido.io/terms-of-service/
+
 Version:  (Build Date: )
 
 Webhooks->Kafka Bridge

@@ -7,10 +7,12 @@ BINARY_WIN=$(BINARY_NAME)-win
 all: deps build test
 build: 
 		$(VGO) build -ldflags "-X main.buildDate=`date -u +\"%Y-%m-%dT%H:%M:%SZ\"` -X main.buildVersion=$(BUILD_VERSION)" -tags=prod -o $(BINARY_NAME) -v
-test:
+coverage.txt:
 		$(VGO) test  ./... -cover -coverprofile=coverage.txt -covermode=atomic
+test: coverage.txt
 clean: 
 		$(VGO) clean
+		rm -f coverage.txt
 		rm -f $(BINARY_NAME)
 		rm -f $(BINARY_UNIX)
 run:

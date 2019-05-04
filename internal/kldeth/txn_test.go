@@ -1,4 +1,4 @@
-// Copyright 2018 Kaleido, a ConsenSys business
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@ package kldeth
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"math/big"
 	"reflect"
 	"testing"
 
@@ -28,14 +30,21 @@ import (
 
 // Slim interface for stubbing
 type testRPCClient struct {
-	mockError      error
-	capturedMethod string
-	capturedArgs   []interface{}
+	mockError       error
+	capturedMethod  string
+	capturedArgs    []interface{}
+	capturedMethod2 string
+	capturedArgs2   []interface{}
 }
 
 func (r *testRPCClient) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
-	r.capturedMethod = method
-	r.capturedArgs = args
+	if r.capturedMethod == "" {
+		r.capturedMethod = method
+		r.capturedArgs = args
+	} else {
+		r.capturedMethod2 = method
+		r.capturedArgs2 = args
+	}
 	return r.mockError
 }
 
@@ -49,6 +58,106 @@ func TestNewContractDeployTxnSimpleStorage(t *testing.T) {
 
 	var msg kldmessages.DeployContract
 	msg.Solidity = simpleStorage
+	msg.Parameters = []interface{}{float64(999999)}
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	tx, err := NewContractDeployTxn(&msg)
+	assert.Nil(err)
+	rpc := testRPCClient{}
+
+	tx.Send(&rpc)
+
+	assert.Equal("eth_sendTransaction", rpc.capturedMethod)
+	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
+	var jsonSent map[string]interface{}
+	json.Unmarshal(jsonBytesSent, &jsonSent)
+	assert.Equal("0x7b", jsonSent["nonce"])
+	assert.Equal("0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", jsonSent["from"])
+	assert.Equal("0x1c8", jsonSent["gas"])
+	assert.Equal("0x0", jsonSent["gasPrice"])
+	assert.Equal("0x315", jsonSent["value"])
+	// The bytecode has the packed parameters appended to the end
+	assert.Regexp(".+00000000000000000000000000000000000000000000000000000000000f423f$", jsonSent["data"])
+
+}
+
+func TestNewContractDeployTxnSimpleStorageCalcGas(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.DeployContract
+	msg.Solidity = simpleStorage
+	msg.Parameters = []interface{}{float64(999999)}
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "0"
+	msg.GasPrice = "789"
+	tx, err := NewContractDeployTxn(&msg)
+	assert.Nil(err)
+	rpc := testRPCClient{}
+
+	tx.Send(&rpc)
+
+	assert.Equal("eth_estimateGas", rpc.capturedMethod)
+	assert.Equal("eth_sendTransaction", rpc.capturedMethod2)
+	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
+	var jsonSent map[string]interface{}
+	json.Unmarshal(jsonBytesSent, &jsonSent)
+	assert.Equal("0x7b", jsonSent["nonce"])
+	assert.Equal("0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", jsonSent["from"])
+	assert.Equal("0x0", jsonSent["gas"])
+	assert.Equal("0x0", jsonSent["gasPrice"])
+	assert.Equal("0x315", jsonSent["value"])
+	// The bytecode has the packed parameters appended to the end
+	assert.Regexp(".+00000000000000000000000000000000000000000000000000000000000f423f$", jsonSent["data"])
+
+}
+
+func TestNewContractDeployTxnSimpleStorageCalcGasFail(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.DeployContract
+	msg.Solidity = simpleStorage
+	msg.Parameters = []interface{}{float64(999999)}
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "0"
+	msg.GasPrice = "789"
+	tx, err := NewContractDeployTxn(&msg)
+	assert.Nil(err)
+	rpc := testRPCClient{}
+
+	rpc.mockError = fmt.Errorf("pop")
+	err = tx.Send(&rpc)
+	assert.EqualError(err, "Failed to calculate gas for transaction: pop")
+}
+
+func TestNewContractDeployMissingCompiledOrSolidity(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.DeployContract
+	msg.Parameters = []interface{}{float64(999999)}
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	_, err := NewContractDeployTxn(&msg)
+	assert.EqualError(err, "Missing Compliled Code + ABI, or Solidity")
+}
+
+func TestNewContractDeployPrecompiledSimpleStorage(t *testing.T) {
+	assert := assert.New(t)
+
+	c, _ := CompileContract(simpleStorage, "simplestorage", "")
+
+	var msg kldmessages.DeployContract
+	msg.Compiled = c.Compiled
+	msg.ABI = &kldmessages.ABI{
+		ABI: *c.ABI,
+	}
 	msg.Parameters = []interface{}{float64(999999)}
 	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 	msg.Nonce = "123"
@@ -330,7 +439,7 @@ func TestSendTxnABIParam(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"123", float64(123), "abc", "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"}
-	msg.Method = kldmessages.ABIMethod{
+	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
 			kldmessages.ABIParam{
@@ -436,6 +545,87 @@ func TestSendTxnInlineParam(t *testing.T) {
 	assert.Regexp("0xe5537abb000000000000000000000000000000000000000000000000000000000000007b000000000000000000000000000000000000000000000000000000000000007b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000aa983ad2a0e0ed8ac639277f37be42f2a5d2618c00000000000000000000000000000000000000000000000000000000000000036162630000000000000000000000000000000000000000000000000000000000", jsonSent["data"])
 }
 
+func TestCallMethod(t *testing.T) {
+	assert := assert.New(t)
+
+	params := []interface{}{}
+
+	param1 := make(map[string]interface{})
+	params = append(params, param1)
+	param1["type"] = "uint8"
+	param1["value"] = "123"
+
+	param2 := make(map[string]interface{})
+	params = append(params, param2)
+	param2["type"] = "int256"
+	param2["value"] = float64(123)
+
+	param3 := make(map[string]interface{})
+	params = append(params, param3)
+	param3["type"] = "string"
+	param3["value"] = "abc"
+
+	param4 := make(map[string]interface{})
+	params = append(params, param4)
+	param4["type"] = "address"
+	param4["value"] = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+
+	method := &abi.Method{}
+	method.Name = "testFunc"
+
+	rpc := &testRPCClient{}
+
+	_, err := CallMethod(rpc,
+		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
+		json.Number("12345"), method, params)
+	assert.NoError(err)
+
+	assert.Equal("eth_call", rpc.capturedMethod)
+	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
+	var jsonSent map[string]interface{}
+	json.Unmarshal(jsonBytesSent, &jsonSent)
+	assert.Equal(nil, jsonSent["nonce"])
+	assert.Equal("0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", jsonSent["from"])
+	assert.Equal(nil, jsonSent["gas"])
+	assert.Equal("0x0", jsonSent["gasPrice"])
+	assert.Equal("0x3039", jsonSent["value"])
+	assert.Regexp("0xe5537abb000000000000000000000000000000000000000000000000000000000000007b000000000000000000000000000000000000000000000000000000000000007b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000aa983ad2a0e0ed8ac639277f37be42f2a5d2618c00000000000000000000000000000000000000000000000000000000000000036162630000000000000000000000000000000000000000000000000000000000", jsonSent["data"])
+}
+
+func TestCallMethodFail(t *testing.T) {
+	assert := assert.New(t)
+
+	params := []interface{}{}
+
+	method := &abi.Method{}
+	method.Name = "testFunc"
+
+	rpc := &testRPCClient{
+		mockError: fmt.Errorf("pop"),
+	}
+
+	_, err := CallMethod(rpc,
+		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
+		json.Number("12345"), method, params)
+
+	assert.Equal("eth_call", rpc.capturedMethod)
+	assert.EqualError(err, "Call failed: pop")
+}
+
+func TestCallMethodBadArgs(t *testing.T) {
+	assert := assert.New(t)
+
+	rpc := &testRPCClient{
+		mockError: fmt.Errorf("pop"),
+	}
+
+	_, err := CallMethod(rpc, "badness", "", json.Number(""), &abi.Method{}, []interface{}{})
+
+	assert.EqualError(err, "Supplied value for 'from' is not a valid hex address")
+}
+
 func TestSendTxnNodeAssignNonce(t *testing.T) {
 	assert := assert.New(t)
 
@@ -488,6 +678,7 @@ func TestSendTxnNodeAssignNonce(t *testing.T) {
 	assert.Equal("0x315", jsonSent["value"])
 	assert.Regexp("0xe5537abb000000000000000000000000000000000000000000000000000000000000007b000000000000000000000000000000000000000000000000000000000000007b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000aa983ad2a0e0ed8ac639277f37be42f2a5d2618c00000000000000000000000000000000000000000000000000000000000000036162630000000000000000000000000000000000000000000000000000000000", jsonSent["data"])
 }
+
 func TestSendTxnInlineBadParamType(t *testing.T) {
 	assert := assert.New(t)
 
@@ -499,7 +690,7 @@ func TestSendTxnInlineBadParamType(t *testing.T) {
 	param1["type"] = "badness"
 	param1["value"] = "123"
 
-	msg.Method = kldmessages.ABIMethod{
+	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 	}
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
@@ -522,7 +713,7 @@ func TestSendTxnInlineMissingParamType(t *testing.T) {
 	msg.Parameters = append(msg.Parameters, param1)
 	param1["value"] = "123"
 
-	msg.Method = kldmessages.ABIMethod{
+	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 	}
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
@@ -545,7 +736,7 @@ func TestSendTxnInlineMissingParamValue(t *testing.T) {
 	msg.Parameters = append(msg.Parameters, param1)
 	param1["type"] = "uint256"
 
-	msg.Method = kldmessages.ABIMethod{
+	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 	}
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
@@ -569,7 +760,7 @@ func TestSendTxnInlineBadTypeType(t *testing.T) {
 	param1["type"] = false
 	param1["value"] = "abcde"
 
-	msg.Method = kldmessages.ABIMethod{
+	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 	}
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
@@ -585,7 +776,7 @@ func TestSendTxnBadInputType(t *testing.T) {
 	assert := assert.New(t)
 
 	var msg kldmessages.SendTransaction
-	msg.Method = kldmessages.ABIMethod{
+	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
 			kldmessages.ABIParam{
@@ -609,7 +800,7 @@ func TestSendTxnMissingMethod(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"123"}
-	msg.Method = kldmessages.ABIMethod{}
+	msg.Method = &kldmessages.ABIMethod{}
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
 	msg.From = "abc"
 	msg.Nonce = "123"
@@ -624,7 +815,7 @@ func TestSendTxnBadFrom(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"123"}
-	msg.Method = kldmessages.ABIMethod{
+	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
 			kldmessages.ABIParam{
@@ -654,7 +845,7 @@ func TestSendTxnBadTo(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"123"}
-	msg.Method = kldmessages.ABIMethod{
+	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
 			kldmessages.ABIParam{
@@ -683,7 +874,7 @@ func TestSendTxnBadOutputType(t *testing.T) {
 	assert := assert.New(t)
 
 	var msg kldmessages.SendTransaction
-	msg.Method = kldmessages.ABIMethod{
+	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
 			kldmessages.ABIParam{
@@ -707,7 +898,7 @@ func TestSendBadParams(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"abc"}
-	msg.Method = kldmessages.ABIMethod{
+	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
 			kldmessages.ABIParam{
@@ -731,7 +922,7 @@ func TestSendTxnPackError(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{""}
-	msg.Method = kldmessages.ABIMethod{
+	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
 			kldmessages.ABIParam{
@@ -748,4 +939,180 @@ func TestSendTxnPackError(t *testing.T) {
 	}
 	_, err := NewSendTxn(&msg)
 	assert.Regexp("cannot use \\[0\\]uint8 as type \\[1\\]uint8 as argument", err.Error())
+}
+
+func TestProcessRLPBytesValidTypes(t *testing.T) {
+	assert := assert.New(t)
+
+	t1, _ := abi.NewType("string")
+	t2, _ := abi.NewType("int256[]")
+	t3, _ := abi.NewType("bool")
+	t4, _ := abi.NewType("bytes1")
+	t5, _ := abi.NewType("address")
+	t6, _ := abi.NewType("bytes4")
+	t7, _ := abi.NewType("uint256")
+	t8, _ := abi.NewType("int32[]")
+	t9, _ := abi.NewType("uint32[]")
+	methodABI := &abi.Method{
+		Name:   "echoTypes2",
+		Inputs: []abi.Argument{},
+		Outputs: []abi.Argument{
+			abi.Argument{Name: "retval1", Type: t1},
+			abi.Argument{Name: "retval2", Type: t2},
+			abi.Argument{Name: "retval3", Type: t3},
+			abi.Argument{Name: "retval4", Type: t4},
+			abi.Argument{Name: "retval5", Type: t5},
+			abi.Argument{Name: "retval6", Type: t6},
+			abi.Argument{Name: "retval7", Type: t7},
+			abi.Argument{Name: "retval8", Type: t8},
+			abi.Argument{Name: "retval9", Type: t9},
+		},
+	}
+	rlp, err := methodABI.Outputs.Pack(
+		"string 1",
+		[]*big.Int{big.NewInt(123)},
+		true,
+		[1]byte{18},
+		[20]byte{18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18},
+		[4]byte{18, 18, 18, 18},
+		big.NewInt(12345),
+		[2]int32{-123, -456},
+		[2]uint32{123, 456},
+	)
+	assert.NoError(err)
+
+	res, err := processRLPBytes(methodABI, rlp)
+	assert.NoError(err)
+	assert.Nil(res["error"])
+
+	assert.Equal("string 1", res["retval1"])
+	assert.Equal(1, len(res["retval2"].([]interface{})))
+	assert.Equal("123", res["retval2"].([]interface{})[0])
+	assert.Equal(true, res["retval3"])
+	assert.Equal("0x12", res["retval4"])
+	assert.Equal("0x1212121212121212121212121212121212121212", res["retval5"])
+	assert.Equal("0x12121212", res["retval6"])
+	assert.Equal("12345", res["retval7"])
+	assert.Equal("-123", res["retval8"].([]interface{})[0])
+	assert.Equal("-456", res["retval8"].([]interface{})[1])
+	assert.Equal("123", res["retval9"].([]interface{})[0])
+	assert.Equal("456", res["retval9"].([]interface{})[1])
+}
+
+func TestProcessRLPBytesInvalidNumber(t *testing.T) {
+	assert := assert.New(t)
+
+	t1, _ := abi.NewType("int32")
+	_, err := mapOutput("test1", "int256", &t1, "not an int")
+	assert.EqualError(err, "Expected number type in JSON/RPC response for test1 (int256). Received string")
+}
+
+func TestProcessRLPBytesInvalidBool(t *testing.T) {
+	assert := assert.New(t)
+
+	t1, _ := abi.NewType("bool")
+	_, err := mapOutput("test1", "bool", &t1, "not a bool")
+	assert.EqualError(err, "Expected boolean in JSON/RPC response for test1 (bool). Received string")
+}
+
+func TestProcessRLPBytesInvalidString(t *testing.T) {
+	assert := assert.New(t)
+
+	t1, _ := abi.NewType("string")
+	_, err := mapOutput("test1", "string", &t1, 42)
+	assert.EqualError(err, "Expected string array in JSON/RPC response for test1 (string). Received int")
+}
+
+func TestProcessRLPBytesInvalidByteArray(t *testing.T) {
+	assert := assert.New(t)
+
+	t1, _ := abi.NewType("address")
+	_, err := mapOutput("test1", "address", &t1, 42)
+	assert.EqualError(err, "Expected []byte array in JSON/RPC response for test1 (address). Received int")
+}
+
+func TestProcessRLPBytesInvalidArray(t *testing.T) {
+	assert := assert.New(t)
+
+	t1, _ := abi.NewType("int32[]")
+	_, err := mapOutput("test1", "int32[]", &t1, 42)
+	assert.EqualError(err, "Expected slice in JSON/RPC response for test1 (int32[]). Received int")
+}
+
+func TestProcessRLPBytesInvalidArrayType(t *testing.T) {
+	assert := assert.New(t)
+
+	t1, _ := abi.NewType("int32[]")
+	_, err := mapOutput("test1", "int32[]", &t1, []string{"wrong"})
+	assert.EqualError(err, "Expected number type in JSON/RPC response for test1 (int32[]). Received string")
+}
+
+func TestProcessRLPBytesInvalidTypeByte(t *testing.T) {
+	assert := assert.New(t)
+
+	t1, _ := abi.NewType("bool")
+	t1.T = 42
+	_, err := mapOutput("test1", "randomness", &t1, 42)
+	assert.EqualError(err, "Unable to process type for test1 (randomness). Received int")
+}
+
+func TestProcessRLPBytesUnpackFailure(t *testing.T) {
+	assert := assert.New(t)
+
+	t1, _ := abi.NewType("string")
+	methodABI := &abi.Method{
+		Name:   "echoTypes2",
+		Inputs: []abi.Argument{},
+		Outputs: []abi.Argument{
+			abi.Argument{Name: "retval1", Type: t1},
+		},
+	}
+
+	_, err := processRLPBytes(methodABI, []byte("this is not the RLP you are looking for"))
+	assert.Regexp("cannot marshal", err.Error())
+}
+
+func TestProcessOutputsTooFew(t *testing.T) {
+	assert := assert.New(t)
+
+	t1, _ := abi.NewType("string")
+	methodABI := &abi.Method{
+		Name:   "echoTypes2",
+		Inputs: []abi.Argument{},
+		Outputs: []abi.Argument{
+			abi.Argument{Name: "retval1", Type: t1},
+		},
+	}
+
+	err := processOutputs(methodABI, []interface{}{}, make(map[string]interface{}))
+	assert.EqualError(err, "Expected 0 in JSON/RPC response. Received 1: []")
+}
+
+func TestProcessOutputsTooMany(t *testing.T) {
+	assert := assert.New(t)
+
+	methodABI := &abi.Method{
+		Name:    "echoTypes2",
+		Inputs:  []abi.Argument{},
+		Outputs: []abi.Argument{},
+	}
+
+	err := processOutputs(methodABI, []interface{}{"arg1"}, make(map[string]interface{}))
+	assert.EqualError(err, "Expected nil in JSON/RPC response. Received: [arg1]")
+}
+
+func TestProcessOutputsBadArgs(t *testing.T) {
+	assert := assert.New(t)
+
+	t1, _ := abi.NewType("int32[]")
+	methodABI := &abi.Method{
+		Name:   "echoTypes2",
+		Inputs: []abi.Argument{},
+		Outputs: []abi.Argument{
+			abi.Argument{Name: "retval1", Type: t1},
+		},
+	}
+
+	err := processOutputs(methodABI, []interface{}{"arg1"}, make(map[string]interface{}))
+	assert.EqualError(err, "Expected slice in JSON/RPC response for retval1 (int32[]). Received string")
 }

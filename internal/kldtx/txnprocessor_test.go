@@ -1,4 +1,4 @@
-// Copyright 2018 Kaleido, a ConsenSys business
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package kldkafka
+package kldtx
 
 import (
 	"context"
@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/spf13/cobra"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
@@ -39,7 +40,7 @@ type errorReply struct {
 	txHash string
 }
 
-type testMsgContext struct {
+type testTxnContext struct {
 	jsonMsg     string
 	badMsgType  string
 	replies     []kldmessages.ReplyWithHeaders
@@ -88,11 +89,11 @@ func (r *testRPC) CallContext(ctx context.Context, result interface{}, method st
 	panic(fmt.Errorf("method unknown to test: %s", method))
 }
 
-func (c *testMsgContext) String() string {
+func (c *testTxnContext) String() string {
 	return "<testmessage>"
 }
 
-func (c *testMsgContext) Headers() *kldmessages.CommonHeaders {
+func (c *testTxnContext) Headers() *kldmessages.CommonHeaders {
 	commonMsg := kldmessages.RequestCommon{}
 	if c.badMsgType != "" {
 		commonMsg.Headers.MsgType = c.badMsgType
@@ -103,16 +104,16 @@ func (c *testMsgContext) Headers() *kldmessages.CommonHeaders {
 	return &commonMsg.Headers
 }
 
-func (c *testMsgContext) Unmarshal(msg interface{}) error {
+func (c *testTxnContext) Unmarshal(msg interface{}) error {
 	log.Infof("Unmarshaling test message: %s", c.jsonMsg)
 	return json.Unmarshal([]byte(c.jsonMsg), msg)
 }
 
-func (c *testMsgContext) SendErrorReply(status int, err error) {
+func (c *testTxnContext) SendErrorReply(status int, err error) {
 	c.SendErrorReplyWithTX(status, err, "")
 }
 
-func (c *testMsgContext) SendErrorReplyWithTX(status int, err error, txHash string) {
+func (c *testTxnContext) SendErrorReplyWithTX(status int, err error, txHash string) {
 	log.Infof("Sending error reply. Status=%d Err=%s", status, err)
 	c.errorRepies = append(c.errorRepies, &errorReply{
 		status: status,
@@ -121,7 +122,7 @@ func (c *testMsgContext) SendErrorReplyWithTX(status int, err error, txHash stri
 	})
 }
 
-func (c *testMsgContext) Reply(replyMsg kldmessages.ReplyWithHeaders) {
+func (c *testTxnContext) Reply(replyMsg kldmessages.ReplyWithHeaders) {
 	log.Infof("Sending success reply: %s", replyMsg.ReplyHeaders().MsgType)
 	c.replies = append(c.replies, replyMsg)
 }
@@ -129,73 +130,75 @@ func (c *testMsgContext) Reply(replyMsg kldmessages.ReplyWithHeaders) {
 func TestOnMessageBadMessage(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := newMsgProcessor()
-	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = "{" +
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"badness\"}" +
 		"}"
-	msgProcessor.OnMessage(testMsgContext)
+	txnProcessor.OnMessage(testTxnContext)
 
-	assert.Empty(testMsgContext.replies)
-	assert.NotEmpty(testMsgContext.errorRepies)
-	assert.Equal(400, testMsgContext.errorRepies[0].status)
-	assert.Regexp("Unknown message type", testMsgContext.errorRepies[0].err.Error())
+	assert.Empty(testTxnContext.replies)
+	assert.NotEmpty(testTxnContext.errorRepies)
+	assert.Equal(400, testTxnContext.errorRepies[0].status)
+	assert.Regexp("Unknown message type", testTxnContext.errorRepies[0].err.Error())
 }
 
 func TestOnDeployContractMessageBadMsg(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := newMsgProcessor()
-	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = "{" +
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"DeployContract\"}," +
 		"  \"nonce\":\"123\"," +
 		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"" +
 		"}"
-	msgProcessor.OnMessage(testMsgContext)
+	txnProcessor.OnMessage(testTxnContext)
 
-	assert.NotEmpty(testMsgContext.errorRepies)
-	assert.Empty(testMsgContext.replies)
-	assert.Regexp("empty source string", testMsgContext.errorRepies[0].err.Error())
+	assert.NotEmpty(testTxnContext.errorRepies)
+	assert.Empty(testTxnContext.replies)
+	assert.Equal("Missing Compliled Code + ABI, or Solidity", testTxnContext.errorRepies[0].err.Error())
 
 }
 func TestOnDeployContractMessageBadJSON(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := newMsgProcessor()
-	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = "badness"
-	testMsgContext.badMsgType = kldmessages.MsgTypeDeployContract
-	msgProcessor.OnMessage(testMsgContext)
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "badness"
+	testTxnContext.badMsgType = kldmessages.MsgTypeDeployContract
+	txnProcessor.OnMessage(testTxnContext)
 
-	assert.NotEmpty(testMsgContext.errorRepies)
-	assert.Empty(testMsgContext.replies)
-	assert.Regexp("invalid character", testMsgContext.errorRepies[0].err.Error())
+	assert.NotEmpty(testTxnContext.errorRepies)
+	assert.Empty(testTxnContext.replies)
+	assert.Regexp("invalid character", testTxnContext.errorRepies[0].err.Error())
 
 }
 func TestOnDeployContractMessageGoodTxnErrOnReceipt(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := newMsgProcessor()
-	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = goodDeployTxnJSON
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+	}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodDeployTxnJSON
 	testRPC := &testRPC{
 		ethSendTransactionResult:    "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b",
 		ethGetTransactionReceiptErr: fmt.Errorf("pop"),
 	}
-	msgProcessor.Init(testRPC, 1)                       // configured in seconds for real world
-	msgProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
+	txnProcessor.Init(testRPC)                          // configured in seconds for real world
+	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
-	msgProcessor.OnMessage(testMsgContext)
-	txnWG := &msgProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
+	txnProcessor.OnMessage(testTxnContext)
+	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
 
 	txnWG.Wait()
-	assert.Equal(1, len(testMsgContext.errorRepies))
+	assert.Equal(1, len(testTxnContext.errorRepies))
 
 	assert.Equal("eth_sendTransaction", testRPC.calls[0])
 	assert.Equal("eth_getTransactionReceipt", testRPC.calls[1])
 
-	assert.Regexp("Error obtaining transaction receipt", testMsgContext.errorRepies[0].err.Error())
+	assert.Regexp("Error obtaining transaction receipt", testTxnContext.errorRepies[0].err.Error())
 
 }
 
@@ -231,24 +234,67 @@ func goodMessageRPC() *testRPC {
 func TestOnDeployContractMessageGoodTxnMined(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := newMsgProcessor()
-	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = goodDeployTxnJSON
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+	}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodDeployTxnJSON
 
 	testRPC := goodMessageRPC()
-	msgProcessor.Init(testRPC, 1)                       // configured in seconds for real world
-	msgProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
+	txnProcessor.Init(testRPC)                          // configured in seconds for real world
+	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
-	msgProcessor.OnMessage(testMsgContext)
-	txnWG := &msgProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
+	txnProcessor.OnMessage(testTxnContext)
+	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
 
 	txnWG.Wait()
-	assert.Equal(0, len(testMsgContext.errorRepies))
+	assert.Equal(0, len(testTxnContext.errorRepies))
 
 	assert.Equal("eth_sendTransaction", testRPC.calls[0])
 	assert.Equal("eth_getTransactionReceipt", testRPC.calls[1])
 
-	replyMsg := testMsgContext.replies[0]
+	replyMsg := testTxnContext.replies[0]
+	assert.Equal("TransactionSuccess", replyMsg.ReplyHeaders().MsgType)
+	replyMsgBytes, _ := json.Marshal(&replyMsg)
+	var replyMsgMap map[string]interface{}
+	json.Unmarshal(replyMsgBytes, &replyMsgMap)
+
+	assert.Equal("0x6e710868fd2d0ac1f141ba3f0cd569e38ce1999d8f39518ee7633d2b9a7122af", replyMsgMap["blockHash"])
+	assert.Equal("12345", replyMsgMap["blockNumber"])
+	assert.Equal("0x28a62cb478a3c3d4daad84f1148ea16cd1a66f37", replyMsgMap["contractAddress"])
+	assert.Equal("23456", replyMsgMap["cumulativeGasUsed"])
+	assert.Equal("0xba25be62a5c55d4ad1d5520268806a8730a4de5e", replyMsgMap["from"])
+	assert.Equal("345678", replyMsgMap["gasUsed"])
+	assert.Equal("123", replyMsgMap["nonce"])
+	assert.Equal("1", replyMsgMap["status"])
+	assert.Equal("0xd7fac2bce408ed7c6ded07a32038b1f79c2b27d3", replyMsgMap["to"])
+	assert.Equal("456789", replyMsgMap["transactionIndex"])
+}
+
+func TestOnDeployContractMessageGoodTxnMinedWithHex(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime:      1,
+		HexValuesInReceipt: true,
+	}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodDeployTxnJSON
+
+	testRPC := goodMessageRPC()
+	txnProcessor.Init(testRPC)                          // configured in seconds for real world
+	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
+
+	txnProcessor.OnMessage(testTxnContext)
+	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
+
+	txnWG.Wait()
+	assert.Equal(0, len(testTxnContext.errorRepies))
+
+	assert.Equal("eth_sendTransaction", testRPC.calls[0])
+	assert.Equal("eth_getTransactionReceipt", testRPC.calls[1])
+
+	replyMsg := testTxnContext.replies[0]
 	assert.Equal("TransactionSuccess", replyMsg.ReplyHeaders().MsgType)
 	replyMsgBytes, _ := json.Marshal(&replyMsg)
 	var replyMsgMap map[string]interface{}
@@ -275,129 +321,135 @@ func TestOnDeployContractMessageGoodTxnMined(t *testing.T) {
 func TestOnDeployContractMessageFailedTxnMined(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := newMsgProcessor()
-	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = goodDeployTxnJSON
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+	}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodDeployTxnJSON
 
 	testRPC := goodMessageRPC()
 	failStatus := hexutil.Big(*big.NewInt(0))
 	testRPC.ethGetTransactionReceiptResult.Status = &failStatus
-	msgProcessor.Init(testRPC, 1)                       // configured in seconds for real world
-	msgProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
+	txnProcessor.Init(testRPC)                          // configured in seconds for real world
+	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
-	msgProcessor.OnMessage(testMsgContext)
-	txnWG := &msgProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
+	txnProcessor.OnMessage(testTxnContext)
+	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
 
 	txnWG.Wait()
-	replyMsg := testMsgContext.replies[0]
+	replyMsg := testTxnContext.replies[0]
 	assert.Equal("TransactionFailure", replyMsg.ReplyHeaders().MsgType)
 }
 
 func TestOnDeployContractMessageFailedTxn(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := newMsgProcessor()
-	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = goodDeployTxnJSON
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 5000,
+	}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodDeployTxnJSON
 	testRPC := &testRPC{
 		ethSendTransactionErr: fmt.Errorf("fizzle"),
 	}
-	msgProcessor.Init(testRPC, 5000)
+	txnProcessor.Init(testRPC)
 
-	msgProcessor.OnMessage(testMsgContext)
+	txnProcessor.OnMessage(testTxnContext)
 
-	assert.Equal("fizzle", testMsgContext.errorRepies[0].err.Error())
+	assert.Equal("fizzle", testTxnContext.errorRepies[0].err.Error())
 	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
 }
 
 func TestOnDeployContractMessageFailedToGetNonce(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := newMsgProcessor()
-	msgProcessor.conf.PredictNonces = true
-	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = "{" +
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+	}).(*txnProcessor)
+	txnProcessor.conf.PredictNonces = true
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"DeployContract\"}," +
 		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"" +
 		"}"
 	testRPC := &testRPC{
 		ethGetTransactionCountErr: fmt.Errorf("ding"),
 	}
-	msgProcessor.Init(testRPC, 1)
+	txnProcessor.Init(testRPC)
 
-	msgProcessor.OnMessage(testMsgContext)
+	txnProcessor.OnMessage(testTxnContext)
 
-	assert.Equal("ding", testMsgContext.errorRepies[0].err.Error())
+	assert.Equal("ding", testTxnContext.errorRepies[0].err.Error())
 	assert.EqualValues([]string{"eth_getTransactionCount"}, testRPC.calls)
 }
 
 func TestOnSendTransactionMessageMissingFrom(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := newMsgProcessor()
-	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = "{" +
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
 		"  \"nonce\":\"123\"" +
 		"}"
-	msgProcessor.OnMessage(testMsgContext)
+	txnProcessor.OnMessage(testTxnContext)
 
-	assert.NotEmpty(testMsgContext.errorRepies)
-	assert.Empty(testMsgContext.replies)
-	assert.Regexp("'from' must be supplied", testMsgContext.errorRepies[0].err.Error())
+	assert.NotEmpty(testTxnContext.errorRepies)
+	assert.Empty(testTxnContext.replies)
+	assert.Regexp("'from' must be supplied", testTxnContext.errorRepies[0].err.Error())
 
 }
 
 func TestOnSendTransactionMessageBadNonce(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := newMsgProcessor()
-	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = "{" +
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
 		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
 		"  \"nonce\":\"abc\"" +
 		"}"
-	msgProcessor.OnMessage(testMsgContext)
+	txnProcessor.OnMessage(testTxnContext)
 
-	assert.NotEmpty(testMsgContext.errorRepies)
-	assert.Empty(testMsgContext.replies)
-	assert.Regexp("Converting supplied 'nonce' to integer", testMsgContext.errorRepies[0].err.Error())
+	assert.NotEmpty(testTxnContext.errorRepies)
+	assert.Empty(testTxnContext.replies)
+	assert.Regexp("Converting supplied 'nonce' to integer", testTxnContext.errorRepies[0].err.Error())
 
 }
 
 func TestOnSendTransactionMessageBadMsg(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := newMsgProcessor()
-	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = "{" +
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
 		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
 		"  \"nonce\":\"123\"," +
 		"  \"value\":\"abc\"," +
 		"  \"method\":{\"name\":\"test\"}" +
 		"}"
-	msgProcessor.OnMessage(testMsgContext)
+	txnProcessor.OnMessage(testTxnContext)
 
-	assert.NotEmpty(testMsgContext.errorRepies)
-	assert.Empty(testMsgContext.replies)
-	assert.Regexp("Converting supplied 'value' to big integer", testMsgContext.errorRepies[0].err.Error())
+	assert.NotEmpty(testTxnContext.errorRepies)
+	assert.Empty(testTxnContext.replies)
+	assert.Regexp("Converting supplied 'value' to big integer", testTxnContext.errorRepies[0].err.Error())
 
 }
 
 func TestOnSendTransactionMessageBadJSON(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := newMsgProcessor()
-	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = "badness"
-	testMsgContext.badMsgType = kldmessages.MsgTypeSendTransaction
-	msgProcessor.OnMessage(testMsgContext)
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "badness"
+	testTxnContext.badMsgType = kldmessages.MsgTypeSendTransaction
+	txnProcessor.OnMessage(testTxnContext)
 
-	assert.NotEmpty(testMsgContext.errorRepies)
-	assert.Empty(testMsgContext.replies)
-	assert.Regexp("invalid character", testMsgContext.errorRepies[0].err.Error())
+	assert.NotEmpty(testTxnContext.errorRepies)
+	assert.Empty(testTxnContext.replies)
+	assert.Regexp("invalid character", testTxnContext.errorRepies[0].err.Error())
 
 }
 
@@ -405,74 +457,82 @@ func TestOnSendTransactionMessageTxnTimeout(t *testing.T) {
 	assert := assert.New(t)
 
 	txHash := "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b"
-	msgProcessor := newMsgProcessor()
-	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = goodSendTxnJSON
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+	}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodSendTxnJSON
 	testRPC := &testRPC{
 		ethSendTransactionResult: txHash,
 	}
-	msgProcessor.Init(testRPC, 1)                       // configured in seconds for real world
-	msgProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
+	txnProcessor.Init(testRPC)                          // configured in seconds for real world
+	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
-	msgProcessor.OnMessage(testMsgContext)
-	txnWG := &msgProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
+	txnProcessor.OnMessage(testTxnContext)
+	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
 	txnWG.Wait()
-	assert.Equal(1, len(testMsgContext.errorRepies))
+	assert.Equal(1, len(testTxnContext.errorRepies))
 
 	assert.Equal("eth_sendTransaction", testRPC.calls[0])
 	assert.Equal("eth_getTransactionReceipt", testRPC.calls[1])
 
-	assert.Regexp("Timed out waiting for transaction receipt", testMsgContext.errorRepies[0].err.Error())
-	assert.Equal(txHash, testMsgContext.errorRepies[0].txHash)
+	assert.Regexp("Timed out waiting for transaction receipt", testTxnContext.errorRepies[0].err.Error())
+	assert.Equal(txHash, testTxnContext.errorRepies[0].txHash)
 
 }
 
 func TestOnSendTransactionMessageFailedTxn(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := newMsgProcessor()
-	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = goodSendTxnJSON
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+	}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodSendTxnJSON
 	testRPC := &testRPC{
 		ethSendTransactionErr: fmt.Errorf("pop"),
 	}
-	msgProcessor.Init(testRPC, 1)
+	txnProcessor.Init(testRPC)
 
-	msgProcessor.OnMessage(testMsgContext)
+	txnProcessor.OnMessage(testTxnContext)
 
-	assert.Equal("pop", testMsgContext.errorRepies[0].err.Error())
+	assert.Equal("pop", testTxnContext.errorRepies[0].err.Error())
 	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
 }
 
 func TestOnSendTransactionMessageFailedToGetNonce(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := newMsgProcessor()
-	msgProcessor.conf.PredictNonces = true
-	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = "{" +
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+	}).(*txnProcessor)
+	txnProcessor.conf.PredictNonces = true
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
 		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"" +
 		"}"
 	testRPC := &testRPC{
 		ethGetTransactionCountErr: fmt.Errorf("poof"),
 	}
-	msgProcessor.Init(testRPC, 1)
+	txnProcessor.Init(testRPC)
 
-	msgProcessor.OnMessage(testMsgContext)
+	txnProcessor.OnMessage(testTxnContext)
 
-	assert.Equal("poof", testMsgContext.errorRepies[0].err.Error())
+	assert.Equal("poof", testTxnContext.errorRepies[0].err.Error())
 	assert.EqualValues([]string{"eth_getTransactionCount"}, testRPC.calls)
 }
 
 func TestOnSendTransactionMessageInflightNonce(t *testing.T) {
 	assert := assert.New(t)
 
-	msgProcessor := newMsgProcessor()
-	msgProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] =
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+	}).(*txnProcessor)
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] =
 		[]*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
-	testMsgContext := &testMsgContext{}
-	testMsgContext.jsonMsg = "{" +
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
 		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
 		"  \"gas\":\"123\"," +
@@ -481,10 +541,23 @@ func TestOnSendTransactionMessageInflightNonce(t *testing.T) {
 	testRPC := &testRPC{
 		ethSendTransactionResult: "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b",
 	}
-	msgProcessor.Init(testRPC, 1)
+	txnProcessor.Init(testRPC)
 
-	msgProcessor.OnMessage(testMsgContext)
+	txnProcessor.OnMessage(testTxnContext)
 
-	assert.Empty(testMsgContext.errorRepies)
+	assert.Empty(testTxnContext.errorRepies)
 	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
+}
+
+func TestCobraInitTxnProcessor(t *testing.T) {
+	assert := assert.New(t)
+	txconf := &TxnProcessorConf{}
+	cmd := &cobra.Command{}
+	CobraInitTxnProcessor(cmd, txconf)
+	cmd.ParseFlags([]string{
+		"-x", "10",
+		"-P",
+	})
+	assert.Equal(10, txconf.MaxTXWaitTime)
+	assert.Equal(true, txconf.PredictNonces)
 }

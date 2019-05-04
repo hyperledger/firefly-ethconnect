@@ -1,4 +1,4 @@
-// Copyright 2018 Kaleido, a ConsenSys business
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"reflect"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 )
@@ -53,6 +54,13 @@ type ABIParam struct {
 	Type string `json:"type"`
 }
 
+// AsyncSentMsg is a standard response for async requests
+type AsyncSentMsg struct {
+	Sent    bool   `json:"sent"`
+	Request string `json:"id"`
+	Msg     string `json:"msg,omitempty"`
+}
+
 // CommonHeaders are common to all messages
 type CommonHeaders struct {
 	ID      string      `json:"id,omitempty"`
@@ -78,6 +86,7 @@ type ReplyHeaders struct {
 // ReplyWithHeaders gives common access the reply headers
 type ReplyWithHeaders interface {
 	ReplyHeaders() *ReplyHeaders
+	IsReceipt() *TransactionReceipt
 }
 
 // ReplyCommon is a common interface to all replies
@@ -90,11 +99,21 @@ func (r *ReplyCommon) ReplyHeaders() *ReplyHeaders {
 	return &r.Headers
 }
 
-// transactionCommon is the common fields from https://github.com/ethereum/wiki/wiki/JavaScript-API#web3ethsendtransaction
+// IsReceipt default is nil
+func (r *ReplyCommon) IsReceipt() *TransactionReceipt {
+	return nil
+}
+
+// IsReceipt returns as receipt
+func (r *TransactionReceipt) IsReceipt() *TransactionReceipt {
+	return r
+}
+
+// TransactionCommon is the common fields from https://github.com/ethereum/wiki/wiki/JavaScript-API#web3ethsendtransaction
 // for sending either contract call or creation transactions
-type transactionCommon struct {
+type TransactionCommon struct {
 	RequestCommon
-	Nonce      json.Number   `json:"nonce"`
+	Nonce      json.Number   `json:"nonce,omitempty"`
 	From       string        `json:"from"`
 	Value      json.Number   `json:"value"`
 	Gas        json.Number   `json:"gas"`
@@ -104,17 +123,28 @@ type transactionCommon struct {
 
 // SendTransaction message instructs the bridge to install a contract
 type SendTransaction struct {
-	transactionCommon
-	To         string    `json:"to"`
-	Method     ABIMethod `json:"method"`
-	MethodName string    `json:"methodName,omitempty"`
+	TransactionCommon
+	To         string     `json:"to"`
+	Method     *ABIMethod `json:"method,omitempty"`
+	MethodName string     `json:"methodName,omitempty"`
+}
+
+// ABI is a wrapper around the ethereum ABI implementation that includes
+// marshal, as well as unmarshal
+type ABI struct {
+	abi.ABI
 }
 
 // DeployContract message instructs the bridge to install a contract
 type DeployContract struct {
-	transactionCommon
-	Solidity     string `json:"solidity"`
-	ContractName string `json:"contractName,omitempty"`
+	TransactionCommon
+	Solidity        string `json:"solidity,omitempty"`
+	CompilerVersion string `json:"compilerVersion,omitempty"`
+	ABI             *ABI   `json:"abi,omitempty"`
+	DevDoc          string `json:"devDocs,omitempty"`
+	Compiled        []byte `json:"compiled,omitempty"`
+	ContractName    string `json:"contractName,omitempty"`
+	Description     string `json:"description,omitempty"`
 }
 
 // TransactionReceipt is sent when a transaction has been successfully mined
@@ -124,21 +154,23 @@ type TransactionReceipt struct {
 	ReplyCommon
 	BlockHash            *common.Hash    `json:"blockHash"`
 	BlockNumberStr       string          `json:"blockNumber"`
-	BlockNumberHex       *hexutil.Big    `json:"blockNumberHex"`
+	BlockNumberHex       *hexutil.Big    `json:"blockNumberHex,omitempty"`
+	ContractSwagger      string          `json:"openapi,omitempty"`
+	ContractUI           string          `json:"apiexerciser,omitempty"`
 	ContractAddress      *common.Address `json:"contractAddress,omitempty"`
 	CumulativeGasUsedStr string          `json:"cumulativeGasUsed"`
-	CumulativeGasUsedHex *hexutil.Big    `json:"cumulativeGasUsedHex"`
+	CumulativeGasUsedHex *hexutil.Big    `json:"cumulativeGasUsedHex,omitempty"`
 	From                 *common.Address `json:"from"`
 	GasUsedStr           string          `json:"gasUsed"`
-	GasUsedHex           *hexutil.Big    `json:"gasUsedHex"`
+	GasUsedHex           *hexutil.Big    `json:"gasUsedHex,omitempty"`
 	NonceStr             string          `json:"nonce"`
-	NonceHex             *hexutil.Uint64 `json:"nonceHex"`
+	NonceHex             *hexutil.Uint64 `json:"nonceHex,omitempty"`
 	StatusStr            string          `json:"status"`
-	StatusHex            *hexutil.Big    `json:"statusHex"`
+	StatusHex            *hexutil.Big    `json:"statusHex,omitempty"`
 	To                   *common.Address `json:"to"`
 	TransactionHash      *common.Hash    `json:"transactionHash"`
 	TransactionIndexStr  string          `json:"transactionIndex"`
-	TransactionIndexHex  *hexutil.Uint   `json:"transactionIndexHex"`
+	TransactionIndexHex  *hexutil.Uint   `json:"transactionIndexHex,omitempty"`
 }
 
 // ErrorReply is

@@ -1,4 +1,4 @@
-// Copyright 2018 Kaleido, a ConsenSys business
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import (
 
 // GetTXReceipt gets the receipt for the transaction
 func (tx *Txn) GetTXReceipt(rpc RPCClient) (bool, error) {
-	start := time.Now()
+	start := time.Now().UTC()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -31,7 +31,7 @@ func (tx *Txn) GetTXReceipt(rpc RPCClient) (bool, error) {
 	if err := rpc.CallContext(ctx, &tx.Receipt, "eth_getTransactionReceipt", tx.Hash); err != nil {
 		return false, err
 	}
-	callTime := time.Now().Sub(start)
+	callTime := time.Now().UTC().Sub(start)
 	isMined := tx.Receipt.BlockNumber != nil && tx.Receipt.BlockNumber.ToInt().Uint64() > 0
 	log.Debugf("eth_getTransactionReceipt(%x,latest)=%t [%.2fs]", tx.Hash, isMined, callTime.Seconds())
 	return isMined, nil

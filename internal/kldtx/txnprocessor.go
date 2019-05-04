@@ -1,4 +1,4 @@
-// Copyright 2018 Kaleido, a ConsenSys business
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -7,12 +7,12 @@
 //     http://www.apache.org/licenses/LICENSE-2.0
 
 // Unless required by applicable law or agreed to in writing, software
-// distributed under the icense is distributed on an "AS IS" BASIS,
+// distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package kldkafka
+package kldtx
 
 import (
 	"encoding/json"
@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/spf13/cobra"
 
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
@@ -30,18 +31,18 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// MsgProcessor interface is called for each message, as is responsible
+// TxnProcessor interface is called for each message, as is responsible
 // for tracking all in-flight messages
-type MsgProcessor interface {
-	OnMessage(MsgContext)
-	Init(kldeth.RPCClient, int)
+type TxnProcessor interface {
+	OnMessage(TxnContext)
+	Init(kldeth.RPCClient)
 }
 
 type inflightTxn struct {
 	from            string // normalized to 0x prefix and lower case
 	nodeAssignNonce bool
 	nonce           int64
-	msgContext      MsgContext
+	txnContext      TxnContext
 	tx              *kldeth.Txn
 	wg              sync.WaitGroup
 }
@@ -55,61 +56,78 @@ func (i *inflightTxn) String() string {
 	if i.tx != nil {
 		txHash = i.tx.Hash
 	}
-	return fmt.Sprintf("TX=%s CTX=%s", txHash, i.msgContext.String())
+	return fmt.Sprintf("TX=%s CTX=%s", txHash, i.txnContext.String())
 }
 
-type msgProcessor struct {
+// TxnProcessorConf configuration for the message processor
+type TxnProcessorConf struct {
+	PredictNonces      bool `json:"alwaysManageNonce"`
+	MaxTXWaitTime      int  `json:"maxTXWaitTime"`
+	HexValuesInReceipt bool `json:"hexValuesInReceipt"`
+}
+
+type txnProcessor struct {
 	maxTXWaitTime      time.Duration
 	inflightTxnsLock   *sync.Mutex
 	inflightTxns       map[string][]*inflightTxn
 	inflightTxnDelayer TxnDelayTracker
 	rpc                kldeth.RPCClient
-	conf               *KafkaBridgeConf
+	conf               *TxnProcessorConf
 }
 
-func newMsgProcessor() *msgProcessor {
-	return &msgProcessor{
+// NewTxnProcessor constructor for message procss
+func NewTxnProcessor(conf *TxnProcessorConf) TxnProcessor {
+	return &txnProcessor{
 		inflightTxnsLock:   &sync.Mutex{},
 		inflightTxns:       make(map[string][]*inflightTxn),
 		inflightTxnDelayer: NewTxnDelayTracker(),
-		conf:               &KafkaBridgeConf{},
+		conf:               conf,
 	}
 }
 
-func (p *msgProcessor) Init(rpc kldeth.RPCClient, maxTXWaitTime int) {
+func (p *txnProcessor) Init(rpc kldeth.RPCClient) {
 	p.rpc = rpc
-	p.maxTXWaitTime = time.Duration(maxTXWaitTime) * time.Second
+	p.maxTXWaitTime = time.Duration(p.conf.MaxTXWaitTime) * time.Second
+}
+
+// CobraInitTxnProcessor sets the standard command-line parameters for the txnprocessor
+func CobraInitTxnProcessor(cmd *cobra.Command, txconf *TxnProcessorConf) {
+	cmd.Flags().IntVarP(&txconf.MaxTXWaitTime, "tx-timeout", "x", kldutils.DefInt("ETH_TX_TIMEOUT", 0), "Maximum wait time for an individual transaction (seconds)")
+	cmd.Flags().BoolVarP(&txconf.HexValuesInReceipt, "hex-values", "H", false, "Include hex values for large numbers in receipts (as well as numeric strings)")
+	cmd.Flags().BoolVarP(&txconf.PredictNonces, "predict-nonces", "P", false, "Predict the next nonce before sending (default=false for node-signed txns)")
+	return
 }
 
 // OnMessage checks the type and dispatches to the correct logic
 // ** From this point on the processor MUST ensure Reply is called
-//    on msgContext eventually in all scenarios.
+//    on txnContext eventually in all scenarios.
 //    It cannot return an error synchronously from this function **
-func (p *msgProcessor) OnMessage(msgContext MsgContext) {
+func (p *txnProcessor) OnMessage(txnContext TxnContext) {
 
 	var unmarshalErr error
-	headers := msgContext.Headers()
+	headers := txnContext.Headers()
+	log.Debugf("Processing %+v", headers)
 	switch headers.MsgType {
 	case kldmessages.MsgTypeDeployContract:
 		var deployContractMsg kldmessages.DeployContract
-		if unmarshalErr = msgContext.Unmarshal(&deployContractMsg); unmarshalErr != nil {
+		if unmarshalErr = txnContext.Unmarshal(&deployContractMsg); unmarshalErr != nil {
 			break
 		}
-		p.OnDeployContractMessage(msgContext, &deployContractMsg)
+		p.OnDeployContractMessage(txnContext, &deployContractMsg)
 		break
 	case kldmessages.MsgTypeSendTransaction:
 		var sendTransactionMsg kldmessages.SendTransaction
-		if unmarshalErr = msgContext.Unmarshal(&sendTransactionMsg); unmarshalErr != nil {
+		if unmarshalErr = txnContext.Unmarshal(&sendTransactionMsg); unmarshalErr != nil {
 			break
 		}
-		p.OnSendTransactionMessage(msgContext, &sendTransactionMsg)
+		p.OnSendTransactionMessage(txnContext, &sendTransactionMsg)
 		break
 	default:
 		unmarshalErr = fmt.Errorf("Unknown message type '%s'", headers.MsgType)
 	}
 	// We must always send a reply
 	if unmarshalErr != nil {
-		msgContext.SendErrorReply(400, unmarshalErr)
+		txnContext.SendErrorReply(400, unmarshalErr)
 	}
 
 }
@@ -119,10 +137,10 @@ func (p *msgProcessor) OnMessage(msgContext MsgContext) {
 // nonce for the transaction.
 // Builds a new wrapper containing this information, that can be added to
 // the inflight list if the transaction is submitted
-func (p *msgProcessor) newInflightWrapper(msgContext MsgContext, suppliedFrom string, suppliedNonce json.Number) (inflight *inflightTxn, err error) {
+func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, suppliedFrom string, suppliedNonce json.Number) (inflight *inflightTxn, err error) {
 
 	inflight = &inflightTxn{
-		msgContext: msgContext,
+		txnContext: txnContext,
 	}
 
 	// Validate the from address, and normalize to lower case with 0x prefix
@@ -184,13 +202,13 @@ func (p *msgProcessor) newInflightWrapper(msgContext MsgContext, suppliedFrom st
 
 // waitForCompletion is the goroutine to track a transaction through
 // to completion and send the result
-func (p *msgProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time.Duration) {
+func (p *txnProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time.Duration) {
 
 	// The initial delay is passed in, based on updates from all the other
 	// go routines that are tracking transactions. The idea is to minimize
 	// both latency beyond the block period, and avoiding spamming the node
 	// with REST calls for long block periods, or when there is a backlog
-	replyWaitStart := time.Now()
+	replyWaitStart := time.Now().UTC()
 	time.Sleep(initialWaitDelay)
 
 	var isMined, timedOut bool
@@ -205,7 +223,7 @@ func (p *msgProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 			log.Infof("Failed to get receipt for %s (retries=%d): %s", iTX, retries, err)
 		}
 
-		elapsed = time.Now().Sub(replyWaitStart)
+		elapsed = time.Now().UTC().Sub(replyWaitStart)
 		timedOut = elapsed > p.maxTXWaitTime
 		if !isMined && !timedOut {
 			// Need to have the inflight lock to calculate the delay, but not
@@ -214,7 +232,7 @@ func (p *msgProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 			delayBeforeRetry := p.inflightTxnDelayer.GetRetryDelay(initialWaitDelay, retries+1)
 			p.inflightTxnsLock.Unlock()
 
-			log.Infof("Recept not available after %.2fs (retries=%d): %s", elapsed.Seconds(), retries, iTX)
+			log.Debugf("Recept not available after %.2fs (retries=%d): %s", elapsed.Seconds(), retries, iTX)
 			time.Sleep(delayBeforeRetry)
 			retries++
 		}
@@ -222,9 +240,9 @@ func (p *msgProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 
 	if timedOut {
 		if err != nil {
-			iTX.msgContext.SendErrorReplyWithTX(500, fmt.Errorf("Error obtaining transaction receipt (%d retries): %s", retries, err), iTX.tx.Hash)
+			iTX.txnContext.SendErrorReplyWithTX(500, fmt.Errorf("Error obtaining transaction receipt (%d retries): %s", retries, err), iTX.tx.Hash)
 		} else {
-			iTX.msgContext.SendErrorReplyWithTX(408, fmt.Errorf("Timed out waiting for transaction receipt"), iTX.tx.Hash)
+			iTX.txnContext.SendErrorReplyWithTX(408, fmt.Errorf("Timed out waiting for transaction receipt"), iTX.tx.Hash)
 		}
 	} else {
 		// Update the stats
@@ -241,34 +259,46 @@ func (p *msgProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 			reply.Headers.MsgType = kldmessages.MsgTypeTransactionFailure
 		}
 		reply.BlockHash = receipt.BlockHash
-		reply.BlockNumberHex = receipt.BlockNumber
+		if p.conf.HexValuesInReceipt {
+			reply.BlockNumberHex = receipt.BlockNumber
+		}
 		if receipt.BlockNumber != nil {
 			reply.BlockNumberStr = receipt.BlockNumber.ToInt().Text(10)
 		}
 		reply.ContractAddress = receipt.ContractAddress
-		reply.CumulativeGasUsedHex = receipt.CumulativeGasUsed
+		if p.conf.HexValuesInReceipt {
+			reply.CumulativeGasUsedHex = receipt.CumulativeGasUsed
+		}
 		if receipt.CumulativeGasUsed != nil {
 			reply.CumulativeGasUsedStr = receipt.CumulativeGasUsed.ToInt().Text(10)
 		}
 		reply.From = receipt.From
-		reply.GasUsedHex = receipt.GasUsed
+		if p.conf.HexValuesInReceipt {
+			reply.GasUsedHex = receipt.GasUsed
+		}
 		if receipt.GasUsed != nil {
 			reply.GasUsedStr = receipt.GasUsed.ToInt().Text(10)
 		}
 		nonceHex := hexutil.Uint64(iTX.nonce)
-		reply.NonceHex = &nonceHex
+		if p.conf.HexValuesInReceipt {
+			reply.NonceHex = &nonceHex
+		}
 		reply.NonceStr = strconv.FormatInt(iTX.nonce, 10)
-		reply.StatusHex = receipt.Status
+		if p.conf.HexValuesInReceipt {
+			reply.StatusHex = receipt.Status
+		}
 		if receipt.Status != nil {
 			reply.StatusStr = receipt.Status.ToInt().Text(10)
 		}
 		reply.To = receipt.To
 		reply.TransactionHash = receipt.TransactionHash
-		reply.TransactionIndexHex = receipt.TransactionIndex
+		if p.conf.HexValuesInReceipt {
+			reply.TransactionIndexHex = receipt.TransactionIndex
+		}
 		if receipt.TransactionIndex != nil {
 			reply.TransactionIndexStr = strconv.FormatUint(uint64(*receipt.TransactionIndex), 10)
 		}
-		iTX.msgContext.Reply(&reply)
+		iTX.txnContext.Reply(&reply)
 	}
 
 	iTX.wg.Done()
@@ -276,7 +306,7 @@ func (p *msgProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 
 // addInflight adds a transction to the inflight list, and kick off
 // a goroutine to check for its completion and send the result
-func (p *msgProcessor) addInflight(inflight *inflightTxn, tx *kldeth.Txn) {
+func (p *txnProcessor) addInflight(inflight *inflightTxn, tx *kldeth.Txn) {
 
 	// Add the inflight transaction to our tracking structure
 	p.inflightTxnsLock.Lock()
@@ -295,48 +325,48 @@ func (p *msgProcessor) addInflight(inflight *inflightTxn, tx *kldeth.Txn) {
 
 }
 
-func (p *msgProcessor) OnDeployContractMessage(msgContext MsgContext, msg *kldmessages.DeployContract) {
+func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *kldmessages.DeployContract) {
 
-	inflightWrapper, err := p.newInflightWrapper(msgContext, msg.From, msg.Nonce)
+	inflightWrapper, err := p.newInflightWrapper(txnContext, msg.From, msg.Nonce)
 	if err != nil {
-		msgContext.SendErrorReply(400, err)
+		txnContext.SendErrorReply(400, err)
 		return
 	}
 	msg.Nonce = inflightWrapper.nonceNumber()
 
 	tx, err := kldeth.NewContractDeployTxn(msg)
 	if err != nil {
-		msgContext.SendErrorReply(400, err)
+		txnContext.SendErrorReply(400, err)
 		return
 	}
 	tx.NodeAssignNonce = inflightWrapper.nodeAssignNonce
 
 	if err = tx.Send(p.rpc); err != nil {
-		msgContext.SendErrorReply(400, err)
+		txnContext.SendErrorReply(400, err)
 		return
 	}
 
 	p.addInflight(inflightWrapper, tx)
 }
 
-func (p *msgProcessor) OnSendTransactionMessage(msgContext MsgContext, msg *kldmessages.SendTransaction) {
+func (p *txnProcessor) OnSendTransactionMessage(txnContext TxnContext, msg *kldmessages.SendTransaction) {
 
-	inflightWrapper, err := p.newInflightWrapper(msgContext, msg.From, msg.Nonce)
+	inflightWrapper, err := p.newInflightWrapper(txnContext, msg.From, msg.Nonce)
 	if err != nil {
-		msgContext.SendErrorReply(400, err)
+		txnContext.SendErrorReply(400, err)
 		return
 	}
 	msg.Nonce = inflightWrapper.nonceNumber()
 
 	tx, err := kldeth.NewSendTxn(msg)
 	if err != nil {
-		msgContext.SendErrorReply(400, err)
+		txnContext.SendErrorReply(400, err)
 		return
 	}
 	tx.NodeAssignNonce = inflightWrapper.nodeAssignNonce
 
 	if err = tx.Send(p.rpc); err != nil {
-		msgContext.SendErrorReply(400, err)
+		txnContext.SendErrorReply(400, err)
 		return
 	}
 

@@ -1,4 +1,4 @@
-// Copyright 2018 Kaleido, a ConsenSys business
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 // Moving average logic builds upon
 // https://github.com/RobinUS2/golang-moving-average/blob/master/ma.go
-package kldkafka
+package kldtx
 
 import (
 	"fmt"

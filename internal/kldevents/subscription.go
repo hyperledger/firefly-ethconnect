@@ -15,11 +15,15 @@
 package kldevents
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/url"
 	"strings"
+	"time"
 
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
@@ -31,15 +35,22 @@ const (
 
 // persistedFilter is the part of the filter we record to storage
 type persistedFilter struct {
-	Addresses []kldeth.Address `json:"address,omitempty"`
-	Topics    [][]kldeth.Hash  `json:"topics,omitempty"`
+	Addresses []kldbind.Address `json:"address,omitempty"`
+	Topics    [][]kldbind.Hash  `json:"topics,omitempty"`
 }
 
-// ethFilter is the filter structure we send over the wire on eth_newFilter
-type ethFilter struct {
+// ethFilterInitial is the filter structure we send over the wire on eth_newFilter when we first register
+type ethFilterInitial struct {
 	persistedFilter
-	FromBlock kldeth.HexBigInt `json:"fromBlock,omitempty"`
-	ToBlock   string           `json:"toBlock,omitempty"`
+	FromBlock string `json:"fromBlock,omitempty"`
+	ToBlock   string `json:"toBlock,omitempty"`
+}
+
+// ethFilterRestart is the filter structure we send over the wire on eth_newFilter when we restart
+type ethFilterRestart struct {
+	persistedFilter
+	FromBlock kldbind.HexBigInt `json:"fromBlock,omitempty"`
+	ToBlock   string            `json:"toBlock,omitempty"`
 }
 
 // actionSpec configures the action to perform for each event
@@ -57,16 +68,20 @@ type webhookAction struct {
 
 // subscriptionInfo is the persisted data for the subscription
 type subscriptionInfo struct {
-	ID     string           `json:"id,omitempty"`
-	Filter persistedFilter  `json:"filter"`
-	Event  *kldeth.ABIEvent `json:"event"`
-	Action *actionSpec      `json:"action"`
+	ID     string                     `json:"id,omitempty"`
+	Name   string                     `json:"name"`
+	Filter persistedFilter            `json:"filter"`
+	Event  kldbind.MarshalledABIEvent `json:"event"`
+	Action *actionSpec                `json:"action"`
 }
 
 // subscription is the runtime that manages the subscription
 type subscription struct {
-	info *subscriptionInfo
-	kv   kvStore
+	info         *subscriptionInfo
+	rpc          kldeth.RPCClient
+	kv           kvStore
+	filterID     kldbind.HexBigInt
+	filteredOnce bool
 }
 
 func (s *subscription) verifyAction(actionIn *actionSpec) error {
@@ -93,22 +108,24 @@ func (s *subscription) verifyAction(actionIn *actionSpec) error {
 	return nil
 }
 
-func newSubscription(kv kvStore, addr *kldeth.Address, event *kldeth.ABIEvent, action *actionSpec) (*subscription, error) {
+func newSubscription(kv kvStore, rpc kldeth.RPCClient, addr *kldbind.Address, event *kldbind.ABIEvent, action *actionSpec) (*subscription, error) {
 	i := &subscriptionInfo{
 		ID:     subIDPrefix + kldutils.UUIDv4(),
-		Event:  event,
+		Event:  kldbind.MarshalledABIEvent{E: *event},
 		Action: action,
 	}
-	f := &i.Filter
 	s := &subscription{
 		info: i,
 		kv:   kv,
+		rpc:  rpc,
 	}
-	addrStr := "nil"
+	f := &i.Filter
+	addrStr := "*"
 	if addr != nil {
-		f.Addresses = []kldeth.Address{*addr}
+		f.Addresses = []kldbind.Address{*addr}
 		addrStr = addr.String()
 	}
+	i.Name = addrStr + ":" + eventSummary(event)
 	if event == nil || event.Name == "" {
 		return nil, fmt.Errorf("Solidity event name must be specified")
 	}
@@ -116,27 +133,89 @@ func newSubscription(kv kvStore, addr *kldeth.Address, event *kldeth.ABIEvent, a
 		return nil, err
 	}
 	// For now we only support filtering on the event type
-	f.Topics = [][]kldeth.Hash{[]kldeth.Hash{event.Id()}}
+	f.Topics = [][]kldbind.Hash{[]kldbind.Hash{event.Id()}}
+	// Create the filter in Ethereum
+	if err := s.initialFilter(); err != nil {
+		return nil, fmt.Errorf("Failed to register filter: %s", err)
+	}
 	// Store the subscription
-	infoBytes, _ := json.Marshal(s.info)
+	infoBytes, _ := json.MarshalIndent(s.info, "", "  ")
 	if err := kv.Put(i.ID, infoBytes); err != nil {
 		return nil, fmt.Errorf("Failed to store subscription info: %s", err)
 	}
-	log.Infof("Created subscription %s - address:%s topic:%s event:%s", i.ID, addrStr, event, event.Id())
+	log.Infof("Created subscription %s %s topic:%s", i.ID, i.Name, event.Id().String())
 	return s, nil
 }
 
-func restoreSubscription(kv kvStore, key string) (*subscription, error) {
+func eventSummary(e *kldbind.ABIEvent) string {
+	var sb strings.Builder
+	sb.WriteString(e.Name)
+	sb.WriteString("(")
+	for idx, input := range e.Inputs {
+		if idx > 0 {
+			sb.WriteString(",")
+		}
+		sb.WriteString(input.Type.String())
+	}
+	sb.WriteString(")")
+	return sb.String()
+}
+
+func restoreSubscription(kv kvStore, rpc kldeth.RPCClient, key string, since *big.Int) (*subscription, error) {
 	infoBytes, err := kv.Get(key)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to read subscription from key value store: %s", err)
 	}
 	var i subscriptionInfo
 	if err := json.Unmarshal(infoBytes, &i); err != nil {
+		log.Errorf("%s: %s", err, string(infoBytes))
 		return nil, fmt.Errorf("Failed to restore subscription from key value store: %s", err)
 	}
-	return &subscription{
+	s := &subscription{
 		kv:   kv,
+		rpc:  rpc,
 		info: &i,
-	}, nil
+	}
+	if err := s.restartFilter(since); err != nil {
+		return nil, fmt.Errorf("Failed to register filter: %s", err)
+	}
+	return s, nil
+}
+
+func (s *subscription) initialFilter() error {
+	var f ethFilterInitial
+	f.persistedFilter = s.info.Filter
+	f.FromBlock = "latest"
+	f.ToBlock = "latest"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return s.rpc.CallContext(ctx, &s.filterID, "eth_newFilter", f)
+}
+
+func (s *subscription) restartFilter(since *big.Int) error {
+	var f ethFilterRestart
+	f.persistedFilter = s.info.Filter
+	f.FromBlock.ToInt().Set(since)
+	f.ToBlock = "latest"
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	err := s.rpc.CallContext(ctx, &s.filterID, "eth_newFilter", f)
+	log.Infof("%s: created filter from block %s: %s", s.info.ID, since.String(), s.filterID.String())
+	return err
+}
+
+func (s *subscription) processNewEvents() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	var res []logEntry
+	rpcMethod := "eth_getFilterLogs"
+	if s.filteredOnce {
+		rpcMethod = "eth_getFilterChanges"
+	}
+	if err := s.rpc.CallContext(ctx, &res, rpcMethod, s.filterID); err != nil {
+		return err
+	}
+	s.filteredOnce = true
+	return nil
 }

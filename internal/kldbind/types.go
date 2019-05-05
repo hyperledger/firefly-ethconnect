@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package kldeth
+package kldbind
 
 import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -38,5 +38,38 @@ type HexUint64 = hexutil.Uint64
 // ABIEvent is an event on the ABI
 type ABIEvent = abi.Event
 
+// ABIArgument is an argument in the Inputs or Outputs of an ABI
+type ABIArgument = abi.Argument
+
+// ABIType is a type
+type ABIType = abi.Type
+
 // ABIMethod is an method on the ABI
 type ABIMethod = abi.Method
+
+// ABI is a wrapper around the ethereum ABI implementation that includes
+// marshal, as well as unmarshal
+type ABI struct {
+	abi.ABI
+}
+
+const (
+	// IntTy - type
+	IntTy = abi.IntTy
+	// UintTy - type
+	UintTy = abi.UintTy
+	// BoolTy - type
+	BoolTy = abi.BoolTy
+	// StringTy - type
+	StringTy = abi.StringTy
+	// BytesTy - type
+	BytesTy = abi.BytesTy
+	// FixedBytesTy - type
+	FixedBytesTy = abi.FixedBytesTy
+	// AddressTy - type
+	AddressTy = abi.AddressTy
+	// SliceTy - type
+	SliceTy = abi.SliceTy
+	// ArrayTy - type
+	ArrayTy = abi.ArrayTy
+)

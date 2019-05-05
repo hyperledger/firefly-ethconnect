@@ -35,6 +35,7 @@ import (
 
 	"github.com/go-openapi/spec"
 	"github.com/julienschmidt/httprouter"
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldopenapi"
 	"github.com/kaleido-io/ethconnect/internal/kldtx"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
@@ -61,7 +62,7 @@ type SmartContractGateway interface {
 
 type smartContractGatewayInt interface {
 	SmartContractGateway
-	loadABIForInstance(addrHexNo0x string) (*kldmessages.ABI, error)
+	loadABIForInstance(addrHexNo0x string) (*kldbind.ABI, error)
 	loadDeployMsgForFactory(abi string) (*kldmessages.DeployContract, error)
 }
 
@@ -205,7 +206,7 @@ func (g *smartContractGW) PostDeploy(msg *kldmessages.TransactionReceipt) error 
 	return g.storeABI(requestID, addrHexNo0x, deployMsg.ABI)
 }
 
-func (g *smartContractGW) genSwagger(requestID, apiName string, abi *kldmessages.ABI, devdoc string, addressOfInstance string) (*spec.Swagger, error) {
+func (g *smartContractGW) genSwagger(requestID, apiName string, abi *kldbind.ABI, devdoc string, addressOfInstance string) (*spec.Swagger, error) {
 
 	if abi == nil {
 		return nil, fmt.Errorf("ABI cannot be nil")
@@ -240,7 +241,7 @@ func (g *smartContractGW) genSwagger(requestID, apiName string, abi *kldmessages
 	return swagger, nil
 }
 
-func (g *smartContractGW) storeABI(requestID, addrHexNo0x string, abi *kldmessages.ABI) error {
+func (g *smartContractGW) storeABI(requestID, addrHexNo0x string, abi *kldbind.ABI) error {
 	abiFile := path.Join(g.conf.StoragePath, "contract_"+addrHexNo0x+".abi.json")
 	abiBytes, _ := json.MarshalIndent(abi, "", "  ")
 	log.Infof("%s: Storing ABI JSON to '%s'", requestID, abiFile)
@@ -250,13 +251,13 @@ func (g *smartContractGW) storeABI(requestID, addrHexNo0x string, abi *kldmessag
 	return nil
 }
 
-func (g *smartContractGW) loadABIForInstance(addrHexNo0x string) (*kldmessages.ABI, error) {
+func (g *smartContractGW) loadABIForInstance(addrHexNo0x string) (*kldbind.ABI, error) {
 	abiFile := path.Join(g.conf.StoragePath, "contract_"+addrHexNo0x+".abi.json")
 	abiBytes, err := ioutil.ReadFile(abiFile)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to find installed ABI for contract address 0x%s: %s", addrHexNo0x, err)
 	}
-	a := kldmessages.ABI{}
+	a := kldbind.ABI{}
 	if err = json.Unmarshal(abiBytes, &a); err != nil {
 		return nil, fmt.Errorf("Failed to load installed ABI for contract address 0x%s: %s", addrHexNo0x, err)
 	}
@@ -297,7 +298,7 @@ func (g *smartContractGW) storeDeployableABI(msg *kldmessages.DeployContract, co
 
 	if compiled != nil {
 		msg.Compiled = compiled.Compiled
-		msg.ABI = &kldmessages.ABI{
+		msg.ABI = &kldbind.ABI{
 			ABI: *compiled.ABI,
 		}
 		msg.DevDoc = compiled.DevDoc

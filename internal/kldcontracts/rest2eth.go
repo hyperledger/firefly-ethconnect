@@ -25,6 +25,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/julienschmidt/httprouter"
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
@@ -147,7 +148,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 
 	value = json.Number(r.getKLDParam("value", req, false))
 
-	var a *kldmessages.ABI
+	var a *kldbind.ABI
 	abiID := params.ByName("abi")
 	if abiID != "" {
 		deployMsg, err = r.gw.loadDeployMsgForFactory(abiID)

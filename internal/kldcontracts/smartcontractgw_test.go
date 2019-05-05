@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-openapi/spec"
 	"github.com/julienschmidt/httprouter"
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -332,7 +333,7 @@ func TestGenSwaggerWriteFail(t *testing.T) {
 		nil, nil, nil,
 	).(*smartContractGW)
 
-	a := kldmessages.ABI{
+	a := kldbind.ABI{
 		ABI: abi.ABI{},
 	}
 	_, err := scgw.genSwagger("req1", "", &a, "", "0123456789AbcdeF0123456789abCdef0123456")
@@ -350,7 +351,7 @@ func TestStoreABIWriteFail(t *testing.T) {
 		nil, nil, nil,
 	).(*smartContractGW)
 
-	a := kldmessages.ABI{
+	a := kldbind.ABI{
 		ABI: abi.ABI{},
 	}
 	err := scgw.storeABI("req1", "0123456789AbcdeF0123456789abCdef0123456", &a)

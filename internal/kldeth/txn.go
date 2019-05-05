@@ -117,7 +117,7 @@ func CallMethod(rpc RPCClient, from, addr string, value json.Number, methodABI *
 	if retBytes == nil {
 		return nil, nil
 	}
-	return processRLPBytes(methodABI, retBytes)
+	return ProcessRLPBytes(methodABI.Outputs, retBytes)
 }
 
 func addErrorToRetval(retval map[string]interface{}, retBytes []byte, rawRetval interface{}, err error) {
@@ -127,26 +127,27 @@ func addErrorToRetval(retval map[string]interface{}, retBytes []byte, rawRetval 
 	retval["error"] = err.Error()
 }
 
-func processRLPBytes(methodABI *abi.Method, retBytes []byte) (map[string]interface{}, error) {
+// ProcessRLPBytes converts binary packed set of bytes into a map
+func ProcessRLPBytes(args abi.Arguments, retBytes []byte) (map[string]interface{}, error) {
 	retval := make(map[string]interface{})
-	rawRetval, err := methodABI.Outputs.UnpackValues(retBytes)
+	rawRetval, err := args.UnpackValues(retBytes)
 	if err != nil {
 		addErrorToRetval(retval, retBytes, rawRetval, fmt.Errorf("Failed to unpack values: %s", err))
 		return nil, err
 	}
-	if err = processOutputs(methodABI, rawRetval, retval); err != nil {
+	if err = processOutputs(args, rawRetval, retval); err != nil {
 		addErrorToRetval(retval, retBytes, rawRetval, err)
 	}
 	return retval, nil
 }
 
-func processOutputs(methodABI *abi.Method, rawRetval []interface{}, retval map[string]interface{}) error {
-	numOutputs := len(methodABI.Outputs)
+func processOutputs(args abi.Arguments, rawRetval []interface{}, retval map[string]interface{}) error {
+	numOutputs := len(args)
 	if numOutputs > 0 {
 		if len(rawRetval) != numOutputs {
-			return fmt.Errorf("Expected %d in JSON/RPC response. Received %d: %+v", len(rawRetval), numOutputs, rawRetval)
+			return fmt.Errorf("Expected %d in JSON/RPC response. Received %d: %+v", numOutputs, len(rawRetval), rawRetval)
 		}
-		for idx, output := range methodABI.Outputs {
+		for idx, output := range args {
 			if err := genOutput(idx, retval, output, rawRetval[idx]); err != nil {
 				return err
 			}

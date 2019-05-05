@@ -38,6 +38,9 @@ type HexUint64 = hexutil.Uint64
 // ABIEvent is an event on the ABI
 type ABIEvent = abi.Event
 
+// ABIArguments is an array of arguments with helper functions
+type ABIArguments = abi.Arguments
+
 // ABIArgument is an argument in the Inputs or Outputs of an ABI
 type ABIArgument = abi.Argument
 

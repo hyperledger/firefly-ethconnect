@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -155,7 +156,7 @@ func TestNewContractDeployPrecompiledSimpleStorage(t *testing.T) {
 
 	var msg kldmessages.DeployContract
 	msg.Compiled = c.Compiled
-	msg.ABI = &kldmessages.ABI{
+	msg.ABI = &kldbind.ABI{
 		ABI: *c.ABI,
 	}
 	msg.Parameters = []interface{}{float64(999999)}

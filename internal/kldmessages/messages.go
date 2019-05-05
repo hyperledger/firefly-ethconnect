@@ -18,9 +18,10 @@ import (
 	"encoding/json"
 	"reflect"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 )
 
 const (
@@ -129,22 +130,16 @@ type SendTransaction struct {
 	MethodName string     `json:"methodName,omitempty"`
 }
 
-// ABI is a wrapper around the ethereum ABI implementation that includes
-// marshal, as well as unmarshal
-type ABI struct {
-	abi.ABI
-}
-
 // DeployContract message instructs the bridge to install a contract
 type DeployContract struct {
 	TransactionCommon
-	Solidity        string `json:"solidity,omitempty"`
-	CompilerVersion string `json:"compilerVersion,omitempty"`
-	ABI             *ABI   `json:"abi,omitempty"`
-	DevDoc          string `json:"devDocs,omitempty"`
-	Compiled        []byte `json:"compiled,omitempty"`
-	ContractName    string `json:"contractName,omitempty"`
-	Description     string `json:"description,omitempty"`
+	Solidity        string       `json:"solidity,omitempty"`
+	CompilerVersion string       `json:"compilerVersion,omitempty"`
+	ABI             *kldbind.ABI `json:"abi,omitempty"`
+	DevDoc          string       `json:"devDocs,omitempty"`
+	Compiled        []byte       `json:"compiled,omitempty"`
+	ContractName    string       `json:"contractName,omitempty"`
+	Description     string       `json:"description,omitempty"`
 }
 
 // TransactionReceipt is sent when a transaction has been successfully mined

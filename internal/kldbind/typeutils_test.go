@@ -1,4 +1,4 @@
-// Copyright 2019 Kaleido
+// Copyright 2018, 2019 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package kldmessages
+package kldbind
 
 import (
 	"encoding/json"
@@ -21,6 +21,28 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestHexToAddress(t *testing.T) {
+	assert := assert.New(t)
+	assert.Equal("0x0123456789abcDEF0123456789abCDef01234567", HexToAddress("0x0123456789abcDEF0123456789abCDef01234567").String())
+}
+
+func TestBytesToAddress(t *testing.T) {
+	assert := assert.New(t)
+	b, _ := HexDecode("0x0123456789abcDEF0123456789abCDef01234567")
+	assert.Equal("0x0123456789abcDEF0123456789abCDef01234567", BytesToAddress(b).String())
+}
+
+func TestHexToHash(t *testing.T) {
+	assert := assert.New(t)
+	assert.Equal("0x49d0d5ec93185ca4cd24efff28fdeef97bd06fe7a26f771e645892433184af13", HexToHash("0x49d0d5ec93185ca4cd24efff28fdeef97bd06fe7a26f771e645892433184af13").String())
+}
+
+func TestABITypeFor(t *testing.T) {
+	assert := assert.New(t)
+	abiType, _ := ABITypeFor("uint256")
+	assert.Equal("uint256", abiType.String())
+}
 
 func TestABIMarshalUnMarshal(t *testing.T) {
 	assert := assert.New(t)
@@ -68,4 +90,37 @@ func TestABIMarshalUnMarshal(t *testing.T) {
 
 	assert.Equal(a1, a2)
 
+}
+
+func TestABIEventMarshalUnMarshal(t *testing.T) {
+	assert := assert.New(t)
+
+	me := MarshalledABIEvent{
+		E: ABIEvent{
+			Name:      "event1",
+			Anonymous: true,
+			Inputs: abi.Arguments{
+				abi.Argument{Name: "earg1", Type: ABITypeKnown("uint256"), Indexed: true},
+			},
+		},
+	}
+
+	jsonBytes, err := json.Marshal(&me)
+	assert.NoError(err)
+
+	var me2 MarshalledABIEvent
+	err = json.Unmarshal(jsonBytes, &me2)
+	assert.NoError(err)
+
+	t.Log(string(jsonBytes))
+
+	assert.Equal(me, me2)
+
+	badType := "{\"inputs\": [{\"type\":\"badness\"}]}"
+	err = json.Unmarshal([]byte(badType), &me)
+	assert.EqualError(err, "unsupported arg type: badness")
+
+	badStuct := "{\"inputs\": false}"
+	err = json.Unmarshal([]byte(badStuct), &me)
+	assert.Regexp("cannot unmarshal", err.Error())
 }

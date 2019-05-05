@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
@@ -70,11 +71,11 @@ func (m *mockREST2EthDispatcher) DispatchDeployContractSync(msg *kldmessages.Dep
 
 type mockABILoader struct {
 	loadABIError error
-	abi          *kldmessages.ABI
+	abi          *kldbind.ABI
 	deployMsg    *kldmessages.DeployContract
 }
 
-func (m *mockABILoader) loadABIForInstance(addrHexNo0x string) (*kldmessages.ABI, error) {
+func (m *mockABILoader) loadABIForInstance(addrHexNo0x string) (*kldbind.ABI, error) {
 	return m.abi, m.loadABIError
 }
 
@@ -107,7 +108,7 @@ func newTestREST2EthAndMsg(dispatcher *mockREST2EthDispatcher, from, to string, 
 
 	mockRPC := &mockRPC{}
 	compiled, _ := kldeth.CompileContract(simpleStorage, "simplestorage", "")
-	a := &kldmessages.ABI{ABI: *compiled.ABI}
+	a := &kldbind.ABI{ABI: *compiled.ABI}
 	deployMsg := &kldmessages.DeployContract{ABI: a}
 	abiLoader := &mockABILoader{
 		abi:       a,

@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"net/url"
 	"strings"
 	"time"
 
@@ -53,26 +52,13 @@ type ethFilterRestart struct {
 	ToBlock   string            `json:"toBlock,omitempty"`
 }
 
-// actionSpec configures the action to perform for each event
-type actionSpec struct {
-	Type         string         `json:"type,omitempty"`
-	BatchSize    int            `json:"batchSize,omitempty"`
-	BatchTimeout int            `json:"batchTimeout,omitempty"`
-	Webhook      *webhookAction `json:"webhook,omitempty"`
-}
-
-type webhookAction struct {
-	URL     string            `json:"url,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"`
-}
-
 // subscriptionInfo is the persisted data for the subscription
 type subscriptionInfo struct {
 	ID     string                     `json:"id,omitempty"`
 	Name   string                     `json:"name"`
+	Action string                     `json:"action"`
 	Filter persistedFilter            `json:"filter"`
 	Event  kldbind.MarshalledABIEvent `json:"event"`
-	Action *actionSpec                `json:"action"`
 }
 
 // subscription is the runtime that manages the subscription
@@ -80,44 +66,28 @@ type subscription struct {
 	info         *subscriptionInfo
 	rpc          kldeth.RPCClient
 	kv           kvStore
+	lp           *logProcessor
+	logName      string
 	filterID     kldbind.HexBigInt
 	filteredOnce bool
 }
 
-func (s *subscription) verifyAction(actionIn *actionSpec) error {
-	if actionIn == nil {
-		return fmt.Errorf("No action specified")
+func newSubscription(sm subscriptionManager, kv kvStore, rpc kldeth.RPCClient, addr *kldbind.Address, event *kldbind.ABIEvent, actionID string) (*subscription, error) {
+	action, err := sm.actionByID(actionID)
+	if err != nil {
+		return nil, err
 	}
-
-	// We build a structure with just the one action sub-section matching their lower case
-	// action type, regardless of what they submitted
-	actionOut := actionSpec{Type: strings.ToLower(actionIn.Type)}
-	switch actionOut.Type {
-	case "webhook":
-		if actionIn.Webhook == nil || actionIn.Webhook.URL == "" {
-			return fmt.Errorf("Must specify webhook.url for action type 'webhook'")
-		}
-		if _, err := url.Parse(actionIn.Webhook.URL); err != nil {
-			return fmt.Errorf("Invalid URL in webhook action")
-		}
-		actionOut.Webhook = actionIn.Webhook
-	default:
-		return fmt.Errorf("Unknown action type '%s'", actionIn.Type)
-	}
-	s.info.Action = &actionOut
-	return nil
-}
-
-func newSubscription(kv kvStore, rpc kldeth.RPCClient, addr *kldbind.Address, event *kldbind.ABIEvent, action *actionSpec) (*subscription, error) {
 	i := &subscriptionInfo{
 		ID:     subIDPrefix + kldutils.UUIDv4(),
 		Event:  kldbind.MarshalledABIEvent{E: *event},
-		Action: action,
+		Action: action.id,
 	}
 	s := &subscription{
-		info: i,
-		kv:   kv,
-		rpc:  rpc,
+		info:    i,
+		kv:      kv,
+		rpc:     rpc,
+		lp:      newLogProcessor(&i.Event.E, action),
+		logName: i.ID + ":" + eventSummary(&i.Event.E),
 	}
 	f := &i.Filter
 	addrStr := "*"
@@ -128,9 +98,6 @@ func newSubscription(kv kvStore, rpc kldeth.RPCClient, addr *kldbind.Address, ev
 	i.Name = addrStr + ":" + eventSummary(event)
 	if event == nil || event.Name == "" {
 		return nil, fmt.Errorf("Solidity event name must be specified")
-	}
-	if err := s.verifyAction(action); err != nil {
-		return nil, err
 	}
 	// For now we only support filtering on the event type
 	f.Topics = [][]kldbind.Hash{[]kldbind.Hash{event.Id()}}
@@ -161,7 +128,7 @@ func eventSummary(e *kldbind.ABIEvent) string {
 	return sb.String()
 }
 
-func restoreSubscription(kv kvStore, rpc kldeth.RPCClient, key string, since *big.Int) (*subscription, error) {
+func restoreSubscription(sm subscriptionManager, kv kvStore, rpc kldeth.RPCClient, key string, since *big.Int) (*subscription, error) {
 	infoBytes, err := kv.Get(key)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to read subscription from key value store: %s", err)
@@ -171,10 +138,16 @@ func restoreSubscription(kv kvStore, rpc kldeth.RPCClient, key string, since *bi
 		log.Errorf("%s: %s", err, string(infoBytes))
 		return nil, fmt.Errorf("Failed to restore subscription from key value store: %s", err)
 	}
+	action, err := sm.actionByID(i.Action)
+	if err != nil {
+		return nil, err
+	}
 	s := &subscription{
-		kv:   kv,
-		rpc:  rpc,
-		info: &i,
+		kv:      kv,
+		rpc:     rpc,
+		info:    &i,
+		lp:      newLogProcessor(&i.Event.E, action),
+		logName: i.ID + ":" + eventSummary(&i.Event.E),
 	}
 	if err := s.restartFilter(since); err != nil {
 		return nil, fmt.Errorf("Failed to register filter: %s", err)
@@ -201,20 +174,26 @@ func (s *subscription) restartFilter(since *big.Int) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	err := s.rpc.CallContext(ctx, &s.filterID, "eth_newFilter", f)
-	log.Infof("%s: created filter from block %s: %s", s.info.ID, since.String(), s.filterID.String())
+	log.Infof("%s: created filter from block %s: %s", s.logName, since.String(), s.filterID.String())
 	return err
 }
 
 func (s *subscription) processNewEvents() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	var res []logEntry
+	var logs []*logEntry
 	rpcMethod := "eth_getFilterLogs"
 	if s.filteredOnce {
 		rpcMethod = "eth_getFilterChanges"
 	}
-	if err := s.rpc.CallContext(ctx, &res, rpcMethod, s.filterID); err != nil {
+	if err := s.rpc.CallContext(ctx, &logs, rpcMethod, s.filterID); err != nil {
 		return err
+	}
+	log.Infof("%s: received %d events (%s)", s.logName, len(logs), rpcMethod)
+	for _, logEntry := range logs {
+		if err := s.lp.processLogEntry(logEntry); err != nil {
+			log.Errorf("Failed to processs event: %s", err)
+		}
 	}
 	s.filteredOnce = true
 	return nil

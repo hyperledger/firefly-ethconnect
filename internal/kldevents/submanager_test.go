@@ -53,12 +53,12 @@ func cleanup(t *testing.T, dir string) {
 	os.RemoveAll(dir)
 }
 
-func newTestSubscriptionManager(dir string) *subscriptionManager {
+func newTestSubscriptionManager(dir string) *subscriptionMGR {
 	smconf := &SubscriptionManagerConf{
 		LevelDBPath: path.Join(dir, "db"),
 	}
 	rconf := &kldeth.RPCConnOpts{URL: ""}
-	sm := NewSubscriptionManager(smconf, rconf).(*subscriptionManager)
+	sm := NewSubscriptionManager(smconf, rconf).(*subscriptionMGR)
 	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
 	return sm
 }

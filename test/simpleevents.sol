@@ -32,7 +32,7 @@ contract SimpleEvents {
   function set(int64 i, string memory s) public {
     storedI = i;
     storedS = s;
-    emit Changed(msg.sender, i, s, keccak256(bytes(s)), "Hi from SimpleEvents");
+    emit Changed(msg.sender, i, s, keccak256(bytes(s)), s);
   }
 
   /**

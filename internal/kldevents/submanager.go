@@ -30,16 +30,23 @@ type SubscriptionManager interface {
 	Close()
 }
 
+type subscriptionManager interface {
+	actionByID(string) (*action, error)
+	subscriptionByID(string) (*subscription, error)
+}
+
 // SubscriptionManagerConf configuration
 type SubscriptionManagerConf struct {
 	LevelDBPath string `json:"db"`
 }
 
-type subscriptionManager struct {
-	conf    *SubscriptionManagerConf
-	rpcConf *kldeth.RPCConnOpts
-	db      kvStore
-	rpc     kldeth.RPCClientAll
+type subscriptionMGR struct {
+	conf          *SubscriptionManagerConf
+	rpcConf       *kldeth.RPCConnOpts
+	db            kvStore
+	rpc           kldeth.RPCClientAll
+	subscriptions map[string]*subscription
+	actions       map[string]*action
 }
 
 // CobraInitSubscriptionManager standard naming for cobra command params
@@ -47,19 +54,37 @@ func CobraInitSubscriptionManager(cmd *cobra.Command, conf *SubscriptionManagerC
 	cmd.Flags().StringVarP(&conf.LevelDBPath, "events-db", "E", "", "Level DB location for subscription management")
 }
 
-func (s *subscriptionManager) AddRoutes(router *httprouter.Router) {
+func (s *subscriptionMGR) AddRoutes(router *httprouter.Router) {
 }
 
 // NewSubscriptionManager construtor
 func NewSubscriptionManager(conf *SubscriptionManagerConf, rpcConf *kldeth.RPCConnOpts) SubscriptionManager {
-	sm := &subscriptionManager{
-		conf:    conf,
-		rpcConf: rpcConf,
+	sm := &subscriptionMGR{
+		conf:          conf,
+		rpcConf:       rpcConf,
+		subscriptions: make(map[string]*subscription),
+		actions:       make(map[string]*action),
 	}
 	return sm
 }
 
-func (s *subscriptionManager) Init() (err error) {
+func (s *subscriptionMGR) subscriptionByID(id string) (*subscription, error) {
+	sub, exists := s.subscriptions[id]
+	if !exists {
+		return nil, fmt.Errorf("Subscription with ID '%s' not found", id)
+	}
+	return sub, nil
+}
+
+func (s *subscriptionMGR) actionByID(id string) (*action, error) {
+	action, exists := s.actions[id]
+	if !exists {
+		return nil, fmt.Errorf("Action with ID '%s' not found", id)
+	}
+	return action, nil
+}
+
+func (s *subscriptionMGR) Init() (err error) {
 	if s.db, err = newLDBKeyValueStore(s.conf.LevelDBPath); err != nil {
 		return fmt.Errorf("Failed to open DB at %s: %s", s.conf.LevelDBPath, err)
 	}
@@ -69,7 +94,7 @@ func (s *subscriptionManager) Init() (err error) {
 	return nil
 }
 
-func (s *subscriptionManager) Close() {
+func (s *subscriptionMGR) Close() {
 	if s.db != nil {
 		s.db.Close()
 	}

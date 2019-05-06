@@ -23,6 +23,7 @@ import (
 type kvStore interface {
 	Put(key string, val []byte) error
 	Get(key string) ([]byte, error)
+	Delete(key string) error
 	Close()
 }
 
@@ -36,6 +37,10 @@ func (k *levelDBKeyValueStore) Put(key string, val []byte) error {
 
 func (k *levelDBKeyValueStore) Get(key string) ([]byte, error) {
 	return k.db.Get([]byte(key), nil)
+}
+
+func (k *levelDBKeyValueStore) Delete(key string) error {
+	return k.db.Delete([]byte(key), nil)
 }
 
 func (k *levelDBKeyValueStore) Close() {

@@ -16,7 +16,6 @@ package kldevents
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"strings"
@@ -24,12 +23,7 @@ import (
 
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
-	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
-)
-
-const (
-	subIDPrefix = "sub-"
 )
 
 // persistedFilter is the part of the filter we record to storage
@@ -52,8 +46,8 @@ type ethFilterRestart struct {
 	ToBlock   string            `json:"toBlock,omitempty"`
 }
 
-// subscriptionInfo is the persisted data for the subscription
-type subscriptionInfo struct {
+// SubscriptionInfo is the persisted data for the subscription
+type SubscriptionInfo struct {
 	ID     string                     `json:"id,omitempty"`
 	Name   string                     `json:"name"`
 	Action string                     `json:"action"`
@@ -63,9 +57,8 @@ type subscriptionInfo struct {
 
 // subscription is the runtime that manages the subscription
 type subscription struct {
-	info         *subscriptionInfo
+	info         *SubscriptionInfo
 	rpc          kldeth.RPCClient
-	kv           kvStore
 	lp           *logProcessor
 	logName      string
 	filterID     kldbind.HexBigInt
@@ -73,19 +66,13 @@ type subscription struct {
 	filterStale  bool
 }
 
-func newSubscription(sm subscriptionManager, kv kvStore, rpc kldeth.RPCClient, addr *kldbind.Address, event *kldbind.ABIEvent, actionID string) (*subscription, error) {
-	action, err := sm.actionByID(actionID)
+func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind.Address, i *SubscriptionInfo) (*subscription, error) {
+	action, err := sm.actionByID(i.Action)
 	if err != nil {
 		return nil, err
 	}
-	i := &subscriptionInfo{
-		ID:     subIDPrefix + kldutils.UUIDv4(),
-		Event:  kldbind.MarshalledABIEvent{E: *event},
-		Action: action.id,
-	}
 	s := &subscription{
 		info:    i,
-		kv:      kv,
 		rpc:     rpc,
 		lp:      newLogProcessor(i.ID, &i.Event.E, action),
 		logName: i.ID + ":" + eventSummary(&i.Event.E),
@@ -96,6 +83,7 @@ func newSubscription(sm subscriptionManager, kv kvStore, rpc kldeth.RPCClient, a
 		f.Addresses = []kldbind.Address{*addr}
 		addrStr = addr.String()
 	}
+	event := &i.Event.E
 	i.Name = addrStr + ":" + eventSummary(event)
 	if event == nil || event.Name == "" {
 		return nil, fmt.Errorf("Solidity event name must be specified")
@@ -105,11 +93,6 @@ func newSubscription(sm subscriptionManager, kv kvStore, rpc kldeth.RPCClient, a
 	// Create the filter in Ethereum
 	if err := s.initialFilter(); err != nil {
 		return nil, fmt.Errorf("Failed to register filter: %s", err)
-	}
-	// Store the subscription
-	infoBytes, _ := json.MarshalIndent(s.info, "", "  ")
-	if err := kv.Put(i.ID, infoBytes); err != nil {
-		return nil, fmt.Errorf("Failed to store subscription info: %s", err)
 	}
 	log.Infof("Created subscription %s %s topic:%s", i.ID, i.Name, event.Id().String())
 	return s, nil
@@ -129,24 +112,14 @@ func eventSummary(e *kldbind.ABIEvent) string {
 	return sb.String()
 }
 
-func restoreSubscription(sm subscriptionManager, kv kvStore, rpc kldeth.RPCClient, key string, since *big.Int) (*subscription, error) {
-	infoBytes, err := kv.Get(key)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to read subscription from key value store: %s", err)
-	}
-	var i subscriptionInfo
-	if err := json.Unmarshal(infoBytes, &i); err != nil {
-		log.Errorf("%s: %s", err, string(infoBytes))
-		return nil, fmt.Errorf("Failed to restore subscription from key value store: %s", err)
-	}
+func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *SubscriptionInfo, since *big.Int) (*subscription, error) {
 	action, err := sm.actionByID(i.Action)
 	if err != nil {
 		return nil, err
 	}
 	s := &subscription{
-		kv:      kv,
 		rpc:     rpc,
-		info:    &i,
+		info:    i,
 		lp:      newLogProcessor(i.ID, &i.Event.E, action),
 		logName: i.ID + ":" + eventSummary(&i.Event.E),
 	}

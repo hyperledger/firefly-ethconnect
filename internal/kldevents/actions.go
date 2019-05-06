@@ -45,8 +45,10 @@ const (
 	DefaultExponentialBackoffFactor = float64(2.0)
 )
 
-// actionSpec configures the action to perform for each event
-type actionSpec struct {
+// ActionInfo configures the action to perform for each event
+type ActionInfo struct {
+	ID                   string         `json:"id"`
+	Suspended            bool           `json:"suspended"`
 	Type                 string         `json:"type,omitempty"`
 	BatchSize            uint64         `json:"batchSize,omitempty"`
 	BatchTimeoutMS       uint64         `json:"batchTimeoutMS,omitempty"`
@@ -64,9 +66,8 @@ type webhookAction struct {
 }
 
 type action struct {
-	id                string
 	allowPrivateIPs   bool
-	spec              *actionSpec
+	spec              *ActionInfo
 	eventStream       chan *eventData
 	stopped           bool
 	dispatcherDone    bool
@@ -83,7 +84,7 @@ type action struct {
 // off the event batch processor, and blockHWM will be
 // initialied to that supplied (zero on initial, or the
 // value from the checkpoint)
-func newAction(id string, allowPrivateIPs bool, spec *actionSpec) (a *action, err error) {
+func newAction(allowPrivateIPs bool, spec *ActionInfo) (a *action, err error) {
 
 	if spec == nil {
 		return nil, fmt.Errorf("No action specified")
@@ -121,7 +122,6 @@ func newAction(id string, allowPrivateIPs bool, spec *actionSpec) (a *action, er
 	}
 
 	a = &action{
-		id:                id,
 		spec:              spec,
 		allowPrivateIPs:   allowPrivateIPs,
 		eventStream:       make(chan *eventData),
@@ -142,6 +142,27 @@ func (a *action) stop() {
 	a.eventStream <- nil
 	a.batchCond.Broadcast()
 	a.batchCond.L.Unlock()
+}
+
+// suspend only stops the dispatcher, pushing back as if we're in blockding mode
+func (a *action) suspend() {
+	a.batchCond.L.Lock()
+	a.spec.Suspended = true
+	a.batchCond.Broadcast()
+	a.batchCond.L.Unlock()
+}
+
+// resume resumes the dispatcher
+func (a *action) resume() error {
+	a.batchCond.L.Lock()
+	defer a.batchCond.L.Unlock()
+	if !a.processorDone {
+		return fmt.Errorf("Event processor is already active. Suspending:%t", a.spec.Suspended)
+	}
+	a.spec.Suspended = false
+	go a.batchProcessor()
+	a.batchCond.Broadcast()
+	return nil
 }
 
 // isBlocked protect us from poling for more events when the action is blocked.
@@ -186,7 +207,7 @@ func (a *action) batchDispatcher() {
 			case event := <-a.eventStream:
 				cancel()
 				if event == nil {
-					log.Infof("%s: Event stream stopped while waiting for in-flight batch to fill", a.id)
+					log.Infof("%s: Event stream stopped while waiting for in-flight batch to fill", a.spec.ID)
 					return
 				}
 				currentBatch = append(currentBatch, event)
@@ -195,7 +216,7 @@ func (a *action) batchDispatcher() {
 			// New batch
 			event := <-a.eventStream
 			if event == nil {
-				log.Infof("%s: Event stream stopped", a.id)
+				log.Infof("%s: Event stream stopped", a.spec.ID)
 				return
 			}
 			currentBatch = []*eventData{event}
@@ -218,19 +239,25 @@ func (a *action) batchDispatcher() {
 	}
 }
 
+func (a *action) suspendOrStop() bool {
+	return a.spec.Suspended || a.stopped
+}
+
 // batchProcessor picks up batches from the batchDispatcher, and performs the blocking
 // actions required to perform the action itself.
 // We use a sync.Cond rather than a channel to communicate with this goroutine, as
 // it might be blocked for very large periods of time
 func (a *action) batchProcessor() {
+	a.processorDone = false
 	defer func() { a.processorDone = true }()
 	for {
 		// Wait for the next batch, or to be stopped
 		a.batchCond.L.Lock()
-		for !a.stopped && a.batchQueue.Len() == 0 {
+		for !a.suspendOrStop() && a.batchQueue.Len() == 0 {
 			a.batchCond.Wait()
 		}
-		if a.stopped {
+		if a.suspendOrStop() {
+			a.batchCond.L.Unlock()
 			return
 		}
 		batchElem := a.batchQueue.Front()
@@ -250,22 +277,27 @@ func (a *action) batchProcessor() {
 func (a *action) processBatch(batchNumber uint64, events []*eventData) {
 	processed := false
 	attempt := 0
-	for !processed {
+	for !a.suspendOrStop() && !processed {
 		if attempt > 0 {
 			time.Sleep(time.Duration(a.spec.BlockedRetryDelaySec) * time.Second)
 		}
 		attempt++
-		log.Errorf("%s: Batch %d initiated with %d events", a.id, batchNumber, len(events))
+		log.Errorf("%s: Batch %d initiated with %d events", a.spec.ID, batchNumber, len(events))
 		err := a.performActionWithRetry(batchNumber, events)
 		// If we got an error after all of the internal retries within the event
 		// handler failed, then the ErrorHandling strategy kicks in
 		processed = (err == nil)
 		if !processed {
 			log.Errorf("%s: Batch %d attempt %d failed. ErrorHandling=%s BlockedRetryDelay=%ds",
-				a.id, batchNumber, attempt, a.spec.ErrorHandling, a.spec.BlockedRetryDelaySec)
+				a.spec.ID, batchNumber, attempt, a.spec.ErrorHandling, a.spec.BlockedRetryDelaySec)
 			processed = (a.spec.ErrorHandling == ErrorHandlingSkip)
 		}
 	}
+	// If we were suspended, do not ack the batch
+	if a.suspendOrStop() {
+		return
+	}
+
 	// Call all the callbacks on the events, so they can update their high water marks
 	// If there are multiple events from one SubID, we call it only once with the
 	// last message in the batch
@@ -289,9 +321,9 @@ func (a *action) performActionWithRetry(batchNumber uint64, events []*eventData)
 	delay := a.initialRetryDelay
 	var attempt uint64
 	complete := false
-	for !a.stopped && !complete {
+	for !a.suspendOrStop() && !complete {
 		if attempt > 0 {
-			log.Infof("%s: Watiting %.2fs before re-attempting batch %d", a.id, delay.Seconds(), batchNumber)
+			log.Infof("%s: Watiting %.2fs before re-attempting batch %d", a.spec.ID, delay.Seconds(), batchNumber)
 			time.Sleep(delay)
 			delay = time.Duration(float64(delay) * a.backoffFactor)
 		}
@@ -353,25 +385,25 @@ func (a *action) attemptWebhookAction(batchNumber, attempt uint64, events []*eve
 		Timeout:   time.Duration(a.spec.Webhook.RequestTimeoutSec) * time.Second,
 		Transport: transport,
 	}
-	log.Infof("POST --> %s (attempt=%d)", u.String(), attempt)
+	log.Infof("%s: POST --> %s (attempt=%d)", a.spec.ID, u.String(), attempt)
 	reqBytes, err := json.Marshal(&events)
 	if err == nil {
 		var res *http.Response
 		res, err = netClient.Post(u.String(), "application/json", bytes.NewReader(reqBytes))
 		if err == nil {
 			ok := (res.StatusCode >= 200 && res.StatusCode < 300)
-			log.Infof("POST <-- %s [%d] ok=%t", u.String(), res.StatusCode, ok)
+			log.Infof("%s: POST <-- %s [%d] ok=%t", a.spec.ID, u.String(), res.StatusCode, ok)
 			if !ok || log.IsLevelEnabled(log.DebugLevel) {
 				bodyBytes, _ := ioutil.ReadAll(res.Body)
-				log.Infof("Response body: %s", string(bodyBytes))
+				log.Infof("%s: Response body: %s", a.spec.ID, string(bodyBytes))
 			}
 			if !ok {
-				err = fmt.Errorf("Failed with status=%d", res.StatusCode)
+				err = fmt.Errorf("%s: Failed with status=%d", a.spec.ID, res.StatusCode)
 			}
 		}
 	}
 	if err != nil {
-		log.Errorf("POST %s failed (attempt=%d): %s", u.String(), attempt, err)
+		log.Errorf("%s: POST %s failed (attempt=%d): %s", a.spec.ID, u.String(), attempt, err)
 	}
 	return err
 }

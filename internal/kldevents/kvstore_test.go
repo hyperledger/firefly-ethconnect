@@ -33,10 +33,15 @@ func (m *mockKV) Put(key string, val []byte) error {
 func (m *mockKV) Get(key string) ([]byte, error) {
 	return m.kvs[key], m.err
 }
+func (m *mockKV) Delete(key string) error {
+	delete(m.kvs, key)
+	return m.err
+}
 func (m *mockKV) Close() {}
 
-func newMockKV() *mockKV {
+func newMockKV(err error) *mockKV {
 	return &mockKV{
+		err: err,
 		kvs: make(map[string][]byte),
 	}
 }
@@ -52,5 +57,7 @@ func TestLevelDBPutGet(t *testing.T) {
 	things, err := kv.Get("things")
 	assert.NoError(err)
 	assert.Equal("stuff", string(things))
+	err = kv.Delete("things")
+	assert.NoError(err)
 	kv.Close()
 }

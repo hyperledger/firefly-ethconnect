@@ -28,13 +28,13 @@ import (
 
 func TestConstructorNoSpec(t *testing.T) {
 	assert := assert.New(t)
-	_, err := newAction("id", true, nil)
+	_, err := newAction(true, nil)
 	assert.EqualError(err, "No action specified")
 }
 
 func TestConstructorBadType(t *testing.T) {
 	assert := assert.New(t)
-	_, err := newAction("id", true, &actionSpec{
+	_, err := newAction(true, &ActionInfo{
 		Type: "random",
 	})
 	assert.EqualError(err, "Unknown action type 'random'")
@@ -42,7 +42,7 @@ func TestConstructorBadType(t *testing.T) {
 
 func TestConstructorMissingWebhook(t *testing.T) {
 	assert := assert.New(t)
-	_, err := newAction("id", true, &actionSpec{
+	_, err := newAction(true, &ActionInfo{
 		Type: "webhook",
 	})
 	assert.EqualError(err, "Must specify webhook.url for action type 'webhook'")
@@ -50,7 +50,7 @@ func TestConstructorMissingWebhook(t *testing.T) {
 
 func TestConstructorBadWebhookURL(t *testing.T) {
 	assert := assert.New(t)
-	_, err := newAction("id", true, &actionSpec{
+	_, err := newAction(true, &ActionInfo{
 		Type: "webhook",
 		Webhook: &webhookAction{
 			URL: ":badurl",
@@ -66,7 +66,7 @@ func testEvent(subID string) *eventData {
 	}
 }
 
-func newStreamingAction(spec *actionSpec, status ...int) (*action, *httptest.Server, chan []*eventData) {
+func newStreamingAction(spec *ActionInfo, status ...int) (*action, *httptest.Server, chan []*eventData) {
 	mux := http.NewServeMux()
 	eventStream := make(chan []*eventData)
 	count := 0
@@ -84,13 +84,13 @@ func newStreamingAction(spec *actionSpec, status ...int) (*action, *httptest.Ser
 	svr := httptest.NewServer(mux)
 	spec.Type = "WEBHOOK"
 	spec.Webhook.URL = svr.URL
-	action, _ := newAction("test", true, spec)
+	action, _ := newAction(true, spec)
 	return action, svr, eventStream
 }
 
 func TestBatchTimeout(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&actionSpec{
+	action, svr, eventStream := newStreamingAction(&ActionInfo{
 		BatchSize:      10,
 		BatchTimeoutMS: 50,
 		Webhook:        &webhookAction{},
@@ -131,7 +131,7 @@ func TestBatchTimeout(t *testing.T) {
 
 func TestStopDuringTimeout(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&actionSpec{
+	action, svr, eventStream := newStreamingAction(&ActionInfo{
 		BatchSize:      10,
 		BatchTimeoutMS: 2000,
 		Webhook:        &webhookAction{},
@@ -149,7 +149,7 @@ func TestStopDuringTimeout(t *testing.T) {
 
 func TestBatchSizeCap(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&actionSpec{
+	action, svr, eventStream := newStreamingAction(&ActionInfo{
 		BatchSize: 10000000,
 		Webhook:   &webhookAction{},
 	}, 200)
@@ -162,7 +162,7 @@ func TestBatchSizeCap(t *testing.T) {
 
 func TestBlockingBehavior(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&actionSpec{
+	action, svr, eventStream := newStreamingAction(&ActionInfo{
 		BatchSize:            10,
 		Webhook:              &webhookAction{},
 		ErrorHandling:        ErrorHandlingBlock,
@@ -186,7 +186,7 @@ func TestBlockingBehavior(t *testing.T) {
 
 func TestSkippingBehavior(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&actionSpec{
+	action, svr, eventStream := newStreamingAction(&ActionInfo{
 		BatchSize:            10,
 		Webhook:              &webhookAction{},
 		ErrorHandling:        ErrorHandlingSkip,
@@ -210,7 +210,7 @@ func TestSkippingBehavior(t *testing.T) {
 
 func TestBackoffRetry(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&actionSpec{
+	action, svr, eventStream := newStreamingAction(&ActionInfo{
 		BatchSize:            10,
 		Webhook:              &webhookAction{},
 		ErrorHandling:        ErrorHandlingBlock,
@@ -247,7 +247,7 @@ func TestBackoffRetry(t *testing.T) {
 
 func TestBlockedAddresses(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&actionSpec{
+	action, svr, eventStream := newStreamingAction(&ActionInfo{
 		ErrorHandling: ErrorHandlingBlock,
 		Webhook:       &webhookAction{},
 	}, 200)
@@ -269,7 +269,7 @@ func TestBlockedAddresses(t *testing.T) {
 
 func TestBadDNSName(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&actionSpec{
+	action, svr, eventStream := newStreamingAction(&ActionInfo{
 		ErrorHandling: ErrorHandlingSkip,
 		Webhook:       &webhookAction{},
 	}, 200)
@@ -293,7 +293,7 @@ func TestBadDNSName(t *testing.T) {
 
 func TestBuildup(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&actionSpec{
+	action, svr, eventStream := newStreamingAction(&ActionInfo{
 		ErrorHandling: ErrorHandlingBlock,
 		Webhook:       &webhookAction{},
 	}, 200)

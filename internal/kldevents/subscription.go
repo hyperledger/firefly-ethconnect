@@ -192,3 +192,7 @@ func (s *subscription) unsubscribe() error {
 	log.Infof("%s: Uninstalled filter (retval=%s)", s.logName, retval)
 	return err
 }
+
+func (s *subscription) blockHWM() big.Int {
+	return s.lp.getBlockHWM()
+}

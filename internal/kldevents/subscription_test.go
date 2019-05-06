@@ -15,13 +15,8 @@
 package kldevents
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math/big"
-	"net/http"
-	"net/http/httptest"
-	"sync"
 	"testing"
 
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
@@ -31,9 +26,14 @@ import (
 )
 
 type mockSubMgr struct {
-	stream       *eventStream
-	subscription *subscription
-	err          error
+	stream        *eventStream
+	subscription  *subscription
+	err           error
+	subscriptions []*subscription
+}
+
+func (m *mockSubMgr) config() *SubscriptionManagerConf {
+	return &SubscriptionManagerConf{}
 }
 
 func (m *mockSubMgr) streamByID(string) (*eventStream, error) {
@@ -44,8 +44,16 @@ func (m *mockSubMgr) subscriptionByID(string) (*subscription, error) {
 	return m.subscription, m.err
 }
 
+func (m *mockSubMgr) subscriptionsForStream(string) []*subscription {
+	return m.subscriptions
+}
+
+func (m *mockSubMgr) loadCheckpoint(string) (map[string]*big.Int, error) { return nil, nil }
+
+func (m *mockSubMgr) storeCheckpoint(string, map[string]*big.Int) error { return nil }
+
 func newTestStream() *eventStream {
-	a, _ := newEventStream(true, &StreamInfo{
+	a, _ := newEventStream(newTestSubscriptionManager(""), &StreamInfo{
 		Type: "WebHook",
 		Webhook: &webhookAction{
 			URL: "http://hello.example.com/world",
@@ -198,110 +206,4 @@ func TestUnsubscribeFail(t *testing.T) {
 	err := s.unsubscribe()
 	assert.EqualError(err, "pop")
 	assert.True(s.filterStale)
-}
-
-func TestProcessEventsEnd2End(t *testing.T) {
-	assert := assert.New(t)
-
-	mux := http.NewServeMux()
-	eventStream := make(chan []*eventData)
-	defer close(eventStream)
-	mux.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {
-		var events []*eventData
-		err := json.NewDecoder(req.Body).Decode(&events)
-		assert.NoError(err)
-		eventStream <- events
-		res.WriteHeader(200)
-	})
-	svr := httptest.NewServer(mux)
-	defer svr.Close()
-	stream, _ := newEventStream(true, &StreamInfo{
-		Type: "WebHook",
-		Webhook: &webhookAction{
-			URL: svr.URL,
-		},
-	})
-	m := &mockSubMgr{stream: stream}
-
-	testDataBytes, err := ioutil.ReadFile("../../test/simplevents_logs.json")
-	assert.NoError(err)
-	var testData []*logEntry
-	json.Unmarshal(testDataBytes, &testData)
-
-	callCount := 0
-	rpc := kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}) {
-		t.Logf("CallContext %d: %s", callCount, method)
-		callCount++
-		if method == "eth_newFilter" {
-			assert.True(callCount < 2)
-		} else if method == "eth_getFilterLogs" {
-			assert.Equal(2, callCount)
-			*(res.(*[]*logEntry)) = testData[0:2]
-		} else if method == "eth_getFilterChanges" {
-			assert.Equal(3, callCount)
-			*(res.(*[]*logEntry)) = testData[2:]
-		}
-	})
-
-	event := &kldbind.ABIEvent{
-		Name: "Changed",
-		Inputs: []kldbind.ABIArgument{
-			kldbind.ABIArgument{
-				Name:    "from",
-				Type:    kldbind.ABITypeKnown("address"),
-				Indexed: true,
-			},
-			kldbind.ABIArgument{
-				Name:    "i",
-				Type:    kldbind.ABITypeKnown("int64"),
-				Indexed: true,
-			},
-			kldbind.ABIArgument{
-				Name:    "s",
-				Type:    kldbind.ABITypeKnown("string"),
-				Indexed: true,
-			},
-			kldbind.ABIArgument{
-				Name: "h",
-				Type: kldbind.ABITypeKnown("bytes32"),
-			},
-			kldbind.ABIArgument{
-				Name: "m",
-				Type: kldbind.ABITypeKnown("string"),
-			},
-		},
-	}
-	addr := kldbind.HexToAddress("0x167f57a13a9c35ff92f0649d2be0e52b4f8ac3ca")
-	s, err := newSubscription(m, rpc, &addr, testSubInfo(event))
-	assert.NoError(err)
-
-	// We expect three events to be sent to the webhook
-	// With the default batch size of 1, that means three separate requests
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		e1s := <-eventStream
-		assert.Equal(1, len(e1s))
-		assert.Equal("42", e1s[0].Data["i"])
-		assert.Equal("But what is the question?", e1s[0].Data["m"])
-		assert.Equal("150665", e1s[0].BlockNumber)
-		e2s := <-eventStream
-		assert.Equal(1, len(e2s))
-		assert.Equal("1977", e2s[0].Data["i"])
-		assert.Equal("A long time ago in a galaxy far, far away....", e2s[0].Data["m"])
-		assert.Equal("150676", e2s[0].BlockNumber)
-		e3s := <-eventStream
-		assert.Equal(1, len(e3s))
-		assert.Equal("20151021", e3s[0].Data["i"])
-		assert.Equal("1.21 Gigawatts!", e3s[0].Data["m"])
-		assert.Equal("150721", e3s[0].BlockNumber)
-		wg.Done()
-	}()
-
-	err = s.processNewEvents()
-	assert.NoError(err)
-	err = s.processNewEvents()
-	assert.NoError(err)
-	wg.Wait()
-
 }

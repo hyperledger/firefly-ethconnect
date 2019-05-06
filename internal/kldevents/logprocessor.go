@@ -17,7 +17,9 @@ package kldevents
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"strings"
+	"sync"
 
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 
@@ -40,18 +42,42 @@ type eventData struct {
 	TransactionIndex string                 `json:"transactionIndex"`
 	TransactionHash  string                 `json:"transactionHash"`
 	Data             map[string]interface{} `json:"data"`
+	SubID            string                 `json:"subId"`
+	// Used for callback handling
+	batchComplete func(*eventData)
 }
 
 type logProcessor struct {
-	event  *kldbind.ABIEvent
-	action *action
+	subID    string
+	event    *kldbind.ABIEvent
+	action   *action
+	blockHWM big.Int
+	hwnSync  sync.Mutex
 }
 
-func newLogProcessor(event *kldbind.ABIEvent, action *action) *logProcessor {
+func newLogProcessor(subID string, event *kldbind.ABIEvent, action *action) *logProcessor {
 	return &logProcessor{
+		subID:  subID,
 		event:  event,
 		action: action,
 	}
+}
+
+func (lp *logProcessor) batchComplete(newestEvent *eventData) {
+	lp.hwnSync.Lock()
+	i := new(big.Int)
+	i.SetString(newestEvent.BlockNumber, 10)
+	if i.Cmp(&lp.blockHWM) > 0 {
+		lp.blockHWM.Set(i)
+	}
+	lp.hwnSync.Unlock()
+}
+
+func (lp *logProcessor) getBlockHWM() big.Int {
+	lp.hwnSync.Lock()
+	v := lp.blockHWM
+	lp.hwnSync.Unlock()
+	return v
 }
 
 func (lp *logProcessor) processLogEntry(entry *logEntry) (err error) {
@@ -70,6 +96,8 @@ func (lp *logProcessor) processLogEntry(entry *logEntry) (err error) {
 		TransactionIndex: entry.TransactionIndex.String(),
 		TransactionHash:  entry.TransactionHash.String(),
 		Data:             make(map[string]interface{}),
+		SubID:            lp.subID,
+		batchComplete:    lp.batchComplete,
 	}
 	topicIdx := 0
 	if !lp.event.Anonymous {

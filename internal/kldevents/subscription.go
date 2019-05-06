@@ -70,6 +70,7 @@ type subscription struct {
 	logName      string
 	filterID     kldbind.HexBigInt
 	filteredOnce bool
+	filterStale  bool
 }
 
 func newSubscription(sm subscriptionManager, kv kvStore, rpc kldeth.RPCClient, addr *kldbind.Address, event *kldbind.ABIEvent, actionID string) (*subscription, error) {
@@ -86,7 +87,7 @@ func newSubscription(sm subscriptionManager, kv kvStore, rpc kldeth.RPCClient, a
 		info:    i,
 		kv:      kv,
 		rpc:     rpc,
-		lp:      newLogProcessor(&i.Event.E, action),
+		lp:      newLogProcessor(i.ID, &i.Event.E, action),
 		logName: i.ID + ":" + eventSummary(&i.Event.E),
 	}
 	f := &i.Filter
@@ -146,7 +147,7 @@ func restoreSubscription(sm subscriptionManager, kv kvStore, rpc kldeth.RPCClien
 		kv:      kv,
 		rpc:     rpc,
 		info:    &i,
-		lp:      newLogProcessor(&i.Event.E, action),
+		lp:      newLogProcessor(i.ID, &i.Event.E, action),
 		logName: i.ID + ":" + eventSummary(&i.Event.E),
 	}
 	if err := s.restartFilter(since); err != nil {
@@ -174,6 +175,11 @@ func (s *subscription) restartFilter(since *big.Int) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	err := s.rpc.CallContext(ctx, &s.filterID, "eth_newFilter", f)
+	if err != nil {
+		return err
+	}
+	s.filteredOnce = false
+	s.filterStale = false
 	log.Infof("%s: created filter from block %s: %s", s.logName, since.String(), s.filterID.String())
 	return err
 }
@@ -187,6 +193,9 @@ func (s *subscription) processNewEvents() error {
 		rpcMethod = "eth_getFilterChanges"
 	}
 	if err := s.rpc.CallContext(ctx, &logs, rpcMethod, s.filterID); err != nil {
+		if strings.Contains(err.Error(), "filter not found") {
+			s.filterStale = true
+		}
 		return err
 	}
 	log.Infof("%s: received %d events (%s)", s.logName, len(logs), rpcMethod)
@@ -197,4 +206,14 @@ func (s *subscription) processNewEvents() error {
 	}
 	s.filteredOnce = true
 	return nil
+}
+
+func (s *subscription) unsubscribe() error {
+	var retval string
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	s.filterStale = true
+	err := s.rpc.CallContext(ctx, &retval, "eth_uninstallFilter", s.filterID)
+	log.Infof("%s: Uninstalled filter (retval=%s)", s.logName, retval)
+	return err
 }

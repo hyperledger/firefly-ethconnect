@@ -50,7 +50,7 @@ func newTestAction() *action {
 		Webhook: &webhookAction{
 			URL: "http://hello.example.com/world",
 		},
-	}, 0)
+	})
 	return a
 }
 
@@ -147,12 +147,87 @@ func TestCreateSubscriptionPersistFailure(t *testing.T) {
 	assert.EqualError(err, "Failed to store subscription info: pop")
 }
 
+func TestCreateSubscriptionNewFilterRPCFailure(t *testing.T) {
+	assert := assert.New(t)
+	event := &kldbind.ABIEvent{Name: "party"}
+	rpc := kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil)
+	kv := newMockKV()
+	m := &mockSubMgr{action: newTestAction()}
+	_, err := newSubscription(m, kv, rpc, nil, event, "actionid")
+	assert.EqualError(err, "Failed to register filter: pop")
+}
+
 func TestCreateSubscriptionMissingAction(t *testing.T) {
 	assert := assert.New(t)
 	event := &kldbind.ABIEvent{Name: "party"}
 	m := &mockSubMgr{err: fmt.Errorf("nope")}
 	_, err := newSubscription(m, nil, nil, nil, event, "actionid")
 	assert.EqualError(err, "nope")
+}
+
+func TestRestoreSubscriptionMissingAction(t *testing.T) {
+	assert := assert.New(t)
+	m := &mockSubMgr{err: fmt.Errorf("nope")}
+	kv := newMockKV()
+	kv.Put("sub1", []byte("{}"))
+	_, err := restoreSubscription(m, kv, nil, "sub1", big.NewInt(0))
+	assert.EqualError(err, "nope")
+}
+
+func TestRestoreSubscriptionNewFilterRPCFailure(t *testing.T) {
+	assert := assert.New(t)
+	m := &mockSubMgr{}
+	kv := newMockKV()
+	kv.Put("sub1", []byte("{}"))
+	rpc := kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil)
+	_, err := restoreSubscription(m, kv, rpc, "sub1", big.NewInt(0))
+	assert.EqualError(err, "Failed to register filter: pop")
+}
+
+func TestProcessEventsStaleFilter(t *testing.T) {
+	assert := assert.New(t)
+	s := &subscription{
+		rpc: kldeth.NewMockRPCClientForSync(fmt.Errorf("filter not found"), nil),
+	}
+	err := s.processNewEvents()
+	assert.EqualError(err, "filter not found")
+	assert.True(s.filterStale)
+}
+
+func TestProcessEventsCannotProcess(t *testing.T) {
+	assert := assert.New(t)
+	s := &subscription{
+		rpc: kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}) {
+			les := res.(*[]*logEntry)
+			*les = append(*les, &logEntry{
+				Data: "0x no hex here sorry",
+			})
+		}),
+		lp: newLogProcessor("", &kldbind.ABIEvent{}, newTestAction()),
+	}
+	err := s.processNewEvents()
+	// We swallow the error in this case - as we simply couldn't read the event
+	assert.NoError(err)
+}
+
+func TestUnsubscribe(t *testing.T) {
+	assert := assert.New(t)
+	s := &subscription{
+		rpc: kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}) {
+			*(res.(*string)) = "true"
+		}),
+	}
+	err := s.unsubscribe()
+	assert.NoError(err)
+	assert.True(s.filterStale)
+}
+
+func TestUnsubscribeFail(t *testing.T) {
+	assert := assert.New(t)
+	s := &subscription{rpc: kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil)}
+	err := s.unsubscribe()
+	assert.EqualError(err, "pop")
+	assert.True(s.filterStale)
 }
 
 func TestProcessEventsEnd2End(t *testing.T) {
@@ -175,7 +250,7 @@ func TestProcessEventsEnd2End(t *testing.T) {
 		Webhook: &webhookAction{
 			URL: svr.URL,
 		},
-	}, 0)
+	})
 	m := &mockSubMgr{action: action}
 
 	testDataBytes, err := ioutil.ReadFile("../../test/simplevents_logs.json")

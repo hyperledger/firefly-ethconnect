@@ -50,3 +50,53 @@ func TestTopicToValue(t *testing.T) {
 	assert.Equal(true, v)
 
 }
+
+func TestProcessLogEntryNillAndTooFewFields(t *testing.T) {
+	assert := assert.New(t)
+
+	lp := &logProcessor{
+		event: &kldbind.ABIEvent{
+			Anonymous: true,
+			Inputs: []kldbind.ABIArgument{
+				kldbind.ABIArgument{
+					Name:    "one",
+					Indexed: true,
+				},
+				kldbind.ABIArgument{
+					Name:    "two",
+					Indexed: true,
+				},
+			},
+		},
+	}
+	err := lp.processLogEntry(&logEntry{
+		Topics: []*kldbind.Hash{nil},
+	})
+
+	assert.EqualError(err, "Ran out of topics for indexed fields at field 1 of e (one indexed , two indexed )")
+}
+
+func TestProcessLogBadRLPData(t *testing.T) {
+	assert := assert.New(t)
+
+	lp := &logProcessor{
+		event: &kldbind.ABIEvent{
+			Anonymous: true,
+			Inputs: []kldbind.ABIArgument{
+				kldbind.ABIArgument{
+					Name:    "one",
+					Indexed: false,
+				},
+				kldbind.ABIArgument{
+					Name:    "two",
+					Indexed: false,
+				},
+			},
+		},
+	}
+	err := lp.processLogEntry(&logEntry{
+		Data: "0x00",
+	})
+
+	assert.Regexp("Failed to parse RLP data from event", err.Error())
+}

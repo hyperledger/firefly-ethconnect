@@ -45,7 +45,7 @@ func (m *mockSubMgr) subscriptionByID(string) (*subscription, error) {
 }
 
 func newTestAction() *action {
-	a, _ := newAction("action1", true, &actionSpec{
+	a, _ := newAction(true, &ActionInfo{
 		Type: "WebHook",
 		Webhook: &webhookAction{
 			URL: "http://hello.example.com/world",
@@ -54,11 +54,14 @@ func newTestAction() *action {
 	return a
 }
 
+func testSubInfo(event *kldbind.ABIEvent) *SubscriptionInfo {
+	return &SubscriptionInfo{ID: "test", Action: "actionID", Event: kldbind.MarshalledABIEvent{E: *event}}
+}
+
 func TestCreateWebhookSub(t *testing.T) {
 	assert := assert.New(t)
 
 	rpc := kldeth.NewMockRPCClientForSync(nil, nil)
-	kv := newMockKV()
 	event := &kldbind.ABIEvent{
 		Name: "glastonbury",
 		Inputs: []kldbind.ABIArgument{
@@ -80,11 +83,12 @@ func TestCreateWebhookSub(t *testing.T) {
 		action: newTestAction(),
 	}
 
-	s, err := newSubscription(m, kv, rpc, nil, event, "actionID")
+	i := testSubInfo(event)
+	s, err := newSubscription(m, rpc, nil, i)
 	assert.NoError(err)
 	assert.NotEmpty(s.info.ID)
 
-	s1, err := restoreSubscription(m, kv, rpc, s.info.ID, &big.Int{})
+	s1, err := restoreSubscription(m, rpc, i, &big.Int{})
 	assert.NoError(err)
 
 	assert.Equal(s.info.ID, s1.info.ID)
@@ -96,7 +100,6 @@ func TestCreateWebhookSubWithAddr(t *testing.T) {
 	assert := assert.New(t)
 
 	rpc := kldeth.NewMockRPCClientForSync(nil, nil)
-	kv := newMockKV()
 	m := &mockSubMgr{action: newTestAction()}
 	event := &kldbind.ABIEvent{
 		Name:      "devcon",
@@ -104,56 +107,27 @@ func TestCreateWebhookSubWithAddr(t *testing.T) {
 	}
 
 	addr := kldbind.HexToAddress("0x0123456789abcDEF0123456789abCDef01234567")
-	s, err := newSubscription(m, kv, rpc, &addr, event, "actionid")
+	s, err := newSubscription(m, rpc, &addr, testSubInfo(event))
 	assert.NoError(err)
 	assert.NotEmpty(s.info.ID)
 	assert.Equal(event.Id(), s.info.Filter.Topics[0][0])
 	assert.Equal("0x0123456789abcDEF0123456789abCDef01234567:devcon()", s.info.Name)
 }
 
-func TestRestoreSubscriptionMissing(t *testing.T) {
-	assert := assert.New(t)
-	kv := newMockKV()
-	kv.err = fmt.Errorf("pop")
-	m := &mockSubMgr{action: newTestAction()}
-	_, err := restoreSubscription(m, kv, nil, "missing", &big.Int{})
-	assert.EqualError(err, "Failed to read subscription from key value store: pop")
-}
-
-func TestRestoreSubscriptionBad(t *testing.T) {
-	assert := assert.New(t)
-	kv := newMockKV()
-	m := &mockSubMgr{action: newTestAction()}
-	_, err := restoreSubscription(m, kv, nil, "bad data", &big.Int{})
-	assert.EqualError(err, "Failed to restore subscription from key value store: unexpected end of JSON input")
-}
-
 func TestCreateSubscriptionNoEvent(t *testing.T) {
 	assert := assert.New(t)
 	event := &kldbind.ABIEvent{}
 	m := &mockSubMgr{action: newTestAction()}
-	_, err := newSubscription(m, nil, nil, nil, event, "actionid")
+	_, err := newSubscription(m, nil, nil, testSubInfo(event))
 	assert.EqualError(err, "Solidity event name must be specified")
-}
-
-func TestCreateSubscriptionPersistFailure(t *testing.T) {
-	assert := assert.New(t)
-	event := &kldbind.ABIEvent{Name: "party"}
-	rpc := kldeth.NewMockRPCClientForSync(nil, nil)
-	kv := newMockKV()
-	kv.err = fmt.Errorf("pop")
-	m := &mockSubMgr{action: newTestAction()}
-	_, err := newSubscription(m, kv, rpc, nil, event, "actionid")
-	assert.EqualError(err, "Failed to store subscription info: pop")
 }
 
 func TestCreateSubscriptionNewFilterRPCFailure(t *testing.T) {
 	assert := assert.New(t)
 	event := &kldbind.ABIEvent{Name: "party"}
 	rpc := kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil)
-	kv := newMockKV()
 	m := &mockSubMgr{action: newTestAction()}
-	_, err := newSubscription(m, kv, rpc, nil, event, "actionid")
+	_, err := newSubscription(m, rpc, nil, testSubInfo(event))
 	assert.EqualError(err, "Failed to register filter: pop")
 }
 
@@ -161,26 +135,22 @@ func TestCreateSubscriptionMissingAction(t *testing.T) {
 	assert := assert.New(t)
 	event := &kldbind.ABIEvent{Name: "party"}
 	m := &mockSubMgr{err: fmt.Errorf("nope")}
-	_, err := newSubscription(m, nil, nil, nil, event, "actionid")
+	_, err := newSubscription(m, nil, nil, testSubInfo(event))
 	assert.EqualError(err, "nope")
 }
 
 func TestRestoreSubscriptionMissingAction(t *testing.T) {
 	assert := assert.New(t)
 	m := &mockSubMgr{err: fmt.Errorf("nope")}
-	kv := newMockKV()
-	kv.Put("sub1", []byte("{}"))
-	_, err := restoreSubscription(m, kv, nil, "sub1", big.NewInt(0))
+	_, err := restoreSubscription(m, nil, testSubInfo(&kldbind.ABIEvent{}), big.NewInt(0))
 	assert.EqualError(err, "nope")
 }
 
 func TestRestoreSubscriptionNewFilterRPCFailure(t *testing.T) {
 	assert := assert.New(t)
 	m := &mockSubMgr{}
-	kv := newMockKV()
-	kv.Put("sub1", []byte("{}"))
 	rpc := kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil)
-	_, err := restoreSubscription(m, kv, rpc, "sub1", big.NewInt(0))
+	_, err := restoreSubscription(m, rpc, testSubInfo(&kldbind.ABIEvent{}), big.NewInt(0))
 	assert.EqualError(err, "Failed to register filter: pop")
 }
 
@@ -245,7 +215,7 @@ func TestProcessEventsEnd2End(t *testing.T) {
 	})
 	svr := httptest.NewServer(mux)
 	defer svr.Close()
-	action, _ := newAction("action1", true, &actionSpec{
+	action, _ := newAction(true, &ActionInfo{
 		Type: "WebHook",
 		Webhook: &webhookAction{
 			URL: svr.URL,
@@ -301,9 +271,8 @@ func TestProcessEventsEnd2End(t *testing.T) {
 			},
 		},
 	}
-	kv := newMockKV()
 	addr := kldbind.HexToAddress("0x167f57a13a9c35ff92f0649d2be0e52b4f8ac3ca")
-	s, err := newSubscription(m, kv, rpc, &addr, event, "actionid")
+	s, err := newSubscription(m, rpc, &addr, testSubInfo(event))
 	assert.NoError(err)
 
 	// We expect three events to be sent to the webhook

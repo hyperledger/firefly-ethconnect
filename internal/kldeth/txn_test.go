@@ -982,7 +982,7 @@ func TestProcessRLPBytesValidTypes(t *testing.T) {
 	)
 	assert.NoError(err)
 
-	res, err := processRLPBytes(methodABI.Outputs, rlp)
+	res, err := ProcessRLPBytes(methodABI.Outputs, rlp)
 	assert.NoError(err)
 	assert.Nil(res["error"])
 
@@ -1069,7 +1069,7 @@ func TestProcessRLPBytesUnpackFailure(t *testing.T) {
 		},
 	}
 
-	_, err := processRLPBytes(methodABI.Outputs, []byte("this is not the RLP you are looking for"))
+	_, err := ProcessRLPBytes(methodABI.Outputs, []byte("this is not the RLP you are looking for"))
 	assert.Regexp("cannot marshal", err.Error())
 }
 
@@ -1086,7 +1086,7 @@ func TestProcessOutputsTooFew(t *testing.T) {
 	}
 
 	err := processOutputs(methodABI.Outputs, []interface{}{}, make(map[string]interface{}))
-	assert.EqualError(err, "Expected 0 in JSON/RPC response. Received 1: []")
+	assert.EqualError(err, "Expected 1 in JSON/RPC response. Received 0: []")
 }
 
 func TestProcessOutputsTooMany(t *testing.T) {

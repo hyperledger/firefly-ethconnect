@@ -39,10 +39,10 @@ const (
 	ErrorHandlingSkip = "skip"
 	// MaxBatchSize is the maximum that a user can specific for their batch size
 	MaxBatchSize = 1000
-	// ExponentialBackoffInitial is the initial delay for backoff retry
-	ExponentialBackoffInitial = time.Duration(1) * time.Second
-	// ExponentialBackoffFactor is the factor we use between retries
-	ExponentialBackoffFactor = float64(2.0)
+	// DefaultExponentialBackoffInitial  is the initial delay for backoff retry
+	DefaultExponentialBackoffInitial = time.Duration(1) * time.Second
+	// DefaultExponentialBackoffFactor is the factor we use between retries
+	DefaultExponentialBackoffFactor = float64(2.0)
 )
 
 // actionSpec configures the action to perform for each event
@@ -64,26 +64,38 @@ type webhookAction struct {
 }
 
 type action struct {
-	id              string
-	allowPrivateIPs bool
-	spec            *actionSpec
-	eventStream     chan *eventData
-	stopped         bool
-	inFlight        uint64
-	blockHWM        uint64
-	batchCond       *sync.Cond
-	batchQueue      *list.List
-	batchCount      uint64
+	id                string
+	allowPrivateIPs   bool
+	spec              *actionSpec
+	eventStream       chan *eventData
+	stopped           bool
+	dispatcherDone    bool
+	processorDone     bool
+	inFlight          uint64
+	batchCond         *sync.Cond
+	batchQueue        *list.List
+	batchCount        uint64
+	initialRetryDelay time.Duration
+	backoffFactor     float64
 }
 
 // newAction constructor verfies the action is correct, kicks
 // off the event batch processor, and blockHWM will be
 // initialied to that supplied (zero on initial, or the
 // value from the checkpoint)
-func newAction(id string, allowPrivateIPs bool, spec *actionSpec, blockHWM uint64) (a *action, err error) {
+func newAction(id string, allowPrivateIPs bool, spec *actionSpec) (a *action, err error) {
 
 	if spec == nil {
 		return nil, fmt.Errorf("No action specified")
+	}
+
+	if spec.BatchSize == 0 {
+		spec.BatchSize = 1
+	} else if spec.BatchSize > MaxBatchSize {
+		spec.BatchSize = MaxBatchSize
+	}
+	if spec.BlockedRetryDelaySec == 0 {
+		spec.BlockedRetryDelaySec = 30
 	}
 
 	spec.Type = strings.ToLower(spec.Type)
@@ -108,21 +120,15 @@ func newAction(id string, allowPrivateIPs bool, spec *actionSpec, blockHWM uint6
 		spec.ErrorHandling = ErrorHandlingSkip
 	}
 
-	if spec.BatchSize == 0 {
-		spec.BatchSize = 1
-	} else if spec.BatchSize > MaxBatchSize {
-		spec.BatchSize = MaxBatchSize
-	}
-	if spec.BlockedRetryDelaySec == 0 {
-		spec.BlockedRetryDelaySec = 30
-	}
 	a = &action{
-		id:          id,
-		spec:        spec,
-		blockHWM:    blockHWM,
-		eventStream: make(chan *eventData),
-		batchCond:   sync.NewCond(&sync.Mutex{}),
-		batchQueue:  list.New(),
+		id:                id,
+		spec:              spec,
+		allowPrivateIPs:   allowPrivateIPs,
+		eventStream:       make(chan *eventData),
+		batchCond:         sync.NewCond(&sync.Mutex{}),
+		batchQueue:        list.New(),
+		initialRetryDelay: DefaultExponentialBackoffInitial,
+		backoffFactor:     DefaultExponentialBackoffFactor,
 	}
 	go a.batchProcessor()
 	go a.batchDispatcher()
@@ -149,17 +155,6 @@ func (a *action) IsBlocked() bool {
 	return v
 }
 
-// blockHWM returns the current high water mark of blocks we have dispatched
-// successfully or skipped up to. This is what gets stored in the checkpoint
-// for recovery to minimize the number of redeliveries for our at-least-once
-// event delivery semantics
-func (a *action) BlockHWM() uint64 {
-	a.batchCond.L.Lock()
-	v := a.blockHWM
-	a.batchCond.L.Unlock()
-	return v
-}
-
 // HandleEvent is the entry point for the action from the event detection logic
 func (a *action) HandleEvent(event *eventData) {
 	// Does nothing more than add it to the batch, to be picked up
@@ -175,6 +170,7 @@ func (a *action) batchDispatcher() {
 	var currentBatch []*eventData
 	var batchStart time.Time
 	batchTimeout := time.Duration(a.spec.BatchTimeoutMS) * time.Millisecond
+	defer func() { a.dispatcherDone = true }()
 	for {
 		// Wait for the next event - if we're in the middle of a batch, we
 		// need to cope with a timeout
@@ -227,20 +223,21 @@ func (a *action) batchDispatcher() {
 // We use a sync.Cond rather than a channel to communicate with this goroutine, as
 // it might be blocked for very large periods of time
 func (a *action) batchProcessor() {
+	defer func() { a.processorDone = true }()
 	for {
 		// Wait for the next batch, or to be stopped
 		a.batchCond.L.Lock()
 		for !a.stopped && a.batchQueue.Len() == 0 {
 			a.batchCond.Wait()
 		}
+		if a.stopped {
+			return
+		}
 		batchElem := a.batchQueue.Front()
 		a.batchCount++
 		batchNumber := a.batchCount
 		a.batchQueue.Remove(batchElem)
 		a.batchCond.L.Unlock()
-		if a.stopped {
-			return
-		}
 		// Process the batch - could block for a very long time, particularly if
 		// ErrorHandlingBlock is configured.
 		a.processBatch(batchNumber, batchElem.Value.([]*eventData))
@@ -269,6 +266,19 @@ func (a *action) processBatch(batchNumber uint64, events []*eventData) {
 			processed = (a.spec.ErrorHandling == ErrorHandlingSkip)
 		}
 	}
+	// Call all the callbacks on the events, so they can update their high water marks
+	// If there are multiple events from one SubID, we call it only once with the
+	// last message in the batch
+	cbs := make(map[string]*eventData)
+	for _, event := range events {
+		cbs[event.SubID] = event
+	}
+	for _, event := range cbs {
+		event.batchComplete(event)
+	}
+	a.batchCond.L.Lock()
+	a.inFlight -= uint64(len(events))
+	a.batchCond.L.Unlock()
 }
 
 // performActionWithRetry performs an action, with exponential backoff retry up
@@ -276,34 +286,35 @@ func (a *action) processBatch(batchNumber uint64, events []*eventData) {
 func (a *action) performActionWithRetry(batchNumber uint64, events []*eventData) (err error) {
 	startTime := time.Now()
 	endTime := startTime.Add(time.Duration(a.spec.RetryTimeoutSec) * time.Second)
-	delay := ExponentialBackoffInitial
+	delay := a.initialRetryDelay
 	var attempt uint64
 	complete := false
 	for !a.stopped && !complete {
 		if attempt > 0 {
 			log.Infof("%s: Watiting %.2fs before re-attempting batch %d", a.id, delay.Seconds(), batchNumber)
 			time.Sleep(delay)
-			delay = time.Duration(float64(delay) * ExponentialBackoffFactor)
+			delay = time.Duration(float64(delay) * a.backoffFactor)
 		}
 		attempt++
 		switch a.spec.Type {
 		case "webhook":
 			err = a.attemptWebhookAction(batchNumber, attempt, events)
 		}
-		complete = err == nil || endTime.Sub(time.Now()) > 0
+		complete = err == nil || endTime.Sub(time.Now()) < 0
 	}
 	return err
 }
 
 // isAddressSafe checks for local IPs
-func (a *action) isAddressSafe(ip *net.IPAddr) bool {
+func (a *action) isAddressUnsafe(ip *net.IPAddr) bool {
+	ip4 := ip.IP.To4()
 	return !a.allowPrivateIPs &&
-		(ip.IP[0] == 0 ||
-			ip.IP[0] >= 224 ||
-			ip.IP[0] == 127 ||
-			ip.IP[0] == 10 ||
-			(ip.IP[0] == 172 && ip.IP[1] >= 16 && ip.IP[1] < 32) ||
-			(ip.IP[0] == 192 && ip.IP[1] == 168))
+		(ip4[0] == 0 ||
+			ip4[0] >= 224 ||
+			ip4[0] == 127 ||
+			ip4[0] == 10 ||
+			(ip4[0] == 172 && ip4[1] >= 16 && ip4[1] < 32) ||
+			(ip4[0] == 192 && ip4[1] == 168))
 }
 
 // attemptWebhookAction performs a single attempt of a webhook action
@@ -316,8 +327,10 @@ func (a *action) attemptWebhookAction(batchNumber, attempt uint64, events []*eve
 	if err != nil {
 		return err
 	}
-	if !a.isAddressSafe(addr) {
-		return fmt.Errorf("Cannot send Webhook POST to address: %s", u.Hostname())
+	if a.isAddressUnsafe(addr) {
+		err := fmt.Errorf("Cannot send Webhook POST to address: %s", u.Hostname())
+		log.Errorf(err.Error())
+		return err
 	}
 	u.Host = addr.String() + ":" + port
 	// Set the timeout
@@ -346,7 +359,7 @@ func (a *action) attemptWebhookAction(batchNumber, attempt uint64, events []*eve
 		var res *http.Response
 		res, err = netClient.Post(u.String(), "application/json", bytes.NewReader(reqBytes))
 		if err == nil {
-			ok := (res.StatusCode >= 200 || res.StatusCode < 300)
+			ok := (res.StatusCode >= 200 && res.StatusCode < 300)
 			log.Infof("POST <-- %s [%d] ok=%t", u.String(), res.StatusCode, ok)
 			if !ok || log.IsLevelEnabled(log.DebugLevel) {
 				bodyBytes, _ := ioutil.ReadAll(res.Body)

@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -28,8 +29,10 @@ import (
 )
 
 const (
-	subIDPrefix    = "/subs/"
-	streamIDPrefix = "/streams/"
+	subPathPrefix    = "/subscriptions/"
+	streamPathPrefix = "/eventstreams/"
+	subIDPrefix      = "s-"
+	streamIDPrefix   = "e-"
 )
 
 // SubscriptionManager provides REST APIs for managing events
@@ -107,10 +110,12 @@ func (s *subscriptionMGR) Subscriptions() []*SubscriptionInfo {
 // AddSubscription adds a new subscription
 func (s *subscriptionMGR) AddSubscription(addr *kldbind.Address, event *kldbind.ABIEvent, streamID string) (*SubscriptionInfo, error) {
 	i := &SubscriptionInfo{
-		ID:     subIDPrefix + kldutils.UUIDv4(),
-		Event:  kldbind.MarshalledABIEvent{E: *event},
-		Stream: streamID,
+		ID:             subIDPrefix + kldutils.UUIDv4(),
+		CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
+		Event:          kldbind.MarshalledABIEvent{E: *event},
+		Stream:         streamID,
 	}
+	i.Path = subPathPrefix + i.ID
 	// Create it
 	sub, err := newSubscription(s, s.rpc, addr, i)
 	if err != nil {
@@ -164,6 +169,8 @@ func (s *subscriptionMGR) Streams() []*StreamInfo {
 // AddStream adds a new stream
 func (s *subscriptionMGR) AddStream(spec *StreamInfo) (*StreamInfo, error) {
 	spec.ID = streamIDPrefix + kldutils.UUIDv4()
+	spec.CreatedISO8601 = time.Now().UTC().Format(time.RFC3339)
+	spec.Path = streamPathPrefix + spec.ID
 	stream, err := newEventStream(s.conf.AllowPrivateIPs, spec)
 	if err != nil {
 		return nil, err

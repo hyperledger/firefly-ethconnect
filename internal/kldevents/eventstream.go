@@ -50,6 +50,8 @@ const (
 // StreamInfo configures the stream to perform an action for each event
 type StreamInfo struct {
 	ID                   string         `json:"id"`
+	Path                 string         `json:"path"`
+	CreatedISO8601       string         `json:"created"`
 	Suspended            bool           `json:"suspended"`
 	Type                 string         `json:"type,omitempty"`
 	BatchSize            uint64         `json:"batchSize,omitempty"`

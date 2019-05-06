@@ -17,6 +17,7 @@ package kldevents
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -26,13 +27,15 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 const (
-	subPathPrefix    = "/subscriptions/"
-	streamPathPrefix = "/eventstreams/"
-	subIDPrefix      = "s-"
-	streamIDPrefix   = "e-"
+	subPathPrefix      = "/subscriptions/"
+	streamPathPrefix   = "/eventstreams/"
+	subIDPrefix        = "sb-"
+	streamIDPrefix     = "es-"
+	checkpointIDPrefix = "cp-"
 )
 
 // SubscriptionManager provides REST APIs for managing events
@@ -52,14 +55,19 @@ type SubscriptionManager interface {
 }
 
 type subscriptionManager interface {
+	config() *SubscriptionManagerConf
 	streamByID(string) (*eventStream, error)
 	subscriptionByID(string) (*subscription, error)
+	subscriptionsForStream(string) []*subscription
+	loadCheckpoint(string) (map[string]*big.Int, error)
+	storeCheckpoint(string, map[string]*big.Int) error
 }
 
 // SubscriptionManagerConf configuration
 type SubscriptionManagerConf struct {
-	LevelDBPath     string `json:"db"`
-	AllowPrivateIPs bool   `json:"allowPrivateIPs,omitempty"`
+	LevelDBPath       string `json:"db"`
+	AllowPrivateIPs   bool   `json:"allowPrivateIPs,omitempty"`
+	PollingIntervalMS uint64 `json:"pollingIntervalMS,omitempty"`
 }
 
 type subscriptionMGR struct {
@@ -75,6 +83,7 @@ type subscriptionMGR struct {
 func CobraInitSubscriptionManager(cmd *cobra.Command, conf *SubscriptionManagerConf) {
 	cmd.Flags().StringVarP(&conf.LevelDBPath, "events-db", "E", "", "Level DB location for subscription management")
 	cmd.Flags().BoolVarP(&conf.AllowPrivateIPs, "events-privips", "I", false, "Allow private IPs in Webhooks")
+	cmd.Flags().Uint64VarP(&conf.PollingIntervalMS, "events-polling-int", "P", 10, "Event polling interval (ms)")
 }
 
 // NewSubscriptionManager construtor
@@ -125,6 +134,10 @@ func (s *subscriptionMGR) AddSubscription(addr *kldbind.Address, event *kldbind.
 	return s.storeSubscription(sub.info)
 }
 
+func (s *subscriptionMGR) config() *SubscriptionManagerConf {
+	return s.conf
+}
+
 // DeleteSubscription deletes a streamm
 func (s *subscriptionMGR) DeleteSubscription(id string) error {
 	sub, err := s.subscriptionByID(id)
@@ -171,7 +184,7 @@ func (s *subscriptionMGR) AddStream(spec *StreamInfo) (*StreamInfo, error) {
 	spec.ID = streamIDPrefix + kldutils.UUIDv4()
 	spec.CreatedISO8601 = time.Now().UTC().Format(time.RFC3339)
 	spec.Path = streamPathPrefix + spec.ID
-	stream, err := newEventStream(s.conf.AllowPrivateIPs, spec)
+	stream, err := newEventStream(s, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +220,18 @@ func (s *subscriptionMGR) DeleteStream(id string) error {
 	if err = s.db.Delete(stream.spec.ID); err != nil {
 		return err
 	}
+	s.deleteCheckpoint(stream.spec.ID)
 	return nil
+}
+
+func (s *subscriptionMGR) subscriptionsForStream(id string) []*subscription {
+	subIDs := make([]*subscription, 0)
+	for _, sub := range s.subscriptions {
+		if sub.info.Stream == id {
+			subIDs = append(subIDs, sub)
+		}
+	}
+	return subIDs
 }
 
 // SuspendStream suspends a streamm from firing
@@ -252,6 +276,33 @@ func (s *subscriptionMGR) streamByID(id string) (*eventStream, error) {
 		return nil, fmt.Errorf("Stream with ID '%s' not found", id)
 	}
 	return stream, nil
+}
+
+func (s *subscriptionMGR) loadCheckpoint(streamID string) (map[string]*big.Int, error) {
+	cpID := checkpointIDPrefix + streamID
+	b, err := s.db.Get(cpID)
+	if err == leveldb.ErrNotFound {
+		return make(map[string]*big.Int), nil
+	} else if err != nil {
+		return nil, err
+	}
+	var checkpoint map[string]*big.Int
+	err = json.Unmarshal(b, &checkpoint)
+	if err != nil {
+		return nil, err
+	}
+	return checkpoint, nil
+}
+
+func (s *subscriptionMGR) storeCheckpoint(streamID string, checkpoint map[string]*big.Int) error {
+	cpID := checkpointIDPrefix + streamID
+	b, _ := json.Marshal(&checkpoint)
+	return s.db.Put(cpID, b)
+}
+
+func (s *subscriptionMGR) deleteCheckpoint(streamID string) {
+	cpID := checkpointIDPrefix + streamID
+	s.db.Delete(cpID)
 }
 
 func (s *subscriptionMGR) Init() (err error) {

@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 type mockKV struct {
@@ -28,6 +29,9 @@ type mockKV struct {
 
 func (m *mockKV) Put(key string, val []byte) error {
 	m.kvs[key] = val
+	if val == nil {
+		return leveldb.ErrNotFound
+	}
 	return m.err
 }
 func (m *mockKV) Get(key string) ([]byte, error) {

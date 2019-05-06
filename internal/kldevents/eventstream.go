@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math/big"
 	"net"
 	"net/http"
 	"net/url"
@@ -39,8 +40,6 @@ const (
 	ErrorHandlingSkip = "skip"
 	// MaxBatchSize is the maximum that a user can specific for their batch size
 	MaxBatchSize = 1000
-	// DefaultPollingInterval is the default polling interval against the ethereum node
-	DefaultPollingInterval = time.Duration(10) * time.Second
 	// DefaultExponentialBackoffInitial  is the initial delay for backoff retry
 	DefaultExponentialBackoffInitial = time.Duration(1) * time.Second
 	// DefaultExponentialBackoffFactor is the factor we use between retries
@@ -70,6 +69,7 @@ type webhookAction struct {
 }
 
 type eventStream struct {
+	sm                subscriptionManager
 	allowPrivateIPs   bool
 	spec              *StreamInfo
 	eventStream       chan *eventData
@@ -90,7 +90,7 @@ type eventStream struct {
 // off the event batch processor, and blockHWM will be
 // initialied to that supplied (zero on initial, or the
 // value from the checkpoint)
-func newEventStream(allowPrivateIPs bool, spec *StreamInfo) (a *eventStream, err error) {
+func newEventStream(sm subscriptionManager, spec *StreamInfo) (a *eventStream, err error) {
 
 	if spec == nil {
 		return nil, fmt.Errorf("No action specified")
@@ -128,14 +128,15 @@ func newEventStream(allowPrivateIPs bool, spec *StreamInfo) (a *eventStream, err
 	}
 
 	a = &eventStream{
+		sm:                sm,
 		spec:              spec,
-		allowPrivateIPs:   allowPrivateIPs,
+		allowPrivateIPs:   sm.config().AllowPrivateIPs,
 		eventStream:       make(chan *eventData),
 		batchCond:         sync.NewCond(&sync.Mutex{}),
 		batchQueue:        list.New(),
 		initialRetryDelay: DefaultExponentialBackoffInitial,
 		backoffFactor:     DefaultExponentialBackoffFactor,
-		pollingInterval:   DefaultPollingInterval,
+		pollingInterval:   time.Duration(sm.config().PollingIntervalMS) * time.Millisecond,
 	}
 	go a.eventPoller()
 	go a.batchProcessor()
@@ -171,7 +172,7 @@ func (a *eventStream) suspend() {
 func (a *eventStream) resume() error {
 	a.batchCond.L.Lock()
 	defer a.batchCond.L.Unlock()
-	if !a.processorDone {
+	if !a.processorDone || !a.pollerDone {
 		return fmt.Errorf("Event processor is already active. Suspending:%t", a.spec.Suspended)
 	}
 	a.spec.Suspended = false
@@ -197,7 +198,51 @@ func (a *eventStream) isBlocked() bool {
 // new events on the subscriptions that are registered for this stream
 func (a *eventStream) eventPoller() {
 	defer func() { a.pollerDone = true }()
-	for {
+	var checkpoint map[string]*big.Int
+	for !a.suspendOrStop() {
+		var err error
+		// Load the checkpoint (should only be first time round)
+		if checkpoint == nil {
+			if checkpoint, err = a.sm.loadCheckpoint(a.spec.ID); err != nil {
+				log.Errorf("%s: Failed to load checkpoint: %s", a.spec.ID, err)
+			}
+		}
+		// If we're not blocked, then grab some more events
+		subs := a.sm.subscriptionsForStream(a.spec.ID)
+		if err == nil && !a.isBlocked() {
+			for _, sub := range subs {
+				if sub.filterStale {
+					if i, exists := checkpoint[sub.info.ID]; exists {
+						err = sub.restartFilter(i)
+					} else {
+						err = sub.initialFilter()
+					}
+				}
+				if err == nil {
+					err = sub.processNewEvents()
+				}
+				if err != nil {
+					log.Errorf("%s: subscription error: %s", a.spec.ID, err)
+					err = nil
+				}
+			}
+		}
+		// Record a new checkpoint if needed
+		if err != nil {
+			changed := false
+			for _, sub := range subs {
+				i1, _ := checkpoint[sub.info.ID]
+				i2 := sub.blockHWM()
+
+				changed = changed || i1 == nil || i1.Cmp(&i2) != 0
+				checkpoint[sub.info.ID] = &i2
+			}
+			if changed {
+				if err = a.sm.storeCheckpoint(a.spec.ID, checkpoint); err != nil {
+					log.Errorf("%s: Failed to store checkpoint: %s", a.spec.ID, err)
+				}
+			}
+		}
 		time.Sleep(a.pollingInterval)
 	}
 }

@@ -63,6 +63,9 @@ func newTestSubscriptionManager(dir string) *subscriptionMGR {
 	rconf := &kldeth.RPCConnOpts{URL: ""}
 	sm := NewSubscriptionManager(smconf, rconf).(*subscriptionMGR)
 	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
+	sm.db = newMockKV(nil)
+	sm.config().PollingIntervalMS = 10
+	sm.config().AllowPrivateIPs = true
 	return sm
 }
 

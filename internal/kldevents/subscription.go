@@ -48,11 +48,13 @@ type ethFilterRestart struct {
 
 // SubscriptionInfo is the persisted data for the subscription
 type SubscriptionInfo struct {
-	ID     string                     `json:"id,omitempty"`
-	Name   string                     `json:"name"`
-	Stream string                     `json:"stream"`
-	Filter persistedFilter            `json:"filter"`
-	Event  kldbind.MarshalledABIEvent `json:"event"`
+	ID             string                     `json:"id,omitempty"`
+	Path           string                     `json:"path"`
+	CreatedISO8601 string                     `json:"created"`
+	Name           string                     `json:"name"`
+	Stream         string                     `json:"stream"`
+	Filter         persistedFilter            `json:"filter"`
+	Event          kldbind.MarshalledABIEvent `json:"event"`
 }
 
 // subscription is the runtime that manages the subscription

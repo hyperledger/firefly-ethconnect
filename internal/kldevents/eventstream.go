@@ -35,18 +35,20 @@ import (
 const (
 	// ErrorHandlingBlock blocks the event stream until the handler can accept the event
 	ErrorHandlingBlock = "block"
-	// ErrorHandlingSkip processes up to the retry behavior on the action, then skips to the next event
+	// ErrorHandlingSkip processes up to the retry behavior on the stream, then skips to the next event
 	ErrorHandlingSkip = "skip"
 	// MaxBatchSize is the maximum that a user can specific for their batch size
 	MaxBatchSize = 1000
+	// DefaultPollingInterval is the default polling interval against the ethereum node
+	DefaultPollingInterval = time.Duration(10) * time.Second
 	// DefaultExponentialBackoffInitial  is the initial delay for backoff retry
 	DefaultExponentialBackoffInitial = time.Duration(1) * time.Second
 	// DefaultExponentialBackoffFactor is the factor we use between retries
 	DefaultExponentialBackoffFactor = float64(2.0)
 )
 
-// ActionInfo configures the action to perform for each event
-type ActionInfo struct {
+// StreamInfo configures the stream to perform an action for each event
+type StreamInfo struct {
 	ID                   string         `json:"id"`
 	Suspended            bool           `json:"suspended"`
 	Type                 string         `json:"type,omitempty"`
@@ -65,13 +67,15 @@ type webhookAction struct {
 	RequestTimeoutSec uint32            `json:"requestTimeoutSec,omitempty"`
 }
 
-type action struct {
+type eventStream struct {
 	allowPrivateIPs   bool
-	spec              *ActionInfo
+	spec              *StreamInfo
 	eventStream       chan *eventData
 	stopped           bool
 	dispatcherDone    bool
 	processorDone     bool
+	pollingInterval   time.Duration
+	pollerDone        bool
 	inFlight          uint64
 	batchCond         *sync.Cond
 	batchQueue        *list.List
@@ -80,11 +84,11 @@ type action struct {
 	backoffFactor     float64
 }
 
-// newAction constructor verfies the action is correct, kicks
+// newEventStream constructor verfies the action is correct, kicks
 // off the event batch processor, and blockHWM will be
 // initialied to that supplied (zero on initial, or the
 // value from the checkpoint)
-func newAction(allowPrivateIPs bool, spec *ActionInfo) (a *action, err error) {
+func newEventStream(allowPrivateIPs bool, spec *StreamInfo) (a *eventStream, err error) {
 
 	if spec == nil {
 		return nil, fmt.Errorf("No action specified")
@@ -121,7 +125,7 @@ func newAction(allowPrivateIPs bool, spec *ActionInfo) (a *action, err error) {
 		spec.ErrorHandling = ErrorHandlingSkip
 	}
 
-	a = &action{
+	a = &eventStream{
 		spec:              spec,
 		allowPrivateIPs:   allowPrivateIPs,
 		eventStream:       make(chan *eventData),
@@ -129,14 +133,23 @@ func newAction(allowPrivateIPs bool, spec *ActionInfo) (a *action, err error) {
 		batchQueue:        list.New(),
 		initialRetryDelay: DefaultExponentialBackoffInitial,
 		backoffFactor:     DefaultExponentialBackoffFactor,
+		pollingInterval:   DefaultPollingInterval,
 	}
+	go a.eventPoller()
 	go a.batchProcessor()
 	go a.batchDispatcher()
 	return a, nil
 }
 
+// HandleEvent is the entry point for the stream from the event detection logic
+func (a *eventStream) handleEvent(event *eventData) {
+	// Does nothing more than add it to the batch, to be picked up
+	// by the batchDispatcher
+	a.eventStream <- event
+}
+
 // stop is a lazy stop, that marks a flag for the batch goroutine to pick up
-func (a *action) stop() {
+func (a *eventStream) stop() {
 	a.batchCond.L.Lock()
 	a.stopped = true
 	a.eventStream <- nil
@@ -145,7 +158,7 @@ func (a *action) stop() {
 }
 
 // suspend only stops the dispatcher, pushing back as if we're in blockding mode
-func (a *action) suspend() {
+func (a *eventStream) suspend() {
 	a.batchCond.L.Lock()
 	a.spec.Suspended = true
 	a.batchCond.Broadcast()
@@ -153,41 +166,45 @@ func (a *action) suspend() {
 }
 
 // resume resumes the dispatcher
-func (a *action) resume() error {
+func (a *eventStream) resume() error {
 	a.batchCond.L.Lock()
 	defer a.batchCond.L.Unlock()
 	if !a.processorDone {
 		return fmt.Errorf("Event processor is already active. Suspending:%t", a.spec.Suspended)
 	}
 	a.spec.Suspended = false
+	a.processorDone = false
+	a.pollerDone = false
 	go a.batchProcessor()
 	a.batchCond.Broadcast()
 	return nil
 }
 
-// isBlocked protect us from poling for more events when the action is blocked.
+// isBlocked protect us from poling for more events when the stream is blocked.
 // Can happen regardless of whether the error handling is
 // block or skip. It's just with skip we eventually move onto new messages
 // after the retries etc. are complete
-func (a *action) IsBlocked() bool {
+func (a *eventStream) isBlocked() bool {
 	a.batchCond.L.Lock()
 	v := a.inFlight >= a.spec.BatchSize
 	a.batchCond.L.Unlock()
 	return v
 }
 
-// HandleEvent is the entry point for the action from the event detection logic
-func (a *action) HandleEvent(event *eventData) {
-	// Does nothing more than add it to the batch, to be picked up
-	// by the batchDispatcher
-	a.eventStream <- event
+// eventPoller checks every few seconds against the ethereum node for any
+// new events on the subscriptions that are registered for this stream
+func (a *eventStream) eventPoller() {
+	defer func() { a.pollerDone = true }()
+	for {
+		time.Sleep(a.pollingInterval)
+	}
 }
 
 // batchDispatcher is the goroutine that is alsway available to read new
 // events and form them into batches. Because we can't be sure how many
 // events we'll be dispatched from blocks before the IsBlocked() feedback
 // loop protects us, this logic has to build a list of batches
-func (a *action) batchDispatcher() {
+func (a *eventStream) batchDispatcher() {
 	var currentBatch []*eventData
 	var batchStart time.Time
 	batchTimeout := time.Duration(a.spec.BatchTimeoutMS) * time.Millisecond
@@ -239,7 +256,7 @@ func (a *action) batchDispatcher() {
 	}
 }
 
-func (a *action) suspendOrStop() bool {
+func (a *eventStream) suspendOrStop() bool {
 	return a.spec.Suspended || a.stopped
 }
 
@@ -247,8 +264,7 @@ func (a *action) suspendOrStop() bool {
 // actions required to perform the action itself.
 // We use a sync.Cond rather than a channel to communicate with this goroutine, as
 // it might be blocked for very large periods of time
-func (a *action) batchProcessor() {
-	a.processorDone = false
+func (a *eventStream) batchProcessor() {
 	defer func() { a.processorDone = true }()
 	for {
 		// Wait for the next batch, or to be stopped
@@ -274,7 +290,7 @@ func (a *action) batchProcessor() {
 // processBatch is the blocking function to process a batch of events
 // It never returns an error, and uses the chosen block/skip ErrorHandling
 // behaviour combined with the parameters on the event itself
-func (a *action) processBatch(batchNumber uint64, events []*eventData) {
+func (a *eventStream) processBatch(batchNumber uint64, events []*eventData) {
 	processed := false
 	attempt := 0
 	for !a.suspendOrStop() && !processed {
@@ -315,7 +331,7 @@ func (a *action) processBatch(batchNumber uint64, events []*eventData) {
 
 // performActionWithRetry performs an action, with exponential backoff retry up
 // to a given threshold
-func (a *action) performActionWithRetry(batchNumber uint64, events []*eventData) (err error) {
+func (a *eventStream) performActionWithRetry(batchNumber uint64, events []*eventData) (err error) {
 	startTime := time.Now()
 	endTime := startTime.Add(time.Duration(a.spec.RetryTimeoutSec) * time.Second)
 	delay := a.initialRetryDelay
@@ -338,7 +354,7 @@ func (a *action) performActionWithRetry(batchNumber uint64, events []*eventData)
 }
 
 // isAddressSafe checks for local IPs
-func (a *action) isAddressUnsafe(ip *net.IPAddr) bool {
+func (a *eventStream) isAddressUnsafe(ip *net.IPAddr) bool {
 	ip4 := ip.IP.To4()
 	return !a.allowPrivateIPs &&
 		(ip4[0] == 0 ||
@@ -350,7 +366,7 @@ func (a *action) isAddressUnsafe(ip *net.IPAddr) bool {
 }
 
 // attemptWebhookAction performs a single attempt of a webhook action
-func (a *action) attemptWebhookAction(batchNumber, attempt uint64, events []*eventData) error {
+func (a *eventStream) attemptWebhookAction(batchNumber, attempt uint64, events []*eventData) error {
 	// We perform DNS resolution explicitly, so that we can exclude private IP address
 	// ranges from the target
 	u, _ := url.Parse(a.spec.Webhook.URL)

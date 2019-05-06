@@ -50,16 +50,16 @@ type eventData struct {
 type logProcessor struct {
 	subID    string
 	event    *kldbind.ABIEvent
-	action   *action
+	stream   *eventStream
 	blockHWM big.Int
 	hwnSync  sync.Mutex
 }
 
-func newLogProcessor(subID string, event *kldbind.ABIEvent, action *action) *logProcessor {
+func newLogProcessor(subID string, event *kldbind.ABIEvent, stream *eventStream) *logProcessor {
 	return &logProcessor{
 		subID:  subID,
 		event:  event,
-		action: action,
+		stream: stream,
 	}
 }
 
@@ -136,7 +136,7 @@ func (lp *logProcessor) processLogEntry(entry *logEntry) (err error) {
 	}
 
 	// Ok, now we have the full event in a friendly map output. Pass it down to the event processor
-	lp.action.HandleEvent(result)
+	lp.stream.handleEvent(result)
 	return nil
 }
 

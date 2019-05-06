@@ -28,20 +28,20 @@ import (
 )
 
 const (
-	subIDPrefix    = "/subscriptions/"
-	actionIDPrefix = "/actions/"
+	subIDPrefix    = "/subs/"
+	streamIDPrefix = "/streams/"
 )
 
 // SubscriptionManager provides REST APIs for managing events
 type SubscriptionManager interface {
 	Init() error
-	AddAction(spec *ActionInfo) (*ActionInfo, error)
-	Actions() []*ActionInfo
-	ActionByID(id string) *ActionInfo
-	SuspendAction(id string) error
-	ResumeAction(id string) error
-	DeleteAction(id string) error
-	AddSubscription(addr *kldbind.Address, event *kldbind.ABIEvent, actionID string) (*SubscriptionInfo, error)
+	AddStream(spec *StreamInfo) (*StreamInfo, error)
+	Streams() []*StreamInfo
+	StreamByID(id string) *StreamInfo
+	SuspendStream(id string) error
+	ResumeStream(id string) error
+	DeleteStream(id string) error
+	AddSubscription(addr *kldbind.Address, event *kldbind.ABIEvent, streamID string) (*SubscriptionInfo, error)
 	Subscriptions() []*SubscriptionInfo
 	SubscriptionByID(id string) *SubscriptionInfo
 	DeleteSubscription(id string) error
@@ -49,7 +49,7 @@ type SubscriptionManager interface {
 }
 
 type subscriptionManager interface {
-	actionByID(string) (*action, error)
+	streamByID(string) (*eventStream, error)
 	subscriptionByID(string) (*subscription, error)
 }
 
@@ -65,7 +65,7 @@ type subscriptionMGR struct {
 	db            kvStore
 	rpc           kldeth.RPCClientAll
 	subscriptions map[string]*subscription
-	actions       map[string]*action
+	streams       map[string]*eventStream
 }
 
 // CobraInitSubscriptionManager standard naming for cobra command params
@@ -80,7 +80,7 @@ func NewSubscriptionManager(conf *SubscriptionManagerConf, rpcConf *kldeth.RPCCo
 		conf:          conf,
 		rpcConf:       rpcConf,
 		subscriptions: make(map[string]*subscription),
-		actions:       make(map[string]*action),
+		streams:       make(map[string]*eventStream),
 	}
 	return sm
 }
@@ -105,11 +105,11 @@ func (s *subscriptionMGR) Subscriptions() []*SubscriptionInfo {
 }
 
 // AddSubscription adds a new subscription
-func (s *subscriptionMGR) AddSubscription(addr *kldbind.Address, event *kldbind.ABIEvent, actionID string) (*SubscriptionInfo, error) {
+func (s *subscriptionMGR) AddSubscription(addr *kldbind.Address, event *kldbind.ABIEvent, streamID string) (*SubscriptionInfo, error) {
 	i := &SubscriptionInfo{
 		ID:     subIDPrefix + kldutils.UUIDv4(),
 		Event:  kldbind.MarshalledABIEvent{E: *event},
-		Action: actionID,
+		Stream: streamID,
 	}
 	// Create it
 	sub, err := newSubscription(s, s.rpc, addr, i)
@@ -120,7 +120,7 @@ func (s *subscriptionMGR) AddSubscription(addr *kldbind.Address, event *kldbind.
 	return s.storeSubscription(sub.info)
 }
 
-// DeleteSubscription deletes an action
+// DeleteSubscription deletes a streamm
 func (s *subscriptionMGR) DeleteSubscription(id string) error {
 	sub, err := s.subscriptionByID(id)
 	if err != nil {
@@ -137,95 +137,95 @@ func (s *subscriptionMGR) DeleteSubscription(id string) error {
 func (s *subscriptionMGR) storeSubscription(info *SubscriptionInfo) (*SubscriptionInfo, error) {
 	infoBytes, _ := json.MarshalIndent(info, "", "  ")
 	if err := s.db.Put(info.ID, infoBytes); err != nil {
-		return nil, fmt.Errorf("Failed to store action: %s", err)
+		return nil, fmt.Errorf("Failed to store stream: %s", err)
 	}
 	return info, nil
 }
 
-// ActionByID used externally to get serializable details
-func (s *subscriptionMGR) ActionByID(id string) *ActionInfo {
-	action, err := s.actionByID(id)
+// StreamByID used externally to get serializable details
+func (s *subscriptionMGR) StreamByID(id string) *StreamInfo {
+	stream, err := s.streamByID(id)
 	if err != nil {
 		log.Warnf("Query failed: %s", err)
 		return nil
 	}
-	return action.spec
+	return stream.spec
 }
 
-// Actions used externally to get list actions
-func (s *subscriptionMGR) Actions() []*ActionInfo {
-	l := make([]*ActionInfo, 0, len(s.subscriptions))
-	for _, action := range s.actions {
-		l = append(l, action.spec)
+// Streams used externally to get list streams
+func (s *subscriptionMGR) Streams() []*StreamInfo {
+	l := make([]*StreamInfo, 0, len(s.subscriptions))
+	for _, stream := range s.streams {
+		l = append(l, stream.spec)
 	}
 	return l
 }
 
-// AddAction adds a new action
-func (s *subscriptionMGR) AddAction(spec *ActionInfo) (*ActionInfo, error) {
-	spec.ID = actionIDPrefix + kldutils.UUIDv4()
-	action, err := newAction(s.conf.AllowPrivateIPs, spec)
+// AddStream adds a new stream
+func (s *subscriptionMGR) AddStream(spec *StreamInfo) (*StreamInfo, error) {
+	spec.ID = streamIDPrefix + kldutils.UUIDv4()
+	stream, err := newEventStream(s.conf.AllowPrivateIPs, spec)
 	if err != nil {
 		return nil, err
 	}
-	s.actions[action.spec.ID] = action
-	return s.storeAction(action.spec)
+	s.streams[stream.spec.ID] = stream
+	return s.storeStream(stream.spec)
 }
 
-func (s *subscriptionMGR) storeAction(spec *ActionInfo) (*ActionInfo, error) {
+func (s *subscriptionMGR) storeStream(spec *StreamInfo) (*StreamInfo, error) {
 	infoBytes, _ := json.MarshalIndent(spec, "", "  ")
 	if err := s.db.Put(spec.ID, infoBytes); err != nil {
-		return nil, fmt.Errorf("Failed to store action: %s", err)
+		return nil, fmt.Errorf("Failed to store stream: %s", err)
 	}
 	return spec, nil
 }
 
-// DeleteAction deletes an action
-func (s *subscriptionMGR) DeleteAction(id string) error {
-	action, err := s.actionByID(id)
+// DeleteStream deletes a streamm
+func (s *subscriptionMGR) DeleteStream(id string) error {
+	stream, err := s.streamByID(id)
 	if err != nil {
 		return err
 	}
 	var subIDs []string
 	for _, sub := range s.subscriptions {
-		if sub.info.Action == action.spec.ID {
+		if sub.info.Stream == stream.spec.ID {
 			subIDs = append(subIDs, sub.info.ID)
 		}
 	}
 	if len(subIDs) != 0 {
 		return fmt.Errorf("The following subscriptions are still attached: %s", strings.Join(subIDs, ","))
 	}
-	delete(s.actions, action.spec.ID)
-	action.stop()
-	if err = s.db.Delete(action.spec.ID); err != nil {
+	delete(s.streams, stream.spec.ID)
+	stream.stop()
+	if err = s.db.Delete(stream.spec.ID); err != nil {
 		return err
 	}
 	return nil
 }
 
-// SuspendAction suspends an action from firing
-func (s *subscriptionMGR) SuspendAction(id string) error {
-	action, err := s.actionByID(id)
+// SuspendStream suspends a streamm from firing
+func (s *subscriptionMGR) SuspendStream(id string) error {
+	stream, err := s.streamByID(id)
 	if err != nil {
 		return err
 	}
-	action.suspend()
+	stream.suspend()
 	// Persist the state change
-	_, err = s.storeAction(action.spec)
+	_, err = s.storeStream(stream.spec)
 	return err
 }
 
-// ResumeAction restarts a suspended action
-func (s *subscriptionMGR) ResumeAction(id string) error {
-	action, err := s.actionByID(id)
+// ResumeStream restarts a suspended stream
+func (s *subscriptionMGR) ResumeStream(id string) error {
+	stream, err := s.streamByID(id)
 	if err != nil {
 		return err
 	}
-	if err = action.resume(); err != nil {
+	if err = stream.resume(); err != nil {
 		return err
 	}
 	// Persist the state change
-	_, err = s.storeAction(action.spec)
+	_, err = s.storeStream(stream.spec)
 	return err
 }
 
@@ -238,13 +238,13 @@ func (s *subscriptionMGR) subscriptionByID(id string) (*subscription, error) {
 	return sub, nil
 }
 
-// actionByID used internally to lookup full objects
-func (s *subscriptionMGR) actionByID(id string) (*action, error) {
-	action, exists := s.actions[id]
+// streamByID used internally to lookup full objects
+func (s *subscriptionMGR) streamByID(id string) (*eventStream, error) {
+	stream, exists := s.streams[id]
 	if !exists {
-		return nil, fmt.Errorf("Action with ID '%s' not found", id)
+		return nil, fmt.Errorf("Stream with ID '%s' not found", id)
 	}
-	return action, nil
+	return stream, nil
 }
 
 func (s *subscriptionMGR) Init() (err error) {

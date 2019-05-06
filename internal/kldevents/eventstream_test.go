@@ -28,13 +28,13 @@ import (
 
 func TestConstructorNoSpec(t *testing.T) {
 	assert := assert.New(t)
-	_, err := newAction(true, nil)
+	_, err := newEventStream(true, nil)
 	assert.EqualError(err, "No action specified")
 }
 
 func TestConstructorBadType(t *testing.T) {
 	assert := assert.New(t)
-	_, err := newAction(true, &ActionInfo{
+	_, err := newEventStream(true, &StreamInfo{
 		Type: "random",
 	})
 	assert.EqualError(err, "Unknown action type 'random'")
@@ -42,7 +42,7 @@ func TestConstructorBadType(t *testing.T) {
 
 func TestConstructorMissingWebhook(t *testing.T) {
 	assert := assert.New(t)
-	_, err := newAction(true, &ActionInfo{
+	_, err := newEventStream(true, &StreamInfo{
 		Type: "webhook",
 	})
 	assert.EqualError(err, "Must specify webhook.url for action type 'webhook'")
@@ -50,7 +50,7 @@ func TestConstructorMissingWebhook(t *testing.T) {
 
 func TestConstructorBadWebhookURL(t *testing.T) {
 	assert := assert.New(t)
-	_, err := newAction(true, &ActionInfo{
+	_, err := newEventStream(true, &StreamInfo{
 		Type: "webhook",
 		Webhook: &webhookAction{
 			URL: ":badurl",
@@ -66,7 +66,7 @@ func testEvent(subID string) *eventData {
 	}
 }
 
-func newStreamingAction(spec *ActionInfo, status ...int) (*action, *httptest.Server, chan []*eventData) {
+func newTestStreamForBatching(spec *StreamInfo, status ...int) (*eventStream, *httptest.Server, chan []*eventData) {
 	mux := http.NewServeMux()
 	eventStream := make(chan []*eventData)
 	count := 0
@@ -84,20 +84,20 @@ func newStreamingAction(spec *ActionInfo, status ...int) (*action, *httptest.Ser
 	svr := httptest.NewServer(mux)
 	spec.Type = "WEBHOOK"
 	spec.Webhook.URL = svr.URL
-	action, _ := newAction(true, spec)
-	return action, svr, eventStream
+	stream, _ := newEventStream(true, spec)
+	return stream, svr, eventStream
 }
 
 func TestBatchTimeout(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&ActionInfo{
+	stream, svr, eventStream := newTestStreamForBatching(&StreamInfo{
 		BatchSize:      10,
 		BatchTimeoutMS: 50,
 		Webhook:        &webhookAction{},
 	}, 200)
 	defer close(eventStream)
 	defer svr.Close()
-	defer action.stop()
+	defer stream.stop()
 
 	var e1s []*eventData
 	wg := sync.WaitGroup{}
@@ -107,7 +107,7 @@ func TestBatchTimeout(t *testing.T) {
 		wg.Done()
 	}()
 	for i := 0; i < 3; i++ {
-		action.HandleEvent(testEvent(fmt.Sprintf("sub%d", i)))
+		stream.handleEvent(testEvent(fmt.Sprintf("sub%d", i)))
 	}
 	wg.Wait()
 	assert.Equal(3, len(e1s))
@@ -121,7 +121,7 @@ func TestBatchTimeout(t *testing.T) {
 		wg.Done()
 	}()
 	for i := 0; i < 19; i++ {
-		action.HandleEvent(testEvent(fmt.Sprintf("sub%d", i)))
+		stream.handleEvent(testEvent(fmt.Sprintf("sub%d", i)))
 	}
 	wg.Wait()
 	assert.Equal(10, len(e2s))
@@ -131,7 +131,7 @@ func TestBatchTimeout(t *testing.T) {
 
 func TestStopDuringTimeout(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&ActionInfo{
+	stream, svr, eventStream := newTestStreamForBatching(&StreamInfo{
 		BatchSize:      10,
 		BatchTimeoutMS: 2000,
 		Webhook:        &webhookAction{},
@@ -139,30 +139,30 @@ func TestStopDuringTimeout(t *testing.T) {
 	defer close(eventStream)
 	defer svr.Close()
 
-	action.HandleEvent(testEvent(fmt.Sprintf("sub1")))
+	stream.handleEvent(testEvent(fmt.Sprintf("sub1")))
 	time.Sleep(10 * time.Millisecond)
-	action.stop()
+	stream.stop()
 	time.Sleep(10 * time.Millisecond)
-	assert.True(action.processorDone)
-	assert.True(action.dispatcherDone)
+	assert.True(stream.processorDone)
+	assert.True(stream.dispatcherDone)
 }
 
 func TestBatchSizeCap(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&ActionInfo{
+	stream, svr, eventStream := newTestStreamForBatching(&StreamInfo{
 		BatchSize: 10000000,
 		Webhook:   &webhookAction{},
 	}, 200)
 	defer close(eventStream)
 	defer svr.Close()
-	defer action.stop()
+	defer stream.stop()
 
-	assert.Equal(uint64(MaxBatchSize), action.spec.BatchSize)
+	assert.Equal(uint64(MaxBatchSize), stream.spec.BatchSize)
 }
 
 func TestBlockingBehavior(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&ActionInfo{
+	stream, svr, eventStream := newTestStreamForBatching(&StreamInfo{
 		BatchSize:            10,
 		Webhook:              &webhookAction{},
 		ErrorHandling:        ErrorHandlingBlock,
@@ -170,12 +170,12 @@ func TestBlockingBehavior(t *testing.T) {
 	}, 404)
 	defer close(eventStream)
 	defer svr.Close()
-	defer action.stop()
+	defer stream.stop()
 
 	complete := false
 	thrown := false
 	go func() { <-eventStream; thrown = true }()
-	action.HandleEvent(&eventData{
+	stream.handleEvent(&eventData{
 		SubID:         "sub1",
 		batchComplete: func(*eventData) { complete = true },
 	})
@@ -186,7 +186,7 @@ func TestBlockingBehavior(t *testing.T) {
 
 func TestSkippingBehavior(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&ActionInfo{
+	stream, svr, eventStream := newTestStreamForBatching(&StreamInfo{
 		BatchSize:            10,
 		Webhook:              &webhookAction{},
 		ErrorHandling:        ErrorHandlingSkip,
@@ -194,12 +194,12 @@ func TestSkippingBehavior(t *testing.T) {
 	}, 404)
 	defer close(eventStream)
 	defer svr.Close()
-	defer action.stop()
+	defer stream.stop()
 
 	complete := false
 	thrown := false
 	go func() { <-eventStream; thrown = true }()
-	action.HandleEvent(&eventData{
+	stream.handleEvent(&eventData{
 		SubID:         "sub1",
 		batchComplete: func(*eventData) { complete = true },
 	})
@@ -210,7 +210,7 @@ func TestSkippingBehavior(t *testing.T) {
 
 func TestBackoffRetry(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&ActionInfo{
+	stream, svr, eventStream := newTestStreamForBatching(&StreamInfo{
 		BatchSize:            10,
 		Webhook:              &webhookAction{},
 		ErrorHandling:        ErrorHandlingBlock,
@@ -219,9 +219,9 @@ func TestBackoffRetry(t *testing.T) {
 	}, 404, 500, 503, 504, 200)
 	defer close(eventStream)
 	defer svr.Close()
-	defer action.stop()
-	action.initialRetryDelay = 1 * time.Millisecond
-	action.backoffFactor = 1.1
+	defer stream.stop()
+	stream.initialRetryDelay = 1 * time.Millisecond
+	stream.backoffFactor = 1.1
 
 	complete := false
 	thrown := false
@@ -234,7 +234,7 @@ func TestBackoffRetry(t *testing.T) {
 		}
 		wg.Done()
 	}()
-	action.HandleEvent(&eventData{
+	stream.handleEvent(&eventData{
 		SubID:         "sub1",
 		batchComplete: func(*eventData) { complete = true },
 	})
@@ -247,19 +247,19 @@ func TestBackoffRetry(t *testing.T) {
 
 func TestBlockedAddresses(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&ActionInfo{
+	stream, svr, eventStream := newTestStreamForBatching(&StreamInfo{
 		ErrorHandling: ErrorHandlingBlock,
 		Webhook:       &webhookAction{},
 	}, 200)
 	defer close(eventStream)
 	defer svr.Close()
-	defer action.stop()
+	defer stream.stop()
 
-	action.allowPrivateIPs = false
+	stream.allowPrivateIPs = false
 
 	complete := false
 	go func() { <-eventStream }()
-	action.HandleEvent(&eventData{
+	stream.handleEvent(&eventData{
 		SubID:         "sub1",
 		batchComplete: func(*eventData) { complete = true },
 	})
@@ -269,19 +269,19 @@ func TestBlockedAddresses(t *testing.T) {
 
 func TestBadDNSName(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&ActionInfo{
+	stream, svr, eventStream := newTestStreamForBatching(&StreamInfo{
 		ErrorHandling: ErrorHandlingSkip,
 		Webhook:       &webhookAction{},
 	}, 200)
 	defer close(eventStream)
 	defer svr.Close()
-	defer action.stop()
-	action.spec.Webhook.URL = "http://fail.invalid"
+	defer stream.stop()
+	stream.spec.Webhook.URL = "http://fail.invalid"
 
 	called := false
 	complete := false
 	go func() { <-eventStream; called = true }()
-	action.HandleEvent(&eventData{
+	stream.handleEvent(&eventData{
 		SubID:         "sub1",
 		batchComplete: func(*eventData) { complete = true },
 	})
@@ -293,32 +293,32 @@ func TestBadDNSName(t *testing.T) {
 
 func TestBuildup(t *testing.T) {
 	assert := assert.New(t)
-	action, svr, eventStream := newStreamingAction(&ActionInfo{
+	stream, svr, eventStream := newTestStreamForBatching(&StreamInfo{
 		ErrorHandling: ErrorHandlingBlock,
 		Webhook:       &webhookAction{},
 	}, 200)
 	defer close(eventStream)
 	defer svr.Close()
-	defer action.stop()
+	defer stream.stop()
 
-	assert.False(action.IsBlocked())
+	assert.False(stream.isBlocked())
 
 	// Hang the HTTP requests (no consumption from channel)
 	for i := 0; i < 11; i++ {
-		action.HandleEvent(testEvent(fmt.Sprintf("sub%d", i)))
+		stream.handleEvent(testEvent(fmt.Sprintf("sub%d", i)))
 	}
 
-	for !action.IsBlocked() {
+	for !stream.isBlocked() {
 		time.Sleep(1 * time.Millisecond)
 	}
-	assert.Equal(uint64(11), action.inFlight)
+	assert.Equal(uint64(11), stream.inFlight)
 
 	for i := 0; i < 11; i++ {
 		<-eventStream
 	}
-	for action.IsBlocked() {
+	for stream.isBlocked() {
 		time.Sleep(1 * time.Millisecond)
 	}
-	assert.Equal(uint64(0), action.inFlight)
+	assert.Equal(uint64(0), stream.inFlight)
 
 }

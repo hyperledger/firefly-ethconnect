@@ -50,7 +50,7 @@ type ethFilterRestart struct {
 type SubscriptionInfo struct {
 	ID     string                     `json:"id,omitempty"`
 	Name   string                     `json:"name"`
-	Action string                     `json:"action"`
+	Stream string                     `json:"stream"`
 	Filter persistedFilter            `json:"filter"`
 	Event  kldbind.MarshalledABIEvent `json:"event"`
 }
@@ -67,14 +67,14 @@ type subscription struct {
 }
 
 func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind.Address, i *SubscriptionInfo) (*subscription, error) {
-	action, err := sm.actionByID(i.Action)
+	stream, err := sm.streamByID(i.Stream)
 	if err != nil {
 		return nil, err
 	}
 	s := &subscription{
 		info:    i,
 		rpc:     rpc,
-		lp:      newLogProcessor(i.ID, &i.Event.E, action),
+		lp:      newLogProcessor(i.ID, &i.Event.E, stream),
 		logName: i.ID + ":" + eventSummary(&i.Event.E),
 	}
 	f := &i.Filter
@@ -113,14 +113,14 @@ func eventSummary(e *kldbind.ABIEvent) string {
 }
 
 func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *SubscriptionInfo, since *big.Int) (*subscription, error) {
-	action, err := sm.actionByID(i.Action)
+	stream, err := sm.streamByID(i.Stream)
 	if err != nil {
 		return nil, err
 	}
 	s := &subscription{
 		rpc:     rpc,
 		info:    i,
-		lp:      newLogProcessor(i.ID, &i.Event.E, action),
+		lp:      newLogProcessor(i.ID, &i.Event.E, stream),
 		logName: i.ID + ":" + eventSummary(&i.Event.E),
 	}
 	if err := s.restartFilter(since); err != nil {

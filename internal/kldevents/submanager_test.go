@@ -121,58 +121,58 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	defer sm.db.Close()
 
 	assert.Equal([]*SubscriptionInfo{}, sm.Subscriptions())
-	assert.Equal([]*ActionInfo{}, sm.Actions())
+	assert.Equal([]*StreamInfo{}, sm.Streams())
 
-	action, err := sm.AddAction(&ActionInfo{
+	stream, err := sm.AddStream(&StreamInfo{
 		Type:    "webhook",
 		Webhook: &webhookAction{URL: "http://test.invalid"},
 	})
 	assert.NoError(err)
 
-	sub, err := sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "ping"}, action.ID)
+	sub, err := sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "ping"}, stream.ID)
 	assert.NoError(err)
-	assert.Equal(action.ID, sub.Action)
+	assert.Equal(stream.ID, sub.Stream)
 
 	assert.Equal([]*SubscriptionInfo{sub}, sm.Subscriptions())
-	assert.Equal([]*ActionInfo{action}, sm.Actions())
+	assert.Equal([]*StreamInfo{stream}, sm.Streams())
 
 	assert.Equal(sub, sm.SubscriptionByID(sub.ID))
-	assert.Equal(action, sm.ActionByID(action.ID))
+	assert.Equal(stream, sm.StreamByID(stream.ID))
 
-	assert.Nil(sm.SubscriptionByID(action.ID))
-	assert.Nil(sm.ActionByID(sub.ID))
+	assert.Nil(sm.SubscriptionByID(stream.ID))
+	assert.Nil(sm.StreamByID(sub.ID))
 
-	err = sm.DeleteAction(action.ID)
+	err = sm.DeleteStream(stream.ID)
 	assert.EqualError(err, "The following subscriptions are still attached: "+sub.ID)
 
-	err = sm.SuspendAction(action.ID)
+	err = sm.SuspendStream(stream.ID)
 	assert.NoError(err)
 
-	err = sm.SuspendAction(action.ID)
+	err = sm.SuspendStream(stream.ID)
 	assert.NoError(err)
 
 	for {
 		// Incase the suspend takes a little time
-		if err = sm.ResumeAction(action.ID); err == nil {
+		if err = sm.ResumeStream(stream.ID); err == nil {
 			break
 		} else {
 			time.Sleep(1 * time.Millisecond)
 		}
 	}
 
-	err = sm.ResumeAction(action.ID)
+	err = sm.ResumeStream(stream.ID)
 	assert.EqualError(err, "Event processor is already active. Suspending:false")
 
 	err = sm.DeleteSubscription(sub.ID)
 	assert.NoError(err)
 
-	err = sm.DeleteAction(action.ID)
+	err = sm.DeleteStream(stream.ID)
 	assert.NoError(err)
 
 	sm.Close()
 }
 
-func TestActionAndSubscriptionErrors(t *testing.T) {
+func TestStreamAndSubscriptionErrors(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)
 	defer cleanup(t, dir)
@@ -181,27 +181,27 @@ func TestActionAndSubscriptionErrors(t *testing.T) {
 	sm.db = newMockKV(fmt.Errorf("pop"))
 	defer sm.db.Close()
 
-	_, err := sm.AddAction(&ActionInfo{Type: "random"})
+	_, err := sm.AddStream(&StreamInfo{Type: "random"})
 	assert.EqualError(err, "Unknown action type 'random'")
-	_, err = sm.AddAction(&ActionInfo{
+	_, err = sm.AddStream(&StreamInfo{
 		Type:    "webhook",
 		Webhook: &webhookAction{URL: "http://test.invalid"},
 	})
-	assert.EqualError(err, "Failed to store action: pop")
-	sm.actions["testaction"] = newTestAction()
-	err = sm.DeleteAction("nope")
-	assert.EqualError(err, "Action with ID 'nope' not found")
-	err = sm.SuspendAction("nope")
-	assert.EqualError(err, "Action with ID 'nope' not found")
-	err = sm.ResumeAction("nope")
-	assert.EqualError(err, "Action with ID 'nope' not found")
-	err = sm.DeleteAction("testaction")
+	assert.EqualError(err, "Failed to store stream: pop")
+	sm.streams["teststream"] = newTestStream()
+	err = sm.DeleteStream("nope")
+	assert.EqualError(err, "Stream with ID 'nope' not found")
+	err = sm.SuspendStream("nope")
+	assert.EqualError(err, "Stream with ID 'nope' not found")
+	err = sm.ResumeStream("nope")
+	assert.EqualError(err, "Stream with ID 'nope' not found")
+	err = sm.DeleteStream("teststream")
 	assert.EqualError(err, "pop")
 
 	_, err = sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "any"}, "nope")
-	assert.EqualError(err, "Action with ID 'nope' not found")
-	_, err = sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "any"}, "testaction")
-	assert.EqualError(err, "Failed to store action: pop")
+	assert.EqualError(err, "Stream with ID 'nope' not found")
+	_, err = sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "any"}, "teststream")
+	assert.EqualError(err, "Failed to store stream: pop")
 	sm.subscriptions["testsub"] = &subscription{info: &SubscriptionInfo{}, rpc: sm.rpc}
 	err = sm.DeleteSubscription("nope")
 	assert.EqualError(err, "Subscription with ID 'nope' not found")

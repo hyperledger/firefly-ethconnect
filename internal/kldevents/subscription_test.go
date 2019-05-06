@@ -31,21 +31,21 @@ import (
 )
 
 type mockSubMgr struct {
-	action       *action
+	stream       *eventStream
 	subscription *subscription
 	err          error
 }
 
-func (m *mockSubMgr) actionByID(string) (*action, error) {
-	return m.action, m.err
+func (m *mockSubMgr) streamByID(string) (*eventStream, error) {
+	return m.stream, m.err
 }
 
 func (m *mockSubMgr) subscriptionByID(string) (*subscription, error) {
 	return m.subscription, m.err
 }
 
-func newTestAction() *action {
-	a, _ := newAction(true, &ActionInfo{
+func newTestStream() *eventStream {
+	a, _ := newEventStream(true, &StreamInfo{
 		Type: "WebHook",
 		Webhook: &webhookAction{
 			URL: "http://hello.example.com/world",
@@ -55,7 +55,7 @@ func newTestAction() *action {
 }
 
 func testSubInfo(event *kldbind.ABIEvent) *SubscriptionInfo {
-	return &SubscriptionInfo{ID: "test", Action: "actionID", Event: kldbind.MarshalledABIEvent{E: *event}}
+	return &SubscriptionInfo{ID: "test", Stream: "streamID", Event: kldbind.MarshalledABIEvent{E: *event}}
 }
 
 func TestCreateWebhookSub(t *testing.T) {
@@ -80,7 +80,7 @@ func TestCreateWebhookSub(t *testing.T) {
 		},
 	}
 	m := &mockSubMgr{
-		action: newTestAction(),
+		stream: newTestStream(),
 	}
 
 	i := testSubInfo(event)
@@ -100,7 +100,7 @@ func TestCreateWebhookSubWithAddr(t *testing.T) {
 	assert := assert.New(t)
 
 	rpc := kldeth.NewMockRPCClientForSync(nil, nil)
-	m := &mockSubMgr{action: newTestAction()}
+	m := &mockSubMgr{stream: newTestStream()}
 	event := &kldbind.ABIEvent{
 		Name:      "devcon",
 		Anonymous: true,
@@ -117,7 +117,7 @@ func TestCreateWebhookSubWithAddr(t *testing.T) {
 func TestCreateSubscriptionNoEvent(t *testing.T) {
 	assert := assert.New(t)
 	event := &kldbind.ABIEvent{}
-	m := &mockSubMgr{action: newTestAction()}
+	m := &mockSubMgr{stream: newTestStream()}
 	_, err := newSubscription(m, nil, nil, testSubInfo(event))
 	assert.EqualError(err, "Solidity event name must be specified")
 }
@@ -126,7 +126,7 @@ func TestCreateSubscriptionNewFilterRPCFailure(t *testing.T) {
 	assert := assert.New(t)
 	event := &kldbind.ABIEvent{Name: "party"}
 	rpc := kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil)
-	m := &mockSubMgr{action: newTestAction()}
+	m := &mockSubMgr{stream: newTestStream()}
 	_, err := newSubscription(m, rpc, nil, testSubInfo(event))
 	assert.EqualError(err, "Failed to register filter: pop")
 }
@@ -173,7 +173,7 @@ func TestProcessEventsCannotProcess(t *testing.T) {
 				Data: "0x no hex here sorry",
 			})
 		}),
-		lp: newLogProcessor("", &kldbind.ABIEvent{}, newTestAction()),
+		lp: newLogProcessor("", &kldbind.ABIEvent{}, newTestStream()),
 	}
 	err := s.processNewEvents()
 	// We swallow the error in this case - as we simply couldn't read the event
@@ -215,13 +215,13 @@ func TestProcessEventsEnd2End(t *testing.T) {
 	})
 	svr := httptest.NewServer(mux)
 	defer svr.Close()
-	action, _ := newAction(true, &ActionInfo{
+	stream, _ := newEventStream(true, &StreamInfo{
 		Type: "WebHook",
 		Webhook: &webhookAction{
 			URL: svr.URL,
 		},
 	})
-	m := &mockSubMgr{action: action}
+	m := &mockSubMgr{stream: stream}
 
 	testDataBytes, err := ioutil.ReadFile("../../test/simplevents_logs.json")
 	assert.NoError(err)

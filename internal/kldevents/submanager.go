@@ -313,7 +313,55 @@ func (s *subscriptionMGR) Init() (err error) {
 	if s.rpc, err = kldeth.RPCConnect(s.rpcConf); err != nil {
 		return err
 	}
+	s.recoverStreams()
+	s.recoverSubscriptions()
 	return nil
+}
+
+func (s *subscriptionMGR) recoverStreams() {
+	// Recover all the streams
+	iStream := s.db.NewIterator()
+	defer iStream.Release()
+	for iStream.Next() {
+		k := iStream.Key()
+		if strings.HasPrefix(k, streamIDPrefix) {
+			var streamInfo StreamInfo
+			err := json.Unmarshal(iStream.Value(), &streamInfo)
+			if err != nil {
+				log.Errorf("Failed to recover stream '%s': %s", string(iStream.Value()), err)
+				continue
+			}
+			stream, err := newEventStream(s, &streamInfo)
+			if err != nil {
+				log.Errorf("Failed to recover stream '%s': %s", streamInfo.ID, err)
+			} else {
+				s.streams[streamInfo.ID] = stream
+			}
+		}
+	}
+}
+
+func (s *subscriptionMGR) recoverSubscriptions() {
+	// Recover all the subscriptions
+	iSub := s.db.NewIterator()
+	defer iSub.Release()
+	for iSub.Next() {
+		k := iSub.Key()
+		if strings.HasPrefix(k, subIDPrefix) {
+			var subInfo SubscriptionInfo
+			err := json.Unmarshal(iSub.Value(), &subInfo)
+			if err != nil {
+				log.Errorf("Failed to recover subscription '%s': %s", string(iSub.Value()), err)
+				continue
+			}
+			sub, err := restoreSubscription(s, s.rpc, &subInfo)
+			if err != nil {
+				log.Errorf("Failed to recover subscription '%s': %s", subInfo.ID, err)
+			} else {
+				s.subscriptions[subInfo.ID] = sub
+			}
+		}
+	}
 }
 
 func (s *subscriptionMGR) Close() {

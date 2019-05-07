@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path"
@@ -167,6 +168,20 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	err = sm.ResumeStream(stream.ID)
 	assert.EqualError(err, "Event processor is already active. Suspending:false")
 
+	// Reload
+	sm.Close()
+	mux := http.NewServeMux()
+	svr := httptest.NewServer(mux)
+	defer svr.Close()
+	sm = newTestSubscriptionManager()
+	sm.conf.LevelDBPath = path.Join(dir, "db")
+	sm.rpcConf = &kldeth.RPCConnOpts{URL: svr.URL}
+	err = sm.Init()
+	assert.NoError(err)
+
+	assert.Equal(1, len(sm.streams))
+	assert.Equal(1, len(sm.subscriptions))
+
 	err = sm.DeleteSubscription(sub.ID)
 	assert.NoError(err)
 
@@ -211,4 +226,25 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	assert.EqualError(err, "Subscription with ID 'nope' not found")
 	err = sm.DeleteSubscription("testsub")
 	assert.EqualError(err, "pop")
+}
+
+func TestRecoverErrors(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+	sm := newTestSubscriptionManager()
+	sm.db, _ = newLDBKeyValueStore(path.Join(dir, "db"))
+	defer sm.db.Close()
+
+	sm.db.Put(streamIDPrefix+"esid1", []byte(":bad json"))
+	sm.db.Put(streamIDPrefix+"esid2", []byte("{}"))
+	sm.db.Put(subIDPrefix+"subid1", []byte(":bad json"))
+	sm.db.Put(subIDPrefix+"subid2", []byte("{}"))
+
+	sm.recoverStreams()
+	sm.recoverSubscriptions()
+
+	assert.Equal(0, len(sm.streams))
+	assert.Equal(0, len(sm.subscriptions))
+
 }

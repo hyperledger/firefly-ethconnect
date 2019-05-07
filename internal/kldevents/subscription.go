@@ -74,10 +74,11 @@ func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind
 		return nil, err
 	}
 	s := &subscription{
-		info:    i,
-		rpc:     rpc,
-		lp:      newLogProcessor(i.ID, &i.Event.E, stream),
-		logName: i.ID + ":" + eventSummary(&i.Event.E),
+		info:        i,
+		rpc:         rpc,
+		lp:          newLogProcessor(i.ID, &i.Event.E, stream),
+		logName:     i.ID + ":" + eventSummary(&i.Event.E),
+		filterStale: true,
 	}
 	f := &i.Filter
 	addrStr := "*"
@@ -92,10 +93,6 @@ func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind
 	}
 	// For now we only support filtering on the event type
 	f.Topics = [][]kldbind.Hash{[]kldbind.Hash{event.Id()}}
-	// Create the filter in Ethereum
-	if err := s.initialFilter(); err != nil {
-		return nil, fmt.Errorf("Failed to register filter: %s", err)
-	}
 	log.Infof("Created subscription %s %s topic:%s", i.ID, i.Name, event.Id().String())
 	return s, nil
 }
@@ -114,19 +111,20 @@ func eventSummary(e *kldbind.ABIEvent) string {
 	return sb.String()
 }
 
-func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *SubscriptionInfo, since *big.Int) (*subscription, error) {
+func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *SubscriptionInfo) (*subscription, error) {
+	if i.ID == "" {
+		return nil, fmt.Errorf("No ID")
+	}
 	stream, err := sm.streamByID(i.Stream)
 	if err != nil {
 		return nil, err
 	}
 	s := &subscription{
-		rpc:     rpc,
-		info:    i,
-		lp:      newLogProcessor(i.ID, &i.Event.E, stream),
-		logName: i.ID + ":" + eventSummary(&i.Event.E),
-	}
-	if err := s.restartFilter(since); err != nil {
-		return nil, fmt.Errorf("Failed to register filter: %s", err)
+		rpc:         rpc,
+		info:        i,
+		lp:          newLogProcessor(i.ID, &i.Event.E, stream),
+		logName:     i.ID + ":" + eventSummary(&i.Event.E),
+		filterStale: true,
 	}
 	return s, nil
 }

@@ -104,8 +104,8 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, rpc kldeth.RPCClien
 	gw := &smartContractGW{
 		conf:          conf,
 		abi2swagger:   abi2swagger,
-		contractIndex: make(map[string]timeSortable),
-		abiIndex:      make(map[string]timeSortable),
+		contractIndex: make(map[string]kldmessages.TimeSortable),
+		abiIndex:      make(map[string]kldmessages.TimeSortable),
 	}
 	syncDispatcher := newSyncDispatcher(processor)
 	gw.r2e = newREST2eth(gw, rpc, asyncDispatcher, syncDispatcher)
@@ -117,24 +117,14 @@ type smartContractGW struct {
 	conf          *SmartContractGatewayConf
 	abi2swagger   *kldopenapi.ABI2Swagger
 	r2e           *rest2eth
-	contractIndex map[string]timeSortable
+	contractIndex map[string]kldmessages.TimeSortable
 	idxLock       sync.Mutex
-	abiIndex      map[string]timeSortable
-}
-
-type timeSortable interface {
-	isLessThan(timeSortable, timeSortable) bool
-	getISO8601() string
-	getID() string
-}
-
-type timeSorted struct {
-	CreatedISO8601 string `json:"created"`
+	abiIndex      map[string]kldmessages.TimeSortable
 }
 
 // contractInfo is the minimal data structure we keep in memory, indexed by address
 type contractInfo struct {
-	timeSorted
+	kldmessages.TimeSorted
 	Address     string `json:"address"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -145,7 +135,7 @@ type contractInfo struct {
 
 // abiInfo is the minimal data structure we keep in memory, indexed by our own UUID
 type abiInfo struct {
-	timeSorted
+	kldmessages.TimeSorted
 	ID              string `json:"id"`
 	Name            string `json:"name"`
 	Description     string `json:"description"`
@@ -155,21 +145,12 @@ type abiInfo struct {
 	CompilerVersion string `json:"compilerVersion"`
 }
 
-func (i *contractInfo) getID() string {
+func (i *contractInfo) GetID() string {
 	return i.Address
 }
 
-func (i *abiInfo) getID() string {
+func (i *abiInfo) GetID() string {
 	return i.ID
-}
-
-func (i *timeSorted) getISO8601() string {
-	return i.CreatedISO8601
-}
-
-func (*timeSorted) isLessThan(i timeSortable, j timeSortable) bool {
-	return i.getISO8601() > j.getISO8601() ||
-		(i.getISO8601() == j.getISO8601() && i.getID() < j.getID())
 }
 
 // PostDeploy callback processes the transaction receipt and generates the Swagger
@@ -420,7 +401,7 @@ func (g *smartContractGW) addToContractIndex(address string, swagger *spec.Swagg
 		ABIURI:      abiURI,
 		Path:        "/contracts/" + address,
 		SwaggerURL:  g.conf.BaseURL + "/contracts/" + address + "?swagger",
-		timeSorted: timeSorted{
+		TimeSorted: kldmessages.TimeSorted{
 			CreatedISO8601: createdTime.UTC().Format(time.RFC3339),
 		},
 	}
@@ -437,7 +418,7 @@ func (g *smartContractGW) addToABIIndex(id string, deployMsg *kldmessages.Deploy
 		CompilerVersion: deployMsg.CompilerVersion,
 		Path:            "/abis/" + id,
 		SwaggerURL:      g.conf.BaseURL + "/abis/" + id + "?swagger",
-		timeSorted: timeSorted{
+		TimeSorted: kldmessages.TimeSorted{
 			CreatedISO8601: createdTime.UTC().Format(time.RFC3339),
 		},
 	}
@@ -450,7 +431,7 @@ func (g *smartContractGW) addToABIIndex(id string, deployMsg *kldmessages.Deploy
 func (g *smartContractGW) listContractsOrABIs(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
 
-	var index map[string]timeSortable
+	var index map[string]kldmessages.TimeSortable
 	if strings.HasSuffix(req.URL.Path, "contracts") {
 		index = g.contractIndex
 	} else {
@@ -459,7 +440,7 @@ func (g *smartContractGW) listContractsOrABIs(res http.ResponseWriter, req *http
 
 	// Get an array copy of the current list
 	g.idxLock.Lock()
-	retval := make([]timeSortable, 0, len(index))
+	retval := make([]kldmessages.TimeSortable, 0, len(index))
 	for _, info := range index {
 		retval = append(retval, info)
 	}
@@ -467,7 +448,7 @@ func (g *smartContractGW) listContractsOrABIs(res http.ResponseWriter, req *http
 
 	// Do the sort by Title then Address
 	sort.Slice(retval, func(i, j int) bool {
-		return retval[i].isLessThan(retval[i], retval[j])
+		return retval[i].IsLessThan(retval[i], retval[j])
 	})
 
 	status := 200
@@ -496,7 +477,7 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 	}
 	id := strings.TrimPrefix(strings.ToLower(params.ByName("address")), "0x")
 	prefix := "contract"
-	var index map[string]timeSortable
+	var index map[string]kldmessages.TimeSortable
 	index = g.contractIndex
 	if id == "" {
 		id = strings.ToLower(params.ByName("abi"))

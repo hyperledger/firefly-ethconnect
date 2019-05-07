@@ -30,6 +30,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -48,9 +50,9 @@ const (
 
 // StreamInfo configures the stream to perform an action for each event
 type StreamInfo struct {
+	kldmessages.TimeSorted
 	ID                   string         `json:"id"`
 	Path                 string         `json:"path"`
-	CreatedISO8601       string         `json:"created"`
 	Suspended            bool           `json:"suspended"`
 	Type                 string         `json:"type,omitempty"`
 	BatchSize            uint64         `json:"batchSize,omitempty"`
@@ -91,7 +93,7 @@ type eventStream struct {
 // initialied to that supplied (zero on initial, or the
 // value from the checkpoint)
 func newEventStream(sm subscriptionManager, spec *StreamInfo) (a *eventStream, err error) {
-	if spec == nil || spec.ID == "" {
+	if spec == nil || spec.GetID() == "" {
 		return nil, fmt.Errorf("No ID")
 	}
 
@@ -141,6 +143,11 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo) (a *eventStream, e
 	go a.batchProcessor()
 	go a.batchDispatcher()
 	return a, nil
+}
+
+// GetID returns the ID (for sorting)
+func (spec *StreamInfo) GetID() string {
+	return spec.ID
 }
 
 // HandleEvent is the entry point for the stream from the event detection logic

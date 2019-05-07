@@ -74,7 +74,7 @@
         "produces": [
           "application/json"
         ],
-        "summary": "Approval(address,address,uint256)",
+        "summary": "Approval(address,address,uint256) [event]",
         "parameters": [
           {
             "description": "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured action)",
@@ -116,7 +116,7 @@
         "produces": [
           "application/json"
         ],
-        "summary": "Transfer(address,address,uint256)",
+        "summary": "Transfer(address,address,uint256) [event]",
         "parameters": [
           {
             "description": "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured action)",
@@ -158,7 +158,7 @@
         "produces": [
           "application/json"
         ],
-        "summary": "Approval(address,address,uint256)",
+        "summary": "Approval(address,address,uint256) [event]",
         "parameters": [
           {
             "type": "string",
@@ -207,7 +207,7 @@
         "produces": [
           "application/json"
         ],
-        "summary": "Transfer(address,address,uint256)",
+        "summary": "Transfer(address,address,uint256) [event]",
         "parameters": [
           {
             "type": "string",
@@ -253,7 +253,7 @@
         "produces": [
           "application/json"
         ],
-        "summary": "allowance(address,address)",
+        "summary": "allowance(address,address) [read only]",
         "parameters": [
           {
             "type": "string",
@@ -313,7 +313,7 @@
         "produces": [
           "application/json"
         ],
-        "summary": "allowance(address,address)",
+        "summary": "allowance(address,address) [read only]",
         "parameters": [
           {
             "type": "string",
@@ -489,7 +489,7 @@
         "produces": [
           "application/json"
         ],
-        "summary": "balanceOf(address)",
+        "summary": "balanceOf(address) [read only]",
         "parameters": [
           {
             "type": "string",
@@ -542,7 +542,7 @@
         "produces": [
           "application/json"
         ],
-        "summary": "balanceOf(address)",
+        "summary": "balanceOf(address) [read only]",
         "parameters": [
           {
             "type": "string",
@@ -836,7 +836,7 @@
         "produces": [
           "application/json"
         ],
-        "summary": "totalSupply()",
+        "summary": "totalSupply() [read only]",
         "parameters": [
           {
             "type": "string",
@@ -882,7 +882,7 @@
         "produces": [
           "application/json"
         ],
-        "summary": "totalSupply()",
+        "summary": "totalSupply() [read only]",
         "parameters": [
           {
             "type": "string",

@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -26,18 +27,19 @@ import (
 
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestConstructorNoSpec(t *testing.T) {
 	assert := assert.New(t)
-	_, err := newEventStream(newTestSubscriptionManager(""), nil)
+	_, err := newEventStream(newTestSubscriptionManager(), nil)
 	assert.EqualError(err, "No action specified")
 }
 
 func TestConstructorBadType(t *testing.T) {
 	assert := assert.New(t)
-	_, err := newEventStream(newTestSubscriptionManager(""), &StreamInfo{
+	_, err := newEventStream(newTestSubscriptionManager(), &StreamInfo{
 		Type: "random",
 	})
 	assert.EqualError(err, "Unknown action type 'random'")
@@ -45,7 +47,7 @@ func TestConstructorBadType(t *testing.T) {
 
 func TestConstructorMissingWebhook(t *testing.T) {
 	assert := assert.New(t)
-	_, err := newEventStream(newTestSubscriptionManager(""), &StreamInfo{
+	_, err := newEventStream(newTestSubscriptionManager(), &StreamInfo{
 		Type: "webhook",
 	})
 	assert.EqualError(err, "Must specify webhook.url for action type 'webhook'")
@@ -53,7 +55,7 @@ func TestConstructorMissingWebhook(t *testing.T) {
 
 func TestConstructorBadWebhookURL(t *testing.T) {
 	assert := assert.New(t)
-	_, err := newEventStream(newTestSubscriptionManager(""), &StreamInfo{
+	_, err := newEventStream(newTestSubscriptionManager(), &StreamInfo{
 		Type: "webhook",
 		Webhook: &webhookAction{
 			URL: ":badurl",
@@ -69,7 +71,7 @@ func testEvent(subID string) *eventData {
 	}
 }
 
-func newTestStreamForBatching(dir string, spec *StreamInfo, status ...int) (*subscriptionMGR, *eventStream, *httptest.Server, chan []*eventData) {
+func newTestStreamForBatching(spec *StreamInfo, status ...int) (*subscriptionMGR, *eventStream, *httptest.Server, chan []*eventData) {
 	mux := http.NewServeMux()
 	eventStream := make(chan []*eventData)
 	count := 0
@@ -87,19 +89,16 @@ func newTestStreamForBatching(dir string, spec *StreamInfo, status ...int) (*sub
 	svr := httptest.NewServer(mux)
 	spec.Type = "WEBHOOK"
 	spec.Webhook.URL = svr.URL
-	sm := newTestSubscriptionManager(dir)
+	sm := newTestSubscriptionManager()
 	sm.config().AllowPrivateIPs = true
-	sm.config().PollingIntervalMS = 50
-	if dir != "" {
-		sm.db, _ = newLDBKeyValueStore(dir)
-	}
+	sm.config().PollingIntervalMS = 10
 	stream, _ := sm.AddStream(spec)
 	return sm, sm.streams[stream.ID], svr, eventStream
 }
 
 func TestBatchTimeout(t *testing.T) {
 	assert := assert.New(t)
-	_, stream, svr, eventStream := newTestStreamForBatching("",
+	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize:      10,
 			BatchTimeoutMS: 50,
@@ -141,7 +140,7 @@ func TestBatchTimeout(t *testing.T) {
 
 func TestStopDuringTimeout(t *testing.T) {
 	assert := assert.New(t)
-	_, stream, svr, eventStream := newTestStreamForBatching("",
+	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize:      10,
 			BatchTimeoutMS: 2000,
@@ -160,7 +159,7 @@ func TestStopDuringTimeout(t *testing.T) {
 
 func TestBatchSizeCap(t *testing.T) {
 	assert := assert.New(t)
-	_, stream, svr, eventStream := newTestStreamForBatching("",
+	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize: 10000000,
 			Webhook:   &webhookAction{},
@@ -174,7 +173,7 @@ func TestBatchSizeCap(t *testing.T) {
 
 func TestBlockingBehavior(t *testing.T) {
 	assert := assert.New(t)
-	_, stream, svr, eventStream := newTestStreamForBatching("",
+	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize:            10,
 			Webhook:              &webhookAction{},
@@ -199,7 +198,7 @@ func TestBlockingBehavior(t *testing.T) {
 
 func TestSkippingBehavior(t *testing.T) {
 	assert := assert.New(t)
-	_, stream, svr, eventStream := newTestStreamForBatching("",
+	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize:            10,
 			Webhook:              &webhookAction{},
@@ -224,7 +223,7 @@ func TestSkippingBehavior(t *testing.T) {
 
 func TestBackoffRetry(t *testing.T) {
 	assert := assert.New(t)
-	_, stream, svr, eventStream := newTestStreamForBatching("",
+	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize:            10,
 			Webhook:              &webhookAction{},
@@ -262,7 +261,7 @@ func TestBackoffRetry(t *testing.T) {
 
 func TestBlockedAddresses(t *testing.T) {
 	assert := assert.New(t)
-	_, stream, svr, eventStream := newTestStreamForBatching("",
+	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
 			Webhook:       &webhookAction{},
@@ -285,7 +284,7 @@ func TestBlockedAddresses(t *testing.T) {
 
 func TestBadDNSName(t *testing.T) {
 	assert := assert.New(t)
-	_, stream, svr, eventStream := newTestStreamForBatching("",
+	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingSkip,
 			Webhook:       &webhookAction{},
@@ -310,7 +309,7 @@ func TestBadDNSName(t *testing.T) {
 
 func TestBuildup(t *testing.T) {
 	assert := assert.New(t)
-	_, stream, svr, eventStream := newTestStreamForBatching("",
+	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
 			Webhook:       &webhookAction{},
@@ -329,7 +328,7 @@ func TestBuildup(t *testing.T) {
 	for !stream.isBlocked() {
 		time.Sleep(1 * time.Millisecond)
 	}
-	assert.Equal(uint64(11), stream.inFlight)
+	assert.True(stream.inFlight >= 10)
 
 	for i := 0; i < 11; i++ {
 		<-eventStream
@@ -340,36 +339,24 @@ func TestBuildup(t *testing.T) {
 	assert.Equal(uint64(0), stream.inFlight)
 
 }
-func TestProcessEventsEnd2End(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir(t)
-	defer cleanup(t, dir)
 
-	sm, stream, svr, eventStream := newTestStreamForBatching(
-		dir,
-		&StreamInfo{
-			BatchSize: 1,
-			Webhook:   &webhookAction{},
-		}, 200)
-	defer svr.Close()
-
+func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, stream *eventStream) *SubscriptionInfo {
+	log.SetLevel(log.DebugLevel)
 	testDataBytes, err := ioutil.ReadFile("../../test/simplevents_logs.json")
 	assert.NoError(err)
 	var testData []*logEntry
 	json.Unmarshal(testDataBytes, &testData)
 
 	callCount := 0
-	rpc := kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}) {
-		t.Logf("CallContext %d: %s", callCount, method)
+	rpc := kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
 		callCount++
 		if method == "eth_newFilter" {
-			assert.True(callCount < 2)
 		} else if method == "eth_getFilterLogs" {
-			assert.Equal(2, callCount)
 			*(res.(*[]*logEntry)) = testData[0:2]
-		} else if method == "eth_getFilterChanges" {
-			assert.True(callCount >= 3)
+		} else if method == "eth_getFilterChanges" && (callCount == 3) {
 			*(res.(*[]*logEntry)) = testData[2:]
+		} else if method == "eth_getFilterChanges" {
+			*(res.(*[]*logEntry)) = []*logEntry{}
 		}
 	})
 	sm.rpc = rpc
@@ -403,8 +390,24 @@ func TestProcessEventsEnd2End(t *testing.T) {
 		},
 	}
 	addr := kldbind.HexToAddress("0x167f57a13a9c35ff92f0649d2be0e52b4f8ac3ca")
-	s, err := sm.AddSubscription(&addr, event, stream.spec.ID)
-	assert.NoError(err)
+	s, _ := sm.AddSubscription(&addr, event, stream.spec.ID)
+	return s
+}
+
+func TestProcessEventsEnd2End(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	sm, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			BatchSize: 1,
+			Webhook:   &webhookAction{},
+		}, 200)
+	sm.db, _ = newLDBKeyValueStore(dir)
+	defer svr.Close()
+
+	s := setupTestSubscription(assert, sm, stream)
 
 	// We expect three events to be sent to the webhook
 	// With the default batch size of 1, that means three separate requests
@@ -430,9 +433,195 @@ func TestProcessEventsEnd2End(t *testing.T) {
 	}()
 	wg.Wait()
 
-	err = sm.DeleteSubscription(s.ID)
+	err := sm.DeleteSubscription(s.ID)
 	assert.NoError(err)
 	err = sm.DeleteStream(stream.spec.ID)
 	assert.NoError(err)
 	sm.Close()
+}
+
+func TestCheckpointRecovery(t *testing.T) {
+	assert := assert.New(t)
+	sm, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingBlock,
+			Webhook:       &webhookAction{},
+		}, 200)
+	defer close(eventStream)
+	defer svr.Close()
+	defer stream.stop()
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		for i := 0; i < 3; i++ {
+			<-eventStream
+		}
+		wg.Done()
+	}()
+
+	s := setupTestSubscription(assert, sm, stream)
+
+	for {
+		time.Sleep(1 * time.Millisecond)
+		cp, err := sm.loadCheckpoint(stream.spec.ID)
+		if err == nil {
+			v, exists := cp[s.ID]
+			t.Logf("Checkpoint? %t (%+v)", exists, v)
+			if v != nil && big.NewInt(150721).Cmp(v) == 0 {
+				break
+			}
+		}
+	}
+	stream.suspend()
+	for !stream.pollerDone {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	// Restart from the checkpoint that was stored
+	var newFilterBlock uint64
+	sub := sm.subscriptions[s.ID]
+	sub.filterStale = true
+	sub.rpc = kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
+		if method == "eth_newFilter" {
+			newFilterBlock = args[0].(*ethFilterRestart).FromBlock.ToInt().Uint64()
+			t.Logf("New filter block after checkpoint recovery: %d", newFilterBlock)
+		} else {
+			*(res.(*[]*logEntry)) = []*logEntry{}
+		}
+	})
+
+	stream.resume()
+	for stream.pollerDone {
+		time.Sleep(1 * time.Millisecond)
+	}
+	wg.Wait()
+	for uint64(150721) != newFilterBlock {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+}
+
+func TestWithoutCheckpointRecovery(t *testing.T) {
+	assert := assert.New(t)
+	sm, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingBlock,
+			Webhook:       &webhookAction{},
+		}, 200)
+	defer close(eventStream)
+	defer svr.Close()
+	defer stream.stop()
+
+	stream.suspend()
+	for !stream.pollerDone {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	s := setupTestSubscription(assert, sm, stream)
+
+	var initialEndBlock string
+	sub := sm.subscriptions[s.ID]
+	sub.filterStale = true
+	sub.rpc = kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
+		if method == "eth_newFilter" {
+			initialEndBlock = args[0].(*ethFilterInitial).ToBlock
+			t.Logf("New filter block after recovery with no checkpoint: %s", initialEndBlock)
+		} else {
+			*(res.(*[]*logEntry)) = []*logEntry{}
+		}
+	})
+
+	stream.resume()
+	for stream.pollerDone {
+		time.Sleep(1 * time.Millisecond)
+	}
+	for initialEndBlock != "latest" {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+}
+
+func TestMarkStaleOnError(t *testing.T) {
+	assert := assert.New(t)
+	sm, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingBlock,
+			Webhook:       &webhookAction{},
+		}, 200)
+	defer close(eventStream)
+	defer svr.Close()
+	defer stream.stop()
+
+	stream.suspend()
+	for !stream.pollerDone {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	s := setupTestSubscription(assert, sm, stream)
+
+	sub := sm.subscriptions[s.ID]
+	sub.rpc = kldeth.NewMockRPCClientForSync(fmt.Errorf("filter not found"), nil)
+
+	stream.resume()
+	for stream.pollerDone {
+		time.Sleep(1 * time.Millisecond)
+	}
+	for !sub.filterStale {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+}
+
+func TestStoreCheckpointLoadError(t *testing.T) {
+	sm, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingBlock,
+			Webhook:       &webhookAction{},
+		}, 200)
+	mockKV := newMockKV(fmt.Errorf("pop"))
+	sm.db = mockKV
+	defer close(eventStream)
+	defer svr.Close()
+	defer stream.stop()
+
+	stream.suspend()
+	for !stream.pollerDone {
+		time.Sleep(1 * time.Millisecond)
+	}
+	stream.resume()
+	for stream.pollerDone {
+		time.Sleep(1 * time.Millisecond)
+	}
+}
+
+func TestStoreCheckpointStoreError(t *testing.T) {
+	assert := assert.New(t)
+	sm, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingBlock,
+			Webhook:       &webhookAction{},
+		}, 200)
+	mockKV := newMockKV(nil)
+	mockKV.storeErr = fmt.Errorf("pop")
+	sm.db = mockKV
+	defer close(eventStream)
+	defer svr.Close()
+	defer stream.stop()
+
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		for i := 0; i < 3; i++ {
+			<-eventStream
+		}
+		wg.Done()
+	}()
+	setupTestSubscription(assert, sm, stream)
+	wg.Wait()
+
+	stream.suspend()
+	for !stream.pollerDone {
+		time.Sleep(1 * time.Millisecond)
+	}
 }

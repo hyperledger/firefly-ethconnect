@@ -115,9 +115,11 @@ func newREST2eth(gw smartContractGatewayInt, rpc kldeth.RPCClient, asyncDispatch
 func (r *rest2eth) addRoutes(router *httprouter.Router) {
 	router.POST("/contracts/:address/:method", r.restHandler)
 	router.GET("/contracts/:address/:method", r.restHandler)
+	router.GET("/contracts/:address/:method/:subcommand", r.restHandler)
 	router.POST("/abis/:abi", r.restHandler)
 	router.POST("/abis/:abi/:address/:method", r.restHandler)
 	router.GET("/abis/:abi/:address/:method", r.restHandler)
+	router.GET("/abis/:abi/:address/:method/:subcommand", r.restHandler)
 }
 
 // getKLDParam standardizes how special 'kld' params are specified, in query params, or headers
@@ -135,7 +137,7 @@ func (r *rest2eth) getKLDParam(name string, req *http.Request, isBool bool) stri
 	return val
 }
 
-func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, params httprouter.Params) (from, addr string, value json.Number, abiMethod *abi.Method, deployMsg *kldmessages.DeployContract, msgParams []interface{}, err error) {
+func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, params httprouter.Params) (from, addr string, value json.Number, abiMethod *abi.Method, abiEvent *abi.Event, deployMsg *kldmessages.DeployContract, body map[string]interface{}, msgParams []interface{}, err error) {
 	addr = strings.ToLower(strings.TrimPrefix(params.ByName("address"), "0x"))
 
 	from = strings.ToLower(strings.TrimPrefix(r.getKLDParam("from", req, false), "0x"))
@@ -183,15 +185,27 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 			}
 		}
 		if abiMethod == nil {
-			err = fmt.Errorf("Method '%s' is not declared in the ABI of contract '%s'", url.QueryEscape(methodName), addr)
-			r.restErrReply(res, req, err, 404)
-			return
+			for _, event := range a.ABI.Events {
+				if event.Name == methodName {
+					abiEvent = &event
+					break
+				}
+			}
+			if abiEvent == nil {
+				err = fmt.Errorf("Method or Event '%s' is not declared in the ABI of contract '%s'", url.QueryEscape(methodName), addr)
+				r.restErrReply(res, req, err, 404)
+				return
+			}
 		}
 	}
 
-	body, err := kldutils.YAMLorJSONPayload(req)
+	body, err = kldutils.YAMLorJSONPayload(req)
 	if err != nil {
 		r.restErrReply(res, req, err, 400)
+		return
+	}
+
+	if abiEvent != nil {
 		return
 	}
 
@@ -218,12 +232,14 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
 
-	from, addr, value, abiMethod, deployMsg, msgParams, err := r.resolveParams(res, req, params)
+	from, addr, value, abiMethod, abiEvent, deployMsg, body, msgParams, err := r.resolveParams(res, req, params)
 	if err != nil {
 		return
 	}
 
-	if (!abiMethod.Const) &&
+	if abiEvent != nil {
+		r.subscribeEvent(res, req, abiEvent, body)
+	} else if (!abiMethod.Const) &&
 		strings.ToLower(r.getKLDParam("call", req, true)) != "true" {
 		if from == "" {
 			err = fmt.Errorf("Please specify a valid address in the 'kld-from' query string parameter or x-kaleido-from HTTP header")
@@ -238,6 +254,10 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 	} else {
 		r.callContract(res, req, from, addr, value, abiMethod, msgParams)
 	}
+}
+
+func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, abiEvent *abi.Event, body map[string]interface{}) {
+
 }
 
 func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, from string, value json.Number, abiMethod *abi.Method, deployMsg *kldmessages.DeployContract, msgParams []interface{}) {

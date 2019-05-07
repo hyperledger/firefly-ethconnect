@@ -66,32 +66,32 @@ type subscriptionManager interface {
 
 // SubscriptionManagerConf configuration
 type SubscriptionManagerConf struct {
-	LevelDBPath       string `json:"db"`
-	AllowPrivateIPs   bool   `json:"allowPrivateIPs,omitempty"`
-	PollingIntervalMS uint64 `json:"pollingIntervalMS,omitempty"`
+	EventLevelDBPath        string `json:"eventsDB"`
+	EventPollingIntervalMS  uint64 `json:"eventPollingIntervalMS,omitempty"`
+	WebhooksAllowPrivateIPs bool   `json:"webhooksAllowPrivateIPs,omitempty"`
 }
 
 type subscriptionMGR struct {
 	conf          *SubscriptionManagerConf
 	rpcConf       *kldeth.RPCConnOpts
 	db            kvStore
-	rpc           kldeth.RPCClientAll
+	rpc           kldeth.RPCClient
 	subscriptions map[string]*subscription
 	streams       map[string]*eventStream
 }
 
 // CobraInitSubscriptionManager standard naming for cobra command params
 func CobraInitSubscriptionManager(cmd *cobra.Command, conf *SubscriptionManagerConf) {
-	cmd.Flags().StringVarP(&conf.LevelDBPath, "events-db", "E", "", "Level DB location for subscription management")
-	cmd.Flags().BoolVarP(&conf.AllowPrivateIPs, "events-privips", "I", false, "Allow private IPs in Webhooks")
-	cmd.Flags().Uint64VarP(&conf.PollingIntervalMS, "events-polling-int", "P", 10, "Event polling interval (ms)")
+	cmd.Flags().StringVarP(&conf.EventLevelDBPath, "events-db", "E", "", "Level DB location for subscription management")
+	cmd.Flags().Uint64VarP(&conf.EventPollingIntervalMS, "events-polling-int", "j", 10, "Event polling interval (ms)")
+	cmd.Flags().BoolVarP(&conf.WebhooksAllowPrivateIPs, "events-privips", "J", false, "Allow private IPs in Webhooks")
 }
 
 // NewSubscriptionManager construtor
-func NewSubscriptionManager(conf *SubscriptionManagerConf, rpcConf *kldeth.RPCConnOpts) SubscriptionManager {
+func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc kldeth.RPCClient) SubscriptionManager {
 	sm := &subscriptionMGR{
 		conf:          conf,
-		rpcConf:       rpcConf,
+		rpc:           rpc,
 		subscriptions: make(map[string]*subscription),
 		streams:       make(map[string]*eventStream),
 	}
@@ -310,11 +310,8 @@ func (s *subscriptionMGR) deleteCheckpoint(streamID string) {
 }
 
 func (s *subscriptionMGR) Init() (err error) {
-	if s.db, err = newLDBKeyValueStore(s.conf.LevelDBPath); err != nil {
-		return fmt.Errorf("Failed to open DB at %s: %s", s.conf.LevelDBPath, err)
-	}
-	if s.rpc, err = kldeth.RPCConnect(s.rpcConf); err != nil {
-		return err
+	if s.db, err = newLDBKeyValueStore(s.conf.EventLevelDBPath); err != nil {
+		return fmt.Errorf("Failed to open DB at %s: %s", s.conf.EventLevelDBPath, err)
 	}
 	s.recoverStreams()
 	s.recoverSubscriptions()
@@ -370,8 +367,5 @@ func (s *subscriptionMGR) recoverSubscriptions() {
 func (s *subscriptionMGR) Close() {
 	if s.db != nil {
 		s.db.Close()
-	}
-	if s.rpc != nil {
-		s.rpc.Close()
 	}
 }

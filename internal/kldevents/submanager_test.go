@@ -59,12 +59,11 @@ func cleanup(t *testing.T, dir string) {
 
 func newTestSubscriptionManager() *subscriptionMGR {
 	smconf := &SubscriptionManagerConf{}
-	rconf := &kldeth.RPCConnOpts{URL: ""}
-	sm := NewSubscriptionManager(smconf, rconf).(*subscriptionMGR)
+	sm := NewSubscriptionManager(smconf, nil).(*subscriptionMGR)
 	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
 	sm.db = newMockKV(nil)
-	sm.config().PollingIntervalMS = 10
-	sm.config().AllowPrivateIPs = true
+	sm.config().WebhooksAllowPrivateIPs = true
+	sm.config().EventPollingIntervalMS = 10
 	return sm
 }
 
@@ -86,8 +85,7 @@ func TestInitLevelDBSuccess(t *testing.T) {
 	defer svr.Close()
 
 	sm := newTestSubscriptionManager()
-	sm.config().LevelDBPath = path.Join(dir, "db")
-	sm.rpcConf.URL = svr.URL
+	sm.config().EventLevelDBPath = path.Join(dir, "db")
 	err := sm.Init()
 	assert.Equal(nil, err)
 	sm.Close()
@@ -99,20 +97,9 @@ func TestInitLevelDBFail(t *testing.T) {
 	defer cleanup(t, dir)
 	ioutil.WriteFile(path.Join(dir, "db"), []byte("I am not a directory"), 0644)
 	sm := newTestSubscriptionManager()
-	sm.config().LevelDBPath = path.Join(dir, "db")
+	sm.config().EventLevelDBPath = path.Join(dir, "db")
 	err := sm.Init()
 	assert.Regexp("not a directory", err.Error())
-	sm.Close()
-}
-
-func TestInitLevelRPCFail(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir(t)
-	defer cleanup(t, dir)
-	sm := newTestSubscriptionManager()
-	sm.config().LevelDBPath = path.Join(dir, "db")
-	err := sm.Init()
-	assert.Regexp("missing address", err.Error())
 	sm.Close()
 }
 
@@ -174,7 +161,7 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	svr := httptest.NewServer(mux)
 	defer svr.Close()
 	sm = newTestSubscriptionManager()
-	sm.conf.LevelDBPath = path.Join(dir, "db")
+	sm.conf.EventLevelDBPath = path.Join(dir, "db")
 	sm.rpcConf = &kldeth.RPCConnOpts{URL: svr.URL}
 	err = sm.Init()
 	assert.NoError(err)

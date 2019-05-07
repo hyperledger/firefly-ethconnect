@@ -31,6 +31,7 @@ import (
 	"github.com/go-openapi/spec"
 	"github.com/julienschmidt/httprouter"
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
+	"github.com/kaleido-io/ethconnect/internal/kldevents"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -60,6 +61,41 @@ func TestNewSmartContractGatewayBadURL(t *testing.T) {
 	)
 }
 
+func TestNewSmartContractGatewayWithEvents(t *testing.T) {
+	dir := tempdir()
+	defer cleanup(dir)
+	assert := assert.New(t)
+	s, err := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			BaseURL: "http://localhost/api/v1",
+			SubscriptionManagerConf: kldevents.SubscriptionManagerConf{
+				EventLevelDBPath: path.Join(dir, "db"),
+			},
+		},
+		nil, nil, nil,
+	)
+	assert.NoError(err)
+	assert.NotNil(s.(*smartContractGW).submgr)
+}
+
+func TestNewSmartContractGatewayWithEventsFail(t *testing.T) {
+	dir := tempdir()
+	defer cleanup(dir)
+	assert := assert.New(t)
+	dbpath := path.Join(dir, "db")
+	ioutil.WriteFile(dbpath, []byte("not a database"), 0644)
+	_, err := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			BaseURL: "http://localhost/api/v1",
+			SubscriptionManagerConf: kldevents.SubscriptionManagerConf{
+				EventLevelDBPath: dbpath,
+			},
+		},
+		nil, nil, nil,
+	)
+	assert.Regexp("Event-stream subscription manager", err.Error())
+}
+
 func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	// writes real files and tests end to end
 	assert := assert.New(t)
@@ -70,7 +106,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	scgw, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 			BaseURL:     "http://localhost/api/v1",
@@ -172,12 +208,13 @@ func TestLoadABIFailure(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 	ioutil.WriteFile(path.Join(dir, "contract_addr1.abi.json"), []byte(":bad json"), 0644)
 	_, err := scgw.loadABIForInstance("addr1")
 	assert.Regexp("Failed to load installed ABI for contract address", err.Error())
@@ -187,12 +224,13 @@ func TestLoadDeployMsgOK(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 	goodMsg := &kldmessages.DeployContract{}
 	deployBytes, _ := json.Marshal(goodMsg)
 	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), deployBytes, 0644)
@@ -204,12 +242,13 @@ func TestLoadDeployMsgMissing(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 	_, err := scgw.loadDeployMsgForFactory("abi1")
 	assert.Regexp("Failed to find ABI with ID abi1:", err.Error())
 }
@@ -218,12 +257,13 @@ func TestLoadDeployMsgFailure(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), []byte(":bad json"), 0644)
 	_, err := scgw.loadDeployMsgForFactory("abi1")
 	assert.Regexp("Failed to load ABI with ID abi1", err.Error())
@@ -231,12 +271,13 @@ func TestLoadDeployMsgFailure(t *testing.T) {
 
 func TestPreDeployCompileFailure(t *testing.T) {
 	assert := assert.New(t)
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: "/anypath",
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 	msg := &kldmessages.DeployContract{
 		Solidity: "bad solidity",
 	}
@@ -248,12 +289,13 @@ func TestPreDeployMsgWrite(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: path.Join(dir, "badpath"),
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 	msg := &kldmessages.DeployContract{
 		Solidity: simpleStorage,
 	}
@@ -266,13 +308,14 @@ func TestPostDeployOpenFail(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: path.Join(dir, "badpath"),
 			BaseURL:     "http://localhost/api/v1",
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 	replyMsg := &kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{
 			Headers: kldmessages.ReplyHeaders{
@@ -289,12 +332,13 @@ func TestPostDeployDecodeFail(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 	replyMsg := &kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{
 			Headers: kldmessages.ReplyHeaders{
@@ -312,12 +356,13 @@ func TestPostDeploySwaggerGenFail(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 	_, err := scgw.genSwagger("request1", "", nil, "", "")
 	assert.Regexp("ABI cannot be nil", err.Error())
 }
@@ -326,12 +371,13 @@ func TestGenSwaggerWriteFail(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: path.Join(dir, "badpath"),
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	a := kldbind.ABI{
 		ABI: abi.ABI{},
@@ -344,12 +390,13 @@ func TestStoreABIWriteFail(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: path.Join(dir, "badpath"),
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	a := kldbind.ABI{
 		ABI: abi.ABI{},
@@ -362,12 +409,13 @@ func TestLoadABIReadFail(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: path.Join(dir, "badpath"),
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	_, err := scgw.loadABIForInstance("invalid")
 	assert.Regexp("Failed to find installed ABI for contract address", err.Error())
@@ -377,12 +425,13 @@ func TestLoadABIBadData(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	ioutil.WriteFile(path.Join(dir, "badness.abi.json"), []byte(":not json"), 0644)
 	_, err := scgw.loadABIForInstance("badness")
@@ -422,12 +471,13 @@ func TestBuildIndex(t *testing.T) {
 	ioutil.WriteFile(path.Join(dir, "abi_e27be4cf-6ae2-411e-8088-db2992618938.deploy.json"), deployBytes, 0644)
 	ioutil.WriteFile(path.Join(dir, "abi_519526b2-0879-41f4-93c0-09acaa62e2da.deploy.json"), []byte(":bad json"), 0644)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	assert.Equal(2, len(scgw.contractIndex))
 	info := scgw.contractIndex["123456789abcdef0123456789abcdef012345678"].(*contractInfo)
@@ -464,12 +514,13 @@ func TestAddFileToSwaggerIndexOpenFail(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	scgw.addFileToContractIndex("", path.Join(dir, "baddir", "0123456789abcdef0123456789abcdef01234567.swagger.json"), time.Now())
 	assert.Equal(0, len(scgw.contractIndex))
@@ -480,12 +531,13 @@ func TestGetContractOrABIFail(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	scgw.contractIndex["123456789abcdef0123456789abcdef012345678"] = &contractInfo{
 		Name:    "zombie",
@@ -514,12 +566,13 @@ func TestGetContractUI(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	scgw.contractIndex["123456789abcdef0123456789abcdef012345678"] = &contractInfo{
 		Name:    "any",
@@ -542,12 +595,13 @@ func TestAddABISingleSolidity(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -575,12 +629,13 @@ func TestAddABIZipNested(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -612,12 +667,13 @@ func TestAddABIStoreFail(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: path.Join(dir, "badness"),
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -645,12 +701,13 @@ func TestAddABIBadZip(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -678,12 +735,13 @@ func TestAddABIZipNestedNoSource(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
@@ -714,12 +772,13 @@ func TestAddABIZiNotMultipart(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	req := httptest.NewRequest("POST", "/abis", bytes.NewReader([]byte{}))
 	res := httptest.NewRecorder()
@@ -740,12 +799,13 @@ func TestCompileMultipartFormSolidityBadDir(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	_, err := scgw.compileMultipartFormSolidity(path.Join(dir, "baddir"), nil)
 	assert.EqualError(err, "Failed to read extracted multi-part form data")
@@ -757,12 +817,13 @@ func TestCompileMultipartFormSolidityBadSolc(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 	os.Setenv("KLD_SOLC_0_99", "badness")
 
 	ioutil.WriteFile(path.Join(dir, "solidity.sol"), []byte(simpleStorage), 0644)
@@ -778,12 +839,13 @@ func TestCompileMultipartFormSolidityBadCompilerVerReq(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	ioutil.WriteFile(path.Join(dir, "solidity.sol"), []byte(simpleStorage), 0644)
 	req := httptest.NewRequest("POST", "/abis?compiler=0.99", bytes.NewReader([]byte{}))
@@ -797,12 +859,13 @@ func TestCompileMultipartFormSolidityBadSolidity(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	ioutil.WriteFile(path.Join(dir, "solidity.sol"), []byte("this is not the solidity you are looking for"), 0644)
 	req := httptest.NewRequest("POST", "/abis", bytes.NewReader([]byte{}))
@@ -816,12 +879,13 @@ func TestExtractMultiPartFileBadFile(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	err := scgw.extractMultiPartFile(dir, &multipart.FileHeader{
 		Filename: "/stuff.zip",
@@ -835,12 +899,13 @@ func TestExtractMultiPartFileBadInput(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	err := scgw.extractMultiPartFile(dir, &multipart.FileHeader{
 		Filename: "stuff.zip",
@@ -854,12 +919,13 @@ func TestStoreDeployableABIMissingABI(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	_, err := scgw.storeDeployableABI(&kldmessages.DeployContract{}, nil)
 	assert.EqualError(err, "Must supply ABI to install an existing ABI into the REST Gateway")
@@ -869,12 +935,13 @@ func TestAddFileToABIIndexBadFileSwallowsError(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
-	scgw := NewSmartContractGateway(
+	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
 		nil, nil, nil,
-	).(*smartContractGW)
+	)
+	scgw := s.(*smartContractGW)
 
 	scgw.addFileToABIIndex("", "badness", time.Now().UTC())
 }

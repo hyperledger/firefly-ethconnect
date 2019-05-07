@@ -43,6 +43,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common/compiler"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
+	"github.com/kaleido-io/ethconnect/internal/kldevents"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/mholt/archiver"
 
@@ -68,6 +69,7 @@ type smartContractGatewayInt interface {
 
 // SmartContractGatewayConf configuration
 type SmartContractGatewayConf struct {
+	kldevents.SubscriptionManagerConf
 	StoragePath string `json:"storagePath"`
 	BaseURL     string `json:"baseURL"`
 }
@@ -76,19 +78,21 @@ type SmartContractGatewayConf struct {
 func CobraInitContractGateway(cmd *cobra.Command, conf *SmartContractGatewayConf) {
 	cmd.Flags().StringVarP(&conf.StoragePath, "openapi-path", "I", "", "Path containing ABI + generated OpenAPI/Swagger 2.0 contact definitions")
 	cmd.Flags().StringVarP(&conf.BaseURL, "openapi-baseurl", "U", "", "Base URL for generated OpenAPI/Swagger 2.0 contact definitions")
+	kldevents.CobraInitSubscriptionManager(cmd, &conf.SubscriptionManagerConf)
 }
 
 func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	g.r2e.addRoutes(router)
 	router.GET("/contracts", g.listContractsOrABIs)
 	router.GET("/contracts/:address", g.getContractOrABI)
+	// router.POST("/contracts/eventstream/:event", g.subscribeEvent)
 	router.POST("/abis", g.addABI)
 	router.GET("/abis", g.listContractsOrABIs)
 	router.GET("/abis/:abi", g.getContractOrABI)
 }
 
 // NewSmartContractGateway construtor
-func NewSmartContractGateway(conf *SmartContractGatewayConf, rpc kldeth.RPCClient, processor kldtx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher) SmartContractGateway {
+func NewSmartContractGateway(conf *SmartContractGatewayConf, rpc kldeth.RPCClient, processor kldtx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher) (SmartContractGateway, error) {
 	var baseURL *url.URL
 	var err error
 	if conf.BaseURL != "" {
@@ -110,11 +114,21 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, rpc kldeth.RPCClien
 	syncDispatcher := newSyncDispatcher(processor)
 	gw.r2e = newREST2eth(gw, rpc, asyncDispatcher, syncDispatcher)
 	gw.buildIndex()
-	return gw
+	if conf.EventLevelDBPath != "" {
+		submgr := kldevents.NewSubscriptionManager(&conf.SubscriptionManagerConf, rpc)
+		err = submgr.Init()
+		if err != nil {
+			return nil, fmt.Errorf("Event-stream subscription manager: %s", err)
+		} else {
+			gw.submgr = submgr
+		}
+	}
+	return gw, nil
 }
 
 type smartContractGW struct {
 	conf          *SmartContractGatewayConf
+	submgr        kldevents.SubscriptionManager
 	abi2swagger   *kldopenapi.ABI2Swagger
 	r2e           *rest2eth
 	contractIndex map[string]kldmessages.TimeSortable

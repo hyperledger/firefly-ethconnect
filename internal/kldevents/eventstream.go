@@ -131,13 +131,13 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo) (a *eventStream, e
 	a = &eventStream{
 		sm:                sm,
 		spec:              spec,
-		allowPrivateIPs:   sm.config().AllowPrivateIPs,
+		allowPrivateIPs:   sm.config().WebhooksAllowPrivateIPs,
 		eventStream:       make(chan *eventData),
 		batchCond:         sync.NewCond(&sync.Mutex{}),
 		batchQueue:        list.New(),
 		initialRetryDelay: DefaultExponentialBackoffInitial,
 		backoffFactor:     DefaultExponentialBackoffFactor,
-		pollingInterval:   time.Duration(sm.config().PollingIntervalMS) * time.Millisecond,
+		pollingInterval:   time.Duration(sm.config().EventPollingIntervalMS) * time.Millisecond,
 	}
 	go a.eventPoller()
 	go a.batchProcessor()

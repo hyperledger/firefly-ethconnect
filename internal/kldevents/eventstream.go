@@ -91,9 +91,8 @@ type eventStream struct {
 // initialied to that supplied (zero on initial, or the
 // value from the checkpoint)
 func newEventStream(sm subscriptionManager, spec *StreamInfo) (a *eventStream, err error) {
-
-	if spec == nil {
-		return nil, fmt.Errorf("No action specified")
+	if spec == nil || spec.ID == "" {
+		return nil, fmt.Errorf("No ID")
 	}
 
 	if spec.BatchSize == 0 {

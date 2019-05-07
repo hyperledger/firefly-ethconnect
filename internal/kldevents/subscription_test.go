@@ -54,6 +54,7 @@ func (m *mockSubMgr) storeCheckpoint(string, map[string]*big.Int) error { return
 
 func newTestStream() *eventStream {
 	a, _ := newEventStream(newTestSubscriptionManager(), &StreamInfo{
+		ID:   "123",
 		Type: "WebHook",
 		Webhook: &webhookAction{
 			URL: "http://hello.example.com/world",
@@ -96,7 +97,7 @@ func TestCreateWebhookSub(t *testing.T) {
 	assert.NoError(err)
 	assert.NotEmpty(s.info.ID)
 
-	s1, err := restoreSubscription(m, rpc, i, &big.Int{})
+	s1, err := restoreSubscription(m, rpc, i)
 	assert.NoError(err)
 
 	assert.Equal(s.info.ID, s1.info.ID)
@@ -130,15 +131,6 @@ func TestCreateSubscriptionNoEvent(t *testing.T) {
 	assert.EqualError(err, "Solidity event name must be specified")
 }
 
-func TestCreateSubscriptionNewFilterRPCFailure(t *testing.T) {
-	assert := assert.New(t)
-	event := &kldbind.ABIEvent{Name: "party"}
-	rpc := kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil)
-	m := &mockSubMgr{stream: newTestStream()}
-	_, err := newSubscription(m, rpc, nil, testSubInfo(event))
-	assert.EqualError(err, "Failed to register filter: pop")
-}
-
 func TestCreateSubscriptionMissingAction(t *testing.T) {
 	assert := assert.New(t)
 	event := &kldbind.ABIEvent{Name: "party"}
@@ -150,16 +142,8 @@ func TestCreateSubscriptionMissingAction(t *testing.T) {
 func TestRestoreSubscriptionMissingAction(t *testing.T) {
 	assert := assert.New(t)
 	m := &mockSubMgr{err: fmt.Errorf("nope")}
-	_, err := restoreSubscription(m, nil, testSubInfo(&kldbind.ABIEvent{}), big.NewInt(0))
+	_, err := restoreSubscription(m, nil, testSubInfo(&kldbind.ABIEvent{}))
 	assert.EqualError(err, "nope")
-}
-
-func TestRestoreSubscriptionNewFilterRPCFailure(t *testing.T) {
-	assert := assert.New(t)
-	m := &mockSubMgr{}
-	rpc := kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil)
-	_, err := restoreSubscription(m, rpc, testSubInfo(&kldbind.ABIEvent{}), big.NewInt(0))
-	assert.EqualError(err, "Failed to register filter: pop")
 }
 
 func TestProcessEventsStaleFilter(t *testing.T) {
@@ -186,6 +170,26 @@ func TestProcessEventsCannotProcess(t *testing.T) {
 	err := s.processNewEvents()
 	// We swallow the error in this case - as we simply couldn't read the event
 	assert.NoError(err)
+}
+
+func TestInitialFilterFail(t *testing.T) {
+	assert := assert.New(t)
+	s := &subscription{
+		info: &SubscriptionInfo{},
+		rpc:  kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
+	}
+	err := s.initialFilter()
+	assert.EqualError(err, "pop")
+}
+
+func TestRestartFilterFail(t *testing.T) {
+	assert := assert.New(t)
+	s := &subscription{
+		info: &SubscriptionInfo{},
+		rpc:  kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
+	}
+	err := s.restartFilter(big.NewInt(0))
+	assert.EqualError(err, "pop")
 }
 
 func TestUnsubscribe(t *testing.T) {

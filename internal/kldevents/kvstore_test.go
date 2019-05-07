@@ -44,6 +44,9 @@ func (m *mockKV) Delete(key string) error {
 	delete(m.kvs, key)
 	return m.deleteErr
 }
+func (m *mockKV) NewIterator() kvIterator {
+	return nil // not implemented in mock
+}
 func (m *mockKV) Close() {}
 
 func newMockKV(err error) *mockKV {

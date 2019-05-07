@@ -18,12 +18,21 @@ import (
 	"fmt"
 
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
+
+type kvIterator interface {
+	Key() string
+	Value() []byte
+	Next() bool
+	Release()
+}
 
 type kvStore interface {
 	Put(key string, val []byte) error
 	Get(key string) ([]byte, error)
 	Delete(key string) error
+	NewIterator() kvIterator
 	Close()
 }
 
@@ -41,6 +50,32 @@ func (k *levelDBKeyValueStore) Get(key string) ([]byte, error) {
 
 func (k *levelDBKeyValueStore) Delete(key string) error {
 	return k.db.Delete([]byte(key), nil)
+}
+
+func (k *levelDBKeyValueStore) NewIterator() kvIterator {
+	return &levelDBKeyIterator{
+		i: k.db.NewIterator(nil, nil),
+	}
+}
+
+type levelDBKeyIterator struct {
+	i iterator.Iterator
+}
+
+func (k *levelDBKeyIterator) Key() string {
+	return string(k.i.Key())
+}
+
+func (k *levelDBKeyIterator) Value() []byte {
+	return k.i.Value()
+}
+
+func (k *levelDBKeyIterator) Next() bool {
+	return k.i.Next()
+}
+
+func (k *levelDBKeyIterator) Release() {
+	k.i.Next()
 }
 
 func (k *levelDBKeyValueStore) Close() {

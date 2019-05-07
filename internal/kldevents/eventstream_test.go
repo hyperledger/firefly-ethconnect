@@ -34,12 +34,13 @@ import (
 func TestConstructorNoSpec(t *testing.T) {
 	assert := assert.New(t)
 	_, err := newEventStream(newTestSubscriptionManager(), nil)
-	assert.EqualError(err, "No action specified")
+	assert.EqualError(err, "No ID")
 }
 
 func TestConstructorBadType(t *testing.T) {
 	assert := assert.New(t)
 	_, err := newEventStream(newTestSubscriptionManager(), &StreamInfo{
+		ID:   "123",
 		Type: "random",
 	})
 	assert.EqualError(err, "Unknown action type 'random'")
@@ -48,6 +49,7 @@ func TestConstructorBadType(t *testing.T) {
 func TestConstructorMissingWebhook(t *testing.T) {
 	assert := assert.New(t)
 	_, err := newEventStream(newTestSubscriptionManager(), &StreamInfo{
+		ID:   "123",
 		Type: "webhook",
 	})
 	assert.EqualError(err, "Must specify webhook.url for action type 'webhook'")
@@ -56,6 +58,7 @@ func TestConstructorMissingWebhook(t *testing.T) {
 func TestConstructorBadWebhookURL(t *testing.T) {
 	assert := assert.New(t)
 	_, err := newEventStream(newTestSubscriptionManager(), &StreamInfo{
+		ID:   "123",
 		Type: "webhook",
 		Webhook: &webhookAction{
 			URL: ":badurl",
@@ -559,6 +562,7 @@ func TestMarkStaleOnError(t *testing.T) {
 	}
 
 	s := setupTestSubscription(assert, sm, stream)
+	sm.subscriptions[s.ID].filterStale = false
 
 	sub := sm.subscriptions[s.ID]
 	sub.rpc = kldeth.NewMockRPCClientForSync(fmt.Errorf("filter not found"), nil)

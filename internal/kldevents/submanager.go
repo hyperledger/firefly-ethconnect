@@ -25,6 +25,7 @@ import (
 
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
+	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -119,10 +120,12 @@ func (s *subscriptionMGR) Subscriptions() []*SubscriptionInfo {
 // AddSubscription adds a new subscription
 func (s *subscriptionMGR) AddSubscription(addr *kldbind.Address, event *kldbind.ABIEvent, streamID string) (*SubscriptionInfo, error) {
 	i := &SubscriptionInfo{
-		ID:             subIDPrefix + kldutils.UUIDv4(),
-		CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
-		Event:          kldbind.MarshalledABIEvent{E: *event},
-		Stream:         streamID,
+		TimeSorted: kldmessages.TimeSorted{
+			CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
+		},
+		ID:     subIDPrefix + kldutils.UUIDv4(),
+		Event:  kldbind.MarshalledABIEvent{E: *event},
+		Stream: streamID,
 	}
 	i.Path = subPathPrefix + i.ID
 	// Create it

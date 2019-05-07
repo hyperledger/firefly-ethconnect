@@ -23,6 +23,7 @@ import (
 
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
+	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -48,13 +49,13 @@ type ethFilterRestart struct {
 
 // SubscriptionInfo is the persisted data for the subscription
 type SubscriptionInfo struct {
-	ID             string                     `json:"id,omitempty"`
-	Path           string                     `json:"path"`
-	CreatedISO8601 string                     `json:"created"`
-	Name           string                     `json:"name"`
-	Stream         string                     `json:"stream"`
-	Filter         persistedFilter            `json:"filter"`
-	Event          kldbind.MarshalledABIEvent `json:"event"`
+	kldmessages.TimeSorted
+	ID     string                     `json:"id,omitempty"`
+	Path   string                     `json:"path"`
+	Name   string                     `json:"name"`
+	Stream string                     `json:"stream"`
+	Filter persistedFilter            `json:"filter"`
+	Event  kldbind.MarshalledABIEvent `json:"event"`
 }
 
 // subscription is the runtime that manages the subscription
@@ -97,6 +98,11 @@ func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind
 	return s, nil
 }
 
+// GetID returns the ID (for sorting)
+func (info *SubscriptionInfo) GetID() string {
+	return info.ID
+}
+
 func eventSummary(e *kldbind.ABIEvent) string {
 	var sb strings.Builder
 	sb.WriteString(e.Name)
@@ -112,7 +118,7 @@ func eventSummary(e *kldbind.ABIEvent) string {
 }
 
 func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *SubscriptionInfo) (*subscription, error) {
-	if i.ID == "" {
+	if i.GetID() == "" {
 		return nil, fmt.Errorf("No ID")
 	}
 	stream, err := sm.streamByID(i.Stream)

@@ -178,6 +178,7 @@ func (a *eventStream) resume() error {
 	a.spec.Suspended = false
 	a.processorDone = false
 	a.pollerDone = false
+	go a.eventPoller()
 	go a.batchProcessor()
 	a.batchCond.Broadcast()
 	return nil
@@ -228,14 +229,14 @@ func (a *eventStream) eventPoller() {
 			}
 		}
 		// Record a new checkpoint if needed
-		if err != nil {
+		if checkpoint != nil {
 			changed := false
 			for _, sub := range subs {
 				i1, _ := checkpoint[sub.info.ID]
 				i2 := sub.blockHWM()
 
 				changed = changed || i1 == nil || i1.Cmp(&i2) != 0
-				checkpoint[sub.info.ID] = &i2
+				checkpoint[sub.info.ID] = new(big.Int).Set(&i2)
 			}
 			if changed {
 				if err = a.sm.storeCheckpoint(a.spec.ID, checkpoint); err != nil {

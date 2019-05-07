@@ -56,10 +56,8 @@ func cleanup(t *testing.T, dir string) {
 	os.RemoveAll(dir)
 }
 
-func newTestSubscriptionManager(dir string) *subscriptionMGR {
-	smconf := &SubscriptionManagerConf{
-		LevelDBPath: path.Join(dir, "db"),
-	}
+func newTestSubscriptionManager() *subscriptionMGR {
+	smconf := &SubscriptionManagerConf{}
 	rconf := &kldeth.RPCConnOpts{URL: ""}
 	sm := NewSubscriptionManager(smconf, rconf).(*subscriptionMGR)
 	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
@@ -86,7 +84,8 @@ func TestInitLevelDBSuccess(t *testing.T) {
 	svr := httptest.NewServer(router)
 	defer svr.Close()
 
-	sm := newTestSubscriptionManager(dir)
+	sm := newTestSubscriptionManager()
+	sm.config().LevelDBPath = path.Join(dir, "db")
 	sm.rpcConf.URL = svr.URL
 	err := sm.Init()
 	assert.Equal(nil, err)
@@ -98,7 +97,8 @@ func TestInitLevelDBFail(t *testing.T) {
 	dir := tempdir(t)
 	defer cleanup(t, dir)
 	ioutil.WriteFile(path.Join(dir, "db"), []byte("I am not a directory"), 0644)
-	sm := newTestSubscriptionManager(dir)
+	sm := newTestSubscriptionManager()
+	sm.config().LevelDBPath = path.Join(dir, "db")
 	err := sm.Init()
 	assert.Regexp("not a directory", err.Error())
 	sm.Close()
@@ -108,7 +108,8 @@ func TestInitLevelRPCFail(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)
 	defer cleanup(t, dir)
-	sm := newTestSubscriptionManager(dir)
+	sm := newTestSubscriptionManager()
+	sm.config().LevelDBPath = path.Join(dir, "db")
 	err := sm.Init()
 	assert.Regexp("missing address", err.Error())
 	sm.Close()
@@ -118,7 +119,7 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)
 	defer cleanup(t, dir)
-	sm := newTestSubscriptionManager(dir)
+	sm := newTestSubscriptionManager()
 	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
 	sm.db, _ = newLDBKeyValueStore(path.Join(dir, "db"))
 	defer sm.db.Close()
@@ -179,7 +180,7 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)
 	defer cleanup(t, dir)
-	sm := newTestSubscriptionManager(dir)
+	sm := newTestSubscriptionManager()
 	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
 	sm.db = newMockKV(fmt.Errorf("pop"))
 	defer sm.db.Close()

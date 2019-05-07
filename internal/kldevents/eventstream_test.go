@@ -93,8 +93,8 @@ func newTestStreamForBatching(spec *StreamInfo, status ...int) (*subscriptionMGR
 	spec.Type = "WEBHOOK"
 	spec.Webhook.URL = svr.URL
 	sm := newTestSubscriptionManager()
-	sm.config().AllowPrivateIPs = true
-	sm.config().PollingIntervalMS = 10
+	sm.config().WebhooksAllowPrivateIPs = true
+	sm.config().EventPollingIntervalMS = 10
 	stream, _ := sm.AddStream(spec)
 	return sm, sm.streams[stream.ID], svr, eventStream
 }

@@ -20,7 +20,7 @@
         "produces": [
           "application/json"
         ],
-        "summary": "constructor",
+        "summary": "constructor()",
         "parameters": [
           {
             "name": "body",
@@ -54,6 +54,188 @@
             "description": "successful response",
             "schema": {
               "$ref": "#/definitions/constructor_outputs"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/Approval/subscribe": {
+      "post": {
+        "consumes": [
+          "application/json",
+          "application/x-yaml"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "Approval(address,address,uint256)",
+        "parameters": [
+          {
+            "description": "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured action)",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "action": {
+                  "description": "The ID of an action already defined in the REST Gateway",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/Approval_event"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/Transfer/subscribe": {
+      "post": {
+        "consumes": [
+          "application/json",
+          "application/x-yaml"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "Transfer(address,address,uint256)",
+        "parameters": [
+          {
+            "description": "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured action)",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "action": {
+                  "description": "The ID of an action already defined in the REST Gateway",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/Transfer_event"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/{address}/Approval/subscribe": {
+      "post": {
+        "consumes": [
+          "application/json",
+          "application/x-yaml"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "Approval(address,address,uint256)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "description": "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured action)",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "action": {
+                  "description": "The ID of an action already defined in the REST Gateway",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/Approval_event"
+            }
+          },
+          "default": {
+            "description": "error",
+            "schema": {
+              "$ref": "#/definitions/error"
+            }
+          }
+        }
+      }
+    },
+    "/{address}/Transfer/subscribe": {
+      "post": {
+        "consumes": [
+          "application/json",
+          "application/x-yaml"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "Transfer(address,address,uint256)",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "description": "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured action)",
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "properties": {
+                "action": {
+                  "description": "The ID of an action already defined in the REST Gateway",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful response",
+            "schema": {
+              "$ref": "#/definitions/Transfer_event"
             }
           },
           "default": {
@@ -997,6 +1179,44 @@
     }
   },
   "definitions": {
+    "Approval_event": {
+      "properties": {
+        "owner": {
+          "description": "address",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{40}$"
+        },
+        "spender": {
+          "description": "address",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{40}$"
+        },
+        "value": {
+          "description": "uint256",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        }
+      }
+    },
+    "Transfer_event": {
+      "properties": {
+        "from": {
+          "description": "address",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{40}$"
+        },
+        "to": {
+          "description": "address",
+          "type": "string",
+          "pattern": "^(0x)?[a-fA-F0-9]{40}$"
+        },
+        "value": {
+          "description": "uint256",
+          "type": "string",
+          "pattern": "^-?[0-9]+$"
+        }
+      }
+    },
     "allowance_inputs": {
       "properties": {
         "owner": {

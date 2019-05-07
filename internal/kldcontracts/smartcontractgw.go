@@ -85,7 +85,6 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	g.r2e.addRoutes(router)
 	router.GET("/contracts", g.listContractsOrABIs)
 	router.GET("/contracts/:address", g.getContractOrABI)
-	// router.POST("/contracts/eventstream/:event", g.subscribeEvent)
 	router.POST("/abis", g.addABI)
 	router.GET("/abis", g.listContractsOrABIs)
 	router.GET("/abis/:abi", g.getContractOrABI)
@@ -115,12 +114,10 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, rpc kldeth.RPCClien
 	gw.r2e = newREST2eth(gw, rpc, asyncDispatcher, syncDispatcher)
 	gw.buildIndex()
 	if conf.EventLevelDBPath != "" {
-		submgr := kldevents.NewSubscriptionManager(&conf.SubscriptionManagerConf, rpc)
-		err = submgr.Init()
+		gw.submgr = kldevents.NewSubscriptionManager(&conf.SubscriptionManagerConf, rpc)
+		err = gw.submgr.Init()
 		if err != nil {
 			return nil, fmt.Errorf("Event-stream subscription manager: %s", err)
-		} else {
-			gw.submgr = submgr
 		}
 	}
 	return gw, nil

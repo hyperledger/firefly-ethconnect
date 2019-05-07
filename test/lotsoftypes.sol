@@ -32,8 +32,8 @@ contract LotsOfTypes {
         bool[] memory param6,
         address[] memory param7
     )
-    pure
     public
+    pure
     returns (
         uint8   retval1,
         bytes memory retval2,
@@ -66,8 +66,8 @@ contract LotsOfTypes {
         bytes4 param6,
         uint256 param7
     )
-    pure
     public
+    pure
     returns (
         string memory retval1,
         int[] memory retval2,
@@ -79,7 +79,7 @@ contract LotsOfTypes {
     )
     {
       return (param1,param2,param3,param4,param5,param6,param7);
-    }    
+    }
 
     function undocumentedWrites(
         uint256 param1,
@@ -105,5 +105,6 @@ contract LotsOfTypes {
       val4 = param4;
       val5 = param5;
       return (param1,param2,param3,param4,param5,param6);
-    }    
+    }
+
 }

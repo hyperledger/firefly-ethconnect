@@ -53,7 +53,7 @@ func (m *mockSubMgr) loadCheckpoint(string) (map[string]*big.Int, error) { retur
 func (m *mockSubMgr) storeCheckpoint(string, map[string]*big.Int) error { return nil }
 
 func newTestStream() *eventStream {
-	a, _ := newEventStream(newTestSubscriptionManager(""), &StreamInfo{
+	a, _ := newEventStream(newTestSubscriptionManager(), &StreamInfo{
 		Type: "WebHook",
 		Webhook: &webhookAction{
 			URL: "http://hello.example.com/world",
@@ -175,7 +175,7 @@ func TestProcessEventsStaleFilter(t *testing.T) {
 func TestProcessEventsCannotProcess(t *testing.T) {
 	assert := assert.New(t)
 	s := &subscription{
-		rpc: kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}) {
+		rpc: kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
 			les := res.(*[]*logEntry)
 			*les = append(*les, &logEntry{
 				Data: "0x no hex here sorry",
@@ -191,7 +191,7 @@ func TestProcessEventsCannotProcess(t *testing.T) {
 func TestUnsubscribe(t *testing.T) {
 	assert := assert.New(t)
 	s := &subscription{
-		rpc: kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}) {
+		rpc: kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
 			*(res.(*string)) = "true"
 		}),
 	}
@@ -206,4 +206,14 @@ func TestUnsubscribeFail(t *testing.T) {
 	err := s.unsubscribe()
 	assert.EqualError(err, "pop")
 	assert.True(s.filterStale)
+}
+
+func TestLoadCheckpointBadJSON(t *testing.T) {
+	assert := assert.New(t)
+	sm := newTestSubscriptionManager()
+	mockKV := newMockKV(nil)
+	sm.db = mockKV
+	mockKV.kvs[checkpointIDPrefix+"id1"] = []byte(":bad json")
+	_, err := sm.loadCheckpoint("id1")
+	assert.Error(err)
 }

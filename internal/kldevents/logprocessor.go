@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
@@ -71,6 +72,7 @@ func (lp *logProcessor) batchComplete(newestEvent *eventData) {
 		lp.blockHWM.Set(i)
 	}
 	lp.hwnSync.Unlock()
+	log.Debugf("%s: HWM: %s", lp.subID, lp.blockHWM.String())
 }
 
 func (lp *logProcessor) getBlockHWM() big.Int {

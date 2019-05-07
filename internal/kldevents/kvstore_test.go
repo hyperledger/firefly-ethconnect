@@ -23,30 +23,35 @@ import (
 )
 
 type mockKV struct {
-	kvs map[string][]byte
-	err error
+	kvs       map[string][]byte
+	storeErr  error
+	loadErr   error
+	deleteErr error
 }
 
 func (m *mockKV) Put(key string, val []byte) error {
 	m.kvs[key] = val
-	if val == nil {
-		return leveldb.ErrNotFound
-	}
-	return m.err
+	return m.storeErr
 }
 func (m *mockKV) Get(key string) ([]byte, error) {
-	return m.kvs[key], m.err
+	v, exists := m.kvs[key]
+	if m.loadErr == nil && !exists {
+		return nil, leveldb.ErrNotFound
+	}
+	return v, m.loadErr
 }
 func (m *mockKV) Delete(key string) error {
 	delete(m.kvs, key)
-	return m.err
+	return m.deleteErr
 }
 func (m *mockKV) Close() {}
 
 func newMockKV(err error) *mockKV {
 	return &mockKV{
-		err: err,
-		kvs: make(map[string][]byte),
+		storeErr:  err,
+		loadErr:   err,
+		deleteErr: err,
+		kvs:       make(map[string][]byte),
 	}
 }
 

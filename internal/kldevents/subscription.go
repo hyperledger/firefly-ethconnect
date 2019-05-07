@@ -132,18 +132,25 @@ func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *Subscr
 }
 
 func (s *subscription) initialFilter() error {
-	var f ethFilterInitial
+	f := &ethFilterInitial{}
 	f.persistedFilter = s.info.Filter
 	f.FromBlock = "latest"
 	f.ToBlock = "latest"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	return s.rpc.CallContext(ctx, &s.filterID, "eth_newFilter", f)
+	err := s.rpc.CallContext(ctx, &s.filterID, "eth_newFilter", f)
+	if err != nil {
+		return err
+	}
+	log.Infof("%s: created initial filter: %s", s.logName, s.filterID.String())
+	s.filteredOnce = false
+	s.filterStale = false
+	return nil
 }
 
 func (s *subscription) restartFilter(since *big.Int) error {
-	var f ethFilterRestart
+	f := &ethFilterRestart{}
 	f.persistedFilter = s.info.Filter
 	f.FromBlock.ToInt().Set(since)
 	f.ToBlock = "latest"

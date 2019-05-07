@@ -145,6 +145,9 @@ func (c *ABI2Swagger) getDeclaredIDDetails(inst bool, declaredID string, inputs 
 func (c *ABI2Swagger) buildMethodDefinitionsAndPath(inst bool, defs map[string]spec.Schema, paths map[string]spec.PathItem, name string, method abi.Method, devdocs gjson.Result) {
 
 	constructor, methodSig, path, methodDocs := c.getDeclaredIDDetails(inst, name, method.Inputs, devdocs)
+	if method.Const {
+		methodSig += " [read only]"
+	}
 
 	inputSchema := url.QueryEscape(name) + "_inputs"
 	outputSchema := url.QueryEscape(name) + "_outputs"
@@ -162,6 +165,7 @@ func (c *ABI2Swagger) buildMethodDefinitionsAndPath(inst bool, defs map[string]s
 
 func (c *ABI2Swagger) buildEventDefinitionsAndPath(inst bool, defs map[string]spec.Schema, paths map[string]spec.PathItem, name string, event abi.Event, devdocs gjson.Result) {
 	_, eventSig, path, eventDocs := c.getDeclaredIDDetails(inst, event.Name, event.Inputs, devdocs)
+	eventSig += " [event]"
 	pathItem := spec.PathItem{}
 	eventSchema := url.QueryEscape(name) + "_event"
 	c.buildArgumentsDefinition(defs, eventSchema, event.Inputs, eventDocs)

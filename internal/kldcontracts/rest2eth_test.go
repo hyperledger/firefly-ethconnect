@@ -114,7 +114,7 @@ type mockSubMgr struct {
 
 func (m *mockSubMgr) Init() error { return m.err }
 func (m *mockSubMgr) AddStream(spec *kldevents.StreamInfo) (*kldevents.StreamInfo, error) {
-	return nil, nil
+	return spec, m.err
 }
 func (m *mockSubMgr) Streams() []*kldevents.StreamInfo                    { return m.streams }
 func (m *mockSubMgr) StreamByID(id string) (*kldevents.StreamInfo, error) { return m.stream, m.err }

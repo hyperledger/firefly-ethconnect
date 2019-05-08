@@ -178,7 +178,7 @@ func (s *subscription) processNewEvents() error {
 		}
 		return err
 	}
-	log.Infof("%s: received %d events (%s)", s.logName, len(logs), rpcMethod)
+	log.Debugf("%s: received %d events (%s)", s.logName, len(logs), rpcMethod)
 	for _, logEntry := range logs {
 		if err := s.lp.processLogEntry(logEntry); err != nil {
 			log.Errorf("Failed to processs event: %s", err)

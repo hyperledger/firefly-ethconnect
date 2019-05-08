@@ -128,8 +128,10 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	assert.Equal([]*SubscriptionInfo{sub}, sm.Subscriptions())
 	assert.Equal([]*StreamInfo{stream}, sm.Streams())
 
-	assert.Equal(sub, sm.SubscriptionByID(sub.ID))
-	assert.Equal(stream, sm.StreamByID(stream.ID))
+	retSub, _ := sm.SubscriptionByID(sub.ID)
+	assert.Equal(sub, retSub)
+	retStream, _ := sm.StreamByID(stream.ID)
+	assert.Equal(stream, retStream)
 
 	assert.Nil(sm.SubscriptionByID(stream.ID))
 	assert.Nil(sm.StreamByID(sub.ID))

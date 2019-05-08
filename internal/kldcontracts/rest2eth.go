@@ -16,6 +16,7 @@ package kldcontracts
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -317,7 +318,7 @@ func (r *rest2eth) fromBodyOrForm(req *http.Request, body map[string]interface{}
 
 func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, addrStr string, abiEvent *abi.Event, body map[string]interface{}) {
 	if r.subMgr == nil {
-		r.restErrReply(res, req, fmt.Errorf("Event support is not configured on this gateway"), 405)
+		r.restErrReply(res, req, errors.New(errEventSupportMissing), 405)
 		return
 	}
 	streamID := r.fromBodyOrForm(req, body, "stream")

@@ -103,26 +103,33 @@ func (m *mockRPC) CallContext(ctx context.Context, result interface{}, method st
 }
 
 type mockSubMgr struct {
-	err error
-	sub *kldevents.SubscriptionInfo
+	err       error
+	sub       *kldevents.SubscriptionInfo
+	stream    *kldevents.StreamInfo
+	subs      []*kldevents.SubscriptionInfo
+	streams   []*kldevents.StreamInfo
+	suspended bool
+	resumed   bool
 }
 
-func (m *mockSubMgr) Init() error { return nil }
+func (m *mockSubMgr) Init() error { return m.err }
 func (m *mockSubMgr) AddStream(spec *kldevents.StreamInfo) (*kldevents.StreamInfo, error) {
 	return nil, nil
 }
-func (m *mockSubMgr) Streams() []*kldevents.StreamInfo           { return nil }
-func (m *mockSubMgr) StreamByID(id string) *kldevents.StreamInfo { return nil }
-func (m *mockSubMgr) SuspendStream(id string) error              { return nil }
-func (m *mockSubMgr) ResumeStream(id string) error               { return nil }
-func (m *mockSubMgr) DeleteStream(id string) error               { return nil }
+func (m *mockSubMgr) Streams() []*kldevents.StreamInfo                    { return m.streams }
+func (m *mockSubMgr) StreamByID(id string) (*kldevents.StreamInfo, error) { return m.stream, m.err }
+func (m *mockSubMgr) SuspendStream(id string) error                       { m.suspended = true; return m.err }
+func (m *mockSubMgr) ResumeStream(id string) error                        { m.resumed = true; return m.err }
+func (m *mockSubMgr) DeleteStream(id string) error                        { return m.err }
 func (m *mockSubMgr) AddSubscription(addr *kldbind.Address, event *kldbind.ABIEvent, streamID string) (*kldevents.SubscriptionInfo, error) {
 	return m.sub, m.err
 }
-func (m *mockSubMgr) Subscriptions() []*kldevents.SubscriptionInfo           { return nil }
-func (m *mockSubMgr) SubscriptionByID(id string) *kldevents.SubscriptionInfo { return nil }
-func (m *mockSubMgr) DeleteSubscription(id string) error                     { return nil }
-func (m *mockSubMgr) Close()                                                 {}
+func (m *mockSubMgr) Subscriptions() []*kldevents.SubscriptionInfo { return m.subs }
+func (m *mockSubMgr) SubscriptionByID(id string) (*kldevents.SubscriptionInfo, error) {
+	return m.sub, m.err
+}
+func (m *mockSubMgr) DeleteSubscription(id string) error { return m.err }
+func (m *mockSubMgr) Close()                             {}
 
 func newTestREST2Eth(dispatcher *mockREST2EthDispatcher) (*rest2eth, *mockRPC, *httprouter.Router) {
 	mockRPC := &mockRPC{}

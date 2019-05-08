@@ -18,6 +18,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"mime/multipart"
 	"net/http/httptest"
@@ -950,4 +951,183 @@ func TestAddFileToABIIndexBadFileSwallowsError(t *testing.T) {
 	scgw := s.(*smartContractGW)
 
 	scgw.addFileToABIIndex("", "badness", time.Now().UTC())
+}
+
+func testGWPath(method, path string, results interface{}, sm *mockSubMgr) (res *httptest.ResponseRecorder) {
+	req := httptest.NewRequest(method, path, nil)
+	res = httptest.NewRecorder()
+	s := &smartContractGW{}
+	if sm != nil {
+		s.sm = sm
+	}
+	r := &httprouter.Router{}
+	s.AddRoutes(r)
+	r.ServeHTTP(res, req)
+	json.NewDecoder(res.Body).Decode(&results)
+	return
+}
+
+func TestListStreamsNoSubMgr(t *testing.T) {
+	assert := assert.New(t)
+	res := testGWPath("GET", kldevents.StreamPathPrefix, nil, nil)
+	assert.Equal(405, res.Result().StatusCode)
+}
+
+func TestListStreams(t *testing.T) {
+	assert := assert.New(t)
+
+	mockSubMgr := &mockSubMgr{
+		streams: []*kldevents.StreamInfo{
+			&kldevents.StreamInfo{
+				TimeSorted: kldmessages.TimeSorted{
+					CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
+				}, ID: "earlier",
+			},
+			&kldevents.StreamInfo{
+				TimeSorted: kldmessages.TimeSorted{
+					CreatedISO8601: time.Now().UTC().Add(1 * time.Hour).Format(time.RFC3339),
+				}, ID: "later",
+			},
+		},
+	}
+	var results []*kldevents.StreamInfo
+	res := testGWPath("GET", kldevents.StreamPathPrefix, &results, mockSubMgr)
+	assert.Equal(200, res.Result().StatusCode)
+	assert.Equal(2, len(results))
+	assert.Equal("later", results[0].ID)
+	assert.Equal("earlier", results[1].ID)
+}
+
+func TestListSubs(t *testing.T) {
+	assert := assert.New(t)
+
+	mockSubMgr := &mockSubMgr{
+		subs: []*kldevents.SubscriptionInfo{
+			&kldevents.SubscriptionInfo{
+				TimeSorted: kldmessages.TimeSorted{
+					CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
+				}, ID: "earlier",
+			},
+			&kldevents.SubscriptionInfo{
+				TimeSorted: kldmessages.TimeSorted{
+					CreatedISO8601: time.Now().UTC().Add(1 * time.Hour).Format(time.RFC3339),
+				}, ID: "later",
+			},
+		},
+	}
+	var results []*kldevents.SubscriptionInfo
+	res := testGWPath("GET", kldevents.SubPathPrefix, &results, mockSubMgr)
+	assert.Equal(200, res.Result().StatusCode)
+	assert.Equal(2, len(results))
+	assert.Equal("later", results[0].ID)
+	assert.Equal("earlier", results[1].ID)
+}
+
+func TestGetSub(t *testing.T) {
+	assert := assert.New(t)
+
+	mockSubMgr := &mockSubMgr{
+		sub: &kldevents.SubscriptionInfo{ID: "123"},
+	}
+	var result kldevents.SubscriptionInfo
+	res := testGWPath("GET", kldevents.SubPathPrefix+"/123", &result, mockSubMgr)
+	assert.Equal(200, res.Result().StatusCode)
+	assert.Equal("123", result.ID)
+}
+
+func TestGetStream(t *testing.T) {
+	assert := assert.New(t)
+
+	mockSubMgr := &mockSubMgr{
+		stream: &kldevents.StreamInfo{ID: "123"},
+	}
+	var result kldevents.StreamInfo
+	res := testGWPath("GET", kldevents.StreamPathPrefix+"/123", &result, mockSubMgr)
+	assert.Equal(200, res.Result().StatusCode)
+	assert.Equal("123", result.ID)
+}
+
+func TestGetSubNoSubMgr(t *testing.T) {
+	assert := assert.New(t)
+
+	var result kldevents.SubscriptionInfo
+	res := testGWPath("GET", kldevents.SubPathPrefix+"/123", &result, nil)
+	assert.Equal(405, res.Result().StatusCode)
+}
+
+func TestGetSubNotFound(t *testing.T) {
+	assert := assert.New(t)
+
+	mockSubMgr := &mockSubMgr{err: fmt.Errorf("not found")}
+	var result kldevents.SubscriptionInfo
+	res := testGWPath("GET", kldevents.SubPathPrefix+"/123", &result, mockSubMgr)
+	assert.Equal(404, res.Result().StatusCode)
+}
+
+func TestDeleteSub(t *testing.T) {
+	assert := assert.New(t)
+
+	mockSubMgr := &mockSubMgr{}
+	res := testGWPath("DELETE", kldevents.SubPathPrefix+"/123", nil, mockSubMgr)
+	assert.Equal(204, res.Result().StatusCode)
+}
+
+func TestDeleteStream(t *testing.T) {
+	assert := assert.New(t)
+
+	mockSubMgr := &mockSubMgr{}
+	res := testGWPath("DELETE", kldevents.StreamPathPrefix+"/123", nil, mockSubMgr)
+	assert.Equal(204, res.Result().StatusCode)
+}
+
+func TestDeleteSubNoSubMgr(t *testing.T) {
+	assert := assert.New(t)
+
+	res := testGWPath("DELETE", kldevents.SubPathPrefix+"/123", nil, nil)
+	assert.Equal(405, res.Result().StatusCode)
+}
+
+func TestDeleteSubError(t *testing.T) {
+	assert := assert.New(t)
+
+	mockSubMgr := &mockSubMgr{err: fmt.Errorf("not found")}
+	var errInfo = restErrMsg{}
+	res := testGWPath("DELETE", kldevents.SubPathPrefix+"/123", &errInfo, mockSubMgr)
+	assert.Equal(500, res.Result().StatusCode)
+	assert.Equal("not found", errInfo.Message)
+}
+
+func TestSuspendStream(t *testing.T) {
+	assert := assert.New(t)
+
+	mockSubMgr := &mockSubMgr{}
+	res := testGWPath("POST", kldevents.StreamPathPrefix+"/123/suspend", nil, mockSubMgr)
+	assert.Equal(204, res.Result().StatusCode)
+	assert.True(mockSubMgr.suspended)
+}
+
+func TestResumeStream(t *testing.T) {
+	assert := assert.New(t)
+
+	mockSubMgr := &mockSubMgr{}
+	res := testGWPath("POST", kldevents.StreamPathPrefix+"/123/resume", nil, mockSubMgr)
+	assert.Equal(204, res.Result().StatusCode)
+	assert.True(mockSubMgr.resumed)
+}
+
+func TestResumeStreamFail(t *testing.T) {
+	assert := assert.New(t)
+
+	mockSubMgr := &mockSubMgr{err: fmt.Errorf("pop")}
+	var errInfo = restErrMsg{}
+	res := testGWPath("POST", kldevents.StreamPathPrefix+"/123/resume", &errInfo, mockSubMgr)
+	assert.Equal(500, res.Result().StatusCode)
+	assert.Equal("pop", errInfo.Message)
+}
+
+func TestSuspendNoSubMgr(t *testing.T) {
+	assert := assert.New(t)
+
+	res := testGWPath("POST", kldevents.StreamPathPrefix+"/123/resume", nil, nil)
+	assert.Equal(405, res.Result().StatusCode)
 }

@@ -19,14 +19,17 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/julienschmidt/httprouter"
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
+	"github.com/kaleido-io/ethconnect/internal/kldevents"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
@@ -58,6 +61,7 @@ type rest2eth struct {
 	rpc             kldeth.RPCClient
 	asyncDispatcher REST2EthAsyncDispatcher
 	syncDispatcher  rest2EthSyncDispatcher
+	subMgr          kldevents.SubscriptionManager
 }
 
 type restErrMsg struct {
@@ -101,7 +105,7 @@ func (i *rest2EthSyncResponder) ReplyWithReceipt(receipt kldmessages.ReplyWithHe
 	return
 }
 
-func newREST2eth(gw smartContractGatewayInt, rpc kldeth.RPCClient, asyncDispatcher REST2EthAsyncDispatcher, syncDispatcher rest2EthSyncDispatcher) *rest2eth {
+func newREST2eth(gw smartContractGatewayInt, rpc kldeth.RPCClient, subMgr kldevents.SubscriptionManager, asyncDispatcher REST2EthAsyncDispatcher, syncDispatcher rest2EthSyncDispatcher) *rest2eth {
 	addrCheck, _ := regexp.Compile("^(0x)?[0-9a-z]{40}$")
 	return &rest2eth{
 		gw:              gw,
@@ -109,17 +113,8 @@ func newREST2eth(gw smartContractGatewayInt, rpc kldeth.RPCClient, asyncDispatch
 		syncDispatcher:  syncDispatcher,
 		asyncDispatcher: asyncDispatcher,
 		rpc:             rpc,
+		subMgr:          subMgr,
 	}
-}
-
-func (r *rest2eth) addRoutes(router *httprouter.Router) {
-	router.POST("/contracts/:address/:method", r.restHandler)
-	router.GET("/contracts/:address/:method", r.restHandler)
-	router.GET("/contracts/:address/:method/:subcommand", r.restHandler)
-	router.POST("/abis/:abi", r.restHandler)
-	router.POST("/abis/:abi/:address/:method", r.restHandler)
-	router.GET("/abis/:abi/:address/:method", r.restHandler)
-	router.GET("/abis/:abi/:address/:method/:subcommand", r.restHandler)
 }
 
 // getKLDParam standardizes how special 'kld' params are specified, in query params, or headers
@@ -137,94 +132,152 @@ func (r *rest2eth) getKLDParam(name string, req *http.Request, isBool bool) stri
 	return val
 }
 
-func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, params httprouter.Params) (from, addr string, value json.Number, abiMethod *abi.Method, abiEvent *abi.Event, deployMsg *kldmessages.DeployContract, body map[string]interface{}, msgParams []interface{}, err error) {
-	addr = strings.ToLower(strings.TrimPrefix(params.ByName("address"), "0x"))
+func (r *rest2eth) addRoutes(router *httprouter.Router) {
+	router.POST("/contracts/:address/:method", r.restHandler)
+	router.GET("/contracts/:address/:method", r.restHandler)
+	router.POST("/contracts/:address/:method/:subcommand", r.restHandler)
+	router.POST("/abis/:abi", r.restHandler)
+	router.POST("/abis/:abi/:address/:method", r.restHandler)
+	router.GET("/abis/:abi/:address/:method", r.restHandler)
+	router.GET("/abis/:abi/:address/:method/:subcommand", r.restHandler)
+}
 
-	from = strings.ToLower(strings.TrimPrefix(r.getKLDParam("from", req, false), "0x"))
-	if from != "" && !r.addrCheck.MatchString(from) {
-		log.Errorf("Invalid from address: '%s' (original input = '%s')", from, req.FormValue("from"))
-		err = fmt.Errorf("From Address must be a 40 character hex string (0x prefix is optional)")
+type restCmd struct {
+	from      string
+	addr      string
+	value     json.Number
+	abiMethod *abi.Method
+	abiEvent  *abi.Event
+	deployMsg *kldmessages.DeployContract
+	body      map[string]interface{}
+	msgParams []interface{}
+}
+
+func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, params httprouter.Params) (c restCmd, err error) {
+
+	// Check if we have a valid address in :address (verified later if required)
+	addrParam := params.ByName("address")
+	c.addr = strings.ToLower(strings.TrimPrefix(addrParam, "0x"))
+	validAddress := r.addrCheck.MatchString(c.addr)
+
+	// Check we have a valid ABI
+	var a *kldbind.ABI
+	abiID := params.ByName("abi")
+	if abiID != "" {
+		c.deployMsg, err = r.gw.loadDeployMsgForFactory(abiID)
+		if err != nil {
+			r.restErrReply(res, req, err, 404)
+			return
+		}
+		a = c.deployMsg.ABI
+	} else if validAddress {
+		a, err = r.gw.loadABIForInstance(c.addr)
+		if err != nil {
+			r.restErrReply(res, req, err, 404)
+			return
+		}
+	} else {
+		err = fmt.Errorf("To Address must be a 40 character hex string (0x prefix is optional)")
 		r.restErrReply(res, req, err, 404)
 		return
 	}
 
-	value = json.Number(r.getKLDParam("value", req, false))
+	// See addRoutes for all the various routes we support.
+	// We need to handle the special case of
+	// /abis/:abi/EVENTNAME/subscribe
+	// ... where 'EVENTNAME' is passed as :address and is a valid event
+	// and where 'subscribe' is passed as :method
 
-	var a *kldbind.ABI
-	abiID := params.ByName("abi")
-	if abiID != "" {
-		deployMsg, err = r.gw.loadDeployMsgForFactory(abiID)
-		if err != nil {
-			r.restErrReply(res, req, err, 404)
-			return
-		}
-		a = deployMsg.ABI
-	} else {
-		a, err = r.gw.loadABIForInstance(addr)
-		if err != nil {
-			r.restErrReply(res, req, err, 404)
-			return
-		}
-	}
-
-	methodName := params.ByName("method")
-	if methodName == "" {
-		abiMethod = &a.ABI.Constructor
-	} else {
-		if !r.addrCheck.MatchString(addr) {
-			log.Errorf("Invalid to addres: '%s' (original input = '%s')", addr, params.ByName("address"))
-			err = fmt.Errorf("To Address must be a 40 character hex string (0x prefix is optional)")
-			r.restErrReply(res, req, err, 404)
-			return
-		}
-
+	// Check if we have a method in :method param
+	methodParam := params.ByName("method")
+	methodParamLC := strings.ToLower(methodParam)
+	if methodParam != "" {
 		for _, method := range a.ABI.Methods {
-			if method.Name == methodName {
-				abiMethod = &method
+			if method.Name == methodParam {
+				c.abiMethod = &method
 				break
 			}
 		}
-		if abiMethod == nil {
-			for _, event := range a.ABI.Events {
-				if event.Name == methodName {
-					abiEvent = &event
-					break
-				}
+	}
+
+	// Then if we don't have a method in :method param, we might have
+	// an event in either the :event OR :address param (see special case above)
+	// Note solidity guarantees no overlap in method / event names
+	if c.abiMethod == nil && methodParam != "" {
+		for _, event := range a.ABI.Events {
+			if event.Name == methodParam {
+				c.abiEvent = &event
+				break
 			}
-			if abiEvent == nil {
-				err = fmt.Errorf("Method or Event '%s' is not declared in the ABI of contract '%s'", url.QueryEscape(methodName), addr)
-				r.restErrReply(res, req, err, 404)
-				return
+			if methodParamLC == "subscribe" && event.Name == addrParam {
+				c.addr = ""
+				c.abiEvent = &event
+				break
 			}
 		}
 	}
 
-	body, err = kldutils.YAMLorJSONPayload(req)
+	// Last case is the constructor, where nothing is specified
+	if methodParam == "" && c.abiMethod == nil && c.abiEvent == nil {
+		c.abiMethod = &a.ABI.Constructor
+	}
+
+	// If we didn't find the method or event, report to the user
+	if c.abiMethod == nil && c.abiEvent == nil {
+		if methodParamLC == "subscribe" {
+			err = fmt.Errorf("Event '%s' is not declared in the ABI", methodParam)
+			r.restErrReply(res, req, err, 404)
+			return
+		}
+		err = fmt.Errorf("Method or Event '%s' is not declared in the ABI of contract '%s'", url.QueryEscape(methodParam), c.addr)
+		r.restErrReply(res, req, err, 404)
+		return
+	}
+
+	// If we have an address, it must be valid
+	if c.addr != "" && !validAddress {
+		log.Errorf("Invalid to addres: '%s' (original input = '%s')", c.addr, params.ByName("address"))
+		err = fmt.Errorf("To Address must be a 40 character hex string (0x prefix is optional)")
+		r.restErrReply(res, req, err, 404)
+		return
+	}
+
+	// If we have a from, it needs to be a valid address
+	c.from = strings.ToLower(strings.TrimPrefix(r.getKLDParam("from", req, false), "0x"))
+	if c.from != "" && !r.addrCheck.MatchString(c.from) {
+		log.Errorf("Invalid from address: '%s' (original input = '%s')", c.from, req.FormValue("from"))
+		err = fmt.Errorf("From Address must be a 40 character hex string (0x prefix is optional)")
+		r.restErrReply(res, req, err, 404)
+		return
+	}
+	c.value = json.Number(r.getKLDParam("value", req, false))
+
+	c.body, err = kldutils.YAMLorJSONPayload(req)
 	if err != nil {
 		r.restErrReply(res, req, err, 400)
 		return
 	}
 
-	if abiEvent != nil {
+	if c.abiEvent != nil {
 		return
 	}
 
-	msgParams = make([]interface{}, 0, len(abiMethod.Inputs))
+	c.msgParams = make([]interface{}, 0, len(c.abiMethod.Inputs))
 	queryParams := req.Form
-	for _, abiParam := range abiMethod.Inputs {
+	for _, abiParam := range c.abiMethod.Inputs {
 		// Body takes precedence
 		msgParam := make(map[string]interface{})
 		msgParam["type"] = abiParam.Type.String()
-		if bv, exists := body[abiParam.Name]; exists {
+		if bv, exists := c.body[abiParam.Name]; exists {
 			msgParam["value"] = bv
 		} else if vs := queryParams[abiParam.Name]; len(vs) > 0 {
 			msgParam["value"] = vs[0]
 		} else {
-			err = fmt.Errorf("Parameter '%s' of method '%s' was not specified in body or query parameters", abiParam.Name, abiMethod.Name)
-			r.restErrReply(res, req, err, 404)
+			err = fmt.Errorf("Parameter '%s' of method '%s' was not specified in body or query parameters", abiParam.Name, c.abiMethod.Name)
+			r.restErrReply(res, req, err, 400)
 			return
 		}
-		msgParams = append(msgParams, msgParam)
+		c.msgParams = append(c.msgParams, msgParam)
 	}
 	return
 }
@@ -232,32 +285,63 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
 
-	from, addr, value, abiMethod, abiEvent, deployMsg, body, msgParams, err := r.resolveParams(res, req, params)
+	c, err := r.resolveParams(res, req, params)
 	if err != nil {
 		return
 	}
 
-	if abiEvent != nil {
-		r.subscribeEvent(res, req, abiEvent, body)
-	} else if (!abiMethod.Const) &&
-		strings.ToLower(r.getKLDParam("call", req, true)) != "true" {
-		if from == "" {
+	if c.abiEvent != nil {
+		r.subscribeEvent(res, req, c.addr, c.abiEvent, c.body)
+	} else if (!c.abiMethod.Const) && strings.ToLower(r.getKLDParam("call", req, true)) != "true" {
+		if c.from == "" {
 			err = fmt.Errorf("Please specify a valid address in the 'kld-from' query string parameter or x-kaleido-from HTTP header")
 			r.restErrReply(res, req, err, 400)
-			return
-		}
-		if deployMsg != nil {
-			r.deployContract(res, req, from, value, abiMethod, deployMsg, msgParams)
+		} else if c.deployMsg != nil {
+			r.deployContract(res, req, c.from, c.value, c.abiMethod, c.deployMsg, c.msgParams)
 		} else {
-			r.sendTransaction(res, req, from, addr, value, abiMethod, msgParams)
+			r.sendTransaction(res, req, c.from, c.addr, c.value, c.abiMethod, c.msgParams)
 		}
 	} else {
-		r.callContract(res, req, from, addr, value, abiMethod, msgParams)
+		r.callContract(res, req, c.from, c.addr, c.value, c.abiMethod, c.msgParams)
 	}
 }
 
-func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, abiEvent *abi.Event, body map[string]interface{}) {
+func (r *rest2eth) fromBodyOrForm(req *http.Request, body map[string]interface{}, param string) string {
+	val := body["stream"]
+	valType := reflect.TypeOf(val)
+	if valType != nil && valType.Kind() == reflect.String && len(val.(string)) > 0 {
+		return val.(string)
+	}
+	return req.FormValue("stream")
+}
 
+func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, addrStr string, abiEvent *abi.Event, body map[string]interface{}) {
+	if r.subMgr == nil {
+		r.restErrReply(res, req, fmt.Errorf("Event support is not configured on this gateway"), 405)
+		return
+	}
+	streamID := r.fromBodyOrForm(req, body, "stream")
+	if streamID == "" {
+		r.restErrReply(res, req, fmt.Errorf("Must supply a 'stream' parameter in the body or query"), 400)
+		return
+	}
+	var addr *common.Address
+	if addrStr != "" {
+		address := common.HexToAddress("0x" + addrStr)
+		addr = &address
+	}
+	sub, err := r.subMgr.AddSubscription(addr, abiEvent, streamID)
+	if err != nil {
+		r.restErrReply(res, req, err, 400)
+		return
+	}
+	status := 200
+	resBytes, _ := json.Marshal(sub)
+	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
+	log.Debugf("<-- %s", resBytes)
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(status)
+	res.Write(resBytes)
 }
 
 func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, from string, value json.Number, abiMethod *abi.Method, deployMsg *kldmessages.DeployContract, msgParams []interface{}) {

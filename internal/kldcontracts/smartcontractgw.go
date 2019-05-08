@@ -91,6 +91,7 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	router.POST("/abis", g.addABI)
 	router.GET("/abis", g.listContractsOrABIs)
 	router.GET("/abis/:abi", g.getContractOrABI)
+	router.POST(kldevents.StreamPathPrefix, g.createStream)
 	router.GET(kldevents.StreamPathPrefix, g.listStreamsOrSubs)
 	router.GET(kldevents.SubPathPrefix, g.listStreamsOrSubs)
 	router.GET(kldevents.StreamPathPrefix+"/:id", g.getStreamOrSub)
@@ -480,6 +481,36 @@ func (g *smartContractGW) listContractsOrABIs(res http.ResponseWriter, req *http
 	enc := json.NewEncoder(res)
 	enc.SetIndent("", "  ")
 	enc.Encode(&retval)
+}
+
+// createStream creates a stream
+func (g *smartContractGW) createStream(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	log.Infof("--> %s %s", req.Method, req.URL)
+
+	if g.sm == nil {
+		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		return
+	}
+
+	var spec kldevents.StreamInfo
+	if err := json.NewDecoder(req.Body).Decode(&spec); err != nil {
+		g.gatewayErrReply(res, req, fmt.Errorf("Invalid event stream specification: %s", err), 400)
+		return
+	}
+
+	newSpec, err := g.sm.AddStream(&spec)
+	if err != nil {
+		g.gatewayErrReply(res, req, err, 400)
+		return
+	}
+
+	status := 200
+	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(status)
+	enc := json.NewEncoder(res)
+	enc.SetIndent("", "  ")
+	enc.Encode(&newSpec)
 }
 
 // listStreamsOrSubs sorts by Title then Address and returns an array

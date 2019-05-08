@@ -1074,6 +1074,61 @@ func testGWPath(method, path string, results interface{}, sm *mockSubMgr) (res *
 	return
 }
 
+func TestAddStreamNoSubMgr(t *testing.T) {
+	assert := assert.New(t)
+	res := testGWPath("POST", kldevents.StreamPathPrefix, nil, nil)
+	assert.Equal(405, res.Result().StatusCode)
+}
+
+func TestAddStreamOK(t *testing.T) {
+	assert := assert.New(t)
+	spec := &kldevents.StreamInfo{Type: "webhook"}
+	b, _ := json.Marshal(spec)
+	req := httptest.NewRequest("POST", kldevents.StreamPathPrefix, bytes.NewReader(b))
+	res := httptest.NewRecorder()
+	s := &smartContractGW{}
+	s.sm = &mockSubMgr{}
+	r := &httprouter.Router{}
+	s.AddRoutes(r)
+	r.ServeHTTP(res, req)
+	var newSpec kldevents.StreamInfo
+	json.NewDecoder(res.Body).Decode(&newSpec)
+	assert.Equal(200, res.Result().StatusCode)
+	assert.Equal("webhook", newSpec.Type)
+}
+
+func TestAddStreamBadData(t *testing.T) {
+	assert := assert.New(t)
+	req := httptest.NewRequest("POST", kldevents.StreamPathPrefix, bytes.NewReader([]byte(":bad json")))
+	res := httptest.NewRecorder()
+	s := &smartContractGW{}
+	s.sm = &mockSubMgr{}
+	r := &httprouter.Router{}
+	s.AddRoutes(r)
+	r.ServeHTTP(res, req)
+	var resError restErrMsg
+	json.NewDecoder(res.Body).Decode(&resError)
+	assert.Equal(400, res.Result().StatusCode)
+	assert.Regexp("Invalid event stream specification", resError.Message)
+}
+
+func TestAddStreamSubMgrError(t *testing.T) {
+	assert := assert.New(t)
+	spec := &kldevents.StreamInfo{Type: "webhook"}
+	b, _ := json.Marshal(spec)
+	req := httptest.NewRequest("POST", kldevents.StreamPathPrefix, bytes.NewReader(b))
+	res := httptest.NewRecorder()
+	s := &smartContractGW{}
+	s.sm = &mockSubMgr{err: fmt.Errorf("pop")}
+	r := &httprouter.Router{}
+	s.AddRoutes(r)
+	r.ServeHTTP(res, req)
+	var resError restErrMsg
+	json.NewDecoder(res.Body).Decode(&resError)
+	assert.Equal(400, res.Result().StatusCode)
+	assert.Regexp("pop", resError.Message)
+}
+
 func TestListStreamsNoSubMgr(t *testing.T) {
 	assert := assert.New(t)
 	res := testGWPath("GET", kldevents.StreamPathPrefix, nil, nil)

@@ -68,6 +68,7 @@ func (lp *logProcessor) batchComplete(newestEvent *eventData) {
 	lp.hwnSync.Lock()
 	i := new(big.Int)
 	i.SetString(newestEvent.BlockNumber, 10)
+	i.Add(i, big.NewInt(1)) // restart from the next block
 	if i.Cmp(&lp.blockHWM) > 0 {
 		lp.blockHWM.Set(i)
 	}

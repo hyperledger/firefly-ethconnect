@@ -132,13 +132,19 @@ func (s *subscription) setInitialBlockHeight() (*big.Int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	blockHeight := kldbind.HexBigInt{}
-	err := s.rpc.CallContext(ctx, &s.filterID, "eth_blockNumber", &blockHeight)
+	err := s.rpc.CallContext(ctx, &blockHeight, "eth_blockNumber")
 	if err != nil {
 		return nil, fmt.Errorf("eth_blockNumber: %s", err)
 	}
 	i := blockHeight.ToInt()
 	s.lp.initBlockHWM(i)
+	log.Infof("%s: initial block height for event stream (latest block): %s", s.logName, i.String())
 	return i, nil
+}
+
+func (s *subscription) setCheckpointBlockHeight(i *big.Int) {
+	s.lp.initBlockHWM(i)
+	log.Infof("%s: checkpoint restored block height for event stream: %s", s.logName, i.String())
 }
 
 func (s *subscription) restartFilter(since *big.Int) error {

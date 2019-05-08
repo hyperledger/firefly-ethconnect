@@ -401,14 +401,14 @@ func (c *ABI2Swagger) buildEventPOSTPath(eventSchema string, inst bool, event ab
 		ParamProps: spec.ParamProps{
 			Name:        "body",
 			In:          "body",
-			Description: "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured action)",
+			Description: "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured stream)",
 			Required:    true,
 			Schema: &spec.Schema{
 				SchemaProps: spec.SchemaProps{
 					Properties: map[string]spec.Schema{
-						"action": spec.Schema{
+						"stream": spec.Schema{
 							SchemaProps: spec.SchemaProps{
-								Description: "The ID of an action already defined in the REST Gateway",
+								Description: "The ID of an event stream already configured in the REST Gateway",
 								Type:        []string{"string"},
 							},
 						},

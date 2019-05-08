@@ -111,21 +111,21 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, rpc kldeth.RPCClien
 		abiIndex:      make(map[string]kldmessages.TimeSortable),
 	}
 	syncDispatcher := newSyncDispatcher(processor)
-	gw.r2e = newREST2eth(gw, rpc, asyncDispatcher, syncDispatcher)
-	gw.buildIndex()
 	if conf.EventLevelDBPath != "" {
-		gw.submgr = kldevents.NewSubscriptionManager(&conf.SubscriptionManagerConf, rpc)
-		err = gw.submgr.Init()
+		gw.sm = kldevents.NewSubscriptionManager(&conf.SubscriptionManagerConf, rpc)
+		err = gw.sm.Init()
 		if err != nil {
 			return nil, fmt.Errorf("Event-stream subscription manager: %s", err)
 		}
 	}
+	gw.r2e = newREST2eth(gw, rpc, gw.sm, asyncDispatcher, syncDispatcher)
+	gw.buildIndex()
 	return gw, nil
 }
 
 type smartContractGW struct {
 	conf          *SmartContractGatewayConf
-	submgr        kldevents.SubscriptionManager
+	sm            kldevents.SubscriptionManager
 	abi2swagger   *kldopenapi.ABI2Swagger
 	r2e           *rest2eth
 	contractIndex map[string]kldmessages.TimeSortable

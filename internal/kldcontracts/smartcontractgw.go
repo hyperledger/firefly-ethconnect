@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -51,7 +52,8 @@ import (
 )
 
 const (
-	maxFormParsingMemory = 32 << 20 // 32 MB
+	maxFormParsingMemory   = 32 << 20 // 32 MB
+	errEventSupportMissing = "Event support is not configured on this gateway"
 )
 
 // SmartContractGateway provides gateway functions for OpenAPI 2.0 processing of Solidity contracts
@@ -88,6 +90,14 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	router.POST("/abis", g.addABI)
 	router.GET("/abis", g.listContractsOrABIs)
 	router.GET("/abis/:abi", g.getContractOrABI)
+	router.GET(kldevents.StreamPathPrefix, g.listStreamsOrSubs)
+	router.GET(kldevents.SubPathPrefix, g.listStreamsOrSubs)
+	router.GET(kldevents.StreamPathPrefix+"/:id", g.getStreamOrSub)
+	router.GET(kldevents.SubPathPrefix+"/:id", g.getStreamOrSub)
+	router.DELETE(kldevents.StreamPathPrefix+"/:id", g.deleteStreamOrSub)
+	router.DELETE(kldevents.SubPathPrefix+"/:id", g.deleteStreamOrSub)
+	router.POST(kldevents.StreamPathPrefix+"/:id/suspend", g.suspendOrResumeStream)
+	router.POST(kldevents.StreamPathPrefix+"/:id/resume", g.suspendOrResumeStream)
 }
 
 // NewSmartContractGateway construtor
@@ -140,7 +150,7 @@ type contractInfo struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Path        string `json:"path"`
-	ABIURI      string `json:"abi"`
+	ABI         string `json:"abi"`
 	SwaggerURL  string `json:"openapi"`
 }
 
@@ -401,15 +411,15 @@ func (g *smartContractGW) addFileToABIIndex(id, fileName string, createdTime tim
 
 func (g *smartContractGW) addToContractIndex(address string, swagger *spec.Swagger, createdTime time.Time) {
 	g.idxLock.Lock()
-	var abiURI string
+	var abiID string
 	if ext, exists := swagger.Info.Extensions["x-kaleido-deployment-id"]; exists {
-		abiURI = "/abis/" + ext.(string)
+		abiID = ext.(string)
 	}
 	g.contractIndex[address] = &contractInfo{
 		Address:     address,
 		Name:        swagger.Info.Title,
 		Description: swagger.Info.Description,
-		ABIURI:      abiURI,
+		ABI:         abiID,
 		Path:        "/contracts/" + address,
 		SwaggerURL:  g.conf.BaseURL + "/contracts/" + address + "?swagger",
 		TimeSorted: kldmessages.TimeSorted{
@@ -469,6 +479,126 @@ func (g *smartContractGW) listContractsOrABIs(res http.ResponseWriter, req *http
 	enc := json.NewEncoder(res)
 	enc.SetIndent("", "  ")
 	enc.Encode(&retval)
+}
+
+// listStreamsOrSubs sorts by Title then Address and returns an array
+func (g *smartContractGW) listStreamsOrSubs(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	log.Infof("--> %s %s", req.Method, req.URL)
+
+	if g.sm == nil {
+		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		return
+	}
+
+	var results []kldmessages.TimeSortable
+	if strings.HasPrefix(req.URL.Path, kldevents.SubPathPrefix) {
+		subs := g.sm.Subscriptions()
+		results = make([]kldmessages.TimeSortable, len(subs))
+		for i := range subs {
+			results[i] = subs[i]
+		}
+	} else {
+		streams := g.sm.Streams()
+		results = make([]kldmessages.TimeSortable, len(streams))
+		for i := range streams {
+			results[i] = streams[i]
+		}
+	}
+
+	// Do the sort
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].IsLessThan(results[i], results[j])
+	})
+
+	status := 200
+	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(status)
+	enc := json.NewEncoder(res)
+	enc.SetIndent("", "  ")
+	enc.Encode(&results)
+}
+
+// getStreamOrSub returns stream over REST
+func (g *smartContractGW) getStreamOrSub(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	log.Infof("--> %s %s", req.Method, req.URL)
+
+	if g.sm == nil {
+		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		return
+	}
+
+	var retval interface{}
+	var err error
+	if strings.HasPrefix(req.URL.Path, kldevents.SubPathPrefix) {
+		retval, err = g.sm.SubscriptionByID(params.ByName("id"))
+	} else {
+		retval, err = g.sm.StreamByID(params.ByName("id"))
+	}
+	if err != nil {
+		g.gatewayErrReply(res, req, err, 404)
+		return
+	}
+
+	status := 200
+	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(status)
+	enc := json.NewEncoder(res)
+	enc.SetIndent("", "  ")
+	enc.Encode(retval)
+}
+
+// deleteStreamOrSub deletes stream over REST
+func (g *smartContractGW) deleteStreamOrSub(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	log.Infof("--> %s %s", req.Method, req.URL)
+
+	if g.sm == nil {
+		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		return
+	}
+
+	var err error
+	if strings.HasPrefix(req.URL.Path, kldevents.SubPathPrefix) {
+		err = g.sm.DeleteSubscription(params.ByName("id"))
+	} else {
+		err = g.sm.DeleteStream(params.ByName("id"))
+	}
+	if err != nil {
+		g.gatewayErrReply(res, req, err, 500)
+		return
+	}
+
+	status := 204
+	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(status)
+}
+
+// suspendOrResumeStream suspends or resumes a stream
+func (g *smartContractGW) suspendOrResumeStream(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	log.Infof("--> %s %s", req.Method, req.URL)
+
+	if g.sm == nil {
+		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		return
+	}
+
+	var err error
+	if strings.HasSuffix(req.URL.Path, "resume") {
+		err = g.sm.ResumeStream(params.ByName("id"))
+	} else {
+		err = g.sm.SuspendStream(params.ByName("id"))
+	}
+	if err != nil {
+		g.gatewayErrReply(res, req, err, 500)
+		return
+	}
+
+	status := 204
+	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(status)
 }
 
 func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Request, params httprouter.Params) {

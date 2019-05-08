@@ -77,14 +77,14 @@
         "summary": "Approval(address,address,uint256) [event]",
         "parameters": [
           {
-            "description": "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured action)",
+            "description": "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured stream)",
             "name": "body",
             "in": "body",
             "required": true,
             "schema": {
               "properties": {
-                "action": {
-                  "description": "The ID of an action already defined in the REST Gateway",
+                "stream": {
+                  "description": "The ID of an event stream already configured in the REST Gateway",
                   "type": "string"
                 }
               }
@@ -119,14 +119,14 @@
         "summary": "Transfer(address,address,uint256) [event]",
         "parameters": [
           {
-            "description": "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured action)",
+            "description": "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured stream)",
             "name": "body",
             "in": "body",
             "required": true,
             "schema": {
               "properties": {
-                "action": {
-                  "description": "The ID of an action already defined in the REST Gateway",
+                "stream": {
+                  "description": "The ID of an event stream already configured in the REST Gateway",
                   "type": "string"
                 }
               }
@@ -168,14 +168,14 @@
             "required": true
           },
           {
-            "description": "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured action)",
+            "description": "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured stream)",
             "name": "body",
             "in": "body",
             "required": true,
             "schema": {
               "properties": {
-                "action": {
-                  "description": "The ID of an action already defined in the REST Gateway",
+                "stream": {
+                  "description": "The ID of an event stream already configured in the REST Gateway",
                   "type": "string"
                 }
               }
@@ -217,14 +217,14 @@
             "required": true
           },
           {
-            "description": "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured action)",
+            "description": "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured stream)",
             "name": "body",
             "in": "body",
             "required": true,
             "schema": {
               "properties": {
-                "action": {
-                  "description": "The ID of an action already defined in the REST Gateway",
+                "stream": {
+                  "description": "The ID of an event stream already configured in the REST Gateway",
                   "type": "string"
                 }
               }

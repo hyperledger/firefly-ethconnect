@@ -39,9 +39,15 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-const (
-	simpleStorage = "pragma solidity >=0.4.22 <0.6.0;\n\n/** @title simplestorage */\n\ncontract simplestorage {\nuint public storedData;\n\nconstructor(uint initVal) public {\nstoredData = initVal;\n}\n\nfunction set(uint x) public {\nstoredData = x;\n}\n\nfunction get() public view returns (uint retVal) {\nreturn storedData;\n}\n}"
-)
+var simpleEventsSol string
+
+func simpleEventsSource() string {
+	if simpleEventsSol == "" {
+		simpleEventsBytes, _ := ioutil.ReadFile("../../test/simpleevents.sol")
+		simpleEventsSol = string(simpleEventsBytes)
+	}
+	return simpleEventsSol
+}
 
 func TestCobraInitContractGateway(t *testing.T) {
 	assert := assert.New(t)
@@ -75,7 +81,7 @@ func TestNewSmartContractGatewayWithEvents(t *testing.T) {
 		nil, nil, nil,
 	)
 	assert.NoError(err)
-	assert.NotNil(s.(*smartContractGW).submgr)
+	assert.NotNil(s.(*smartContractGW).sm)
 }
 
 func TestNewSmartContractGatewayWithEventsFail(t *testing.T) {
@@ -100,7 +106,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	// writes real files and tests end to end
 	assert := assert.New(t)
 	msg := kldmessages.DeployContract{
-		Solidity: simpleStorage,
+		Solidity: simpleEventsSource(),
 	}
 	msg.Headers.ID = "message1"
 	dir := tempdir()
@@ -149,7 +155,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal("2.0", gjson.Get(string(swaggerBytes), "swagger").String())
 	assert.Equal("localhost", gjson.Get(string(swaggerBytes), "host").String())
-	assert.Equal("simplestorage", gjson.Get(string(swaggerBytes), "info.title").String())
+	assert.Equal("SimpleEvents", gjson.Get(string(swaggerBytes), "info.title").String())
 	assert.Equal("message1", gjson.Get(string(swaggerBytes), "info.x-kaleido-deployment-id").String())
 	assert.Equal("/api/v1/contracts/0123456789abcdef0123456789abcdef01234567", gjson.Get(string(swaggerBytes), "basePath").String())
 
@@ -168,7 +174,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	err = json.NewDecoder(res.Body).Decode(&body)
 	assert.NoError(err)
 	assert.Equal(1, len(body))
-	assert.Equal("simplestorage", body[0].Name)
+	assert.Equal("SimpleEvents", body[0].Name)
 	assert.Equal("0123456789abcdef0123456789abcdef01234567", body[0].Address)
 
 	// Check we can get it back over REST
@@ -179,7 +185,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	var info contractInfo
 	err = json.NewDecoder(res.Body).Decode(&info)
 	assert.NoError(err)
-	assert.Equal("simplestorage", info.Name)
+	assert.Equal("SimpleEvents", info.Name)
 	assert.Equal("0123456789abcdef0123456789abcdef01234567", info.Address)
 
 	// Check we can get the full swagger back over REST
@@ -190,7 +196,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	var swagger spec.Swagger
 	err = json.NewDecoder(res.Body).Decode(&swagger)
 	assert.NoError(err)
-	assert.Equal("simplestorage", swagger.Info.Title)
+	assert.Equal("SimpleEvents", swagger.Info.Title)
 
 	// Check we can get the full swagger back over REST for download with a default from
 	req = httptest.NewRequest("GET", "/contracts/0123456789abcdef0123456789abcdef01234567?swagger&from=0x0123456789abcdef0123456789abcdef01234567&download", bytes.NewReader([]byte{}))
@@ -199,7 +205,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	assert.Equal(200, res.Result().StatusCode)
 	err = json.NewDecoder(res.Body).Decode(&swagger)
 	assert.NoError(err)
-	assert.Equal("simplestorage", swagger.Info.Title)
+	assert.Equal("SimpleEvents", swagger.Info.Title)
 	assert.Equal("attachment; filename=\"0123456789abcdef0123456789abcdef01234567.swagger.json\"", res.HeaderMap.Get("Content-Disposition"))
 	assert.Equal("0x0123456789abcdef0123456789abcdef01234567", swagger.Parameters["fromParam"].SimpleSchema.Default)
 }
@@ -297,7 +303,7 @@ func TestPreDeployMsgWrite(t *testing.T) {
 	)
 	scgw := s.(*smartContractGW)
 	msg := &kldmessages.DeployContract{
-		Solidity: simpleStorage,
+		Solidity: simpleEventsSource(),
 	}
 
 	err := scgw.writeAbiInfo("request1", msg)
@@ -605,8 +611,8 @@ func TestAddABISingleSolidity(t *testing.T) {
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("files", "simplestorage.sol")
-	part.Write([]byte(simpleStorage))
+	part, _ := writer.CreateFormFile("files", "SimpleEvents.sol")
+	part.Write([]byte(simpleEventsSource()))
 	writer.Close()
 
 	req := httptest.NewRequest("POST", "/abis", body)
@@ -620,7 +626,7 @@ func TestAddABISingleSolidity(t *testing.T) {
 	info := &abiInfo{}
 	err := json.NewDecoder(res.Body).Decode(info)
 	assert.NoError(err)
-	assert.Equal("simplestorage", info.Name)
+	assert.Equal("SimpleEvents", info.Name)
 }
 
 func TestAddABIZipNested(t *testing.T) {
@@ -641,10 +647,10 @@ func TestAddABIZipNested(t *testing.T) {
 	writer := multipart.NewWriter(body)
 	part, _ := writer.CreateFormFile("files", "solfiles.zip")
 	zipWriter := zip.NewWriter(part)
-	solWriter, _ := zipWriter.Create("solfiles/simplestorage.sol")
-	solWriter.Write([]byte(simpleStorage))
+	solWriter, _ := zipWriter.Create("solfiles/SimpleEvents.sol")
+	solWriter.Write([]byte(simpleEventsSource()))
 	zipWriter.Close()
-	writer.WriteField("source", "solfiles/simplestorage.sol")
+	writer.WriteField("source", "solfiles/SimpleEvents.sol")
 	writer.Close()
 
 	req := httptest.NewRequest("POST", "/abis", body)
@@ -658,7 +664,7 @@ func TestAddABIZipNested(t *testing.T) {
 	info := &abiInfo{}
 	err := json.NewDecoder(res.Body).Decode(info)
 	assert.NoError(err)
-	assert.Equal("simplestorage", info.Name)
+	assert.Equal("SimpleEvents", info.Name)
 }
 
 func TestAddABIStoreFail(t *testing.T) {
@@ -677,8 +683,8 @@ func TestAddABIStoreFail(t *testing.T) {
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("files", "simplestorage.sol")
-	part.Write([]byte(simpleStorage))
+	part, _ := writer.CreateFormFile("files", "SimpleEvents.sol")
+	part.Write([]byte(simpleEventsSource()))
 	writer.Close()
 
 	req := httptest.NewRequest("POST", "/abis", body)
@@ -711,8 +717,8 @@ func TestAddABIBadZip(t *testing.T) {
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("files", "simplestorage.zip")
-	part.Write([]byte(simpleStorage))
+	part, _ := writer.CreateFormFile("files", "SimpleEvents.zip")
+	part.Write([]byte(simpleEventsSource()))
 	writer.Close()
 
 	req := httptest.NewRequest("POST", "/abis", body)
@@ -747,8 +753,8 @@ func TestAddABIZipNestedNoSource(t *testing.T) {
 	writer := multipart.NewWriter(body)
 	part, _ := writer.CreateFormFile("files", "solfiles.zip")
 	zipWriter := zip.NewWriter(part)
-	solWriter, _ := zipWriter.Create("solfiles/simplestorage.sol")
-	solWriter.Write([]byte(simpleStorage))
+	solWriter, _ := zipWriter.Create("solfiles/SimpleEvents.sol")
+	solWriter.Write([]byte(simpleEventsSource()))
 	zipWriter.Close()
 	writer.Close()
 
@@ -826,7 +832,7 @@ func TestCompileMultipartFormSolidityBadSolc(t *testing.T) {
 	scgw := s.(*smartContractGW)
 	os.Setenv("KLD_SOLC_0_99", "badness")
 
-	ioutil.WriteFile(path.Join(dir, "solidity.sol"), []byte(simpleStorage), 0644)
+	ioutil.WriteFile(path.Join(dir, "solidity.sol"), []byte(simpleEventsSource()), 0644)
 	req := httptest.NewRequest("POST", "/abis?compiler=0.99", bytes.NewReader([]byte{}))
 	_, err := scgw.compileMultipartFormSolidity(dir, req)
 	assert.EqualError(err, "Failed checking solc version")
@@ -847,7 +853,7 @@ func TestCompileMultipartFormSolidityBadCompilerVerReq(t *testing.T) {
 	)
 	scgw := s.(*smartContractGW)
 
-	ioutil.WriteFile(path.Join(dir, "solidity.sol"), []byte(simpleStorage), 0644)
+	ioutil.WriteFile(path.Join(dir, "solidity.sol"), []byte(simpleEventsSource()), 0644)
 	req := httptest.NewRequest("POST", "/abis?compiler=0.99", bytes.NewReader([]byte{}))
 	_, err := scgw.compileMultipartFormSolidity(dir, req)
 	assert.EqualError(err, "Could not find a configured compiler for requested Solidity major version 0.99")

@@ -472,7 +472,7 @@ func TestCheckpointRecovery(t *testing.T) {
 		if err == nil {
 			v, exists := cp[s.ID]
 			t.Logf("Checkpoint? %t (%+v)", exists, v)
-			if v != nil && big.NewInt(150721).Cmp(v) == 0 {
+			if v != nil && big.NewInt(150722).Cmp(v) == 0 {
 				break
 			}
 		}
@@ -500,7 +500,7 @@ func TestCheckpointRecovery(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 	wg.Wait()
-	for uint64(150721) != newFilterBlock {
+	for uint64(150722) != newFilterBlock {
 		time.Sleep(1 * time.Millisecond)
 	}
 

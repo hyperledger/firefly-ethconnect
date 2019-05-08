@@ -223,10 +223,11 @@ func (a *eventStream) eventPoller() {
 		if err == nil && !a.isBlocked() {
 			for _, sub := range subs {
 				if sub.filterStale {
-					var blockHeight *big.Int
-					var exists bool
-					if blockHeight, exists = checkpoint[sub.info.ID]; !exists || blockHeight.Cmp(big.NewInt(0)) <= 0 {
+					blockHeight, exists := checkpoint[sub.info.ID]
+					if !exists || blockHeight.Cmp(big.NewInt(0)) <= 0 {
 						blockHeight, err = sub.setInitialBlockHeight()
+					} else {
+						sub.setCheckpointBlockHeight(blockHeight)
 					}
 					if err == nil {
 						err = sub.restartFilter(blockHeight)

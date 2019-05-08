@@ -102,6 +102,9 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo) (a *eventStream, e
 	} else if spec.BatchSize > MaxBatchSize {
 		spec.BatchSize = MaxBatchSize
 	}
+	if spec.BatchTimeoutMS == 0 {
+		spec.BatchTimeoutMS = 5000
+	}
 	if spec.BlockedRetryDelaySec == 0 {
 		spec.BlockedRetryDelaySec = 30
 	}

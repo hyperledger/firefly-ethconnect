@@ -19,25 +19,42 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/syndtr/goleveldb/leveldb"
 )
 
 type mockKV struct {
-	kvs map[string][]byte
-	err error
+	kvs       map[string][]byte
+	storeErr  error
+	loadErr   error
+	deleteErr error
 }
 
 func (m *mockKV) Put(key string, val []byte) error {
 	m.kvs[key] = val
-	return m.err
+	return m.storeErr
 }
 func (m *mockKV) Get(key string) ([]byte, error) {
-	return m.kvs[key], m.err
+	v, exists := m.kvs[key]
+	if m.loadErr == nil && !exists {
+		return nil, leveldb.ErrNotFound
+	}
+	return v, m.loadErr
+}
+func (m *mockKV) Delete(key string) error {
+	delete(m.kvs, key)
+	return m.deleteErr
+}
+func (m *mockKV) NewIterator() kvIterator {
+	return nil // not implemented in mock
 }
 func (m *mockKV) Close() {}
 
-func newMockKV() *mockKV {
+func newMockKV(err error) *mockKV {
 	return &mockKV{
-		kvs: make(map[string][]byte),
+		storeErr:  err,
+		loadErr:   err,
+		deleteErr: err,
+		kvs:       make(map[string][]byte),
 	}
 }
 
@@ -52,5 +69,7 @@ func TestLevelDBPutGet(t *testing.T) {
 	things, err := kv.Get("things")
 	assert.NoError(err)
 	assert.Equal("stuff", string(things))
+	err = kv.Delete("things")
+	assert.NoError(err)
 	kv.Close()
 }

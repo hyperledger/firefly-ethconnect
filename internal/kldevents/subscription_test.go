@@ -15,122 +15,209 @@
 package kldevents
 
 import (
-	"encoding/json"
 	"fmt"
+	"math/big"
 	"testing"
 
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 
 	"github.com/stretchr/testify/assert"
 )
 
+type mockSubMgr struct {
+	stream        *eventStream
+	subscription  *subscription
+	err           error
+	subscriptions []*subscription
+}
+
+func (m *mockSubMgr) config() *SubscriptionManagerConf {
+	return &SubscriptionManagerConf{}
+}
+
+func (m *mockSubMgr) streamByID(string) (*eventStream, error) {
+	return m.stream, m.err
+}
+
+func (m *mockSubMgr) subscriptionByID(string) (*subscription, error) {
+	return m.subscription, m.err
+}
+
+func (m *mockSubMgr) subscriptionsForStream(string) []*subscription {
+	return m.subscriptions
+}
+
+func (m *mockSubMgr) loadCheckpoint(string) (map[string]*big.Int, error) { return nil, nil }
+
+func (m *mockSubMgr) storeCheckpoint(string, map[string]*big.Int) error { return nil }
+
+func newTestStream() *eventStream {
+	a, _ := newEventStream(newTestSubscriptionManager(), &StreamInfo{
+		ID:   "123",
+		Type: "WebHook",
+		Webhook: &webhookAction{
+			URL: "http://hello.example.com/world",
+		},
+	})
+	return a
+}
+
+func testSubInfo(event *kldbind.ABIEvent) *SubscriptionInfo {
+	return &SubscriptionInfo{ID: "test", Stream: "streamID", Event: kldbind.MarshalledABIEvent{E: *event}}
+}
+
 func TestCreateWebhookSub(t *testing.T) {
 	assert := assert.New(t)
 
-	kv := newMockKV()
-	event := &kldeth.ABIEvent{
+	rpc := kldeth.NewMockRPCClientForSync(nil, nil)
+	event := &kldbind.ABIEvent{
 		Name: "glastonbury",
-	}
-	action := &actionSpec{
-		Type: "WebHook",
-		Webhook: &webhookAction{
-			URL: "http://hello/world",
+		Inputs: []kldbind.ABIArgument{
+			kldbind.ABIArgument{
+				Name: "field",
+				Type: kldbind.ABITypeKnown("address"),
+			},
+			kldbind.ABIArgument{
+				Name: "tents",
+				Type: kldbind.ABITypeKnown("uint256"),
+			},
+			kldbind.ABIArgument{
+				Name: "mud",
+				Type: kldbind.ABITypeKnown("bool"),
+			},
 		},
 	}
+	m := &mockSubMgr{
+		stream: newTestStream(),
+	}
 
-	s, err := newSubscription(kv, nil, event, action)
+	i := testSubInfo(event)
+	s, err := newSubscription(m, rpc, nil, i)
 	assert.NoError(err)
 	assert.NotEmpty(s.info.ID)
 
-	var s1 subscriptionInfo
-	infoBytes, _ := kv.Get(s.info.ID)
-	err = json.Unmarshal(infoBytes, &s1)
+	s1, err := restoreSubscription(m, rpc, i)
 	assert.NoError(err)
 
-	assert.Equal(s.info.ID, s1.ID)
-	assert.Equal(*event, *s1.Event)
-	assert.Equal("webhook", s1.Action.Type)
-	assert.Equal("http://hello/world", s1.Action.Webhook.URL)
+	assert.Equal(s.info.ID, s1.info.ID)
+	assert.Equal("*:glastonbury(address,uint256,bool)", s1.info.Name)
 	assert.Equal(event.Id(), s.info.Filter.Topics[0][0])
 }
 
 func TestCreateWebhookSubWithAddr(t *testing.T) {
 	assert := assert.New(t)
 
-	kv := newMockKV()
-	event := &kldeth.ABIEvent{
+	rpc := kldeth.NewMockRPCClientForSync(nil, nil)
+	m := &mockSubMgr{stream: newTestStream()}
+	event := &kldbind.ABIEvent{
 		Name:      "devcon",
 		Anonymous: true,
 	}
-	action := &actionSpec{
-		Type: "WebHook",
-		Webhook: &webhookAction{
-			URL: "http://hello/world",
-		},
-	}
 
-	addr := kldeth.HexToAddress("0x0123456789abcDEF0123456789abCDef01234567")
-	s, err := newSubscription(kv, &addr, event, action)
+	addr := kldbind.HexToAddress("0x0123456789abcDEF0123456789abCDef01234567")
+	s, err := newSubscription(m, rpc, &addr, testSubInfo(event))
 	assert.NoError(err)
 	assert.NotEmpty(s.info.ID)
 	assert.Equal(event.Id(), s.info.Filter.Topics[0][0])
-	assert.Equal(*event, *s.info.Event)
+	assert.Equal("0x0123456789abcDEF0123456789abCDef01234567:devcon()", s.info.Name)
 }
 
 func TestCreateSubscriptionNoEvent(t *testing.T) {
 	assert := assert.New(t)
-	event := &kldeth.ABIEvent{}
-	_, err := newSubscription(nil, nil, event, nil)
+	event := &kldbind.ABIEvent{}
+	m := &mockSubMgr{stream: newTestStream()}
+	_, err := newSubscription(m, nil, nil, testSubInfo(event))
 	assert.EqualError(err, "Solidity event name must be specified")
-}
-
-func TestCreateSubscriptionPersistFailure(t *testing.T) {
-	assert := assert.New(t)
-	event := &kldeth.ABIEvent{Name: "party"}
-	action := &actionSpec{
-		Type:    "WebHook",
-		Webhook: &webhookAction{URL: "http://hello/world"},
-	}
-	kv := newMockKV()
-	kv.err = fmt.Errorf("pop")
-	_, err := newSubscription(kv, nil, event, action)
-	assert.EqualError(err, "Failed to store subscription info: pop")
-}
-
-func TestCreateSubscriptionMissingWebhookURL(t *testing.T) {
-	assert := assert.New(t)
-	event := &kldeth.ABIEvent{Name: "party"}
-	action := &actionSpec{
-		Type: "WebHook",
-	}
-	_, err := newSubscription(nil, nil, event, action)
-	assert.EqualError(err, "Must specify webhook.url for action type 'webhook'")
-}
-
-func TestCreateSubscriptionBadWebhookURL(t *testing.T) {
-	assert := assert.New(t)
-	event := &kldeth.ABIEvent{Name: "party"}
-	action := &actionSpec{
-		Type:    "WebHook",
-		Webhook: &webhookAction{URL: ":"},
-	}
-	_, err := newSubscription(nil, nil, event, action)
-	assert.EqualError(err, "Invalid URL in webhook action")
-}
-
-func TestCreateSubscriptionUnkonwnType(t *testing.T) {
-	assert := assert.New(t)
-	event := &kldeth.ABIEvent{Name: "party"}
-	action := &actionSpec{
-		Type: "Dance",
-	}
-	_, err := newSubscription(nil, nil, event, action)
-	assert.EqualError(err, "Unknown action type 'Dance'")
 }
 
 func TestCreateSubscriptionMissingAction(t *testing.T) {
 	assert := assert.New(t)
-	event := &kldeth.ABIEvent{Name: "party"}
-	_, err := newSubscription(nil, nil, event, nil)
-	assert.EqualError(err, "No action specified")
+	event := &kldbind.ABIEvent{Name: "party"}
+	m := &mockSubMgr{err: fmt.Errorf("nope")}
+	_, err := newSubscription(m, nil, nil, testSubInfo(event))
+	assert.EqualError(err, "nope")
+}
+
+func TestRestoreSubscriptionMissingAction(t *testing.T) {
+	assert := assert.New(t)
+	m := &mockSubMgr{err: fmt.Errorf("nope")}
+	_, err := restoreSubscription(m, nil, testSubInfo(&kldbind.ABIEvent{}))
+	assert.EqualError(err, "nope")
+}
+
+func TestProcessEventsStaleFilter(t *testing.T) {
+	assert := assert.New(t)
+	s := &subscription{
+		rpc: kldeth.NewMockRPCClientForSync(fmt.Errorf("filter not found"), nil),
+	}
+	err := s.processNewEvents()
+	assert.EqualError(err, "filter not found")
+	assert.True(s.filterStale)
+}
+
+func TestProcessEventsCannotProcess(t *testing.T) {
+	assert := assert.New(t)
+	s := &subscription{
+		rpc: kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
+			les := res.(*[]*logEntry)
+			*les = append(*les, &logEntry{
+				Data: "0x no hex here sorry",
+			})
+		}),
+		lp: newLogProcessor("", &kldbind.ABIEvent{}, newTestStream()),
+	}
+	err := s.processNewEvents()
+	// We swallow the error in this case - as we simply couldn't read the event
+	assert.NoError(err)
+}
+
+func TestInitialFilterFail(t *testing.T) {
+	assert := assert.New(t)
+	s := &subscription{
+		info: &SubscriptionInfo{},
+		rpc:  kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
+	}
+	_, err := s.setInitialBlockHeight()
+	assert.EqualError(err, "eth_blockNumber: pop")
+}
+
+func TestRestartFilterFail(t *testing.T) {
+	assert := assert.New(t)
+	s := &subscription{
+		info: &SubscriptionInfo{},
+		rpc:  kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
+	}
+	err := s.restartFilter(big.NewInt(0))
+	assert.EqualError(err, "eth_newFilter: pop")
+}
+
+func TestUnsubscribe(t *testing.T) {
+	assert := assert.New(t)
+	s := &subscription{
+		rpc: kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
+			*(res.(*string)) = "true"
+		}),
+	}
+	err := s.unsubscribe()
+	assert.NoError(err)
+	assert.True(s.filterStale)
+}
+
+func TestUnsubscribeFail(t *testing.T) {
+	assert := assert.New(t)
+	s := &subscription{rpc: kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil)}
+	err := s.unsubscribe()
+	assert.EqualError(err, "pop")
+	assert.True(s.filterStale)
+}
+
+func TestLoadCheckpointBadJSON(t *testing.T) {
+	assert := assert.New(t)
+	sm := newTestSubscriptionManager()
+	mockKV := newMockKV(nil)
+	sm.db = mockKV
+	mockKV.kvs[checkpointIDPrefix+"id1"] = []byte(":bad json")
+	_, err := sm.loadCheckpoint("id1")
+	assert.Error(err)
 }

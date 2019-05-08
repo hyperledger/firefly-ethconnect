@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -27,6 +28,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -35,6 +37,7 @@ import (
 
 	"github.com/go-openapi/spec"
 	"github.com/julienschmidt/httprouter"
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldopenapi"
 	"github.com/kaleido-io/ethconnect/internal/kldtx"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
@@ -42,6 +45,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common/compiler"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
+	"github.com/kaleido-io/ethconnect/internal/kldevents"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/mholt/archiver"
 
@@ -49,7 +53,8 @@ import (
 )
 
 const (
-	maxFormParsingMemory = 32 << 20 // 32 MB
+	maxFormParsingMemory   = 32 << 20 // 32 MB
+	errEventSupportMissing = "Event support is not configured on this gateway"
 )
 
 // SmartContractGateway provides gateway functions for OpenAPI 2.0 processing of Solidity contracts
@@ -61,12 +66,13 @@ type SmartContractGateway interface {
 
 type smartContractGatewayInt interface {
 	SmartContractGateway
-	loadABIForInstance(addrHexNo0x string) (*kldmessages.ABI, error)
+	loadABIForInstance(addrHexNo0x string) (*kldbind.ABI, error)
 	loadDeployMsgForFactory(abi string) (*kldmessages.DeployContract, error)
 }
 
 // SmartContractGatewayConf configuration
 type SmartContractGatewayConf struct {
+	kldevents.SubscriptionManagerConf
 	StoragePath string `json:"storagePath"`
 	BaseURL     string `json:"baseURL"`
 }
@@ -75,6 +81,7 @@ type SmartContractGatewayConf struct {
 func CobraInitContractGateway(cmd *cobra.Command, conf *SmartContractGatewayConf) {
 	cmd.Flags().StringVarP(&conf.StoragePath, "openapi-path", "I", "", "Path containing ABI + generated OpenAPI/Swagger 2.0 contact definitions")
 	cmd.Flags().StringVarP(&conf.BaseURL, "openapi-baseurl", "U", "", "Base URL for generated OpenAPI/Swagger 2.0 contact definitions")
+	kldevents.CobraInitSubscriptionManager(cmd, &conf.SubscriptionManagerConf)
 }
 
 func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
@@ -84,10 +91,19 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	router.POST("/abis", g.addABI)
 	router.GET("/abis", g.listContractsOrABIs)
 	router.GET("/abis/:abi", g.getContractOrABI)
+	router.POST(kldevents.StreamPathPrefix, g.createStream)
+	router.GET(kldevents.StreamPathPrefix, g.listStreamsOrSubs)
+	router.GET(kldevents.SubPathPrefix, g.listStreamsOrSubs)
+	router.GET(kldevents.StreamPathPrefix+"/:id", g.getStreamOrSub)
+	router.GET(kldevents.SubPathPrefix+"/:id", g.getStreamOrSub)
+	router.DELETE(kldevents.StreamPathPrefix+"/:id", g.deleteStreamOrSub)
+	router.DELETE(kldevents.SubPathPrefix+"/:id", g.deleteStreamOrSub)
+	router.POST(kldevents.StreamPathPrefix+"/:id/suspend", g.suspendOrResumeStream)
+	router.POST(kldevents.StreamPathPrefix+"/:id/resume", g.suspendOrResumeStream)
 }
 
 // NewSmartContractGateway construtor
-func NewSmartContractGateway(conf *SmartContractGatewayConf, rpc kldeth.RPCClient, processor kldtx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher) SmartContractGateway {
+func NewSmartContractGateway(conf *SmartContractGatewayConf, rpc kldeth.RPCClient, processor kldtx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher) (SmartContractGateway, error) {
 	var baseURL *url.URL
 	var err error
 	if conf.BaseURL != "" {
@@ -103,48 +119,46 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, rpc kldeth.RPCClien
 	gw := &smartContractGW{
 		conf:          conf,
 		abi2swagger:   abi2swagger,
-		contractIndex: make(map[string]timeSortable),
-		abiIndex:      make(map[string]timeSortable),
+		contractIndex: make(map[string]kldmessages.TimeSortable),
+		abiIndex:      make(map[string]kldmessages.TimeSortable),
 	}
 	syncDispatcher := newSyncDispatcher(processor)
-	gw.r2e = newREST2eth(gw, rpc, asyncDispatcher, syncDispatcher)
+	if conf.EventLevelDBPath != "" {
+		gw.sm = kldevents.NewSubscriptionManager(&conf.SubscriptionManagerConf, rpc)
+		err = gw.sm.Init()
+		if err != nil {
+			return nil, fmt.Errorf("Event-stream subscription manager: %s", err)
+		}
+	}
+	gw.r2e = newREST2eth(gw, rpc, gw.sm, asyncDispatcher, syncDispatcher)
 	gw.buildIndex()
-	return gw
+	return gw, nil
 }
 
 type smartContractGW struct {
 	conf          *SmartContractGatewayConf
+	sm            kldevents.SubscriptionManager
 	abi2swagger   *kldopenapi.ABI2Swagger
 	r2e           *rest2eth
-	contractIndex map[string]timeSortable
+	contractIndex map[string]kldmessages.TimeSortable
 	idxLock       sync.Mutex
-	abiIndex      map[string]timeSortable
-}
-
-type timeSortable interface {
-	isLessThan(timeSortable, timeSortable) bool
-	getISO8601() string
-	getID() string
-}
-
-type timeSorted struct {
-	CreatedISO8601 string `json:"created"`
+	abiIndex      map[string]kldmessages.TimeSortable
 }
 
 // contractInfo is the minimal data structure we keep in memory, indexed by address
 type contractInfo struct {
-	timeSorted
+	kldmessages.TimeSorted
 	Address     string `json:"address"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Path        string `json:"path"`
-	ABIURI      string `json:"abi"`
+	ABI         string `json:"abi"`
 	SwaggerURL  string `json:"openapi"`
 }
 
 // abiInfo is the minimal data structure we keep in memory, indexed by our own UUID
 type abiInfo struct {
-	timeSorted
+	kldmessages.TimeSorted
 	ID              string `json:"id"`
 	Name            string `json:"name"`
 	Description     string `json:"description"`
@@ -154,21 +168,12 @@ type abiInfo struct {
 	CompilerVersion string `json:"compilerVersion"`
 }
 
-func (i *contractInfo) getID() string {
+func (i *contractInfo) GetID() string {
 	return i.Address
 }
 
-func (i *abiInfo) getID() string {
+func (i *abiInfo) GetID() string {
 	return i.ID
-}
-
-func (i *timeSorted) getISO8601() string {
-	return i.CreatedISO8601
-}
-
-func (*timeSorted) isLessThan(i timeSortable, j timeSortable) bool {
-	return i.getISO8601() > j.getISO8601() ||
-		(i.getISO8601() == j.getISO8601() && i.getID() < j.getID())
 }
 
 // PostDeploy callback processes the transaction receipt and generates the Swagger
@@ -205,7 +210,7 @@ func (g *smartContractGW) PostDeploy(msg *kldmessages.TransactionReceipt) error 
 	return g.storeABI(requestID, addrHexNo0x, deployMsg.ABI)
 }
 
-func (g *smartContractGW) genSwagger(requestID, apiName string, abi *kldmessages.ABI, devdoc string, addressOfInstance string) (*spec.Swagger, error) {
+func (g *smartContractGW) genSwagger(requestID, apiName string, abi *kldbind.ABI, devdoc string, addressOfInstance string) (*spec.Swagger, error) {
 
 	if abi == nil {
 		return nil, fmt.Errorf("ABI cannot be nil")
@@ -240,7 +245,7 @@ func (g *smartContractGW) genSwagger(requestID, apiName string, abi *kldmessages
 	return swagger, nil
 }
 
-func (g *smartContractGW) storeABI(requestID, addrHexNo0x string, abi *kldmessages.ABI) error {
+func (g *smartContractGW) storeABI(requestID, addrHexNo0x string, abi *kldbind.ABI) error {
 	abiFile := path.Join(g.conf.StoragePath, "contract_"+addrHexNo0x+".abi.json")
 	abiBytes, _ := json.MarshalIndent(abi, "", "  ")
 	log.Infof("%s: Storing ABI JSON to '%s'", requestID, abiFile)
@@ -250,13 +255,13 @@ func (g *smartContractGW) storeABI(requestID, addrHexNo0x string, abi *kldmessag
 	return nil
 }
 
-func (g *smartContractGW) loadABIForInstance(addrHexNo0x string) (*kldmessages.ABI, error) {
+func (g *smartContractGW) loadABIForInstance(addrHexNo0x string) (*kldbind.ABI, error) {
 	abiFile := path.Join(g.conf.StoragePath, "contract_"+addrHexNo0x+".abi.json")
 	abiBytes, err := ioutil.ReadFile(abiFile)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to find installed ABI for contract address 0x%s: %s", addrHexNo0x, err)
 	}
-	a := kldmessages.ABI{}
+	a := kldbind.ABI{}
 	if err = json.Unmarshal(abiBytes, &a); err != nil {
 		return nil, fmt.Errorf("Failed to load installed ABI for contract address 0x%s: %s", addrHexNo0x, err)
 	}
@@ -297,7 +302,7 @@ func (g *smartContractGW) storeDeployableABI(msg *kldmessages.DeployContract, co
 
 	if compiled != nil {
 		msg.Compiled = compiled.Compiled
-		msg.ABI = &kldmessages.ABI{
+		msg.ABI = &kldbind.ABI{
 			ABI: *compiled.ABI,
 		}
 		msg.DevDoc = compiled.DevDoc
@@ -408,18 +413,18 @@ func (g *smartContractGW) addFileToABIIndex(id, fileName string, createdTime tim
 
 func (g *smartContractGW) addToContractIndex(address string, swagger *spec.Swagger, createdTime time.Time) {
 	g.idxLock.Lock()
-	var abiURI string
+	var abiID string
 	if ext, exists := swagger.Info.Extensions["x-kaleido-deployment-id"]; exists {
-		abiURI = "/abis/" + ext.(string)
+		abiID = ext.(string)
 	}
 	g.contractIndex[address] = &contractInfo{
 		Address:     address,
 		Name:        swagger.Info.Title,
 		Description: swagger.Info.Description,
-		ABIURI:      abiURI,
+		ABI:         abiID,
 		Path:        "/contracts/" + address,
 		SwaggerURL:  g.conf.BaseURL + "/contracts/" + address + "?swagger",
-		timeSorted: timeSorted{
+		TimeSorted: kldmessages.TimeSorted{
 			CreatedISO8601: createdTime.UTC().Format(time.RFC3339),
 		},
 	}
@@ -436,7 +441,7 @@ func (g *smartContractGW) addToABIIndex(id string, deployMsg *kldmessages.Deploy
 		CompilerVersion: deployMsg.CompilerVersion,
 		Path:            "/abis/" + id,
 		SwaggerURL:      g.conf.BaseURL + "/abis/" + id + "?swagger",
-		timeSorted: timeSorted{
+		TimeSorted: kldmessages.TimeSorted{
 			CreatedISO8601: createdTime.UTC().Format(time.RFC3339),
 		},
 	}
@@ -449,7 +454,7 @@ func (g *smartContractGW) addToABIIndex(id string, deployMsg *kldmessages.Deploy
 func (g *smartContractGW) listContractsOrABIs(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
 
-	var index map[string]timeSortable
+	var index map[string]kldmessages.TimeSortable
 	if strings.HasSuffix(req.URL.Path, "contracts") {
 		index = g.contractIndex
 	} else {
@@ -458,7 +463,7 @@ func (g *smartContractGW) listContractsOrABIs(res http.ResponseWriter, req *http
 
 	// Get an array copy of the current list
 	g.idxLock.Lock()
-	retval := make([]timeSortable, 0, len(index))
+	retval := make([]kldmessages.TimeSortable, 0, len(index))
 	for _, info := range index {
 		retval = append(retval, info)
 	}
@@ -466,7 +471,7 @@ func (g *smartContractGW) listContractsOrABIs(res http.ResponseWriter, req *http
 
 	// Do the sort by Title then Address
 	sort.Slice(retval, func(i, j int) bool {
-		return retval[i].isLessThan(retval[i], retval[j])
+		return retval[i].IsLessThan(retval[i], retval[j])
 	})
 
 	status := 200
@@ -476,6 +481,156 @@ func (g *smartContractGW) listContractsOrABIs(res http.ResponseWriter, req *http
 	enc := json.NewEncoder(res)
 	enc.SetIndent("", "  ")
 	enc.Encode(&retval)
+}
+
+// createStream creates a stream
+func (g *smartContractGW) createStream(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	log.Infof("--> %s %s", req.Method, req.URL)
+
+	if g.sm == nil {
+		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		return
+	}
+
+	var spec kldevents.StreamInfo
+	if err := json.NewDecoder(req.Body).Decode(&spec); err != nil {
+		g.gatewayErrReply(res, req, fmt.Errorf("Invalid event stream specification: %s", err), 400)
+		return
+	}
+
+	newSpec, err := g.sm.AddStream(&spec)
+	if err != nil {
+		g.gatewayErrReply(res, req, err, 400)
+		return
+	}
+
+	status := 200
+	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(status)
+	enc := json.NewEncoder(res)
+	enc.SetIndent("", "  ")
+	enc.Encode(&newSpec)
+}
+
+// listStreamsOrSubs sorts by Title then Address and returns an array
+func (g *smartContractGW) listStreamsOrSubs(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	log.Infof("--> %s %s", req.Method, req.URL)
+
+	if g.sm == nil {
+		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		return
+	}
+
+	var results []kldmessages.TimeSortable
+	if strings.HasPrefix(req.URL.Path, kldevents.SubPathPrefix) {
+		subs := g.sm.Subscriptions()
+		results = make([]kldmessages.TimeSortable, len(subs))
+		for i := range subs {
+			results[i] = subs[i]
+		}
+	} else {
+		streams := g.sm.Streams()
+		results = make([]kldmessages.TimeSortable, len(streams))
+		for i := range streams {
+			results[i] = streams[i]
+		}
+	}
+
+	// Do the sort
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].IsLessThan(results[i], results[j])
+	})
+
+	status := 200
+	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(status)
+	enc := json.NewEncoder(res)
+	enc.SetIndent("", "  ")
+	enc.Encode(&results)
+}
+
+// getStreamOrSub returns stream over REST
+func (g *smartContractGW) getStreamOrSub(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	log.Infof("--> %s %s", req.Method, req.URL)
+
+	if g.sm == nil {
+		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		return
+	}
+
+	var retval interface{}
+	var err error
+	if strings.HasPrefix(req.URL.Path, kldevents.SubPathPrefix) {
+		retval, err = g.sm.SubscriptionByID(params.ByName("id"))
+	} else {
+		retval, err = g.sm.StreamByID(params.ByName("id"))
+	}
+	if err != nil {
+		g.gatewayErrReply(res, req, err, 404)
+		return
+	}
+
+	status := 200
+	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(status)
+	enc := json.NewEncoder(res)
+	enc.SetIndent("", "  ")
+	enc.Encode(retval)
+}
+
+// deleteStreamOrSub deletes stream over REST
+func (g *smartContractGW) deleteStreamOrSub(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	log.Infof("--> %s %s", req.Method, req.URL)
+
+	if g.sm == nil {
+		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		return
+	}
+
+	var err error
+	if strings.HasPrefix(req.URL.Path, kldevents.SubPathPrefix) {
+		err = g.sm.DeleteSubscription(params.ByName("id"))
+	} else {
+		err = g.sm.DeleteStream(params.ByName("id"))
+	}
+	if err != nil {
+		g.gatewayErrReply(res, req, err, 500)
+		return
+	}
+
+	status := 204
+	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(status)
+}
+
+// suspendOrResumeStream suspends or resumes a stream
+func (g *smartContractGW) suspendOrResumeStream(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	log.Infof("--> %s %s", req.Method, req.URL)
+
+	if g.sm == nil {
+		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		return
+	}
+
+	var err error
+	if strings.HasSuffix(req.URL.Path, "resume") {
+		err = g.sm.ResumeStream(params.ByName("id"))
+	} else {
+		err = g.sm.SuspendStream(params.ByName("id"))
+	}
+	if err != nil {
+		g.gatewayErrReply(res, req, err, 500)
+		return
+	}
+
+	status := 204
+	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(status)
 }
 
 func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
@@ -495,7 +650,7 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 	}
 	id := strings.TrimPrefix(strings.ToLower(params.ByName("address")), "0x")
 	prefix := "contract"
-	var index map[string]timeSortable
+	var index map[string]kldmessages.TimeSortable
 	index = g.contractIndex
 	if id == "" {
 		id = strings.ToLower(params.ByName("abi"))
@@ -585,7 +740,42 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 		}
 	}
 
-	compiled, err := g.compileMultipartFormSolidity(tempdir, req)
+	if vs := req.Form["findsolidity"]; len(vs) > 0 {
+		var solFiles []string
+		filepath.Walk(
+			tempdir,
+			func(p string, info os.FileInfo, err error) error {
+				if strings.HasSuffix(p, ".sol") {
+					solFiles = append(solFiles, strings.TrimPrefix(strings.TrimPrefix(p, tempdir), "/"))
+				}
+				return nil
+			})
+		log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
+		res.Header().Set("Content-Type", "application/json")
+		res.WriteHeader(200)
+		json.NewEncoder(res).Encode(&solFiles)
+		return
+	}
+
+	preCompiled, err := g.compileMultipartFormSolidity(tempdir, req)
+	if err != nil {
+		g.gatewayErrReply(res, req, fmt.Errorf("Failed to compile solidity: %s", err), 400)
+		return
+	}
+
+	if vs := req.Form["findcontracts"]; len(vs) > 0 {
+		contractNames := make([]string, 0, len(preCompiled))
+		for contractName := range preCompiled {
+			contractNames = append(contractNames, contractName)
+		}
+		log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
+		res.Header().Set("Content-Type", "application/json")
+		res.WriteHeader(200)
+		json.NewEncoder(res).Encode(&contractNames)
+		return
+	}
+
+	compiled, err := kldeth.ProcessCompiled(preCompiled, req.FormValue("contract"), false)
 	if err != nil {
 		g.gatewayErrReply(res, req, fmt.Errorf("Failed to compile solidity: %s", err), 400)
 		return
@@ -606,7 +796,7 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 	json.NewEncoder(res).Encode(info)
 }
 
-func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Request) (*kldeth.CompiledSolidity, error) {
+func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Request) (map[string]*compiler.Contract, error) {
 	solFiles := []string{}
 	rootFiles, err := ioutil.ReadDir(dir)
 	if err != nil {
@@ -659,7 +849,7 @@ func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Req
 		return nil, fmt.Errorf("Failed to parse solc output: %s", err)
 	}
 
-	return kldeth.ProcessCompiled(compiled, req.FormValue("contract"), false)
+	return compiled, nil
 }
 
 func (g *smartContractGW) extractMultiPartFile(dir string, file *multipart.FileHeader) error {

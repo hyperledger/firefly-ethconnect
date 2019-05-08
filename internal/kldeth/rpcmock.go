@@ -41,7 +41,7 @@ func (ms *MockRPCSubscription) Unsubscribe() {
 type MockRPCClient struct {
 	// Requests for behaviour
 	callError     error
-	resultWranger func(interface{})
+	resultWranger func(string, interface{}, ...interface{})
 	// Captured results
 	SubscribeErr  error
 	SubResult     *MockRPCSubscription
@@ -63,7 +63,7 @@ func NewMockRPCClientForAsync(subscribeErr error) *MockRPCClient {
 }
 
 // NewMockRPCClientForSync contructs a mock client for sync testing
-func NewMockRPCClientForSync(callErr error, resultWranger func(interface{})) *MockRPCClient {
+func NewMockRPCClientForSync(callErr error, resultWranger func(string, interface{}, ...interface{})) *MockRPCClient {
 	m := &MockRPCClient{
 		callError:     callErr,
 		resultWranger: resultWranger,
@@ -76,7 +76,7 @@ func (m *MockRPCClient) CallContext(ctx context.Context, result interface{}, met
 	m.MethodCapture = method
 	m.ArgsCapture = args
 	if m.resultWranger != nil {
-		m.resultWranger(result)
+		m.resultWranger(method, result, args...)
 	}
 	return m.callError
 }

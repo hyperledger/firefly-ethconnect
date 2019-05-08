@@ -18,7 +18,7 @@
         "produces": [
           "application/json"
         ],
-        "summary": "echoTypes1(uint8,bytes,uint256[],bytes1[],bytes32,bool[],address[])",
+        "summary": "echoTypes1(uint8,bytes,uint256[],bytes1[],bytes32,bool[],address[]) [read only]",
         "parameters": [
           {
             "type": "string",
@@ -106,7 +106,7 @@
         "produces": [
           "application/json"
         ],
-        "summary": "echoTypes1(uint8,bytes,uint256[],bytes1[],bytes32,bool[],address[])",
+        "summary": "echoTypes1(uint8,bytes,uint256[],bytes1[],bytes32,bool[],address[]) [read only]",
         "parameters": [
           {
             "name": "body",
@@ -157,7 +157,7 @@
         "produces": [
           "application/json"
         ],
-        "summary": "echoTypes2(string,int256[],bool,bytes1,address,bytes4,uint256)",
+        "summary": "echoTypes2(string,int256[],bool,bytes1,address,bytes4,uint256) [read only]",
         "parameters": [
           {
             "type": "string",
@@ -245,7 +245,7 @@
         "produces": [
           "application/json"
         ],
-        "summary": "echoTypes2(string,int256[],bool,bytes1,address,bytes4,uint256)",
+        "summary": "echoTypes2(string,int256[],bool,bytes1,address,bytes4,uint256) [read only]",
         "parameters": [
           {
             "name": "body",

@@ -15,109 +15,189 @@
 package kldevents
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"net/url"
+	"math/big"
 	"strings"
+	"time"
 
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
-	"github.com/kaleido-io/ethconnect/internal/kldutils"
-)
-
-const (
-	subIDPrefix = "sub-"
+	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+	log "github.com/sirupsen/logrus"
 )
 
 // persistedFilter is the part of the filter we record to storage
 type persistedFilter struct {
-	Addresses []kldeth.Address `json:"address,omitempty"`
-	Topics    [][]kldeth.Hash  `json:"topics,omitempty"`
+	Addresses []kldbind.Address `json:"address,omitempty"`
+	Topics    [][]kldbind.Hash  `json:"topics,omitempty"`
 }
 
 // ethFilter is the filter structure we send over the wire on eth_newFilter
 type ethFilter struct {
 	persistedFilter
-	FromBlock kldeth.HexBigInt `json:"fromBlock,omitempty"`
-	ToBlock   string           `json:"toBlock,omitempty"`
+	FromBlock kldbind.HexBigInt `json:"fromBlock,omitempty"`
+	ToBlock   string            `json:"toBlock,omitempty"`
 }
 
-// actionSpec configures the action to perform for each event
-type actionSpec struct {
-	Type         string         `json:"type,omitempty"`
-	BatchSize    int            `json:"batchSize,omitempty"`
-	BatchTimeout int            `json:"batchTimeout,omitempty"`
-	Webhook      *webhookAction `json:"webhook,omitempty"`
-}
-
-type webhookAction struct {
-	URL     string            `json:"url,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"`
-}
-
-// subscriptionInfo is the persisted data for the subscription
-type subscriptionInfo struct {
-	ID     string           `json:"id,omitempty"`
-	Filter persistedFilter  `json:"filter"`
-	Event  *kldeth.ABIEvent `json:"event"`
-	Action *actionSpec      `json:"action"`
+// SubscriptionInfo is the persisted data for the subscription
+type SubscriptionInfo struct {
+	kldmessages.TimeSorted
+	ID     string                     `json:"id,omitempty"`
+	Path   string                     `json:"path"`
+	Name   string                     `json:"name"`
+	Stream string                     `json:"stream"`
+	Filter persistedFilter            `json:"filter"`
+	Event  kldbind.MarshalledABIEvent `json:"event"`
 }
 
 // subscription is the runtime that manages the subscription
 type subscription struct {
-	info *subscriptionInfo
-	kv   kvStore
+	info         *SubscriptionInfo
+	rpc          kldeth.RPCClient
+	lp           *logProcessor
+	logName      string
+	filterID     kldbind.HexBigInt
+	filteredOnce bool
+	filterStale  bool
 }
 
-func (s *subscription) verifyAction(actionIn *actionSpec) error {
-	if actionIn == nil {
-		return fmt.Errorf("No action specified")
+func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind.Address, i *SubscriptionInfo) (*subscription, error) {
+	stream, err := sm.streamByID(i.Stream)
+	if err != nil {
+		return nil, err
 	}
-
-	// We build a structure with just the one action sub-section matching their lower case
-	// action type, regardless of what they submitted
-	actionOut := actionSpec{Type: strings.ToLower(actionIn.Type)}
-	switch actionOut.Type {
-	case "webhook":
-		if actionIn.Webhook == nil || actionIn.Webhook.URL == "" {
-			return fmt.Errorf("Must specify webhook.url for action type 'webhook'")
-		}
-		if _, err := url.Parse(actionIn.Webhook.URL); err != nil {
-			return fmt.Errorf("Invalid URL in webhook action")
-		}
-		actionOut.Webhook = actionIn.Webhook
-	default:
-		return fmt.Errorf("Unknown action type '%s'", actionIn.Type)
-	}
-	s.info.Action = &actionOut
-	return nil
-}
-
-func newSubscription(kv kvStore, addr *kldeth.Address, event *kldeth.ABIEvent, action *actionSpec) (*subscription, error) {
-	i := &subscriptionInfo{
-		ID:     subIDPrefix + kldutils.UUIDv4(),
-		Event:  event,
-		Action: action,
+	s := &subscription{
+		info:        i,
+		rpc:         rpc,
+		lp:          newLogProcessor(i.ID, &i.Event.E, stream),
+		logName:     i.ID + ":" + eventSummary(&i.Event.E),
+		filterStale: true,
 	}
 	f := &i.Filter
-	s := &subscription{
-		info: i,
-		kv:   kv,
-	}
+	addrStr := "*"
 	if addr != nil {
-		f.Addresses = []kldeth.Address{*addr}
+		f.Addresses = []kldbind.Address{*addr}
+		addrStr = addr.String()
 	}
+	event := &i.Event.E
+	i.Name = addrStr + ":" + eventSummary(event)
 	if event == nil || event.Name == "" {
 		return nil, fmt.Errorf("Solidity event name must be specified")
 	}
-	if err := s.verifyAction(action); err != nil {
+	// For now we only support filtering on the event type
+	f.Topics = [][]kldbind.Hash{[]kldbind.Hash{event.Id()}}
+	log.Infof("Created subscription %s %s topic:%s", i.ID, i.Name, event.Id().String())
+	return s, nil
+}
+
+// GetID returns the ID (for sorting)
+func (info *SubscriptionInfo) GetID() string {
+	return info.ID
+}
+
+func eventSummary(e *kldbind.ABIEvent) string {
+	var sb strings.Builder
+	sb.WriteString(e.Name)
+	sb.WriteString("(")
+	for idx, input := range e.Inputs {
+		if idx > 0 {
+			sb.WriteString(",")
+		}
+		sb.WriteString(input.Type.String())
+	}
+	sb.WriteString(")")
+	return sb.String()
+}
+
+func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *SubscriptionInfo) (*subscription, error) {
+	if i.GetID() == "" {
+		return nil, fmt.Errorf("No ID")
+	}
+	stream, err := sm.streamByID(i.Stream)
+	if err != nil {
 		return nil, err
 	}
-	// For now we only support filtering on the event type
-	f.Topics = [][]kldeth.Hash{[]kldeth.Hash{event.Id()}}
-	// Store the subscription
-	infoBytes, _ := json.Marshal(s.info)
-	if err := kv.Put(i.ID, infoBytes); err != nil {
-		return nil, fmt.Errorf("Failed to store subscription info: %s", err)
+	s := &subscription{
+		rpc:         rpc,
+		info:        i,
+		lp:          newLogProcessor(i.ID, &i.Event.E, stream),
+		logName:     i.ID + ":" + eventSummary(&i.Event.E),
+		filterStale: true,
 	}
 	return s, nil
+}
+
+func (s *subscription) setInitialBlockHeight() (*big.Int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	blockHeight := kldbind.HexBigInt{}
+	err := s.rpc.CallContext(ctx, &blockHeight, "eth_blockNumber")
+	if err != nil {
+		return nil, fmt.Errorf("eth_blockNumber: %s", err)
+	}
+	i := blockHeight.ToInt()
+	s.lp.initBlockHWM(i)
+	log.Infof("%s: initial block height for event stream (latest block): %s", s.logName, i.String())
+	return i, nil
+}
+
+func (s *subscription) setCheckpointBlockHeight(i *big.Int) {
+	s.lp.initBlockHWM(i)
+	log.Infof("%s: checkpoint restored block height for event stream: %s", s.logName, i.String())
+}
+
+func (s *subscription) restartFilter(since *big.Int) error {
+	f := &ethFilter{}
+	f.persistedFilter = s.info.Filter
+	f.FromBlock.ToInt().Set(since)
+	f.ToBlock = "latest"
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	err := s.rpc.CallContext(ctx, &s.filterID, "eth_newFilter", f)
+	if err != nil {
+		return fmt.Errorf("eth_newFilter: %s", err)
+	}
+	s.filteredOnce = false
+	s.filterStale = false
+	log.Infof("%s: created filter from block %s: %s", s.logName, since.String(), s.filterID.String())
+	return err
+}
+
+func (s *subscription) processNewEvents() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	var logs []*logEntry
+	rpcMethod := "eth_getFilterLogs"
+	if s.filteredOnce {
+		rpcMethod = "eth_getFilterChanges"
+	}
+	if err := s.rpc.CallContext(ctx, &logs, rpcMethod, s.filterID); err != nil {
+		if strings.Contains(err.Error(), "filter not found") {
+			s.filterStale = true
+		}
+		return err
+	}
+	log.Debugf("%s: received %d events (%s)", s.logName, len(logs), rpcMethod)
+	for _, logEntry := range logs {
+		if err := s.lp.processLogEntry(logEntry); err != nil {
+			log.Errorf("Failed to processs event: %s", err)
+		}
+	}
+	s.filteredOnce = true
+	return nil
+}
+
+func (s *subscription) unsubscribe() error {
+	var retval string
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	s.filterStale = true
+	err := s.rpc.CallContext(ctx, &retval, "eth_uninstallFilter", s.filterID)
+	log.Infof("%s: Uninstalled filter (retval=%s)", s.logName, retval)
+	return err
+}
+
+func (s *subscription) blockHWM() big.Int {
+	return s.lp.getBlockHWM()
 }

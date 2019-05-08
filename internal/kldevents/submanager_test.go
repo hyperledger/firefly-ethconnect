@@ -136,9 +136,6 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	assert.Nil(sm.SubscriptionByID(stream.ID))
 	assert.Nil(sm.StreamByID(sub.ID))
 
-	err = sm.DeleteStream(stream.ID)
-	assert.EqualError(err, "The following subscriptions are still attached: "+sub.ID)
-
 	err = sm.SuspendStream(stream.ID)
 	assert.NoError(err)
 
@@ -180,6 +177,30 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	sm.Close()
 }
 
+func TestActionChildCleanup(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+	sm := newTestSubscriptionManager()
+	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
+	sm.db, _ = newLDBKeyValueStore(path.Join(dir, "db"))
+	defer sm.db.Close()
+
+	stream, err := sm.AddStream(&StreamInfo{
+		Type:    "webhook",
+		Webhook: &webhookAction{URL: "http://test.invalid"},
+	})
+	assert.NoError(err)
+
+	_, err = sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "ping"}, stream.ID)
+	err = sm.DeleteStream(stream.ID)
+	assert.NoError(err)
+
+	assert.Equal([]*SubscriptionInfo{}, sm.Subscriptions())
+	assert.Equal([]*StreamInfo{}, sm.Streams())
+
+	sm.Close()
+}
 func TestStreamAndSubscriptionErrors(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)

@@ -360,7 +360,7 @@ func (a *eventStream) processBatch(batchNumber uint64, events []*eventData) {
 			time.Sleep(time.Duration(a.spec.BlockedRetryDelaySec) * time.Second)
 		}
 		attempt++
-		log.Errorf("%s: Batch %d initiated with %d events", a.spec.ID, batchNumber, len(events))
+		log.Infof("%s: Batch %d initiated with %d events", a.spec.ID, batchNumber, len(events))
 		err := a.performActionWithRetry(batchNumber, events)
 		// If we got an error after all of the internal retries within the event
 		// handler failed, then the ErrorHandling strategy kicks in
@@ -472,7 +472,7 @@ func (a *eventStream) attemptWebhookAction(batchNumber, attempt uint64, events [
 		for h, v := range a.spec.Webhook.Headers {
 			req.Header.Set(h, v)
 		}
-		res, err = netClient.Post(u.String(), "application/json", bytes.NewReader(reqBytes))
+		res, err = netClient.Do(req)
 		if err == nil {
 			ok := (res.StatusCode >= 200 && res.StatusCode < 300)
 			log.Infof("%s: POST <-- %s [%d] ok=%t", a.spec.ID, u.String(), res.StatusCode, ok)

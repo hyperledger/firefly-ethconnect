@@ -33,15 +33,8 @@ type persistedFilter struct {
 	Topics    [][]kldbind.Hash  `json:"topics,omitempty"`
 }
 
-// ethFilterInitial is the filter structure we send over the wire on eth_newFilter when we first register
-type ethFilterInitial struct {
-	persistedFilter
-	FromBlock string `json:"fromBlock,omitempty"`
-	ToBlock   string `json:"toBlock,omitempty"`
-}
-
-// ethFilterRestart is the filter structure we send over the wire on eth_newFilter when we restart
-type ethFilterRestart struct {
+// ethFilter is the filter structure we send over the wire on eth_newFilter
+type ethFilter struct {
 	persistedFilter
 	FromBlock kldbind.HexBigInt `json:"fromBlock,omitempty"`
 	ToBlock   string            `json:"toBlock,omitempty"`
@@ -135,26 +128,21 @@ func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *Subscr
 	return s, nil
 }
 
-func (s *subscription) initialFilter() error {
-	f := &ethFilterInitial{}
-	f.persistedFilter = s.info.Filter
-	f.FromBlock = "latest"
-	f.ToBlock = "latest"
-
+func (s *subscription) setInitialBlockHeight() (*big.Int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	err := s.rpc.CallContext(ctx, &s.filterID, "eth_newFilter", f)
+	blockHeight := kldbind.HexBigInt{}
+	err := s.rpc.CallContext(ctx, &s.filterID, "eth_blockNumber", &blockHeight)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("eth_blockNumber: %s", err)
 	}
-	log.Infof("%s: created initial filter: %s", s.logName, s.filterID.String())
-	s.filteredOnce = false
-	s.filterStale = false
-	return nil
+	i := blockHeight.ToInt()
+	s.lp.initBlockHWM(i)
+	return i, nil
 }
 
 func (s *subscription) restartFilter(since *big.Int) error {
-	f := &ethFilterRestart{}
+	f := &ethFilter{}
 	f.persistedFilter = s.info.Filter
 	f.FromBlock.ToInt().Set(since)
 	f.ToBlock = "latest"
@@ -162,7 +150,7 @@ func (s *subscription) restartFilter(since *big.Int) error {
 	defer cancel()
 	err := s.rpc.CallContext(ctx, &s.filterID, "eth_newFilter", f)
 	if err != nil {
-		return err
+		return fmt.Errorf("eth_newFilter: %s", err)
 	}
 	s.filteredOnce = false
 	s.filterStale = false

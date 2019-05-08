@@ -63,7 +63,7 @@ func newTestSubscriptionManager() *subscriptionMGR {
 	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
 	sm.db = newMockKV(nil)
 	sm.config().WebhooksAllowPrivateIPs = true
-	sm.config().EventPollingIntervalMS = 10
+	sm.config().EventPollingIntervalSec = 0
 	return sm
 }
 

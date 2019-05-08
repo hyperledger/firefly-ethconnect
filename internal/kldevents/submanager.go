@@ -148,9 +148,13 @@ func (s *subscriptionMGR) DeleteSubscription(id string) error {
 	if err != nil {
 		return err
 	}
+	return s.deleteSubscription(sub)
+}
+
+func (s *subscriptionMGR) deleteSubscription(sub *subscription) error {
 	delete(s.subscriptions, sub.info.ID)
 	sub.unsubscribe()
-	if err = s.db.Delete(sub.info.ID); err != nil {
+	if err := s.db.Delete(sub.info.ID); err != nil {
 		return err
 	}
 	return nil
@@ -209,14 +213,11 @@ func (s *subscriptionMGR) DeleteStream(id string) error {
 	if err != nil {
 		return err
 	}
-	var subIDs []string
+	// We have to clean up all the associated subs
 	for _, sub := range s.subscriptions {
 		if sub.info.Stream == stream.spec.ID {
-			subIDs = append(subIDs, sub.info.ID)
+			s.deleteSubscription(sub)
 		}
-	}
-	if len(subIDs) != 0 {
-		return fmt.Errorf("The following subscriptions are still attached: %s", strings.Join(subIDs, ","))
 	}
 	delete(s.streams, stream.spec.ID)
 	stream.stop()

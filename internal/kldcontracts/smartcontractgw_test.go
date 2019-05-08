@@ -630,6 +630,35 @@ func TestAddABISingleSolidity(t *testing.T) {
 	assert.Equal("SimpleEvents", info.Name)
 }
 
+func TestAddABISingleSolidityBadContractName(t *testing.T) {
+	log.SetLevel(log.DebugLevel)
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	s, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+		},
+		nil, nil, nil,
+	)
+	scgw := s.(*smartContractGW)
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("files", "SimpleEvents.sol")
+	part.Write([]byte(simpleEventsSource()))
+	writer.Close()
+
+	req := httptest.NewRequest("POST", "/abis?contract=badness", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	res := httptest.NewRecorder()
+	router := &httprouter.Router{}
+	scgw.AddRoutes(router)
+	router.ServeHTTP(res, req)
+
+	assert.Equal(400, res.Result().StatusCode)
+}
 func TestAddABIZipNested(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	assert := assert.New(t)
@@ -666,6 +695,84 @@ func TestAddABIZipNested(t *testing.T) {
 	err := json.NewDecoder(res.Body).Decode(info)
 	assert.NoError(err)
 	assert.Equal("SimpleEvents", info.Name)
+}
+
+func TestAddABIZipNestedListSolidity(t *testing.T) {
+	log.SetLevel(log.DebugLevel)
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	s, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+		},
+		nil, nil, nil,
+	)
+	scgw := s.(*smartContractGW)
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("files", "solfiles.zip")
+	zipWriter := zip.NewWriter(part)
+	solWriter, _ := zipWriter.Create("solfiles/SimpleEvents.sol")
+	solWriter.Write([]byte(simpleEventsSource()))
+	zipWriter.Close()
+	writer.WriteField("source", "solfiles/SimpleEvents.sol")
+	writer.Close()
+
+	req := httptest.NewRequest("POST", "/abis?findsolidity", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	res := httptest.NewRecorder()
+	router := &httprouter.Router{}
+	scgw.AddRoutes(router)
+	router.ServeHTTP(res, req)
+
+	assert.Equal(200, res.Result().StatusCode)
+	var solFiles []string
+	err := json.NewDecoder(res.Body).Decode(&solFiles)
+	assert.NoError(err)
+	assert.Equal(1, len(solFiles))
+	assert.Equal("solfiles/SimpleEvents.sol", solFiles[0])
+}
+
+func TestAddABIZipNestedListContracts(t *testing.T) {
+	log.SetLevel(log.DebugLevel)
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	s, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+		},
+		nil, nil, nil,
+	)
+	scgw := s.(*smartContractGW)
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("files", "solfiles.zip")
+	zipWriter := zip.NewWriter(part)
+	solWriter, _ := zipWriter.Create("solfiles/SimpleEvents.sol")
+	solWriter.Write([]byte(simpleEventsSource()))
+	zipWriter.Close()
+	writer.WriteField("source", "solfiles/SimpleEvents.sol")
+	writer.Close()
+
+	req := httptest.NewRequest("POST", "/abis?findcontracts", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	res := httptest.NewRecorder()
+	router := &httprouter.Router{}
+	scgw.AddRoutes(router)
+	router.ServeHTTP(res, req)
+
+	assert.Equal(200, res.Result().StatusCode)
+	var solFiles []string
+	err := json.NewDecoder(res.Body).Decode(&solFiles)
+	assert.NoError(err)
+	assert.Equal(1, len(solFiles))
+	assert.Equal("solfiles/SimpleEvents.sol:SimpleEvents", solFiles[0])
 }
 
 func TestAddABIStoreFail(t *testing.T) {

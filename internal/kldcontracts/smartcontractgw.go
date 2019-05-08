@@ -28,6 +28,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -708,7 +709,42 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 		}
 	}
 
-	compiled, err := g.compileMultipartFormSolidity(tempdir, req)
+	if vs := req.Form["findsolidity"]; len(vs) > 0 {
+		var solFiles []string
+		filepath.Walk(
+			tempdir,
+			func(p string, info os.FileInfo, err error) error {
+				if strings.HasSuffix(p, ".sol") {
+					solFiles = append(solFiles, strings.TrimPrefix(strings.TrimPrefix(p, tempdir), "/"))
+				}
+				return nil
+			})
+		log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
+		res.Header().Set("Content-Type", "application/json")
+		res.WriteHeader(200)
+		json.NewEncoder(res).Encode(&solFiles)
+		return
+	}
+
+	preCompiled, err := g.compileMultipartFormSolidity(tempdir, req)
+	if err != nil {
+		g.gatewayErrReply(res, req, fmt.Errorf("Failed to compile solidity: %s", err), 400)
+		return
+	}
+
+	if vs := req.Form["findcontracts"]; len(vs) > 0 {
+		contractNames := make([]string, 0, len(preCompiled))
+		for contractName := range preCompiled {
+			contractNames = append(contractNames, contractName)
+		}
+		log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
+		res.Header().Set("Content-Type", "application/json")
+		res.WriteHeader(200)
+		json.NewEncoder(res).Encode(&contractNames)
+		return
+	}
+
+	compiled, err := kldeth.ProcessCompiled(preCompiled, req.FormValue("contract"), false)
 	if err != nil {
 		g.gatewayErrReply(res, req, fmt.Errorf("Failed to compile solidity: %s", err), 400)
 		return
@@ -729,7 +765,7 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 	json.NewEncoder(res).Encode(info)
 }
 
-func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Request) (*kldeth.CompiledSolidity, error) {
+func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Request) (map[string]*compiler.Contract, error) {
 	solFiles := []string{}
 	rootFiles, err := ioutil.ReadDir(dir)
 	if err != nil {
@@ -782,7 +818,7 @@ func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Req
 		return nil, fmt.Errorf("Failed to parse solc output: %s", err)
 	}
 
-	return kldeth.ProcessCompiled(compiled, req.FormValue("contract"), false)
+	return compiled, nil
 }
 
 func (g *smartContractGW) extractMultiPartFile(dir string, file *multipart.FileHeader) error {

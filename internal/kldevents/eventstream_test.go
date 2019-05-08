@@ -92,9 +92,10 @@ func newTestStreamForBatching(spec *StreamInfo, status ...int) (*subscriptionMGR
 	svr := httptest.NewServer(mux)
 	spec.Type = "WEBHOOK"
 	spec.Webhook.URL = svr.URL
+	spec.Webhook.Headers = map[string]string{"x-my-header": "my-value"}
 	sm := newTestSubscriptionManager()
 	sm.config().WebhooksAllowPrivateIPs = true
-	sm.config().EventPollingIntervalMS = 10
+	sm.config().EventPollingIntervalSec = 0
 	stream, _ := sm.AddStream(spec)
 	return sm, sm.streams[stream.ID], svr, eventStream
 }
@@ -353,10 +354,10 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 	callCount := 0
 	rpc := kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
 		callCount++
-		if method == "eth_newFilter" {
+		if method == "eth_blockNumber" || method == "eth_newFilter" {
 		} else if method == "eth_getFilterLogs" {
 			*(res.(*[]*logEntry)) = testData[0:2]
-		} else if method == "eth_getFilterChanges" && (callCount == 3) {
+		} else if method == "eth_getFilterChanges" && (callCount == 4) {
 			*(res.(*[]*logEntry)) = testData[2:]
 		} else if method == "eth_getFilterChanges" {
 			*(res.(*[]*logEntry)) = []*logEntry{}
@@ -487,7 +488,7 @@ func TestCheckpointRecovery(t *testing.T) {
 	sub.filterStale = true
 	sub.rpc = kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
 		if method == "eth_newFilter" {
-			newFilterBlock = args[0].(*ethFilterRestart).FromBlock.ToInt().Uint64()
+			newFilterBlock = args[0].(*ethFilter).FromBlock.ToInt().Uint64()
 			t.Logf("New filter block after checkpoint recovery: %d", newFilterBlock)
 		} else {
 			*(res.(*[]*logEntry)) = []*logEntry{}
@@ -527,8 +528,9 @@ func TestWithoutCheckpointRecovery(t *testing.T) {
 	sub := sm.subscriptions[s.ID]
 	sub.filterStale = true
 	sub.rpc = kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
-		if method == "eth_newFilter" {
-			initialEndBlock = args[0].(*ethFilterInitial).ToBlock
+		if method == "eth_blockNumber" {
+		} else if method == "eth_newFilter" {
+			initialEndBlock = args[0].(*ethFilter).ToBlock
 			t.Logf("New filter block after recovery with no checkpoint: %s", initialEndBlock)
 		} else {
 			*(res.(*[]*logEntry)) = []*logEntry{}

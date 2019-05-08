@@ -82,6 +82,12 @@ func (lp *logProcessor) getBlockHWM() big.Int {
 	return v
 }
 
+func (lp *logProcessor) initBlockHWM(intVal *big.Int) {
+	lp.hwnSync.Lock()
+	lp.blockHWM = *intVal
+	lp.hwnSync.Unlock()
+}
+
 func (lp *logProcessor) processLogEntry(entry *logEntry) (err error) {
 
 	var data []byte

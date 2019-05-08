@@ -98,8 +98,8 @@ func (i *rest2EthSyncResponder) ReplyWithReceipt(receipt kldmessages.ReplyWithHe
 	reply, _ := json.MarshalIndent(receipt, "", "  ")
 	log.Infof("<-- %s %s [%d]", i.req.Method, i.req.URL, status)
 	log.Debugf("<-- %s", reply)
-	i.res.WriteHeader(status)
 	i.res.Header().Set("Content-Type", "application/json")
+	i.res.WriteHeader(status)
 	i.res.Write(reply)
 	i.done = true
 	i.waiter.Broadcast()

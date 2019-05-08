@@ -114,7 +114,7 @@ func TestSubscribeWrapper(t *testing.T) {
 func TestCallContextWrapper(t *testing.T) {
 	assert := assert.New(t)
 
-	mockRPC := NewMockRPCClientForSync(nil, func(res interface{}) {
+	mockRPC := NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
 		*(res.(*string)) = "mock result"
 	})
 	var iRPC RPCClient

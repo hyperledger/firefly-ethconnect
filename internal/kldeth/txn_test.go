@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -155,7 +156,7 @@ func TestNewContractDeployPrecompiledSimpleStorage(t *testing.T) {
 
 	var msg kldmessages.DeployContract
 	msg.Compiled = c.Compiled
-	msg.ABI = &kldmessages.ABI{
+	msg.ABI = &kldbind.ABI{
 		ABI: *c.ABI,
 	}
 	msg.Parameters = []interface{}{float64(999999)}
@@ -981,7 +982,7 @@ func TestProcessRLPBytesValidTypes(t *testing.T) {
 	)
 	assert.NoError(err)
 
-	res, err := processRLPBytes(methodABI, rlp)
+	res, err := ProcessRLPBytes(methodABI.Outputs, rlp)
 	assert.NoError(err)
 	assert.Nil(res["error"])
 
@@ -1068,7 +1069,7 @@ func TestProcessRLPBytesUnpackFailure(t *testing.T) {
 		},
 	}
 
-	_, err := processRLPBytes(methodABI, []byte("this is not the RLP you are looking for"))
+	_, err := ProcessRLPBytes(methodABI.Outputs, []byte("this is not the RLP you are looking for"))
 	assert.Regexp("cannot marshal", err.Error())
 }
 
@@ -1084,8 +1085,8 @@ func TestProcessOutputsTooFew(t *testing.T) {
 		},
 	}
 
-	err := processOutputs(methodABI, []interface{}{}, make(map[string]interface{}))
-	assert.EqualError(err, "Expected 0 in JSON/RPC response. Received 1: []")
+	err := processOutputs(methodABI.Outputs, []interface{}{}, make(map[string]interface{}))
+	assert.EqualError(err, "Expected 1 in JSON/RPC response. Received 0: []")
 }
 
 func TestProcessOutputsTooMany(t *testing.T) {
@@ -1097,7 +1098,7 @@ func TestProcessOutputsTooMany(t *testing.T) {
 		Outputs: []abi.Argument{},
 	}
 
-	err := processOutputs(methodABI, []interface{}{"arg1"}, make(map[string]interface{}))
+	err := processOutputs(methodABI.Outputs, []interface{}{"arg1"}, make(map[string]interface{}))
 	assert.EqualError(err, "Expected nil in JSON/RPC response. Received: [arg1]")
 }
 
@@ -1113,6 +1114,6 @@ func TestProcessOutputsBadArgs(t *testing.T) {
 		},
 	}
 
-	err := processOutputs(methodABI, []interface{}{"arg1"}, make(map[string]interface{}))
+	err := processOutputs(methodABI.Outputs, []interface{}{"arg1"}, make(map[string]interface{}))
 	assert.EqualError(err, "Expected slice in JSON/RPC response for retval1 (int32[]). Received string")
 }

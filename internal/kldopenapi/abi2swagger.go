@@ -95,6 +95,14 @@ func (c *ABI2Swagger) buildDefinitionsAndPaths(inst bool, abi *abi.ABI, defs map
 	for _, method := range abi.Methods {
 		c.buildMethodDefinitionsAndPath(inst, defs, paths, method.Name, method, methodsDocs)
 	}
+	for _, event := range abi.Events {
+		c.buildEventDefinitionsAndPath(inst, defs, paths, event.Name, event, devdocs.Get("events"))
+		if !inst {
+			// We add the event again at the top level (as if it were an instance) on non-instance
+			// swagger definitions, so you can subscribe to all events of this type on all instances
+			c.buildEventDefinitionsAndPath(true, defs, paths, event.Name, event, devdocs.Get("events"))
+		}
+	}
 	errSchema := spec.Schema{
 		SchemaProps: spec.SchemaProps{
 			Properties: make(map[string]spec.Schema),
@@ -109,41 +117,60 @@ func (c *ABI2Swagger) buildDefinitionsAndPaths(inst bool, abi *abi.ABI, defs map
 	defs["error"] = errSchema
 }
 
-func (c *ABI2Swagger) buildMethodDefinitionsAndPath(inst bool, defs map[string]spec.Schema, paths map[string]spec.PathItem, name string, method abi.Method, devdocs gjson.Result) {
-
-	methodSig := name
-	constructor := name == "constructor"
+func (c *ABI2Swagger) getDeclaredIDDetails(inst bool, declaredID string, inputs abi.Arguments, devdocs gjson.Result) (bool, string, string, gjson.Result) {
+	sig := declaredID
+	constructor := (declaredID == "constructor")
 	path := "/"
 	if !constructor {
 		if inst {
-			path = "/" + name
+			path = "/" + declaredID
 		} else {
-			path = "/{address}/" + name
+			path = "/{address}/" + declaredID
 		}
-		methodSig += "("
-		for i, input := range method.Inputs {
-			if i > 0 {
-				methodSig += ","
-			}
-			methodSig += input.Type.String()
-		}
-		methodSig += ")"
 	}
-	search := strings.ReplaceAll(methodSig, "(", "\\(")
-	search = strings.ReplaceAll(methodSig, ")", "\\)")
+	sig += "("
+	for i, input := range inputs {
+		if i > 0 {
+			sig += ","
+		}
+		sig += input.Type.String()
+	}
+	sig += ")"
+	search := strings.ReplaceAll(sig, "(", "\\(")
+	search = strings.ReplaceAll(sig, ")", "\\)")
 	methodDocs := devdocs.Get(search)
+	return constructor, sig, path, methodDocs
+}
+
+func (c *ABI2Swagger) buildMethodDefinitionsAndPath(inst bool, defs map[string]spec.Schema, paths map[string]spec.PathItem, name string, method abi.Method, devdocs gjson.Result) {
+
+	constructor, methodSig, path, methodDocs := c.getDeclaredIDDetails(inst, name, method.Inputs, devdocs)
+	if method.Const {
+		methodSig += " [read only]"
+	}
 
 	inputSchema := url.QueryEscape(name) + "_inputs"
 	outputSchema := url.QueryEscape(name) + "_outputs"
-	c.buildArgumentsDefinition(defs, outputSchema, method.Outputs, true, methodDocs)
+	c.buildArgumentsDefinition(defs, outputSchema, method.Outputs, methodDocs)
 	pathItem := spec.PathItem{}
-	if name != "constructor" {
+	if !constructor {
 		pathItem.Get = c.buildGETPath(outputSchema, inst, method, methodSig, methodDocs)
 	}
-	c.buildArgumentsDefinition(defs, inputSchema, method.Inputs, false, methodDocs)
+	c.buildArgumentsDefinition(defs, inputSchema, method.Inputs, methodDocs)
 	pathItem.Post = c.buildPOSTPath(inputSchema, outputSchema, inst, constructor, method, methodSig, methodDocs)
 	paths[path] = pathItem
 
+	return
+}
+
+func (c *ABI2Swagger) buildEventDefinitionsAndPath(inst bool, defs map[string]spec.Schema, paths map[string]spec.PathItem, name string, event abi.Event, devdocs gjson.Result) {
+	_, eventSig, path, eventDocs := c.getDeclaredIDDetails(inst, event.Name, event.Inputs, devdocs)
+	eventSig += " [event]"
+	pathItem := spec.PathItem{}
+	eventSchema := url.QueryEscape(name) + "_event"
+	c.buildArgumentsDefinition(defs, eventSchema, event.Inputs, eventDocs)
+	pathItem.Post = c.buildEventPOSTPath(eventSchema, inst, event, eventSig, eventDocs)
+	paths[path+"/subscribe"] = pathItem
 	return
 }
 
@@ -303,7 +330,7 @@ func (c *ABI2Swagger) buildGETPath(outputSchema string, inst bool, method abi.Me
 			Summary:     methodSig,
 			Description: devdocs.Get("details").String(),
 			Produces:    []string{"application/json"},
-			Responses:   c.buildResponses(outputSchema, method, devdocs),
+			Responses:   c.buildResponses(outputSchema, devdocs),
 			Parameters:  parameters,
 		},
 	}
@@ -347,7 +374,7 @@ func (c *ABI2Swagger) buildPOSTPath(inputSchema, outputSchema string, inst, cons
 			Description: devdocs.Get("details").String(),
 			Consumes:    []string{"application/json", "application/x-yaml"},
 			Produces:    []string{"application/json"},
-			Responses:   c.buildResponses(outputSchema, method, devdocs),
+			Responses:   c.buildResponses(outputSchema, devdocs),
 			Parameters:  parameters,
 		},
 	}
@@ -355,7 +382,55 @@ func (c *ABI2Swagger) buildPOSTPath(inputSchema, outputSchema string, inst, cons
 	return op
 }
 
-func (c *ABI2Swagger) buildResponses(outputSchema string, method abi.Method, devdocs gjson.Result) *spec.Responses {
+func (c *ABI2Swagger) buildEventPOSTPath(eventSchema string, inst bool, event abi.Event, eventSig string, devdocs gjson.Result) *spec.Operation {
+	parameters := make([]spec.Parameter, 0, 2)
+	if !inst {
+		parameters = append(parameters, spec.Parameter{
+			ParamProps: spec.ParamProps{
+				Description: "The contract address",
+				Name:        "address",
+				In:          "path",
+				Required:    true,
+			},
+			SimpleSchema: spec.SimpleSchema{
+				Type: "string",
+			},
+		})
+	}
+	parameters = append(parameters, spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Name:        "body",
+			In:          "body",
+			Description: "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured stream)",
+			Required:    true,
+			Schema: &spec.Schema{
+				SchemaProps: spec.SchemaProps{
+					Properties: map[string]spec.Schema{
+						"stream": spec.Schema{
+							SchemaProps: spec.SchemaProps{
+								Description: "The ID of an event stream already configured in the REST Gateway",
+								Type:        []string{"string"},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	op := &spec.Operation{
+		OperationProps: spec.OperationProps{
+			Summary:     eventSig,
+			Description: devdocs.Get("details").String(),
+			Consumes:    []string{"application/json", "application/x-yaml"},
+			Produces:    []string{"application/json"},
+			Responses:   c.buildResponses(eventSchema, devdocs),
+			Parameters:  parameters,
+		},
+	}
+	return op
+}
+
+func (c *ABI2Swagger) buildResponses(outputSchema string, devdocs gjson.Result) *spec.Responses {
 	errRef, _ := jsonreference.New("#/definitions/error")
 	errorResponse := spec.Response{
 		ResponseProps: spec.ResponseProps{
@@ -395,7 +470,7 @@ func (c *ABI2Swagger) buildResponses(outputSchema string, method abi.Method, dev
 	}
 }
 
-func (c *ABI2Swagger) buildArgumentsDefinition(defs map[string]spec.Schema, name string, args abi.Arguments, isReturn bool, devdocs gjson.Result) {
+func (c *ABI2Swagger) buildArgumentsDefinition(defs map[string]spec.Schema, name string, args abi.Arguments, devdocs gjson.Result) {
 
 	s := spec.Schema{
 		SchemaProps: spec.SchemaProps{
@@ -413,12 +488,12 @@ func (c *ABI2Swagger) buildArgumentsDefinition(defs map[string]spec.Schema, name
 			}
 		}
 		argDocs := devdocs.Get("params." + arg.Name)
-		s.Properties[argName] = c.mapArgToSchema(arg, isReturn, argDocs.String())
+		s.Properties[argName] = c.mapArgToSchema(arg, argDocs.String())
 	}
 
 }
 
-func (c *ABI2Swagger) mapArgToSchema(arg abi.Argument, isReturn bool, desc string) spec.Schema {
+func (c *ABI2Swagger) mapArgToSchema(arg abi.Argument, desc string) spec.Schema {
 
 	varDetails := desc
 	if varDetails != "" {
@@ -431,12 +506,12 @@ func (c *ABI2Swagger) mapArgToSchema(arg abi.Argument, isReturn bool, desc strin
 			Type:        []string{"string"},
 		},
 	}
-	c.mapTypeToSchema(&s, arg.Type, isReturn)
+	c.mapTypeToSchema(&s, arg.Type)
 
 	return s
 }
 
-func (c *ABI2Swagger) mapTypeToSchema(s *spec.Schema, t abi.Type, isReturn bool) {
+func (c *ABI2Swagger) mapTypeToSchema(s *spec.Schema, t abi.Type) {
 
 	switch t.T {
 	case abi.IntTy, abi.UintTy:
@@ -467,7 +542,7 @@ func (c *ABI2Swagger) mapTypeToSchema(s *spec.Schema, t abi.Type, isReturn bool)
 		s.Type = []string{"array"}
 		s.Items = &spec.SchemaOrArray{}
 		s.Items.Schema = &spec.Schema{}
-		c.mapTypeToSchema(s.Items.Schema, *t.Elem, isReturn)
+		c.mapTypeToSchema(s.Items.Schema, *t.Elem)
 		break
 	}
 

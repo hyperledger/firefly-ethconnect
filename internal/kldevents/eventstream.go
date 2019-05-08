@@ -137,7 +137,11 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo) (a *eventStream, e
 		batchQueue:        list.New(),
 		initialRetryDelay: DefaultExponentialBackoffInitial,
 		backoffFactor:     DefaultExponentialBackoffFactor,
-		pollingInterval:   time.Duration(sm.config().EventPollingIntervalMS) * time.Millisecond,
+		pollingInterval:   time.Duration(sm.config().EventPollingIntervalSec) * time.Second,
+	}
+	if a.pollingInterval == 0 {
+		// Let's us do this from UTs, without exposing it
+		a.pollingInterval = 100 * time.Millisecond
 	}
 	go a.eventPoller()
 	go a.batchProcessor()
@@ -219,10 +223,13 @@ func (a *eventStream) eventPoller() {
 		if err == nil && !a.isBlocked() {
 			for _, sub := range subs {
 				if sub.filterStale {
-					if i, exists := checkpoint[sub.info.ID]; exists {
-						err = sub.restartFilter(i)
-					} else {
-						err = sub.initialFilter()
+					var blockHeight *big.Int
+					var exists bool
+					if blockHeight, exists = checkpoint[sub.info.ID]; !exists || blockHeight.Cmp(big.NewInt(0)) <= 0 {
+						blockHeight, err = sub.setInitialBlockHeight()
+					}
+					if err == nil {
+						err = sub.restartFilter(blockHeight)
 					}
 				}
 				if err == nil {
@@ -421,10 +428,8 @@ func (a *eventStream) isAddressUnsafe(ip *net.IPAddr) bool {
 
 // attemptWebhookAction performs a single attempt of a webhook action
 func (a *eventStream) attemptWebhookAction(batchNumber, attempt uint64, events []*eventData) error {
-	// We perform DNS resolution explicitly, so that we can exclude private IP address
-	// ranges from the target
+	// We perform DNS resolution before each attempt, to exclude private IP address ranges from the target
 	u, _ := url.Parse(a.spec.Webhook.URL)
-	port := u.Port()
 	addr, err := net.ResolveIPAddr("ip4", u.Hostname())
 	if err != nil {
 		return err
@@ -434,7 +439,6 @@ func (a *eventStream) attemptWebhookAction(batchNumber, attempt uint64, events [
 		log.Errorf(err.Error())
 		return err
 	}
-	u.Host = addr.String() + ":" + port
 	// Set the timeout
 	var transport = &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
@@ -455,10 +459,18 @@ func (a *eventStream) attemptWebhookAction(batchNumber, attempt uint64, events [
 		Timeout:   time.Duration(a.spec.Webhook.RequestTimeoutSec) * time.Second,
 		Transport: transport,
 	}
-	log.Infof("%s: POST --> %s (attempt=%d)", a.spec.ID, u.String(), attempt)
+	log.Infof("%s: POST --> %s [%s] (attempt=%d)", a.spec.ID, u.String(), addr.String(), attempt)
 	reqBytes, err := json.Marshal(&events)
+	var req *http.Request
+	if err == nil {
+		req, err = http.NewRequest("POST", u.String(), bytes.NewReader(reqBytes))
+	}
 	if err == nil {
 		var res *http.Response
+		req.Header.Set("Content-Type", "application/json")
+		for h, v := range a.spec.Webhook.Headers {
+			req.Header.Set(h, v)
+		}
 		res, err = netClient.Post(u.String(), "application/json", bytes.NewReader(reqBytes))
 		if err == nil {
 			ok := (res.StatusCode >= 200 && res.StatusCode < 300)

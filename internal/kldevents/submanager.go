@@ -69,7 +69,7 @@ type subscriptionManager interface {
 // SubscriptionManagerConf configuration
 type SubscriptionManagerConf struct {
 	EventLevelDBPath        string `json:"eventsDB"`
-	EventPollingIntervalMS  uint64 `json:"eventPollingIntervalMS,omitempty"`
+	EventPollingIntervalSec uint64 `json:"eventPollingIntervalSec,omitempty"`
 	WebhooksAllowPrivateIPs bool   `json:"webhooksAllowPrivateIPs,omitempty"`
 }
 
@@ -85,7 +85,7 @@ type subscriptionMGR struct {
 // CobraInitSubscriptionManager standard naming for cobra command params
 func CobraInitSubscriptionManager(cmd *cobra.Command, conf *SubscriptionManagerConf) {
 	cmd.Flags().StringVarP(&conf.EventLevelDBPath, "events-db", "E", "", "Level DB location for subscription management")
-	cmd.Flags().Uint64VarP(&conf.EventPollingIntervalMS, "events-polling-int", "j", 10, "Event polling interval (ms)")
+	cmd.Flags().Uint64VarP(&conf.EventPollingIntervalSec, "events-polling-int", "j", 10, "Event polling interval (ms)")
 	cmd.Flags().BoolVarP(&conf.WebhooksAllowPrivateIPs, "events-privips", "J", false, "Allow private IPs in Webhooks")
 }
 

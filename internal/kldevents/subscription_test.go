@@ -178,8 +178,8 @@ func TestInitialFilterFail(t *testing.T) {
 		info: &SubscriptionInfo{},
 		rpc:  kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
 	}
-	err := s.initialFilter()
-	assert.EqualError(err, "pop")
+	_, err := s.setInitialBlockHeight()
+	assert.EqualError(err, "eth_blockNumber: pop")
 }
 
 func TestRestartFilterFail(t *testing.T) {
@@ -189,7 +189,7 @@ func TestRestartFilterFail(t *testing.T) {
 		rpc:  kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
 	}
 	err := s.restartFilter(big.NewInt(0))
-	assert.EqualError(err, "pop")
+	assert.EqualError(err, "eth_newFilter: pop")
 }
 
 func TestUnsubscribe(t *testing.T) {

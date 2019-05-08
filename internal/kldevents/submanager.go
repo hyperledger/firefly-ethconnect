@@ -32,8 +32,10 @@ import (
 )
 
 const (
-	subPathPrefix      = "/subscriptions/"
-	streamPathPrefix   = "/eventstreams/"
+	// SubPathPrefix is the path prefix for subscriptions
+	SubPathPrefix = "/subscriptions"
+	// StreamPathPrefix is the path prefix for event streams
+	StreamPathPrefix   = "/eventstreams"
 	subIDPrefix        = "sb-"
 	streamIDPrefix     = "es-"
 	checkpointIDPrefix = "cp-"
@@ -44,13 +46,13 @@ type SubscriptionManager interface {
 	Init() error
 	AddStream(spec *StreamInfo) (*StreamInfo, error)
 	Streams() []*StreamInfo
-	StreamByID(id string) *StreamInfo
+	StreamByID(id string) (*StreamInfo, error)
 	SuspendStream(id string) error
 	ResumeStream(id string) error
 	DeleteStream(id string) error
 	AddSubscription(addr *kldbind.Address, event *kldbind.ABIEvent, streamID string) (*SubscriptionInfo, error)
 	Subscriptions() []*SubscriptionInfo
-	SubscriptionByID(id string) *SubscriptionInfo
+	SubscriptionByID(id string) (*SubscriptionInfo, error)
 	DeleteSubscription(id string) error
 	Close()
 }
@@ -99,13 +101,12 @@ func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc kldeth.RPCClient)
 }
 
 // SubscriptionByID used externally to get serializable details
-func (s *subscriptionMGR) SubscriptionByID(id string) *SubscriptionInfo {
+func (s *subscriptionMGR) SubscriptionByID(id string) (*SubscriptionInfo, error) {
 	sub, err := s.subscriptionByID(id)
 	if err != nil {
-		log.Warnf("Query failed: %s", err)
-		return nil
+		return nil, err
 	}
-	return sub.info
+	return sub.info, err
 }
 
 // Subscriptions used externally to get list subscriptions
@@ -127,7 +128,7 @@ func (s *subscriptionMGR) AddSubscription(addr *kldbind.Address, event *kldbind.
 		Event:  kldbind.MarshalledABIEvent{E: *event},
 		Stream: streamID,
 	}
-	i.Path = subPathPrefix + i.ID
+	i.Path = SubPathPrefix + "/" + i.ID
 	// Create it
 	sub, err := newSubscription(s, s.rpc, addr, i)
 	if err != nil {
@@ -164,13 +165,12 @@ func (s *subscriptionMGR) storeSubscription(info *SubscriptionInfo) (*Subscripti
 }
 
 // StreamByID used externally to get serializable details
-func (s *subscriptionMGR) StreamByID(id string) *StreamInfo {
+func (s *subscriptionMGR) StreamByID(id string) (*StreamInfo, error) {
 	stream, err := s.streamByID(id)
 	if err != nil {
-		log.Warnf("Query failed: %s", err)
-		return nil
+		return nil, err
 	}
-	return stream.spec
+	return stream.spec, nil
 }
 
 // Streams used externally to get list streams
@@ -186,7 +186,7 @@ func (s *subscriptionMGR) Streams() []*StreamInfo {
 func (s *subscriptionMGR) AddStream(spec *StreamInfo) (*StreamInfo, error) {
 	spec.ID = streamIDPrefix + kldutils.UUIDv4()
 	spec.CreatedISO8601 = time.Now().UTC().Format(time.RFC3339)
-	spec.Path = streamPathPrefix + spec.ID
+	spec.Path = StreamPathPrefix + "/" + spec.ID
 	stream, err := newEventStream(s, spec)
 	if err != nil {
 		return nil, err

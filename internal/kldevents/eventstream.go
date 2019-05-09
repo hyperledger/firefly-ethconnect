@@ -144,7 +144,7 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo) (a *eventStream, e
 	}
 	if a.pollingInterval == 0 {
 		// Let's us do this from UTs, without exposing it
-		a.pollingInterval = 100 * time.Millisecond
+		a.pollingInterval = 10 * time.Millisecond
 	}
 	go a.eventPoller()
 	go a.batchProcessor()

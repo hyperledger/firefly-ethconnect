@@ -179,7 +179,7 @@ func TestBlockingBehavior(t *testing.T) {
 	assert := assert.New(t)
 	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
-			BatchSize:            10,
+			BatchSize:            1,
 			Webhook:              &webhookAction{},
 			ErrorHandling:        ErrorHandlingBlock,
 			BlockedRetryDelaySec: 1,
@@ -189,14 +189,15 @@ func TestBlockingBehavior(t *testing.T) {
 	defer stream.stop()
 
 	complete := false
-	thrown := false
-	go func() { <-eventStream; thrown = true }()
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() { <-eventStream; wg.Done() }()
 	stream.handleEvent(&eventData{
 		SubID:         "sub1",
 		batchComplete: func(*eventData) { complete = true },
 	})
+	wg.Wait()
 	time.Sleep(10 * time.Millisecond)
-	assert.True(thrown)
 	assert.False(complete)
 }
 
@@ -204,7 +205,7 @@ func TestSkippingBehavior(t *testing.T) {
 	assert := assert.New(t)
 	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
-			BatchSize:            10,
+			BatchSize:            1,
 			Webhook:              &webhookAction{},
 			ErrorHandling:        ErrorHandlingSkip,
 			BlockedRetryDelaySec: 1,
@@ -214,14 +215,15 @@ func TestSkippingBehavior(t *testing.T) {
 	defer stream.stop()
 
 	complete := false
-	thrown := false
-	go func() { <-eventStream; thrown = true }()
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() { <-eventStream; wg.Done() }()
 	stream.handleEvent(&eventData{
 		SubID:         "sub1",
 		batchComplete: func(*eventData) { complete = true },
 	})
+	wg.Wait()
 	time.Sleep(100 * time.Millisecond)
-	assert.True(thrown)
 	assert.True(complete)
 }
 
@@ -229,7 +231,7 @@ func TestBackoffRetry(t *testing.T) {
 	assert := assert.New(t)
 	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
-			BatchSize:            10,
+			BatchSize:            1,
 			Webhook:              &webhookAction{},
 			ErrorHandling:        ErrorHandlingBlock,
 			RetryTimeoutSec:      1,

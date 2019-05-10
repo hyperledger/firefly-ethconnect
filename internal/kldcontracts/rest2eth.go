@@ -251,7 +251,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 		r.restErrReply(res, req, err, 404)
 		return
 	}
-	c.value = json.Number(r.getKLDParam("value", req, false))
+	c.value = json.Number(r.getKLDParam("ethvalue", req, false))
 
 	c.body, err = kldutils.YAMLorJSONPayload(req)
 	if err != nil {

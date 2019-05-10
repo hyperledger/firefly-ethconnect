@@ -614,6 +614,30 @@ func TestCallMethodSuccess(t *testing.T) {
 	assert.Equal("testing", reply["s"])
 }
 
+func TestCallReadOnlyMethodViaPOSTSuccess(t *testing.T) {
+	log.SetLevel(log.DebugLevel)
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
+	dispatcher := &mockREST2EthDispatcher{}
+	_, mockRPC, router, res, _ := newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	req := httptest.NewRequest("POST", "/contracts/"+to+"/get", bytes.NewReader([]byte{}))
+	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
+	router.ServeHTTP(res, req)
+
+	assert.Equal(200, res.Result().StatusCode)
+	assert.Equal("eth_call", mockRPC.capturedMethod)
+	var reply map[string]interface{}
+	err := json.NewDecoder(res.Result().Body).Decode(&reply)
+	assert.NoError(err)
+	log.Infof("Reply: %+v", reply)
+	assert.Nil(reply["error"])
+	assert.Equal("123456", reply["i"])
+	assert.Equal("testing", reply["s"])
+}
+
 func TestCallMethodFail(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()

@@ -202,14 +202,13 @@ func TestBlockingBehavior(t *testing.T) {
 }
 
 func TestSkippingBehavior(t *testing.T) {
-	assert := assert.New(t)
 	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize:            1,
 			Webhook:              &webhookAction{},
 			ErrorHandling:        ErrorHandlingSkip,
 			BlockedRetryDelaySec: 1,
-		}, 404)
+		}, 404 /* fail the requests */)
 	defer close(eventStream)
 	defer svr.Close()
 	defer stream.stop()
@@ -223,8 +222,10 @@ func TestSkippingBehavior(t *testing.T) {
 		batchComplete: func(*eventData) { complete = true },
 	})
 	wg.Wait()
-	time.Sleep(100 * time.Millisecond)
-	assert.True(complete)
+	for !complete {
+		time.Sleep(50 * time.Millisecond)
+	}
+	// reaching here despite the 404s means we passed
 }
 
 func TestBackoffRetry(t *testing.T) {

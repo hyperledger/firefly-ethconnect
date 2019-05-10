@@ -237,9 +237,11 @@ func TestSendTransactionSyncSuccess(t *testing.T) {
 	}
 	_, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
 	body, _ := json.Marshal(&bodyMap)
-	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?kld-sync", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?kld-sync&kld-ethvalue=1234", bytes.NewReader(body))
 	req.Header.Add("x-kaleido-from", from)
 	router.ServeHTTP(res, req)
+
+	assert.Equal(json.Number("1234"), dispatcher.sendTransactionMsg.Value)
 
 	assert.Equal(200, res.Result().StatusCode)
 	assert.Equal(from, dispatcher.sendTransactionMsg.From)
@@ -533,7 +535,7 @@ func TestSendTransactionParamInQuery(t *testing.T) {
 		},
 	}
 	_, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
-	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?i=999&s=msg", bytes.NewReader([]byte("{}")))
+	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?i=999&s=msg&kld-ethvalue=12345", bytes.NewReader([]byte("{}")))
 	req.Header.Set("x-kaleido-from", from)
 	router.ServeHTTP(res, req)
 

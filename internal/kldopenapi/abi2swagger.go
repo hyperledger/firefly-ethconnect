@@ -190,7 +190,7 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	params["valueParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
 			Description:     "Value to send with the transaction - 'x-kaleido-value' header can also be used",
-			Name:            "kld-value",
+			Name:            "kld-ethvalue",
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: true,

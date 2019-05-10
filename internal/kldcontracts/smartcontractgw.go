@@ -665,7 +665,7 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 			if from != "" {
 				fromQuery = "&from=" + url.QueryEscape(from)
 			}
-			g.writeHTMLForUI(prefix, id, fromQuery, res)
+			g.writeHTMLForUI(prefix, id, fromQuery, (prefix == "abi"), res)
 		} else if swaggerRequest {
 			swaggerPath := path.Join(g.conf.StoragePath, prefix+"_"+id+".swagger.json")
 			log.Infof("Returning %s", swaggerPath)
@@ -892,7 +892,15 @@ func (g *smartContractGW) processIfArchive(dir, fileName string) error {
 }
 
 // Write out a nice little UI for exercising the Swagger
-func (g *smartContractGW) writeHTMLForUI(prefix, id, fromQuery string, res http.ResponseWriter) {
+func (g *smartContractGW) writeHTMLForUI(prefix, id, fromQuery string, factory bool, res http.ResponseWriter) {
+	factoryMessage := ""
+	if factory {
+		factoryMessage =
+			`       <li><code>POST</code> against <code>/</code> (the constructor) will deploy a new instance of the smart contract
+        <ul>
+          <li>A dedicated API will be generated for each instance deployed via this API, scoped to that contract Address</li>
+        </ul></li>`
+	}
 	html := `<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
 <html>
 <head>
@@ -912,11 +920,53 @@ func (g *smartContractGW) writeHTMLForUI(prefix, id, fromQuery string, res http.
   >
     <img 
       slot="logo" 
-      src="//bit.ly/kaleido-logo-header-small-purple"
+      src="//api.kaleido.io/kaleido.svg"
       alt="Kaleido"
-      onclick="window.open('https://kaleido.io')"
-      style="cursor: pointer;"
+      onclick="window.open('https://docs.kaleido.io/kaleido-services/ethconnect')"
+      style="cursor: pointer; padding-bottom: 2px; margin-left: 25px; margin-right: 10px;"
     />
+    <div style="border: #f2f2f2 1px solid; padding: 25px; margin-top: 25px;
+      display: flex; flex-direction: row; flex-wrap: wrap;">
+      <div style="flex: 1;">
+        <p>Welcome to the built-in API exerciser of Ethconnect</p>
+        <p><a href="#quickstart" style="text-decoration: none" onclick="document.getElementById('kaleido-quickstart-header').style.display = 'block'; this.style.display = 'none'; return false;">Show quickstart instructions</a></p>
+        <div id="kaleido-quickstart-header" style="display: none;">
+          <ul>
+            <li><code>POST</code> actions against Solidity methods will <b>write to the chain</b> unless <code>kld-call</code> is set, or the method is marked <code>[read-only]</code>
+            <ul>
+              <li>When <code>kld-sync</code> is set, the response will not be returned until the transaction is mined <b>taking a few seconds</b></li>
+              <li>When <code>kld-sync</code> is unset, the transaction is reliably streamed to the node over Kafka</li>
+              <li>Use the <a href="/replies" target="_blank" style="text-decoration: none">/replies</a> API route on Ethconnect to view receipts for streamed transactions</li>
+            </ul></li>
+            ` + factoryMessage + `
+            <li><code>GET</code> actions <b>never</b> write to the chain. Even for actions that update state - so you can simulate execution</li>
+            <li><code>POST</code> actions against <code>/subscribe</code> paths marked <code>[event]</code> add subscriptions to event streams
+            <ul>
+              <li>Pre-configure your event streams with actions in the Kaleido console, or via the <code>/eventstreams</code> API route on Ethconnect</b></li>
+              <li>Once you add a subscription, all matching events will be reliably read, batched and delivered over your event stream</li>
+            </ul></li>
+            <li>Data type conversion is automatic for all actions an events.
+              <ul>
+                  <li>Numbers are encoded as strings, to avoid loss of precision.</li>
+                  <li>Byte arrays, including Address fields, are encoded in Hex with an <code>0x</code> prefix</li>
+                  <li>See the 'Model' of each method and event input/output below for details</li>
+              </ul>
+            </li>
+            <li>Descriptions are taken from the devdoc included in the Solidity code comments</li>
+          </ul>        
+        </div>
+      </div>
+      <div style="flex-shrink: 1; margin-left: auto; text-align: center;"">
+        <button type="button" style="color: white; background-color: #3942c1;
+          font-size: 1rem; border-radius: 4px; cursor: pointer;
+          text-transform: uppercase; height: 50px; padding: 0 20px;
+          text-align: center; box-sizing: border-box; margin-bottom: 10px;"
+          onclick="window.open('` + g.conf.BaseURL + "/" + prefix + "s/" + id + "?swagger&download" + fromQuery + `')">
+          Download API
+        </button><br/>
+        <a href="https://docs.kaleido.io/kaleido-services/ethconnect" style="text-decoration: none">Open the docs</a>
+      </div>
+    </div>
   </rapi-doc>
 </body> 
 </html>

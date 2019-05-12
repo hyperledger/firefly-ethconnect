@@ -121,7 +121,7 @@ func (r *receiptStore) processReply(msgBytes []byte) {
 
 func (r *receiptStore) marshalAndReply(res http.ResponseWriter, req *http.Request, result interface{}) {
 	// Serialize and return
-	resBytes, err := json.Marshal(result)
+	resBytes, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
 		log.Errorf("Error serializing receipts: %s", err)
 		sendRESTError(res, req, fmt.Errorf("Error serializing response"), 500)

@@ -715,7 +715,7 @@
     },
     "valueParam": {
       "type": "integer",
-      "description": "Value to send with the transaction - 'x-kaleido-value' header can also be used",
+      "description": "Ether value to send with the transaction - 'x-kaleido-ethvalue' header can also be used",
       "name": "kld-ethvalue",
       "in": "query",
       "allowEmptyValue": true

@@ -1433,7 +1433,7 @@
     "valueParam": {
       "type": "integer",
       "description": "Value to send with the transaction - 'x-kaleido-value' header can also be used",
-      "name": "kld-value",
+      "name": "kld-ethvalue",
       "in": "query",
       "allowEmptyValue": true
     }

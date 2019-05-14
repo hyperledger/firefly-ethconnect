@@ -19,6 +19,7 @@
           "application/json"
         ],
         "summary": "echoTypes1(uint8,bytes,uint256[],bytes1[],bytes32,bool[],address[]) [read only]",
+        "operationId": "echoTypes1_get",
         "parameters": [
           {
             "type": "string",
@@ -107,6 +108,7 @@
           "application/json"
         ],
         "summary": "echoTypes1(uint8,bytes,uint256[],bytes1[],bytes32,bool[],address[]) [read only]",
+        "operationId": "echoTypes1_post",
         "parameters": [
           {
             "name": "body",
@@ -158,6 +160,7 @@
           "application/json"
         ],
         "summary": "echoTypes2(string,int256[],bool,bytes1,address,bytes4,uint256) [read only]",
+        "operationId": "echoTypes2_get",
         "parameters": [
           {
             "type": "string",
@@ -246,6 +249,7 @@
           "application/json"
         ],
         "summary": "echoTypes2(string,int256[],bool,bytes1,address,bytes4,uint256) [read only]",
+        "operationId": "echoTypes2_post",
         "parameters": [
           {
             "name": "body",
@@ -296,6 +300,7 @@
           "application/json"
         ],
         "summary": "undocumentedWrites(uint256,uint256,uint256,uint256,uint256,bool)",
+        "operationId": "undocumentedWrites_get",
         "parameters": [
           {
             "type": "string",
@@ -376,6 +381,7 @@
           "application/json"
         ],
         "summary": "undocumentedWrites(uint256,uint256,uint256,uint256,uint256,bool)",
+        "operationId": "undocumentedWrites_post",
         "parameters": [
           {
             "name": "body",

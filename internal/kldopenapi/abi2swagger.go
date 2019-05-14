@@ -154,10 +154,10 @@ func (c *ABI2Swagger) buildMethodDefinitionsAndPath(inst bool, defs map[string]s
 	c.buildArgumentsDefinition(defs, outputSchema, method.Outputs, methodDocs)
 	pathItem := spec.PathItem{}
 	if !constructor {
-		pathItem.Get = c.buildGETPath(outputSchema, inst, method, methodSig, methodDocs)
+		pathItem.Get = c.buildGETPath(outputSchema, inst, name, method, methodSig, methodDocs)
 	}
 	c.buildArgumentsDefinition(defs, inputSchema, method.Inputs, methodDocs)
-	pathItem.Post = c.buildPOSTPath(inputSchema, outputSchema, inst, constructor, method, methodSig, methodDocs)
+	pathItem.Post = c.buildPOSTPath(inputSchema, outputSchema, inst, constructor, name, method, methodSig, methodDocs)
 	paths[path] = pathItem
 
 	return
@@ -292,7 +292,7 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 	}
 }
 
-func (c *ABI2Swagger) buildGETPath(outputSchema string, inst bool, method abi.Method, methodSig string, devdocs gjson.Result) *spec.Operation {
+func (c *ABI2Swagger) buildGETPath(outputSchema string, inst bool, name string, method abi.Method, methodSig string, devdocs gjson.Result) *spec.Operation {
 	parameters := make([]spec.Parameter, 0, len(method.Inputs)+1)
 	if !inst {
 		parameters = append(parameters, spec.Parameter{
@@ -327,6 +327,7 @@ func (c *ABI2Swagger) buildGETPath(outputSchema string, inst bool, method abi.Me
 	}
 	op := &spec.Operation{
 		OperationProps: spec.OperationProps{
+			ID:          name + "_get",
 			Summary:     methodSig,
 			Description: devdocs.Get("details").String(),
 			Produces:    []string{"application/json"},
@@ -338,7 +339,7 @@ func (c *ABI2Swagger) buildGETPath(outputSchema string, inst bool, method abi.Me
 	return op
 }
 
-func (c *ABI2Swagger) buildPOSTPath(inputSchema, outputSchema string, inst, constructor bool, method abi.Method, methodSig string, devdocs gjson.Result) *spec.Operation {
+func (c *ABI2Swagger) buildPOSTPath(inputSchema, outputSchema string, inst, constructor bool, name string, method abi.Method, methodSig string, devdocs gjson.Result) *spec.Operation {
 	parameters := make([]spec.Parameter, 0, 2)
 	if !inst && !constructor {
 		parameters = append(parameters, spec.Parameter{
@@ -370,6 +371,7 @@ func (c *ABI2Swagger) buildPOSTPath(inputSchema, outputSchema string, inst, cons
 	})
 	op := &spec.Operation{
 		OperationProps: spec.OperationProps{
+			ID:          name + "_post",
 			Summary:     methodSig,
 			Description: devdocs.Get("details").String(),
 			Consumes:    []string{"application/json", "application/x-yaml"},
@@ -384,6 +386,7 @@ func (c *ABI2Swagger) buildPOSTPath(inputSchema, outputSchema string, inst, cons
 
 func (c *ABI2Swagger) buildEventPOSTPath(eventSchema string, inst bool, event abi.Event, eventSig string, devdocs gjson.Result) *spec.Operation {
 	parameters := make([]spec.Parameter, 0, 2)
+	id := event.Name + "_subscribe"
 	if !inst {
 		parameters = append(parameters, spec.Parameter{
 			ParamProps: spec.ParamProps{
@@ -396,6 +399,7 @@ func (c *ABI2Swagger) buildEventPOSTPath(eventSchema string, inst bool, event ab
 				Type: "string",
 			},
 		})
+		id = event.Name + "_subscribe_all"
 	}
 	parameters = append(parameters, spec.Parameter{
 		ParamProps: spec.ParamProps{
@@ -419,6 +423,7 @@ func (c *ABI2Swagger) buildEventPOSTPath(eventSchema string, inst bool, event ab
 	})
 	op := &spec.Operation{
 		OperationProps: spec.OperationProps{
+			ID:          id,
 			Summary:     eventSig,
 			Description: devdocs.Get("details").String(),
 			Consumes:    []string{"application/json", "application/x-yaml"},

@@ -21,6 +21,7 @@
           "application/json"
         ],
         "summary": "constructor()",
+        "operationId": "constructor_post",
         "parameters": [
           {
             "name": "body",
@@ -75,6 +76,7 @@
           "application/json"
         ],
         "summary": "Approval(address,address,uint256) [event]",
+        "operationId": "Approval_subscribe",
         "parameters": [
           {
             "description": "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured stream)",
@@ -117,6 +119,7 @@
           "application/json"
         ],
         "summary": "Transfer(address,address,uint256) [event]",
+        "operationId": "Transfer_subscribe",
         "parameters": [
           {
             "description": "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured stream)",
@@ -159,6 +162,7 @@
           "application/json"
         ],
         "summary": "Approval(address,address,uint256) [event]",
+        "operationId": "Approval_subscribe_all",
         "parameters": [
           {
             "type": "string",
@@ -208,6 +212,7 @@
           "application/json"
         ],
         "summary": "Transfer(address,address,uint256) [event]",
+        "operationId": "Transfer_subscribe_all",
         "parameters": [
           {
             "type": "string",
@@ -254,6 +259,7 @@
           "application/json"
         ],
         "summary": "allowance(address,address) [read only]",
+        "operationId": "allowance_get",
         "parameters": [
           {
             "type": "string",
@@ -314,6 +320,7 @@
           "application/json"
         ],
         "summary": "allowance(address,address) [read only]",
+        "operationId": "allowance_post",
         "parameters": [
           {
             "type": "string",
@@ -372,6 +379,7 @@
           "application/json"
         ],
         "summary": "approve(address,uint256)",
+        "operationId": "approve_get",
         "parameters": [
           {
             "type": "string",
@@ -432,6 +440,7 @@
           "application/json"
         ],
         "summary": "approve(address,uint256)",
+        "operationId": "approve_post",
         "parameters": [
           {
             "type": "string",
@@ -490,6 +499,7 @@
           "application/json"
         ],
         "summary": "balanceOf(address) [read only]",
+        "operationId": "balanceOf_get",
         "parameters": [
           {
             "type": "string",
@@ -543,6 +553,7 @@
           "application/json"
         ],
         "summary": "balanceOf(address) [read only]",
+        "operationId": "balanceOf_post",
         "parameters": [
           {
             "type": "string",
@@ -601,6 +612,7 @@
           "application/json"
         ],
         "summary": "decreaseAllowance(address,uint256)",
+        "operationId": "decreaseAllowance_get",
         "parameters": [
           {
             "type": "string",
@@ -661,6 +673,7 @@
           "application/json"
         ],
         "summary": "decreaseAllowance(address,uint256)",
+        "operationId": "decreaseAllowance_post",
         "parameters": [
           {
             "type": "string",
@@ -719,6 +732,7 @@
           "application/json"
         ],
         "summary": "increaseAllowance(address,uint256)",
+        "operationId": "increaseAllowance_get",
         "parameters": [
           {
             "type": "string",
@@ -779,6 +793,7 @@
           "application/json"
         ],
         "summary": "increaseAllowance(address,uint256)",
+        "operationId": "increaseAllowance_post",
         "parameters": [
           {
             "type": "string",
@@ -837,6 +852,7 @@
           "application/json"
         ],
         "summary": "totalSupply() [read only]",
+        "operationId": "totalSupply_get",
         "parameters": [
           {
             "type": "string",
@@ -883,6 +899,7 @@
           "application/json"
         ],
         "summary": "totalSupply() [read only]",
+        "operationId": "totalSupply_post",
         "parameters": [
           {
             "type": "string",
@@ -941,6 +958,7 @@
           "application/json"
         ],
         "summary": "transfer(address,uint256)",
+        "operationId": "transfer_get",
         "parameters": [
           {
             "type": "string",
@@ -1001,6 +1019,7 @@
           "application/json"
         ],
         "summary": "transfer(address,uint256)",
+        "operationId": "transfer_post",
         "parameters": [
           {
             "type": "string",
@@ -1059,6 +1078,7 @@
           "application/json"
         ],
         "summary": "transferFrom(address,address,uint256)",
+        "operationId": "transferFrom_get",
         "parameters": [
           {
             "type": "string",
@@ -1126,6 +1146,7 @@
           "application/json"
         ],
         "summary": "transferFrom(address,address,uint256)",
+        "operationId": "transferFrom_post",
         "parameters": [
           {
             "type": "string",

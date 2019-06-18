@@ -13,6 +13,11 @@
   "paths": {
     "/": {
       "post": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "consumes": [
           "application/json",
           "application/x-yaml"
@@ -254,6 +259,11 @@
     },
     "/{address}/allowance": {
       "get": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Function to check the amount of tokens that an owner allowed to a spender.",
         "produces": [
           "application/json"
@@ -311,6 +321,11 @@
         }
       },
       "post": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Function to check the amount of tokens that an owner allowed to a spender.",
         "consumes": [
           "application/json",
@@ -374,6 +389,11 @@
     },
     "/{address}/approve": {
       "get": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Approve the passed address to spend the specified amount of tokens on behalf of msg.sender. Beware that changing an allowance with this method brings the risk that someone may use both the old and the new allowance by unfortunate transaction ordering. One possible solution to mitigate this race condition is to first reduce the spender's allowance to 0 and set the desired value afterwards: https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729",
         "produces": [
           "application/json"
@@ -431,6 +451,11 @@
         }
       },
       "post": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Approve the passed address to spend the specified amount of tokens on behalf of msg.sender. Beware that changing an allowance with this method brings the risk that someone may use both the old and the new allowance by unfortunate transaction ordering. One possible solution to mitigate this race condition is to first reduce the spender's allowance to 0 and set the desired value afterwards: https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729",
         "consumes": [
           "application/json",
@@ -494,6 +519,11 @@
     },
     "/{address}/balanceOf": {
       "get": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Gets the balance of the specified address.",
         "produces": [
           "application/json"
@@ -544,6 +574,11 @@
         }
       },
       "post": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Gets the balance of the specified address.",
         "consumes": [
           "application/json",
@@ -607,6 +642,11 @@
     },
     "/{address}/decreaseAllowance": {
       "get": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Decrease the amount of tokens that an owner allowed to a spender. approve should be called when _allowed[msg.sender][spender] == 0. To decrement allowed value is better to use this function to avoid 2 calls (and wait until the first transaction is mined) From MonolithDAO Token.sol Emits an Approval event.",
         "produces": [
           "application/json"
@@ -664,6 +704,11 @@
         }
       },
       "post": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Decrease the amount of tokens that an owner allowed to a spender. approve should be called when _allowed[msg.sender][spender] == 0. To decrement allowed value is better to use this function to avoid 2 calls (and wait until the first transaction is mined) From MonolithDAO Token.sol Emits an Approval event.",
         "consumes": [
           "application/json",
@@ -727,6 +772,11 @@
     },
     "/{address}/increaseAllowance": {
       "get": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Increase the amount of tokens that an owner allowed to a spender. approve should be called when _allowed[msg.sender][spender] == 0. To increment allowed value is better to use this function to avoid 2 calls (and wait until the first transaction is mined) From MonolithDAO Token.sol Emits an Approval event.",
         "produces": [
           "application/json"
@@ -784,6 +834,11 @@
         }
       },
       "post": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Increase the amount of tokens that an owner allowed to a spender. approve should be called when _allowed[msg.sender][spender] == 0. To increment allowed value is better to use this function to avoid 2 calls (and wait until the first transaction is mined) From MonolithDAO Token.sol Emits an Approval event.",
         "consumes": [
           "application/json",
@@ -847,6 +902,11 @@
     },
     "/{address}/totalSupply": {
       "get": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Total number of tokens in existence.",
         "produces": [
           "application/json"
@@ -890,6 +950,11 @@
         }
       },
       "post": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Total number of tokens in existence.",
         "consumes": [
           "application/json",
@@ -953,6 +1018,11 @@
     },
     "/{address}/transfer": {
       "get": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Transfer token to a specified address.",
         "produces": [
           "application/json"
@@ -1010,6 +1080,11 @@
         }
       },
       "post": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Transfer token to a specified address.",
         "consumes": [
           "application/json",
@@ -1073,6 +1148,11 @@
     },
     "/{address}/transferFrom": {
       "get": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Transfer tokens from one address to another. Note that while this function emits an Approval event, this is not required as per the specification, and other compliant implementations may not emit the event.",
         "produces": [
           "application/json"
@@ -1137,6 +1217,11 @@
         }
       },
       "post": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Transfer tokens from one address to another. Note that while this function emits an Approval event, this is not required as per the specification, and other compliant implementations may not emit the event.",
         "consumes": [
           "application/json",
@@ -1457,6 +1542,11 @@
       "name": "kld-ethvalue",
       "in": "query",
       "allowEmptyValue": true
+    }
+  },
+  "securityDefinitions": {
+    "KaleidoAppCredential": {
+      "type": "basic"
     }
   }
 }

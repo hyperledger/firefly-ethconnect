@@ -32,6 +32,10 @@ type ABI2Swagger struct {
 	externalRootPath string
 }
 
+const (
+	kaleidoAppCredential = "KaleidoAppCredential"
+)
+
 // NewABI2Swagger constructor
 func NewABI2Swagger(externalHost, externalRootPath string, externalSchemes []string) *ABI2Swagger {
 	c := &ABI2Swagger{
@@ -83,6 +87,13 @@ func (c *ABI2Swagger) convert(basePath, name string, abi *abi.ABI, devdocsJSON s
 			Paths:       paths,
 			Definitions: definitions,
 			Parameters:  parameters,
+			SecurityDefinitions: map[string]*spec.SecurityScheme{
+				kaleidoAppCredential: &spec.SecurityScheme{
+					SecuritySchemeProps: spec.SecuritySchemeProps{
+						Type: "basic",
+					},
+				},
+			},
 		},
 	}
 }
@@ -252,6 +263,9 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 }
 
 func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstructor bool) {
+
+	op.Security = append(op.Security, map[string][]string{kaleidoAppCredential: []string{}})
+
 	fromParam, _ := spec.NewRef("#/parameters/fromParam")
 	valueParam, _ := spec.NewRef("#/parameters/valueParam")
 	gasParam, _ := spec.NewRef("#/parameters/gasParam")

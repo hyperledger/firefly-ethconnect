@@ -14,6 +14,11 @@
   "paths": {
     "/echoTypes1": {
       "get": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Echo back some types",
         "produces": [
           "application/json"
@@ -99,6 +104,11 @@
         }
       },
       "post": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Echo back some types",
         "consumes": [
           "application/json",
@@ -155,6 +165,11 @@
     },
     "/echoTypes2": {
       "get": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Echo back some more types",
         "produces": [
           "application/json"
@@ -240,6 +255,11 @@
         }
       },
       "post": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "description": "Echo back some more types",
         "consumes": [
           "application/json",
@@ -296,6 +316,11 @@
     },
     "/undocumentedWrites": {
       "get": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "produces": [
           "application/json"
         ],
@@ -373,6 +398,11 @@
         }
       },
       "post": {
+        "security": [
+          {
+            "KaleidoAppCredential": []
+          }
+        ],
         "consumes": [
           "application/json",
           "application/x-yaml"
@@ -725,6 +755,11 @@
       "name": "kld-ethvalue",
       "in": "query",
       "allowEmptyValue": true
+    }
+  },
+  "securityDefinitions": {
+    "KaleidoAppCredential": {
+      "type": "basic"
     }
   }
 }

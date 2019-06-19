@@ -140,6 +140,7 @@ type DeployContract struct {
 	Compiled        []byte       `json:"compiled,omitempty"`
 	ContractName    string       `json:"contractName,omitempty"`
 	Description     string       `json:"description,omitempty"`
+	RegisterAs      string       `json:"registerAs,omitempty"`
 }
 
 // TransactionReceipt is sent when a transaction has been successfully mined
@@ -166,6 +167,7 @@ type TransactionReceipt struct {
 	TransactionHash      *common.Hash    `json:"transactionHash"`
 	TransactionIndexStr  string          `json:"transactionIndex"`
 	TransactionIndexHex  *hexutil.Uint   `json:"transactionIndexHex,omitempty"`
+	RegisterAs           string          `json:"registerAs,omitempty"`
 }
 
 // ErrorReply is

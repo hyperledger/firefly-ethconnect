@@ -72,13 +72,19 @@ func (m *mockREST2EthDispatcher) DispatchDeployContractSync(msg *kldmessages.Dep
 }
 
 type mockABILoader struct {
-	loadABIError error
-	abi          *kldbind.ABI
-	deployMsg    *kldmessages.DeployContract
+	loadABIError           error
+	abi                    *kldbind.ABI
+	deployMsg              *kldmessages.DeployContract
+	registeredContractAddr string
+	resolveContractErr     error
 }
 
 func (m *mockABILoader) loadABIForInstance(addrHexNo0x string) (*kldbind.ABI, error) {
 	return m.abi, m.loadABIError
+}
+
+func (m *mockABILoader) resolveContractAddr(registeredName string) (string, error) {
+	return m.registeredContractAddr, m.resolveContractErr
 }
 
 func (m *mockABILoader) loadDeployMsgForFactory(addrHexNo0x string) (*kldmessages.DeployContract, error) {
@@ -381,11 +387,34 @@ func TestSendTransactionBadContract(t *testing.T) {
 	_, _, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
 	router.ServeHTTP(res, req)
 
+	assert.Equal(500, res.Result().StatusCode)
+	reply := restErrMsg{}
+	err := json.NewDecoder(res.Result().Body).Decode(&reply)
+	assert.NoError(err)
+	assert.Equal("pop", reply.Message)
+}
+
+func TestSendTransactionUnknownRegisteredName(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	bodyMap["i"] = 12345
+	bodyMap["s"] = "testing"
+	to := "random"
+	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
+	dispatcher := &mockREST2EthDispatcher{}
+	r, _, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	abiLoader := r.gw.(*mockABILoader)
+	abiLoader.resolveContractErr = fmt.Errorf("unregistered")
+	router.ServeHTTP(res, req)
+
 	assert.Equal(404, res.Result().StatusCode)
 	reply := restErrMsg{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
-	assert.Equal("To Address must be a 40 character hex string (0x prefix is optional)", reply.Message)
+	assert.Equal("unregistered", reply.Message)
 }
 
 func TestSendTransactionMissingContract(t *testing.T) {
@@ -660,24 +689,6 @@ func TestCallMethodFail(t *testing.T) {
 	assert.Regexp("Call failed: pop", reply.Message)
 }
 
-func TestCallMethodBadParams(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-
-	to := "badness"
-	dispatcher := &mockREST2EthDispatcher{}
-	_, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
-	req := httptest.NewRequest("GET", "/contracts/"+to+"/get", bytes.NewReader([]byte{}))
-	router.ServeHTTP(res, req)
-
-	assert.Equal(404, res.Result().StatusCode)
-	reply := restErrMsg{}
-	err := json.NewDecoder(res.Result().Body).Decode(&reply)
-	assert.NoError(err)
-	assert.Equal("To Address must be a 40 character hex string (0x prefix is optional)", reply.Message)
-}
-
 func TestCallMethodViaABIBadAddress(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
@@ -813,6 +824,8 @@ func TestSubscribeWithAddressBadAddress(t *testing.T) {
 
 	dispatcher := &mockREST2EthDispatcher{}
 	r, _, router := newTestREST2Eth(dispatcher)
+	abiLoader := r.gw.(*mockABILoader)
+	abiLoader.resolveContractErr = fmt.Errorf("unregistered")
 	r.subMgr = &mockSubMgr{
 		sub: &kldevents.SubscriptionInfo{ID: "sub1"},
 	}
@@ -827,7 +840,7 @@ func TestSubscribeWithAddressBadAddress(t *testing.T) {
 	reply := restErrMsg{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
-	assert.Equal("To Address must be a 40 character hex string (0x prefix is optional)", reply.Message)
+	assert.Equal("unregistered", reply.Message)
 }
 
 func TestSubscribeWithAddressSubmgrFailure(t *testing.T) {

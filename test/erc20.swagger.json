@@ -53,6 +53,9 @@
           },
           {
             "$ref": "#/parameters/callParam"
+          },
+          {
+            "$ref": "#/parameters/registerParam"
           }
         ],
         "responses": {
@@ -153,6 +156,52 @@
             "schema": {
               "$ref": "#/definitions/error"
             }
+          }
+        }
+      }
+    },
+    "/{address}": {
+      "put": {
+        "description": "Add a friendly path for an instance of this contract already deployed to the chain",
+        "consumes": [
+          "application/json",
+          "application/x-yaml"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "summary": "Register an existing contract address",
+        "operationId": "registerAddress",
+        "parameters": [
+          {
+            "type": "string",
+            "description": "The contract address",
+            "name": "address",
+            "in": "path",
+            "required": true
+          },
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "description": "Registration request",
+              "type": "object",
+              "properties": {
+                "registerAs": {
+                  "description": "The friendly name to register for the contract instance",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Previously used name has been re-registered"
+          },
+          "201": {
+            "description": "Previously unused name has been registered"
           }
         }
       }
@@ -1527,6 +1576,12 @@
       "name": "kld-gasprice",
       "in": "query",
       "allowEmptyValue": true
+    },
+    "registerParam": {
+      "type": "string",
+      "description": "Register the installed contract on a friendly path (overwrites existing) - 'x-kaleido-register' header can also be used",
+      "name": "kld-register",
+      "in": "query"
     },
     "syncParam": {
       "type": "boolean",

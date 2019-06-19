@@ -45,6 +45,7 @@ type inflightTxn struct {
 	txnContext      TxnContext
 	tx              *kldeth.Txn
 	wg              sync.WaitGroup
+	registerAs      string // passed from request to reply
 }
 
 func (i *inflightTxn) nonceNumber() json.Number {
@@ -266,6 +267,7 @@ func (p *txnProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 			reply.BlockNumberStr = receipt.BlockNumber.ToInt().Text(10)
 		}
 		reply.ContractAddress = receipt.ContractAddress
+		reply.RegisterAs = iTX.registerAs
 		if p.conf.HexValuesInReceipt {
 			reply.CumulativeGasUsedHex = receipt.CumulativeGasUsed
 		}
@@ -328,6 +330,7 @@ func (p *txnProcessor) addInflight(inflight *inflightTxn, tx *kldeth.Txn) {
 func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *kldmessages.DeployContract) {
 
 	inflightWrapper, err := p.newInflightWrapper(txnContext, msg.From, msg.Nonce)
+	inflightWrapper.registerAs = msg.RegisterAs
 	if err != nil {
 		txnContext.SendErrorReply(400, err)
 		return

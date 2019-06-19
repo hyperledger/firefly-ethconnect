@@ -221,6 +221,141 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	assert.Equal("0x0123456789abcdef0123456789abcdef01234567", swagger.Parameters["fromParam"].SimpleSchema.Default)
 }
 
+func TestRegisterExistingContract(t *testing.T) {
+	// writes real files and tests end to end
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	scgw, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+			BaseURL:     "http://localhost/api/v1",
+		},
+		nil, nil, nil,
+	)
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, _ := writer.CreateFormFile("files", "SimpleEvents.sol")
+	part.Write([]byte(simpleEventsSource()))
+	writer.Close()
+
+	req := httptest.NewRequest("POST", "/abis", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	res := httptest.NewRecorder()
+	router := &httprouter.Router{}
+	scgw.AddRoutes(router)
+	router.ServeHTTP(res, req)
+	assert.Equal(200, res.Code)
+
+	var abi abiInfo
+	json.NewDecoder(res.Body).Decode(&abi)
+	assert.NotEmpty(abi.ID)
+
+	register := &contractRegistration{RegisterAs: "testcontract"}
+	registerBody, _ := json.Marshal(register)
+
+	req = httptest.NewRequest("PUT", "/abis/"+abi.ID+"/0x0123456789abcdef0123456789abcdef01234567", bytes.NewReader(registerBody))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	var contract contractInfo
+	json.NewDecoder(res.Body).Decode(&contract)
+	assert.Equal(201, res.Code)
+
+	req = httptest.NewRequest("PUT", "/abis/"+abi.ID+"/0x0123456789abcdef0123456789abcdef01234567", bytes.NewReader(registerBody))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	json.NewDecoder(res.Body).Decode(&contract)
+	assert.Equal(200, res.Code)
+
+	req = httptest.NewRequest("GET", "/contracts/testcontract?swagger", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	returnedSwagger := spec.Swagger{}
+	assert.Equal(200, res.Code)
+	json.NewDecoder(res.Body).Decode(&returnedSwagger)
+	assert.Equal("testcontract", returnedSwagger.Info.Extensions["x-kaleido-registered-name"])
+
+}
+
+func TestRegisterContractBadAddress(t *testing.T) {
+	// writes real files and tests end to end
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	scgw, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+			BaseURL:     "http://localhost/api/v1",
+		},
+		nil, nil, nil,
+	)
+	router := &httprouter.Router{}
+	scgw.AddRoutes(router)
+
+	req := httptest.NewRequest("PUT", "/abis/ID/badness", bytes.NewReader([]byte{}))
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(404, res.Code)
+	var resBody map[string]interface{}
+	json.NewDecoder(res.Body).Decode(&resBody)
+	assert.Equal("Invalid address in path - must be a 40 character hex string with optional 0x prefix", resBody["error"])
+}
+
+func TestRegisterContractBadContractInfo(t *testing.T) {
+	// writes real files and tests end to end
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	scgw, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+			BaseURL:     "http://localhost/api/v1",
+		},
+		nil, nil, nil,
+	)
+	router := &httprouter.Router{}
+	scgw.AddRoutes(router)
+
+	req := httptest.NewRequest("PUT", "/abis/ID/0x0123456789abcdef0123456789abcdef01234567", bytes.NewReader([]byte{}))
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(400, res.Code)
+	var resBody map[string]interface{}
+	json.NewDecoder(res.Body).Decode(&resBody)
+	assert.Regexp("Invalid registration request body", resBody["error"])
+}
+
+func TestRegisterContractBadABI(t *testing.T) {
+	// writes real files and tests end to end
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	scgw, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+			BaseURL:     "http://localhost/api/v1",
+		},
+		nil, nil, nil,
+	)
+	router := &httprouter.Router{}
+	scgw.AddRoutes(router)
+
+	register := &contractRegistration{RegisterAs: "testcontract"}
+	registerBody, _ := json.Marshal(register)
+	req := httptest.NewRequest("PUT", "/abis/BADID/0x0123456789abcdef0123456789abcdef01234567", bytes.NewReader(registerBody))
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(404, res.Code)
+	var resBody map[string]interface{}
+	json.NewDecoder(res.Body).Decode(&resBody)
+	assert.Regexp("Failed to find ABI with ID BADID", resBody["error"])
+}
+
 func TestLoadABIFailure(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()

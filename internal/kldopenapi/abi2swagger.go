@@ -259,6 +259,17 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 			Type: "boolean",
 		},
 	}
+	params["registerParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description: "Register the installed contract on a friendly path (overwrites existing) - 'x-kaleido-register' header can also be used",
+			Name:        "kld-register",
+			In:          "query",
+			Required:    false,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "string",
+		},
+	}
 	return params
 }
 
@@ -272,6 +283,7 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 	gaspriceParam, _ := spec.NewRef("#/parameters/gaspriceParam")
 	syncParam, _ := spec.NewRef("#/parameters/syncParam")
 	callParam, _ := spec.NewRef("#/parameters/callParam")
+	registerParam, _ := spec.NewRef("#/parameters/registerParam")
 	op.Parameters = append(op.Parameters, spec.Parameter{
 		Refable: spec.Refable{
 			Ref: fromParam,
@@ -301,6 +313,13 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 		op.Parameters = append(op.Parameters, spec.Parameter{
 			Refable: spec.Refable{
 				Ref: callParam,
+			},
+		})
+	}
+	if isConstructor {
+		op.Parameters = append(op.Parameters, spec.Parameter{
+			Refable: spec.Refable{
+				Ref: registerParam,
 			},
 		})
 	}

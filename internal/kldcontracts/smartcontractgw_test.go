@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"mime/multipart"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path"
 	"testing"
@@ -107,7 +108,8 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	// writes real files and tests end to end
 	assert := assert.New(t)
 	msg := kldmessages.DeployContract{
-		Solidity: simpleEventsSource(),
+		Solidity:   simpleEventsSource(),
+		RegisterAs: "Test 1",
 	}
 	msg.Headers.ID = "message1"
 	dir := tempdir()
@@ -148,6 +150,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 			},
 		},
 		ContractAddress: &contractAddr,
+		RegisterAs:      msg.RegisterAs,
 	}
 	err = scgw.PostDeploy(&receipt)
 	assert.NoError(err)
@@ -158,7 +161,8 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	assert.Equal("localhost", gjson.Get(string(swaggerBytes), "host").String())
 	assert.Equal("SimpleEvents", gjson.Get(string(swaggerBytes), "info.title").String())
 	assert.Equal("message1", gjson.Get(string(swaggerBytes), "info.x-kaleido-deployment-id").String())
-	assert.Equal("/api/v1/contracts/0123456789abcdef0123456789abcdef01234567", gjson.Get(string(swaggerBytes), "basePath").String())
+	assert.Equal("Test+1", gjson.Get(string(swaggerBytes), "info.x-kaleido-registered-name").String())
+	assert.Equal("/api/v1/contracts/Test+1", gjson.Get(string(swaggerBytes), "basePath").String())
 
 	abi, err := scgw.(*smartContractGW).loadABIForInstance("0123456789abcdef0123456789abcdef01234567")
 	assert.NoError(err)
@@ -198,6 +202,12 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	err = json.NewDecoder(res.Body).Decode(&swagger)
 	assert.NoError(err)
 	assert.Equal("SimpleEvents", swagger.Info.Title)
+
+	// Check we can get the full swagger back over REST using the registered name
+	req = httptest.NewRequest("GET", "/contracts/Test+1?ui&from=0x0123456789abcdef0123456789abcdef01234567", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(200, res.Result().StatusCode)
 
 	// Check we can get the full swagger back over REST for download with a default from
 	req = httptest.NewRequest("GET", "/contracts/0123456789abcdef0123456789abcdef01234567?swagger&from=0x0123456789abcdef0123456789abcdef01234567&download", bytes.NewReader([]byte{}))
@@ -370,7 +380,7 @@ func TestPostDeploySwaggerGenFail(t *testing.T) {
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
-	_, err := scgw.genSwagger("request1", "", nil, "", "")
+	_, err := scgw.genSwagger("request1", "", nil, "", "", "")
 	assert.Regexp("ABI cannot be nil", err.Error())
 }
 
@@ -389,7 +399,7 @@ func TestGenSwaggerWriteFail(t *testing.T) {
 	a := kldbind.ABI{
 		ABI: abi.ABI{},
 	}
-	_, err := scgw.genSwagger("req1", "", &a, "", "0123456789AbcdeF0123456789abCdef0123456")
+	_, err := scgw.genSwagger("req1", "", &a, "", "0123456789AbcdeF0123456789abCdef0123456", "")
 	assert.Regexp("Failed to write OpenAPI JSON", err.Error())
 }
 
@@ -462,6 +472,7 @@ func TestBuildIndex(t *testing.T) {
 			},
 		},
 	}
+	okSwagger.Info.AddExtension("x-kaleido-registered-name", url.QueryEscape("Same For/All"))
 	swaggerBytes, _ = json.Marshal(&okSwagger)
 	ioutil.WriteFile(path.Join(dir, "contract_123456789abcdef0123456789abcdef012345678.swagger.json"), swaggerBytes, 0644)
 	ioutil.WriteFile(path.Join(dir, "contract_23456789abcdef0123456789abcdef0123456789.swagger.json"), swaggerBytes, 0644)
@@ -489,7 +500,10 @@ func TestBuildIndex(t *testing.T) {
 	assert.Equal(2, len(scgw.contractIndex))
 	info := scgw.contractIndex["123456789abcdef0123456789abcdef012345678"].(*contractInfo)
 	assert.Equal("good one", info.Name)
-	assert.Equal("good one", info.Name)
+	info = scgw.contractRegistrations["Same+For%2FAll"]
+	assert.Equal("/contracts/Same+For%2FAll", info.Path)
+	assert.Equal("/contracts/Same+For%2FAll?swagger", info.SwaggerURL)
+	assert.Equal("23456789abcdef0123456789abcdef0123456789", info.Address)
 
 	req := httptest.NewRequest("GET", "/contracts", bytes.NewReader([]byte{}))
 	res := httptest.NewRecorder()
@@ -558,6 +572,14 @@ func TestGetContractOrABIFail(t *testing.T) {
 	scgw.AddRoutes(router)
 	router.ServeHTTP(res, req)
 	assert.Equal(500, res.Result().StatusCode)
+
+	// One that exists in the index, but for some reason the file isn't there - should be a 500
+	req = httptest.NewRequest("GET", "/contracts/nonexistent?openapi", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router = &httprouter.Router{}
+	scgw.AddRoutes(router)
+	router.ServeHTTP(res, req)
+	assert.Equal(404, res.Result().StatusCode)
 
 	// One that simply doesn't exist in the index - should be a 404
 	req = httptest.NewRequest("GET", "/abis/23456789abcdef0123456789abcdef0123456789?openapi", bytes.NewReader([]byte{}))

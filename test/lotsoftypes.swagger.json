@@ -741,6 +741,12 @@
       "in": "query",
       "allowEmptyValue": true
     },
+    "registerParam": {
+      "type": "string",
+      "description": "Register the installed contract on a friendly path (overwrites existing) - 'x-kaleido-register' header can also be used",
+      "name": "kld-register",
+      "in": "query"
+    },
     "syncParam": {
       "type": "boolean",
       "default": true,

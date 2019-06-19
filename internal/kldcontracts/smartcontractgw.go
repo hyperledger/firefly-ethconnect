@@ -445,7 +445,7 @@ func (g *smartContractGW) addFileToABIIndex(id, fileName string, createdTime tim
 	g.addToABIIndex(id, &deployMsg, createdTime)
 }
 
-func (g *smartContractGW) addToContractIndex(address string, swagger *spec.Swagger, createdTime time.Time) bool {
+func (g *smartContractGW) addToContractIndex(address string, swagger *spec.Swagger, createdTime time.Time) (*contractInfo, bool) {
 	g.idxLock.Lock()
 	var abiID string
 	if ext, exists := swagger.Info.Extensions["x-kaleido-deployment-id"]; exists {
@@ -475,7 +475,7 @@ func (g *smartContractGW) addToContractIndex(address string, swagger *spec.Swagg
 	}
 	g.contractIndex[address] = info
 	g.idxLock.Unlock()
-	return overwritten
+	return info, overwritten
 }
 
 func (g *smartContractGW) addToABIIndex(id string, deployMsg *kldmessages.DeployContract, createdTime time.Time) *abiInfo {
@@ -775,15 +775,15 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 		return
 	}
 
-	deployMsg, err := g.loadDeployMsgForFactory(params.ByName("abi"))
-	if err != nil {
-		g.gatewayErrReply(res, req, err, 404)
+	var reqBody contractRegistration
+	if err := json.NewDecoder(req.Body).Decode(&reqBody); err != nil {
+		g.gatewayErrReply(res, req, fmt.Errorf("Invalid registration request body: %s", err), 400)
 		return
 	}
 
-	var reqBody contractRegistration
-	if err := json.NewDecoder(req.Body).Decode(&reqBody); err != nil {
-		g.gatewayErrReply(res, req, fmt.Errorf("Invalid contract info: %s", err), 400)
+	deployMsg, err := g.loadDeployMsgForFactory(params.ByName("abi"))
+	if err != nil {
+		g.gatewayErrReply(res, req, err, 404)
 		return
 	}
 
@@ -793,7 +793,7 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 		g.gatewayErrReply(res, req, err, 400)
 		return
 	}
-	overwritten := g.addToContractIndex(addrHexNo0x, swagger, time.Now().UTC())
+	contractInfo, overwritten := g.addToContractIndex(addrHexNo0x, swagger, time.Now().UTC())
 
 	// Also store the corresponding ABI
 	if err := g.storeABI(requestID, addrHexNo0x, deployMsg.ABI); err != nil {
@@ -807,6 +807,7 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(status)
+	json.NewEncoder(res).Encode(&contractInfo)
 }
 
 func tempdir() string {

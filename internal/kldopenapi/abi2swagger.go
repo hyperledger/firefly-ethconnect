@@ -102,6 +102,7 @@ func (c *ABI2Swagger) buildDefinitionsAndPaths(inst bool, abi *abi.ABI, defs map
 	methodsDocs := devdocs.Get("methods")
 	if !inst {
 		c.buildMethodDefinitionsAndPath(inst, defs, paths, "constructor", abi.Constructor, methodsDocs)
+		c.addRegisterPath(paths)
 	}
 	for _, method := range abi.Methods {
 		c.buildMethodDefinitionsAndPath(inst, defs, paths, method.Name, method, methodsDocs)
@@ -172,6 +173,60 @@ func (c *ABI2Swagger) buildMethodDefinitionsAndPath(inst bool, defs map[string]s
 	paths[path] = pathItem
 
 	return
+}
+
+func (c *ABI2Swagger) addRegisterPath(paths map[string]spec.PathItem) {
+	pathItem := spec.PathItem{}
+	pathItem.Put = &spec.Operation{
+		OperationProps: spec.OperationProps{
+			ID:          "registerAddress",
+			Summary:     "Register an existing contract address",
+			Description: "Add a friendly path for an instance of this contract already deployed to the chain",
+			Consumes:    []string{"application/json", "application/x-yaml"},
+			Produces:    []string{"application/json"},
+			Responses: &spec.Responses{
+				ResponsesProps: spec.ResponsesProps{
+					StatusCodeResponses: map[int]spec.Response{
+						201: spec.Response{
+							ResponseProps: spec.ResponseProps{
+								Description: "Previously unused name has been registered",
+							},
+						},
+						200: spec.Response{
+							ResponseProps: spec.ResponseProps{
+								Description: "Previously used name has been re-registered",
+							},
+						},
+					},
+				},
+			},
+			Parameters: []spec.Parameter{
+				c.getAddressParam(),
+				spec.Parameter{
+					ParamProps: spec.ParamProps{
+						Name:     "body",
+						In:       "body",
+						Required: true,
+						Schema: &spec.Schema{
+							SchemaProps: spec.SchemaProps{
+								Description: "Registration request",
+								Type:        []string{"object"},
+								Properties: map[string]spec.Schema{
+									"registerAs": spec.Schema{
+										SchemaProps: spec.SchemaProps{
+											Description: "The friendly name to register for the contract instance",
+											Type:        []string{"string"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	paths["/{address}"] = pathItem
 }
 
 func (c *ABI2Swagger) buildEventDefinitionsAndPath(inst bool, defs map[string]spec.Schema, paths map[string]spec.PathItem, name string, event abi.Event, devdocs gjson.Result) {
@@ -325,20 +380,24 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 	}
 }
 
+func (c *ABI2Swagger) getAddressParam() spec.Parameter {
+	return spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description: "The contract address",
+			Name:        "address",
+			In:          "path",
+			Required:    true,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "string",
+		},
+	}
+}
+
 func (c *ABI2Swagger) buildGETPath(outputSchema string, inst bool, name string, method abi.Method, methodSig string, devdocs gjson.Result) *spec.Operation {
 	parameters := make([]spec.Parameter, 0, len(method.Inputs)+1)
 	if !inst {
-		parameters = append(parameters, spec.Parameter{
-			ParamProps: spec.ParamProps{
-				Description: "The contract address",
-				Name:        "address",
-				In:          "path",
-				Required:    true,
-			},
-			SimpleSchema: spec.SimpleSchema{
-				Type: "string",
-			},
-		})
+		parameters = append(parameters, c.getAddressParam())
 	}
 	for _, input := range method.Inputs {
 		desc := devdocs.Get("params." + input.Name).String()

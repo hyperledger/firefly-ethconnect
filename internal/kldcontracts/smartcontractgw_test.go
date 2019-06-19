@@ -332,6 +332,7 @@ func TestPostDeployOpenFail(t *testing.T) {
 		},
 		nil, nil, nil,
 	)
+	contractAddr := common.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	scgw := s.(*smartContractGW)
 	replyMsg := &kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{
@@ -339,13 +340,14 @@ func TestPostDeployOpenFail(t *testing.T) {
 				ReqID: "message1",
 			},
 		},
+		ContractAddress: &contractAddr,
 	}
 
 	err := scgw.PostDeploy(replyMsg)
 	assert.Regexp("Unable to recover pre-deploy message", err.Error())
 }
 
-func TestPostDeployDecodeFail(t *testing.T) {
+func TestPostDeployMissingContractAddress(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
@@ -362,6 +364,32 @@ func TestPostDeployDecodeFail(t *testing.T) {
 				ReqID: "message1",
 			},
 		},
+	}
+	ioutil.WriteFile(path.Join(dir, "message1.deploy.json"), []byte("invalid json"), 0664)
+
+	err := scgw.PostDeploy(replyMsg)
+	assert.Regexp("message1: Missing contract address in receipt", err.Error())
+}
+
+func TestPostDeployDecodeFail(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+	s, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+		},
+		nil, nil, nil,
+	)
+	contractAddr := common.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	scgw := s.(*smartContractGW)
+	replyMsg := &kldmessages.TransactionReceipt{
+		ReplyCommon: kldmessages.ReplyCommon{
+			Headers: kldmessages.ReplyHeaders{
+				ReqID: "message1",
+			},
+		},
+		ContractAddress: &contractAddr,
 	}
 	ioutil.WriteFile(path.Join(dir, "message1.deploy.json"), []byte("invalid json"), 0664)
 

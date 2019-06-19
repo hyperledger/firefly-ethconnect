@@ -171,16 +171,20 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 			return
 		}
 		a = c.deployMsg.ABI
-	} else if validAddress {
+	} else {
+		if !validAddress {
+			// Resolve the address as a registered name, to an actual contract address
+			if c.addr, err = r.gw.resolveContractAddr(addrParam); err != nil {
+				r.restErrReply(res, req, err, 404)
+				return
+			}
+			validAddress = true
+		}
 		a, err = r.gw.loadABIForInstance(c.addr)
 		if err != nil {
 			r.restErrReply(res, req, err, 404)
 			return
 		}
-	} else {
-		err = fmt.Errorf("To Address must be a 40 character hex string (0x prefix is optional)")
-		r.restErrReply(res, req, err, 404)
-		return
 	}
 
 	// See addRoutes for all the various routes we support.
@@ -353,6 +357,7 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 	deployMsg.GasPrice = json.Number(r.getKLDParam("gasprice", req, false))
 	deployMsg.Value = value
 	deployMsg.Parameters = msgParams
+	deployMsg.RegisterAs = r.getKLDParam("register", req, false)
 	if strings.ToLower(r.getKLDParam("sync", req, true)) == "true" {
 		responder := &rest2EthSyncResponder{
 			r:      r,

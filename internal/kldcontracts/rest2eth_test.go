@@ -77,6 +77,7 @@ type mockABILoader struct {
 	deployMsg              *kldmessages.DeployContract
 	registeredContractAddr string
 	resolveContractErr     error
+	nameAvailableError     error
 }
 
 func (m *mockABILoader) loadABIForInstance(addrHexNo0x string) (*kldbind.ABI, error) {
@@ -89,6 +90,10 @@ func (m *mockABILoader) resolveContractAddr(registeredName string) (string, erro
 
 func (m *mockABILoader) loadDeployMsgForFactory(addrHexNo0x string) (*kldmessages.DeployContract, error) {
 	return m.deployMsg, m.loadABIError
+}
+
+func (m *mockABILoader) checkNameAvailable(name string) error {
+	return m.nameAvailableError
 }
 
 func (m *mockABILoader) PreDeploy(msg *kldmessages.DeployContract) error      { return nil }
@@ -233,6 +238,35 @@ func TestDeployContractAsyncSuccess(t *testing.T) {
 	assert.Equal("0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90", dispatcher.asyncDispatchMsg["privateFrom"])
 	assert.Equal("0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745", dispatcher.asyncDispatchMsg["privateFor"].([]interface{})[0])
 	assert.Equal("0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C", dispatcher.asyncDispatchMsg["privateFor"].([]interface{})[1])
+}
+
+func TestDeployContractAsyncDuplicate(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	bodyMap["i"] = 12345
+	bodyMap["s"] = "testing"
+	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
+	dispatcher := &mockREST2EthDispatcher{
+		asyncDispatchReply: &kldmessages.AsyncSentMsg{
+			Sent:    true,
+			Request: "request1",
+		},
+	}
+	r, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	abiLoader := r.gw.(*mockABILoader)
+	abiLoader.nameAvailableError = fmt.Errorf("spent already")
+	body, _ := json.Marshal(&bodyMap)
+	req := httptest.NewRequest("POST", "/abis/abi1?kld-privateFrom=0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90&kld-privateFor=0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745&kld-privateFor=0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C", bytes.NewReader(body))
+	req.Header.Add("x-kaleido-from", from)
+	router.ServeHTTP(res, req)
+
+	assert.Equal(409, res.Result().StatusCode)
+	var resBody map[string]interface{}
+	json.NewDecoder(res.Body).Decode(&resBody)
+	assert.Equal("spent already", resBody["error"])
 }
 
 func TestSendTransactionSyncSuccess(t *testing.T) {

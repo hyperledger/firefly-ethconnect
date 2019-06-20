@@ -126,10 +126,10 @@ func (tx *Txn) sendUnsignedTxn(ctx context.Context, rpc RPCClient, txArgs *sendT
 		nonce = &hexNonce
 	}
 	txArgs.Nonce = nonce
-	// if tx.PrivateFrom != "" {
-	// 	args.PrivateFrom = tx.PrivateFrom
-	// 	args.PrivateFor = tx.PrivateFor
-	// }
+	if len(tx.PrivateFor) > 0 {
+		txArgs.PrivateFrom = tx.PrivateFrom
+		txArgs.PrivateFor = tx.PrivateFor
+	}
 	var txHash string
 	err := rpc.CallContext(ctx, &txHash, "eth_sendTransaction", txArgs)
 	return txHash, err

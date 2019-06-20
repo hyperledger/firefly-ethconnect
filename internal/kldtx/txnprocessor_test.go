@@ -55,6 +55,7 @@ type testRPC struct {
 	ethGetTransactionReceiptResult kldeth.TxnReceipt
 	ethGetTransactionReceiptErr    error
 	calls                          []string
+	params                         [][]interface{}
 }
 
 const testFromAddr = "0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1"
@@ -74,8 +75,19 @@ var goodSendTxnJSON = "{" +
 	"  \"method\":{\"name\":\"test\"}" +
 	"}"
 
+var goodDeployTxnPrivateJSON = "{" +
+	"  \"headers\":{\"type\": \"DeployContract\"}," +
+	"  \"solidity\":\"pragma solidity >=0.4.22 <0.6.0; contract t {constructor() public {}}\"," +
+	"  \"from\":\"" + testFromAddr + "\"," +
+	"  \"nonce\":\"123\"," +
+	"  \"gas\":\"123\"," +
+	"  \"privateFrom\":\"s6a3mQ8IvrI2ZgHqHZlJaELiJs10HxlZNIwNd669FH4=\"," +
+	"  \"privateFor\":[\"oD76ZRgu6py/WKrsXbtF9P2Mf1mxVxzqficE1Uiw6S8=\"]" +
+	"}"
+
 func (r *testRPC) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
 	r.calls = append(r.calls, method)
+	r.params = append(r.params, args)
 	if method == "eth_sendTransaction" {
 		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethSendTransactionResult))
 		return r.ethSendTransactionErr
@@ -271,6 +283,51 @@ func TestOnDeployContractMessageGoodTxnMined(t *testing.T) {
 	assert.Equal("456789", replyMsgMap["transactionIndex"])
 }
 
+func TestOnDeployContractPrivateMessageGoodTxnMined(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+	}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodDeployTxnPrivateJSON
+
+	testRPC := goodMessageRPC()
+	txnProcessor.Init(testRPC)                          // configured in seconds for real world
+	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
+
+	txnProcessor.OnMessage(testTxnContext)
+	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
+
+	txnWG.Wait()
+	assert.Equal(0, len(testTxnContext.errorRepies))
+
+	assert.Equal("eth_sendTransaction", testRPC.calls[0])
+	sendTxArg0JSON, _ := json.Marshal(testRPC.params[0][0])
+	var sendTxArg0Generic map[string]interface{}
+	json.Unmarshal(sendTxArg0JSON, &sendTxArg0Generic)
+	assert.Equal("s6a3mQ8IvrI2ZgHqHZlJaELiJs10HxlZNIwNd669FH4=", sendTxArg0Generic["privateFrom"])
+	assert.Equal("oD76ZRgu6py/WKrsXbtF9P2Mf1mxVxzqficE1Uiw6S8=", sendTxArg0Generic["privateFor"].([]interface{})[0])
+
+	assert.Equal("eth_getTransactionReceipt", testRPC.calls[1])
+
+	replyMsg := testTxnContext.replies[0]
+	assert.Equal("TransactionSuccess", replyMsg.ReplyHeaders().MsgType)
+	replyMsgBytes, _ := json.Marshal(&replyMsg)
+	var replyMsgMap map[string]interface{}
+	json.Unmarshal(replyMsgBytes, &replyMsgMap)
+
+	assert.Equal("0x6e710868fd2d0ac1f141ba3f0cd569e38ce1999d8f39518ee7633d2b9a7122af", replyMsgMap["blockHash"])
+	assert.Equal("12345", replyMsgMap["blockNumber"])
+	assert.Equal("0x28a62cb478a3c3d4daad84f1148ea16cd1a66f37", replyMsgMap["contractAddress"])
+	assert.Equal("23456", replyMsgMap["cumulativeGasUsed"])
+	assert.Equal("0xba25be62a5c55d4ad1d5520268806a8730a4de5e", replyMsgMap["from"])
+	assert.Equal("345678", replyMsgMap["gasUsed"])
+	assert.Equal("123", replyMsgMap["nonce"])
+	assert.Equal("1", replyMsgMap["status"])
+	assert.Equal("0xd7fac2bce408ed7c6ded07a32038b1f79c2b27d3", replyMsgMap["to"])
+	assert.Equal("456789", replyMsgMap["transactionIndex"])
+}
 func TestOnDeployContractMessageGoodTxnMinedWithHex(t *testing.T) {
 	assert := assert.New(t)
 

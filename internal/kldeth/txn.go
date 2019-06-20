@@ -42,6 +42,8 @@ type Txn struct {
 	EthTX           *types.Transaction
 	Hash            string
 	Receipt         TxnReceipt
+	PrivateFrom     string
+	PrivateFor      []string
 }
 
 // TxnReceipt is the receipt obtained over JSON/RPC from the ethereum client
@@ -60,10 +62,9 @@ type TxnReceipt struct {
 
 // NewContractDeployTxn builds a new ethereum transaction from the supplied
 // SendTranasction message
-func NewContractDeployTxn(msg *kldmessages.DeployContract) (pTX *Txn, err error) {
+func NewContractDeployTxn(msg *kldmessages.DeployContract) (tx *Txn, err error) {
 
-	var tx Txn
-	pTX = &tx
+	tx = &Txn{}
 
 	var compiled *CompiledSolidity
 
@@ -83,7 +84,7 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract) (pTX *Txn, err error)
 	}
 
 	// Build correctly typed args for the ethereum call
-	typedArgs, err := pTX.generateTypedArgs(msg.Parameters, &compiled.ABI.Constructor)
+	typedArgs, err := tx.generateTypedArgs(msg.Parameters, &compiled.ABI.Constructor)
 	if err != nil {
 		return
 	}
@@ -99,7 +100,13 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract) (pTX *Txn, err error)
 	data := append(compiled.Compiled, packedCall...)
 
 	// Generate the ethereum transaction
-	err = pTX.genEthTransaction(msg.From, "", msg.Nonce, msg.Value, msg.Gas, msg.GasPrice, data)
+	if err = tx.genEthTransaction(msg.From, "", msg.Nonce, msg.Value, msg.Gas, msg.GasPrice, data); err != nil {
+		return
+	}
+
+	// retain private transaction fields
+	tx.PrivateFrom = msg.PrivateFrom
+	tx.PrivateFor = msg.PrivateFor
 	return
 }
 
@@ -259,7 +266,14 @@ func NewSendTxn(msg *kldmessages.SendTransaction) (tx *Txn, err error) {
 		}
 	}
 
-	return buildTX(msg.From, msg.To, msg.Nonce, msg.Value, msg.Gas, msg.GasPrice, methodABI, msg.Parameters)
+	if tx, err = buildTX(msg.From, msg.To, msg.Nonce, msg.Value, msg.Gas, msg.GasPrice, methodABI, msg.Parameters); err != nil {
+		return
+	}
+
+	// retain private transaction fields
+	tx.PrivateFrom = msg.PrivateFrom
+	tx.PrivateFor = msg.PrivateFor
+	return
 }
 
 func buildTX(msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json.Number, methodABI *abi.Method, params []interface{}) (tx *Txn, err error) {
@@ -350,7 +364,7 @@ func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgG
 
 	gasPrice := big.NewInt(0)
 	if msgGasPrice.String() != "" {
-		if _, ok := value.SetString(msgGasPrice.String(), 10); !ok {
+		if _, ok := gasPrice.SetString(msgGasPrice.String(), 10); !ok {
 			err = fmt.Errorf("Converting supplied 'gasPrice' to big integer")
 			return
 		}

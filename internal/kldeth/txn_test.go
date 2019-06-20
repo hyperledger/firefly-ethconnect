@@ -78,8 +78,8 @@ func TestNewContractDeployTxnSimpleStorage(t *testing.T) {
 	assert.Equal("0x7b", jsonSent["nonce"])
 	assert.Equal("0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", jsonSent["from"])
 	assert.Equal("0x1c8", jsonSent["gas"])
-	assert.Equal("0x0", jsonSent["gasPrice"])
-	assert.Equal("0x315", jsonSent["value"])
+	assert.Equal("0x315", jsonSent["gasPrice"])
+	assert.Equal("0x0", jsonSent["value"])
 	// The bytecode has the packed parameters appended to the end
 	assert.Regexp(".+00000000000000000000000000000000000000000000000000000000000f423f$", jsonSent["data"])
 
@@ -109,10 +109,41 @@ func TestNewContractDeployTxnSimpleStorageCalcGas(t *testing.T) {
 	assert.Equal("0x7b", jsonSent["nonce"])
 	assert.Equal("0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", jsonSent["from"])
 	assert.Equal("0x0", jsonSent["gas"])
-	assert.Equal("0x0", jsonSent["gasPrice"])
-	assert.Equal("0x315", jsonSent["value"])
+	assert.Equal("0x315", jsonSent["gasPrice"])
+	assert.Equal("0x0", jsonSent["value"])
 	// The bytecode has the packed parameters appended to the end
 	assert.Regexp(".+00000000000000000000000000000000000000000000000000000000000f423f$", jsonSent["data"])
+
+}
+
+func TestNewContractDeployTxnSimpleStoragePrivate(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.DeployContract
+	msg.Solidity = simpleStorage
+	msg.Parameters = []interface{}{float64(999999)}
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "678"
+	msg.GasPrice = "0"
+	msg.PrivateFrom = "oD76ZRgu6py/WKrsXbtF9P2Mf1mxVxzqficE1Uiw6S8="
+	msg.PrivateFor = []string{"s6a3mQ8IvrI2ZgHqHZlJaELiJs10HxlZNIwNd669FH4="}
+	tx, err := NewContractDeployTxn(&msg)
+	assert.Nil(err)
+	rpc := testRPCClient{}
+
+	tx.Send(&rpc)
+
+	assert.Equal("eth_estimateGas", rpc.capturedMethod)
+	assert.Equal("eth_sendTransaction", rpc.capturedMethod2)
+	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
+	var jsonSent map[string]interface{}
+	json.Unmarshal(jsonBytesSent, &jsonSent)
+	assert.Equal("0x0", jsonSent["gasPrice"])
+	assert.Equal("0x2a6", jsonSent["value"])
+	assert.Equal("0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", jsonSent["from"])
+	assert.Equal("oD76ZRgu6py/WKrsXbtF9P2Mf1mxVxzqficE1Uiw6S8=", jsonSent["privateFrom"])
+	assert.Equal("s6a3mQ8IvrI2ZgHqHZlJaELiJs10HxlZNIwNd669FH4=", jsonSent["privateFor"].([]interface{})[0])
 
 }
 
@@ -178,8 +209,8 @@ func TestNewContractDeployPrecompiledSimpleStorage(t *testing.T) {
 	assert.Equal("0x7b", jsonSent["nonce"])
 	assert.Equal("0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", jsonSent["from"])
 	assert.Equal("0x1c8", jsonSent["gas"])
-	assert.Equal("0x0", jsonSent["gasPrice"])
-	assert.Equal("0x315", jsonSent["value"])
+	assert.Equal("0x315", jsonSent["gasPrice"])
+	assert.Equal("0x0", jsonSent["value"])
 	// The bytecode has the packed parameters appended to the end
 	assert.Regexp(".+00000000000000000000000000000000000000000000000000000000000f423f$", jsonSent["data"])
 
@@ -488,8 +519,8 @@ func TestSendTxnABIParam(t *testing.T) {
 	assert.Equal("0x7b", jsonSent["nonce"])
 	assert.Equal("0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", jsonSent["from"])
 	assert.Equal("0x1c8", jsonSent["gas"])
-	assert.Equal("0x0", jsonSent["gasPrice"])
-	assert.Equal("0x315", jsonSent["value"])
+	assert.Equal("0x315", jsonSent["gasPrice"])
+	assert.Equal("0x0", jsonSent["value"])
 	assert.Regexp("0xe5537abb000000000000000000000000000000000000000000000000000000000000007b000000000000000000000000000000000000000000000000000000000000007b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000aa983ad2a0e0ed8ac639277f37be42f2a5d2618c00000000000000000000000000000000000000000000000000000000000000036162630000000000000000000000000000000000000000000000000000000000", jsonSent["data"])
 }
 
@@ -541,8 +572,8 @@ func TestSendTxnInlineParam(t *testing.T) {
 	assert.Equal("0x7b", jsonSent["nonce"])
 	assert.Equal("0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", jsonSent["from"])
 	assert.Equal("0x1c8", jsonSent["gas"])
-	assert.Equal("0x0", jsonSent["gasPrice"])
-	assert.Equal("0x315", jsonSent["value"])
+	assert.Equal("0x315", jsonSent["gasPrice"])
+	assert.Equal("0x0", jsonSent["value"])
 	assert.Regexp("0xe5537abb000000000000000000000000000000000000000000000000000000000000007b000000000000000000000000000000000000000000000000000000000000007b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000aa983ad2a0e0ed8ac639277f37be42f2a5d2618c00000000000000000000000000000000000000000000000000000000000000036162630000000000000000000000000000000000000000000000000000000000", jsonSent["data"])
 }
 
@@ -675,8 +706,8 @@ func TestSendTxnNodeAssignNonce(t *testing.T) {
 	assert.Equal(nil, jsonSent["nonce"])
 	assert.Equal("0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", jsonSent["from"])
 	assert.Equal("0x1c8", jsonSent["gas"])
-	assert.Equal("0x0", jsonSent["gasPrice"])
-	assert.Equal("0x315", jsonSent["value"])
+	assert.Equal("0x315", jsonSent["gasPrice"])
+	assert.Equal("0x0", jsonSent["value"])
 	assert.Regexp("0xe5537abb000000000000000000000000000000000000000000000000000000000000007b000000000000000000000000000000000000000000000000000000000000007b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000aa983ad2a0e0ed8ac639277f37be42f2a5d2618c00000000000000000000000000000000000000000000000000000000000000036162630000000000000000000000000000000000000000000000000000000000", jsonSent["data"])
 }
 

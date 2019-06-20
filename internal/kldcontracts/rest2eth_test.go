@@ -181,6 +181,8 @@ func TestSendTransactionAsyncSuccess(t *testing.T) {
 		},
 	}
 	_, _, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	req.Header.Set("X-Kaleido-PrivateFrom", "0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90")
+	req.Header.Set("X-Kaleido-PrivateFor", "0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745,0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C")
 	router.ServeHTTP(res, req)
 
 	assert.Equal(202, res.Result().StatusCode)
@@ -193,6 +195,9 @@ func TestSendTransactionAsyncSuccess(t *testing.T) {
 	assert.Equal(true, dispatcher.asyncDispatchAck)
 	assert.Equal(from, dispatcher.asyncDispatchMsg["from"])
 	assert.Equal(to, dispatcher.asyncDispatchMsg["to"])
+	assert.Equal("0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90", dispatcher.asyncDispatchMsg["privateFrom"])
+	assert.Equal("0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745", dispatcher.asyncDispatchMsg["privateFor"].([]interface{})[0])
+	assert.Equal("0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C", dispatcher.asyncDispatchMsg["privateFor"].([]interface{})[1])
 }
 
 func TestDeployContractAsyncSuccess(t *testing.T) {
@@ -212,7 +217,7 @@ func TestDeployContractAsyncSuccess(t *testing.T) {
 	}
 	_, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
 	body, _ := json.Marshal(&bodyMap)
-	req := httptest.NewRequest("POST", "/abis/abi1", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/abis/abi1?kld-privateFrom=0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90&kld-privateFor=0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745&kld-privateFor=0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C", bytes.NewReader(body))
 	req.Header.Add("x-kaleido-from", from)
 	router.ServeHTTP(res, req)
 
@@ -225,6 +230,9 @@ func TestDeployContractAsyncSuccess(t *testing.T) {
 
 	assert.Equal(true, dispatcher.asyncDispatchAck)
 	assert.Equal(from, dispatcher.asyncDispatchMsg["from"])
+	assert.Equal("0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90", dispatcher.asyncDispatchMsg["privateFrom"])
+	assert.Equal("0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745", dispatcher.asyncDispatchMsg["privateFor"].([]interface{})[0])
+	assert.Equal("0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C", dispatcher.asyncDispatchMsg["privateFor"].([]interface{})[1])
 }
 
 func TestSendTransactionSyncSuccess(t *testing.T) {

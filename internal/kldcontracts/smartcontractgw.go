@@ -781,24 +781,19 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 		return
 	}
 
-	deployMsg, err := g.loadDeployMsgForFactory(params.ByName("abi"))
+	abiID := params.ByName("abi")
+	deployMsg, err := g.loadDeployMsgForFactory(abiID)
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 404)
 		return
 	}
 
-	requestID := kldutils.UUIDv4()
-	swagger, err := g.genSwagger(requestID, deployMsg.ContractName, deployMsg.ABI, deployMsg.DevDoc, addrHexNo0x, reqBody.RegisterAs)
+	swagger, err := g.genSwagger(abiID, deployMsg.ContractName, deployMsg.ABI, deployMsg.DevDoc, addrHexNo0x, reqBody.RegisterAs)
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 400)
 		return
 	}
 	contractInfo, overwritten := g.addToContractIndex(addrHexNo0x, swagger, time.Now().UTC())
-
-	// Also store the corresponding ABI
-	if err := g.storeABI(requestID, addrHexNo0x, deployMsg.ABI); err != nil {
-		g.gatewayErrReply(res, req, err, 500)
-	}
 
 	status := 201
 	if overwritten {

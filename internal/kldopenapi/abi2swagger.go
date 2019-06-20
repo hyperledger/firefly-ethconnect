@@ -314,12 +314,37 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 			Type: "boolean",
 		},
 	}
+	params["privateFromParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description:     "Private transaction sender - 'x-kaleido-privatefrom' header can also be used",
+			Name:            "kld-privatefrom",
+			In:              "query",
+			Required:        false,
+			AllowEmptyValue: false,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "string",
+		},
+	}
+	params["privateForParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description:     "Private transaction recipients (comma separated or multiple params) - 'x-kaleido-privatefor' header can also be used",
+			Name:            "kld-privatefor",
+			In:              "query",
+			Required:        false,
+			AllowEmptyValue: false,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "string",
+		},
+	}
 	params["registerParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description: "Register the installed contract on a friendly path (overwrites existing) - 'x-kaleido-register' header can also be used",
-			Name:        "kld-register",
-			In:          "query",
-			Required:    false,
+			Description:     "Register the installed contract on a friendly path (overwrites existing) - 'x-kaleido-register' header can also be used",
+			Name:            "kld-register",
+			In:              "query",
+			Required:        false,
+			AllowEmptyValue: false,
 		},
 		SimpleSchema: spec.SimpleSchema{
 			Type: "string",
@@ -338,6 +363,8 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 	gaspriceParam, _ := spec.NewRef("#/parameters/gaspriceParam")
 	syncParam, _ := spec.NewRef("#/parameters/syncParam")
 	callParam, _ := spec.NewRef("#/parameters/callParam")
+	privateFromParam, _ := spec.NewRef("#/parameters/privateFromParam")
+	privateForParam, _ := spec.NewRef("#/parameters/privateForParam")
 	registerParam, _ := spec.NewRef("#/parameters/registerParam")
 	op.Parameters = append(op.Parameters, spec.Parameter{
 		Refable: spec.Refable{
@@ -368,6 +395,16 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 		op.Parameters = append(op.Parameters, spec.Parameter{
 			Refable: spec.Refable{
 				Ref: callParam,
+			},
+		})
+		op.Parameters = append(op.Parameters, spec.Parameter{
+			Refable: spec.Refable{
+				Ref: privateFromParam,
+			},
+		})
+		op.Parameters = append(op.Parameters, spec.Parameter{
+			Refable: spec.Refable{
+				Ref: privateForParam,
 			},
 		})
 	}

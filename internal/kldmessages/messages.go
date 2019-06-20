@@ -114,12 +114,14 @@ func (r *TransactionReceipt) IsReceipt() *TransactionReceipt {
 // for sending either contract call or creation transactions
 type TransactionCommon struct {
 	RequestCommon
-	Nonce      json.Number   `json:"nonce,omitempty"`
-	From       string        `json:"from"`
-	Value      json.Number   `json:"value"`
-	Gas        json.Number   `json:"gas"`
-	GasPrice   json.Number   `json:"gasPrice"`
-	Parameters []interface{} `json:"params"`
+	Nonce       json.Number   `json:"nonce,omitempty"`
+	From        string        `json:"from"`
+	Value       json.Number   `json:"value"`
+	Gas         json.Number   `json:"gas"`
+	GasPrice    json.Number   `json:"gasPrice"`
+	Parameters  []interface{} `json:"params"`
+	PrivateFrom string        `json:"privateFrom,omitempty"`
+	PrivateFor  []string      `json:"privateFor,omitempty"`
 }
 
 // SendTransaction message instructs the bridge to install a contract

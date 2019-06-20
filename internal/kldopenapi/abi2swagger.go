@@ -177,7 +177,8 @@ func (c *ABI2Swagger) buildMethodDefinitionsAndPath(inst bool, defs map[string]s
 
 func (c *ABI2Swagger) addRegisterPath(paths map[string]spec.PathItem) {
 	pathItem := spec.PathItem{}
-	pathItem.Put = &spec.Operation{
+	registerParam, _ := spec.NewRef("#/parameters/registerParam")
+	pathItem.Post = &spec.Operation{
 		OperationProps: spec.OperationProps{
 			ID:          "registerAddress",
 			Summary:     "Register an existing contract address",
@@ -189,12 +190,7 @@ func (c *ABI2Swagger) addRegisterPath(paths map[string]spec.PathItem) {
 					StatusCodeResponses: map[int]spec.Response{
 						201: spec.Response{
 							ResponseProps: spec.ResponseProps{
-								Description: "Previously unused name has been registered",
-							},
-						},
-						200: spec.Response{
-							ResponseProps: spec.ResponseProps{
-								Description: "Previously used name has been re-registered",
+								Description: "Successfully registered",
 							},
 						},
 					},
@@ -202,6 +198,11 @@ func (c *ABI2Swagger) addRegisterPath(paths map[string]spec.PathItem) {
 			},
 			Parameters: []spec.Parameter{
 				c.getAddressParam(),
+				spec.Parameter{
+					Refable: spec.Refable{
+						Ref: registerParam,
+					},
+				},
 				spec.Parameter{
 					ParamProps: spec.ParamProps{
 						Name:     "body",
@@ -211,14 +212,7 @@ func (c *ABI2Swagger) addRegisterPath(paths map[string]spec.PathItem) {
 							SchemaProps: spec.SchemaProps{
 								Description: "Registration request",
 								Type:        []string{"object"},
-								Properties: map[string]spec.Schema{
-									"registerAs": spec.Schema{
-										SchemaProps: spec.SchemaProps{
-											Description: "The friendly name to register for the contract instance",
-											Type:        []string{"string"},
-										},
-									},
-								},
+								Properties:  map[string]spec.Schema{ /* currently no properties - more metadata and version control TBD */ },
 							},
 						},
 					},

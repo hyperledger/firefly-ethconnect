@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/textproto"
 	"net/url"
 	"reflect"
 	"regexp"
@@ -117,47 +116,6 @@ func newREST2eth(gw smartContractGatewayInt, rpc kldeth.RPCClient, subMgr kldeve
 		rpc:             rpc,
 		subMgr:          subMgr,
 	}
-}
-
-func (r *rest2eth) getQueryParamNoCase(name string, req *http.Request) []string {
-	name = strings.ToLower(name)
-	req.ParseForm()
-	for k, vs := range req.Form {
-		if strings.ToLower(k) == name {
-			return vs
-		}
-	}
-	return nil
-}
-
-// getKLDParam standardizes how special 'kld' params are specified, in query params, or headers
-func (r *rest2eth) getKLDParam(name string, req *http.Request, isBool bool) string {
-	valStr := ""
-	vs := r.getQueryParamNoCase("kld-"+name, req)
-	if len(vs) > 0 {
-		valStr = vs[0]
-	}
-	if isBool && valStr == "" && len(vs) > 0 {
-		valStr = "true"
-	}
-	if valStr == "" {
-		valStr = req.Header.Get("x-kaleido-" + name)
-	}
-	return valStr
-}
-
-// getKLDParamMulti returns an array parameter, or nil if none specified.
-// allows multiple query params / headers, or a single comma-separated query param / header
-func (r *rest2eth) getKLDParamMulti(name string, req *http.Request) (val []string) {
-	req.ParseForm()
-	val = r.getQueryParamNoCase("kld-"+name, req)
-	if len(val) == 0 {
-		val = textproto.MIMEHeader(req.Header)[textproto.CanonicalMIMEHeaderKey("x-kaleido-"+name)]
-	}
-	if val != nil && len(val) == 1 {
-		val = strings.Split(val[0], ",")
-	}
-	return
 }
 
 func (r *rest2eth) addRoutes(router *httprouter.Router) {
@@ -275,14 +233,14 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 	}
 
 	// If we have a from, it needs to be a valid address
-	c.from = strings.ToLower(strings.TrimPrefix(r.getKLDParam("from", req, false), "0x"))
+	c.from = strings.ToLower(strings.TrimPrefix(getKLDParam("from", req, false), "0x"))
 	if c.from != "" && !r.addrCheck.MatchString(c.from) {
 		log.Errorf("Invalid from address: '%s' (original input = '%s')", c.from, req.FormValue("from"))
 		err = fmt.Errorf("From Address must be a 40 character hex string (0x prefix is optional)")
 		r.restErrReply(res, req, err, 404)
 		return
 	}
-	c.value = json.Number(r.getKLDParam("ethvalue", req, false))
+	c.value = json.Number(getKLDParam("ethvalue", req, false))
 
 	c.body, err = kldutils.YAMLorJSONPayload(req)
 	if err != nil {
@@ -324,7 +282,7 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 
 	if c.abiEvent != nil {
 		r.subscribeEvent(res, req, c.addr, c.abiEvent, c.body)
-	} else if (!c.abiMethod.Const) && strings.ToLower(r.getKLDParam("call", req, true)) != "true" {
+	} else if (!c.abiMethod.Const) && strings.ToLower(getKLDParam("call", req, true)) != "true" {
 		if c.from == "" {
 			err = fmt.Errorf("Please specify a valid address in the 'kld-from' query string parameter or x-kaleido-from HTTP header")
 			r.restErrReply(res, req, err, 400)
@@ -380,8 +338,8 @@ func (r *rest2eth) addPrivateTx(msg *kldmessages.TransactionCommon, req *http.Re
 	// Due to an annoying bug in the rapidoc Swagger UI, it is double URL encoding parameters.
 	// As most constellation b64 encoded values end in "=" that's breaking the ability to use
 	// the UI. As they do not contain a % we just double URL decode them :-(
-	msg.PrivateFrom, _ = url.QueryUnescape(r.getKLDParam("privatefrom", req, false))
-	msg.PrivateFor = r.getKLDParamMulti("privatefor", req)
+	msg.PrivateFrom, _ = url.QueryUnescape(getKLDParam("privatefrom", req, false))
+	msg.PrivateFor = getKLDParamMulti("privatefor", req)
 	for idx, val := range msg.PrivateFor {
 		msg.PrivateFor[idx], _ = url.QueryUnescape(val)
 	}
@@ -391,13 +349,17 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 
 	deployMsg.Headers.MsgType = kldmessages.MsgTypeDeployContract
 	deployMsg.From = "0x" + from
-	deployMsg.Gas = json.Number(r.getKLDParam("gas", req, false))
-	deployMsg.GasPrice = json.Number(r.getKLDParam("gasprice", req, false))
+	deployMsg.Gas = json.Number(getKLDParam("gas", req, false))
+	deployMsg.GasPrice = json.Number(getKLDParam("gasprice", req, false))
 	deployMsg.Value = value
 	deployMsg.Parameters = msgParams
 	r.addPrivateTx(&deployMsg.TransactionCommon, req)
-	deployMsg.RegisterAs = r.getKLDParam("register", req, false)
-	if strings.ToLower(r.getKLDParam("sync", req, true)) == "true" {
+	deployMsg.RegisterAs = getKLDParam("register", req, false)
+	if err := r.gw.checkNameAvailable(deployMsg.RegisterAs); err != nil {
+		r.restErrReply(res, req, err, 409)
+		return
+	}
+	if strings.ToLower(getKLDParam("sync", req, true)) == "true" {
 		responder := &rest2EthSyncResponder{
 			r:      r,
 			res:    res,
@@ -411,7 +373,7 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 			responder.waiter.Wait()
 		}
 	} else {
-		ack := (r.getKLDParam("noack", req, true) != "true") // turn on ack's by default
+		ack := (getKLDParam("noack", req, true) != "true") // turn on ack's by default
 
 		// Async messages are dispatched as generic map payloads.
 		// We are confident in the re-serialization here as we've deserialized from JSON then built our own structure
@@ -434,13 +396,13 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 	msg.MethodName = abiMethod.Name
 	msg.To = "0x" + addr
 	msg.From = "0x" + from
-	msg.Gas = json.Number(r.getKLDParam("gas", req, false))
-	msg.GasPrice = json.Number(r.getKLDParam("gasprice", req, false))
+	msg.Gas = json.Number(getKLDParam("gas", req, false))
+	msg.GasPrice = json.Number(getKLDParam("gasprice", req, false))
 	msg.Value = value
 	msg.Parameters = msgParams
 	r.addPrivateTx(&msg.TransactionCommon, req)
 
-	if strings.ToLower(r.getKLDParam("sync", req, true)) == "true" {
+	if strings.ToLower(getKLDParam("sync", req, true)) == "true" {
 		responder := &rest2EthSyncResponder{
 			r:      r,
 			res:    res,
@@ -454,7 +416,7 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 			responder.waiter.Wait()
 		}
 	} else {
-		ack := (r.getKLDParam("noack", req, true) != "true") // turn on ack's by default
+		ack := (getKLDParam("noack", req, true) != "true") // turn on ack's by default
 
 		// Async messages are dispatched as generic map payloads.
 		// We are confident in the re-serialization here as we've deserialized from JSON then built our own structure

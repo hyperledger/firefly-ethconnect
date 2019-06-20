@@ -167,7 +167,7 @@
       }
     },
     "/{address}": {
-      "put": {
+      "post": {
         "description": "Add a friendly path for an instance of this contract already deployed to the chain",
         "consumes": [
           "application/json",
@@ -187,27 +187,21 @@
             "required": true
           },
           {
+            "$ref": "#/parameters/registerParam"
+          },
+          {
             "name": "body",
             "in": "body",
             "required": true,
             "schema": {
               "description": "Registration request",
-              "type": "object",
-              "properties": {
-                "registerAs": {
-                  "description": "The friendly name to register for the contract instance",
-                  "type": "string"
-                }
-              }
+              "type": "object"
             }
           }
         ],
         "responses": {
-          "200": {
-            "description": "Previously used name has been re-registered"
-          },
           "201": {
-            "description": "Previously unused name has been registered"
+            "description": "Successfully registered"
           }
         }
       }

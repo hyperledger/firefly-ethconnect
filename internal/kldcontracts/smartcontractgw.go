@@ -69,6 +69,7 @@ type smartContractGatewayInt interface {
 	loadABIForInstance(addrHexNo0x string) (*kldbind.ABI, error)
 	resolveContractAddr(registeredName string) (string, error)
 	loadDeployMsgForFactory(abi string) (*kldmessages.DeployContract, error)
+	checkNameAvailable(name string) error
 }
 
 // SmartContractGatewayConf configuration
@@ -92,7 +93,7 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	router.POST("/abis", g.addABI)
 	router.GET("/abis", g.listContractsOrABIs)
 	router.GET("/abis/:abi", g.getContractOrABI)
-	router.PUT("/abis/:abi/:address", g.registerContract)
+	router.POST("/abis/:abi/:address", g.registerContract)
 	router.POST(kldevents.StreamPathPrefix, g.createStream)
 	router.GET(kldevents.StreamPathPrefix, g.listStreamsOrSubs)
 	router.GET(kldevents.SubPathPrefix, g.listStreamsOrSubs)
@@ -160,11 +161,6 @@ type contractInfo struct {
 	SwaggerURL  string `json:"openapi"`
 }
 
-// contractRegistration is the body to PUT when registering
-type contractRegistration struct {
-	RegisterAs string `json:"registerAs"`
-}
-
 // abiInfo is the minimal data structure we keep in memory, indexed by our own UUID
 type abiInfo struct {
 	kldmessages.TimeSorted
@@ -214,7 +210,9 @@ func (g *smartContractGW) PostDeploy(msg *kldmessages.TransactionReceipt) error 
 	if err != nil {
 		return err
 	}
-	g.addToContractIndex(addrHexNo0x, swagger, time.Now().UTC())
+	if _, err = g.addToContractIndex(addrHexNo0x, swagger, time.Now().UTC()); err != nil {
+		return err
+	}
 
 	urlBase := g.conf.BaseURL + swagger.BasePath
 	msg.ContractSwagger = urlBase + "?openapi"
@@ -445,8 +443,16 @@ func (g *smartContractGW) addFileToABIIndex(id, fileName string, createdTime tim
 	g.addToABIIndex(id, &deployMsg, createdTime)
 }
 
-func (g *smartContractGW) addToContractIndex(address string, swagger *spec.Swagger, createdTime time.Time) (*contractInfo, bool) {
+func (g *smartContractGW) checkNameAvailable(registerAs string) error {
+	if existing, exists := g.contractRegistrations[registerAs]; exists {
+		return fmt.Errorf("Contract address %s is already registered for name '%s'", existing.Address, registerAs)
+	}
+	return nil
+}
+
+func (g *smartContractGW) addToContractIndex(address string, swagger *spec.Swagger, createdTime time.Time) (*contractInfo, error) {
 	g.idxLock.Lock()
+	defer g.idxLock.Unlock()
 	var abiID string
 	if ext, exists := swagger.Info.Extensions["x-kaleido-deployment-id"]; exists {
 		abiID = ext.(string)
@@ -462,20 +468,17 @@ func (g *smartContractGW) addToContractIndex(address string, swagger *spec.Swagg
 			CreatedISO8601: createdTime.UTC().Format(time.RFC3339),
 		},
 	}
-	overwritten := false
 	if registerAs, exists := swagger.Info.Extensions["x-kaleido-registered-name"]; exists {
 		info.Path = "/contracts/" + registerAs.(string)
 		info.SwaggerURL = g.conf.BaseURL + "/contracts/" + registerAs.(string) + "?swagger"
-		// Only the most recently registered can win on the router itself
-		if existing, exists := g.contractRegistrations[registerAs.(string)]; !exists || existing.CreatedISO8601 <= info.CreatedISO8601 {
-			log.Infof("Registering path '%s' for address 0x'%s'. Replaced=%t", info.Path, info.Address, exists)
-			g.contractRegistrations[registerAs.(string)] = info
-			overwritten = exists
+		// Protect against overwrite
+		if err := g.checkNameAvailable(registerAs.(string)); err != nil {
+			return nil, err
 		}
+		g.contractRegistrations[registerAs.(string)] = info
 	}
 	g.contractIndex[address] = info
-	g.idxLock.Unlock()
-	return info, overwritten
+	return info, nil
 }
 
 func (g *smartContractGW) addToABIIndex(id string, deployMsg *kldmessages.DeployContract, createdTime time.Time) *abiInfo {
@@ -775,11 +778,7 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 		return
 	}
 
-	var reqBody contractRegistration
-	if err := json.NewDecoder(req.Body).Decode(&reqBody); err != nil {
-		g.gatewayErrReply(res, req, fmt.Errorf("Invalid registration request body: %s", err), 400)
-		return
-	}
+	// Note: there is currently no body payload required for the POST
 
 	abiID := params.ByName("abi")
 	deployMsg, err := g.loadDeployMsgForFactory(abiID)
@@ -788,17 +787,20 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 		return
 	}
 
-	swagger, err := g.genSwagger(abiID, deployMsg.ContractName, deployMsg.ABI, deployMsg.DevDoc, addrHexNo0x, reqBody.RegisterAs)
+	registeredName := getKLDParam("register", req, false)
+	swagger, err := g.genSwagger(abiID, deployMsg.ContractName, deployMsg.ABI, deployMsg.DevDoc, addrHexNo0x, registeredName)
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 400)
 		return
 	}
-	contractInfo, overwritten := g.addToContractIndex(addrHexNo0x, swagger, time.Now().UTC())
+
+	contractInfo, err := g.addToContractIndex(addrHexNo0x, swagger, time.Now().UTC())
+	if err != nil {
+		g.gatewayErrReply(res, req, err, 409)
+		return
+	}
 
 	status := 201
-	if overwritten {
-		status = 200
-	}
 	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(status)

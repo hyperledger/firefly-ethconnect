@@ -55,6 +55,12 @@
             "$ref": "#/parameters/callParam"
           },
           {
+            "$ref": "#/parameters/privateFromParam"
+          },
+          {
+            "$ref": "#/parameters/privateForParam"
+          },
+          {
             "$ref": "#/parameters/registerParam"
           }
         ],
@@ -418,6 +424,12 @@
           },
           {
             "$ref": "#/parameters/callParam"
+          },
+          {
+            "$ref": "#/parameters/privateFromParam"
+          },
+          {
+            "$ref": "#/parameters/privateForParam"
           }
         ],
         "responses": {
@@ -548,6 +560,12 @@
           },
           {
             "$ref": "#/parameters/callParam"
+          },
+          {
+            "$ref": "#/parameters/privateFromParam"
+          },
+          {
+            "$ref": "#/parameters/privateForParam"
           }
         ],
         "responses": {
@@ -671,6 +689,12 @@
           },
           {
             "$ref": "#/parameters/callParam"
+          },
+          {
+            "$ref": "#/parameters/privateFromParam"
+          },
+          {
+            "$ref": "#/parameters/privateForParam"
           }
         ],
         "responses": {
@@ -801,6 +825,12 @@
           },
           {
             "$ref": "#/parameters/callParam"
+          },
+          {
+            "$ref": "#/parameters/privateFromParam"
+          },
+          {
+            "$ref": "#/parameters/privateForParam"
           }
         ],
         "responses": {
@@ -931,6 +961,12 @@
           },
           {
             "$ref": "#/parameters/callParam"
+          },
+          {
+            "$ref": "#/parameters/privateFromParam"
+          },
+          {
+            "$ref": "#/parameters/privateForParam"
           }
         ],
         "responses": {
@@ -1047,6 +1083,12 @@
           },
           {
             "$ref": "#/parameters/callParam"
+          },
+          {
+            "$ref": "#/parameters/privateFromParam"
+          },
+          {
+            "$ref": "#/parameters/privateForParam"
           }
         ],
         "responses": {
@@ -1177,6 +1219,12 @@
           },
           {
             "$ref": "#/parameters/callParam"
+          },
+          {
+            "$ref": "#/parameters/privateFromParam"
+          },
+          {
+            "$ref": "#/parameters/privateForParam"
           }
         ],
         "responses": {
@@ -1314,6 +1362,12 @@
           },
           {
             "$ref": "#/parameters/callParam"
+          },
+          {
+            "$ref": "#/parameters/privateFromParam"
+          },
+          {
+            "$ref": "#/parameters/privateForParam"
           }
         ],
         "responses": {
@@ -1576,6 +1630,18 @@
       "name": "kld-gasprice",
       "in": "query",
       "allowEmptyValue": true
+    },
+    "privateForParam": {
+      "type": "string",
+      "description": "Private transaction recipients (comma separated or multiple params) - 'x-kaleido-privatefor' header can also be used",
+      "name": "kld-privatefor",
+      "in": "query"
+    },
+    "privateFromParam": {
+      "type": "string",
+      "description": "Private transaction sender - 'x-kaleido-privatefrom' header can also be used",
+      "name": "kld-privatefrom",
+      "in": "query"
     },
     "registerParam": {
       "type": "string",

@@ -563,7 +563,10 @@ func (tx *Txn) generateTypedArgs(origParams []interface{}, method *abi.Method) (
 		param := params[idx]
 		requiredType := inputArg.Type.String()
 		suppliedType := reflect.TypeOf(param)
-		if requiredType == "string" {
+		if suppliedType == nil {
+			err = fmt.Errorf("Method '%s' param %d: Cannot supply a null value", methodName, idx)
+			break
+		} else if requiredType == "string" {
 			if suppliedType.Kind() == reflect.String {
 				typedArgs = append(typedArgs, param.(string))
 			} else {

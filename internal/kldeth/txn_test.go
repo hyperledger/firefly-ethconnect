@@ -577,6 +577,29 @@ func TestSendTxnInlineParam(t *testing.T) {
 	assert.Regexp("0xe5537abb000000000000000000000000000000000000000000000000000000000000007b000000000000000000000000000000000000000000000000000000000000007b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000aa983ad2a0e0ed8ac639277f37be42f2a5d2618c00000000000000000000000000000000000000000000000000000000000000036162630000000000000000000000000000000000000000000000000000000000", jsonSent["data"])
 }
 
+func TestSendTxnNilParam(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{}
+
+	param1 := make(map[string]interface{})
+	msg.Parameters = append(msg.Parameters, param1)
+	param1["type"] = "string"
+	param1["value"] = nil
+
+	msg.MethodName = "testFunc"
+	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	_, err := NewSendTxn(&msg)
+	assert.EqualError(err, "Method 'testFunc' param 0: Cannot supply a null value")
+
+}
+
 func TestCallMethod(t *testing.T) {
 	assert := assert.New(t)
 

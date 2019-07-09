@@ -334,14 +334,20 @@ func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, ad
 	res.Write(resBytes)
 }
 
-func (r *rest2eth) addPrivateTx(msg *kldmessages.TransactionCommon, req *http.Request) {
+func (r *rest2eth) doubleURLDecode(s string) string {
 	// Due to an annoying bug in the rapidoc Swagger UI, it is double URL encoding parameters.
 	// As most constellation b64 encoded values end in "=" that's breaking the ability to use
 	// the UI. As they do not contain a % we just double URL decode them :-(
-	msg.PrivateFrom, _ = url.QueryUnescape(getKLDParam("privatefrom", req, false))
+	// However, this translates '+' into ' ' (space), so we have to fix that too.
+	doubleDecoded, _ := url.QueryUnescape(s)
+	return strings.ReplaceAll(doubleDecoded, " ", "+")
+}
+
+func (r *rest2eth) addPrivateTx(msg *kldmessages.TransactionCommon, req *http.Request) {
+	msg.PrivateFrom = r.doubleURLDecode(getKLDParam("privatefrom", req, false))
 	msg.PrivateFor = getKLDParamMulti("privatefor", req)
 	for idx, val := range msg.PrivateFor {
-		msg.PrivateFor[idx], _ = url.QueryUnescape(val)
+		msg.PrivateFor[idx] = r.doubleURLDecode(val)
 	}
 }
 

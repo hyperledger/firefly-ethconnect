@@ -126,8 +126,8 @@ func TestNewContractDeployTxnSimpleStoragePrivate(t *testing.T) {
 	msg.Nonce = "123"
 	msg.Value = "678"
 	msg.GasPrice = "0"
-	msg.PrivateFrom = "oD76ZRgu6py/WKrsXbtF9P2Mf1mxVxzqficE1Uiw6S8="
-	msg.PrivateFor = []string{"s6a3mQ8IvrI2ZgHqHZlJaELiJs10HxlZNIwNd669FH4="}
+	msg.PrivateFrom = "oD76ZRgu6py/WKrsXbtF9++Mf1mxVxzqficE1Uiw6S8="
+	msg.PrivateFor = []string{"s6a3mQ8I+rI2ZgHqHZlJaELiJs10HxlZNIwNd669FH4="}
 	tx, err := NewContractDeployTxn(&msg)
 	assert.Nil(err)
 	rpc := testRPCClient{}
@@ -142,8 +142,8 @@ func TestNewContractDeployTxnSimpleStoragePrivate(t *testing.T) {
 	assert.Equal("0x0", jsonSent["gasPrice"])
 	assert.Equal("0x2a6", jsonSent["value"])
 	assert.Equal("0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", jsonSent["from"])
-	assert.Equal("oD76ZRgu6py/WKrsXbtF9P2Mf1mxVxzqficE1Uiw6S8=", jsonSent["privateFrom"])
-	assert.Equal("s6a3mQ8IvrI2ZgHqHZlJaELiJs10HxlZNIwNd669FH4=", jsonSent["privateFor"].([]interface{})[0])
+	assert.Equal("oD76ZRgu6py/WKrsXbtF9++Mf1mxVxzqficE1Uiw6S8=", jsonSent["privateFrom"])
+	assert.Equal("s6a3mQ8I+rI2ZgHqHZlJaELiJs10HxlZNIwNd669FH4=", jsonSent["privateFor"].([]interface{})[0])
 
 }
 

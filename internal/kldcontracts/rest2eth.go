@@ -134,6 +134,7 @@ type restCmd struct {
 	value     json.Number
 	abiMethod *abi.Method
 	abiEvent  *abi.Event
+	isDeploy  bool
 	deployMsg *kldmessages.DeployContract
 	body      map[string]interface{}
 	msgParams []interface{}
@@ -210,6 +211,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 	// Last case is the constructor, where nothing is specified
 	if methodParam == "" && c.abiMethod == nil && c.abiEvent == nil {
 		c.abiMethod = &a.ABI.Constructor
+		c.isDeploy = true
 	}
 
 	// If we didn't find the method or event, report to the user
@@ -286,7 +288,7 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 		if c.from == "" {
 			err = fmt.Errorf("Please specify a valid address in the 'kld-from' query string parameter or x-kaleido-from HTTP header")
 			r.restErrReply(res, req, err, 400)
-		} else if c.deployMsg != nil {
+		} else if c.isDeploy {
 			r.deployContract(res, req, c.from, c.value, c.abiMethod, c.deployMsg, c.msgParams)
 		} else {
 			r.sendTransaction(res, req, c.from, c.addr, c.value, c.abiMethod, c.msgParams)

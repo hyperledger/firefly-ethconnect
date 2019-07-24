@@ -562,6 +562,7 @@ func (tx *Txn) generateTypedArgs(origParams []interface{}, method *abi.Method) (
 		}
 		param := params[idx]
 		requiredType := inputArg.Type.String()
+		log.Debugf("Arg %d requiredType=%s", idx, requiredType)
 		suppliedType := reflect.TypeOf(param)
 		if suppliedType == nil {
 			err = fmt.Errorf("Method '%s' param %d: Cannot supply a null value", methodName, idx)
@@ -600,12 +601,14 @@ func (tx *Txn) generateTypedArgs(origParams []interface{}, method *abi.Method) (
 				bSlice := common.FromHex(param.(string))
 				if len(bSlice) == 0 {
 					typedArgs = append(typedArgs, [0]byte{})
-				} else {
+				} else if inputArg.Type.Kind == reflect.Array {
 					// Create ourselves an array of the right size (ethereum won't accept a slice)
 					bArrayType := reflect.ArrayOf(len(bSlice), reflect.TypeOf(bSlice[0]))
 					bNewArray := reflect.New(bArrayType).Elem()
 					reflect.Copy(bNewArray, reflect.ValueOf(bSlice))
 					typedArgs = append(typedArgs, bNewArray.Interface())
+				} else {
+					typedArgs = append(typedArgs, bSlice)
 				}
 			} else {
 				err = fmt.Errorf("Method '%s' param %d is a %s: Must supply a hex string", methodName, idx, requiredType)

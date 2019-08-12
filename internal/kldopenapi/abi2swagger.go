@@ -667,10 +667,15 @@ func (c *ABI2Swagger) mapTypeToSchema(s *spec.Schema, t abi.Type) {
 		s.Pattern = "^(0x)?[a-fA-F0-9]{" + strconv.Itoa(t.Size*2) + "}$"
 		break
 	case abi.SliceTy, abi.ArrayTy:
-		s.Type = []string{"array"}
-		s.Items = &spec.SchemaOrArray{}
-		s.Items.Schema = &spec.Schema{}
-		c.mapTypeToSchema(s.Items.Schema, *t.Elem)
+		if t.Elem.T == abi.FixedBytesTy {
+			s.Type = []string{"string"}
+			s.Pattern = "^(0x)?[a-fA-F0-9]*$"
+		} else {
+			s.Type = []string{"array"}
+			s.Items = &spec.SchemaOrArray{}
+			s.Items.Schema = &spec.Schema{}
+			c.mapTypeToSchema(s.Items.Schema, *t.Elem)
+		}
 		break
 	}
 

@@ -356,6 +356,9 @@ func (a *eventStream) batchProcessor() {
 // It never returns an error, and uses the chosen block/skip ErrorHandling
 // behaviour combined with the parameters on the event itself
 func (a *eventStream) processBatch(batchNumber uint64, events []*eventData) {
+	if len(events) == 0 {
+		return
+	}
 	processed := false
 	attempt := 0
 	for !a.suspendOrStop() && !processed {
@@ -363,7 +366,7 @@ func (a *eventStream) processBatch(batchNumber uint64, events []*eventData) {
 			time.Sleep(time.Duration(a.spec.BlockedRetryDelaySec) * time.Second)
 		}
 		attempt++
-		log.Infof("%s: Batch %d initiated with %d events", a.spec.ID, batchNumber, len(events))
+		log.Infof("%s: Batch %d initiated with %d events. FirstBlock=%s LastBlock=%s", a.spec.ID, batchNumber, len(events), events[0].BlockNumber, events[len(events)-1].BlockNumber)
 		err := a.performActionWithRetry(batchNumber, events)
 		// If we got an error after all of the internal retries within the event
 		// handler failed, then the ErrorHandling strategy kicks in

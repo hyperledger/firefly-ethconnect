@@ -421,7 +421,7 @@ func TestSolidityIntParamConversion(t *testing.T) {
 	testComplexParam(t, "int256", "abc", "Could not be converted to a number")
 }
 
-func TestSolidityIntArrayParamConversion(t *testing.T) {
+func TestSolidityIntSliceParamConversion(t *testing.T) {
 	testComplexParam(t, "int8[] memory", []float64{123, 456, 789}, "")
 	testComplexParam(t, "int8[] memory", []float64{}, "")
 	testComplexParam(t, "int256[] memory", []float64{123, 456, 789}, "")
@@ -429,6 +429,24 @@ func TestSolidityIntArrayParamConversion(t *testing.T) {
 	testComplexParam(t, "int256[] memory", float64(123), "Must supply an array")
 	testComplexParam(t, "uint8[] memory", []string{"123"}, "")
 	testComplexParam(t, "uint8[] memory", []string{"abc"}, "Could not be converted to a number")
+}
+
+func TestSolidityIntArrayParamConversion(t *testing.T) {
+	testComplexParam(t, "int8[3] memory", []float64{123, 456, 789}, "")
+	testComplexParam(t, "int256[3] memory", []float64{123, 456, 789}, "")
+	testComplexParam(t, "int256[3] memory", float64(123), "Must supply an array")
+}
+
+func TestSolidityBoolArrayParamConversion(t *testing.T) {
+	testComplexParam(t, "bool[] memory", []bool{true, false, true}, "")
+	testComplexParam(t, "bool[] memory", []string{"true", "ANYTHING"}, "")
+	testComplexParam(t, "bool[] memory", []float64{99}, "Must supply a boolean or a string")
+}
+
+func TestSolidityAddressArrayParamConversion(t *testing.T) {
+	testComplexParam(t, "address[] memory", []string{"df3394931699709b981a1d6e92f6dd2c93430840", "0x2de6181a8cbfb529207c131d4fc0bba97d3259a9"}, "")
+	testComplexParam(t, "address[] memory", []string{"0xfeedbeef"}, "Could not be converted to a hex address")
+	testComplexParam(t, "address[] memory", []bool{false}, "Must supply a hex address string")
 }
 
 func TestSolidityStringParamConversion(t *testing.T) {
@@ -453,15 +471,29 @@ func TestSolidityBytesParamConversion(t *testing.T) {
 	testComplexParam(t, "bytes32", float64(123), "Must supply a hex string")
 	testComplexParam(t, "bytes1", "0f", "")
 	testComplexParam(t, "bytes4", "0xfeedbeef", "")
+	testComplexParam(t, "bytes memory", []float64{1, 55, 128, 255}, "")
+	testComplexParam(t, "bytes memory", []interface{}{float64(128)}, "")
+	testComplexParam(t, "bytes memory", []float64{256}, "outside of range for byte")
+	testComplexParam(t, "bytes memory", []float64{-1}, "outside of range for byte")
+	testComplexParam(t, "bytes memory", []string{"ff"}, "Invalid entry in number array")
 	testComplexParam(t, "bytes1", "", "cannot use \\[0\\]uint8 as type \\[1\\]uint8 as argument")
 	testComplexParam(t, "bytes16", "0xAA983AD2a0", "cannot use \\[5\\]uint8 as type \\[16\\]uint8 as argument")
+}
+
+func TestSolidityArrayOfByteArraysParamConversion(t *testing.T) {
+	// These types are wierd, as they are arrays of arrays of bytes.
+	// We do not support HEX strings for these, but the docs explicitly discourage their
+	// use in favour of bytes8 etc.
+	testComplexParam(t, "byte[8] memory", []string{"fe", "ed", "be", "ef"}, "")
+	testComplexParam(t, "byte[] memory", []string{"fe", "ed", "be", "ef"}, "")
+	testComplexParam(t, "bytes1[] memory", []string{"fe", "ed", "be", "ef"}, "")
 }
 
 func TestTypeNotYetSupported(t *testing.T) {
 	assert := assert.New(t)
 	var tx Txn
 	var m abi.Method
-	m.Inputs = append(m.Inputs, abi.Argument{Name: "random", Type: abi.Type{Type: reflect.TypeOf(t)}})
+	m.Inputs = append(m.Inputs, abi.Argument{Name: "random", Type: abi.Type{Type: reflect.TypeOf(t), T: 42}})
 	_, err := tx.generateTypedArgs([]interface{}{"abc"}, &m)
 	assert.Regexp("Type '.*' is not yet supported", err)
 }
@@ -1160,6 +1192,25 @@ func TestProcessOutputsTooMany(t *testing.T) {
 	assert.EqualError(err, "Expected nil in JSON/RPC response. Received: [arg1]")
 }
 
+func TestProcessOutputsDefaultName(t *testing.T) {
+	assert := assert.New(t)
+
+	t1, _ := abi.NewType("string")
+	methodABI := &abi.Method{
+		Name:   "anonReturn",
+		Inputs: []abi.Argument{},
+		Outputs: []abi.Argument{
+			abi.Argument{Name: "", Type: t1},
+			abi.Argument{Name: "", Type: t1},
+		},
+	}
+
+	retval := make(map[string]interface{})
+	err := processOutputs(methodABI.Outputs, []interface{}{"arg1", "arg2"}, retval)
+	assert.NoError(err)
+	assert.Equal("arg1", retval["output"])
+	assert.Equal("arg2", retval["output1"])
+}
 func TestProcessOutputsBadArgs(t *testing.T) {
 	assert := assert.New(t)
 

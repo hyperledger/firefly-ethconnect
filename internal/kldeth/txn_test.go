@@ -475,6 +475,14 @@ func TestSolidityBytesParamConversion(t *testing.T) {
 	testComplexParam(t, "bytes16", "0xAA983AD2a0", "cannot use \\[5\\]uint8 as type \\[16\\]uint8 as argument")
 }
 
+func TestSolidityBytesParamConversion1(t *testing.T) {
+	// These types are wierd, as they are arrays of arrays of bytes.
+	// We do not support HEX strings for these, but the docs explicitly discourage their
+	// use in favour of bytes8 etc.
+	testComplexParam(t, "byte[8] memory", []string{"fe", "ed", "be", "ef"}, "")
+	testComplexParam(t, "byte[] memory", []string{"fe", "ed", "be", "ef"}, "")
+}
+
 func TestTypeNotYetSupported(t *testing.T) {
 	assert := assert.New(t)
 	var tx Txn

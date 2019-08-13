@@ -456,35 +456,37 @@ func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, metho
 	}
 	switch requiredType.T {
 	case abi.IntTy, abi.UintTy:
-		if requiredType.T == abi.IntTy {
-			intVal, err := tx.getInteger(methodName, idx, requiredType, suppliedType, param)
-			if err != nil {
-				return nil, err
-			}
-			switch requiredType.Size {
-			case 8:
-				return int8(intVal), nil
-			case 16:
-				return int16(intVal), nil
-			case 32:
-				return int32(intVal), nil
-			case 64:
-				return int64(intVal), nil
-			}
-		} else {
-			uintVal, err := tx.getUnsignedInteger(methodName, idx, requiredType, suppliedType, param)
-			if err != nil {
-				return nil, err
-			}
-			switch requiredType.Size {
-			case 8:
-				return uint8(uintVal), nil
-			case 16:
-				return uint16(uintVal), nil
-			case 32:
-				return uint32(uintVal), nil
-			case 64:
-				return uint64(uintVal), nil
+		if requiredType.Size <= 64 {
+			if requiredType.T == abi.IntTy {
+				intVal, err := tx.getInteger(methodName, idx, requiredType, suppliedType, param)
+				if err != nil {
+					return nil, err
+				}
+				switch requiredType.Size {
+				case 8:
+					return int8(intVal), nil
+				case 16:
+					return int16(intVal), nil
+				case 32:
+					return int32(intVal), nil
+				case 64:
+					return int64(intVal), nil
+				}
+			} else {
+				uintVal, err := tx.getUnsignedInteger(methodName, idx, requiredType, suppliedType, param)
+				if err != nil {
+					return nil, err
+				}
+				switch requiredType.Size {
+				case 8:
+					return uint8(uintVal), nil
+				case 16:
+					return uint16(uintVal), nil
+				case 32:
+					return uint32(uintVal), nil
+				case 64:
+					return uint64(uintVal), nil
+				}
 			}
 		}
 		// Catch-all is a big.Int - anyting that isn't an exact match power of 2, or greater than 64 bit
@@ -528,7 +530,6 @@ func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, metho
 			if isByteArray {
 				return nil, fmt.Errorf("Method '%s' param %d is a %s: Must supply a hex string (or an array of bytes)", methodName, idx, requiredType)
 			}
-			return nil, fmt.Errorf("Method '%s' param %d is a %s: Must supply an array of values", methodName, idx, requiredType)
 		}
 		return tx.generateTypedArrayOrSlice(methodName, idx, requiredType, suppliedType, param)
 	default:

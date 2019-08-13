@@ -516,9 +516,8 @@ func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, metho
 			return common.HexToAddress(param.(string)), nil
 		}
 		return nil, fmt.Errorf("Method '%s' param %d is a %s: Must supply a hex address string", methodName, idx, requiredType)
-	case abi.BytesTy, abi.FixedBytesTy, abi.SliceTy, abi.ArrayTy:
-		isByteArray := (requiredType.T == abi.BytesTy || requiredType.T == abi.FixedBytesTy || requiredType.Elem.T == abi.FixedBytesTy)
-		if isByteArray && suppliedType.Kind() == reflect.String {
+	case abi.BytesTy, abi.FixedBytesTy:
+		if suppliedType.Kind() == reflect.String {
 			bSlice := common.FromHex(param.(string))
 			if len(bSlice) == 0 {
 				return [0]byte{}, nil
@@ -528,14 +527,11 @@ func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, metho
 				bNewArray := reflect.New(bArrayType).Elem()
 				reflect.Copy(bNewArray, reflect.ValueOf(bSlice))
 				return bNewArray.Interface(), nil
-			} else {
-				return bSlice, nil
 			}
-		} else if suppliedType.Kind() != reflect.Slice {
-			if isByteArray {
-				return nil, fmt.Errorf("Method '%s' param %d is a %s: Must supply a hex string (or an array of bytes)", methodName, idx, requiredType)
-			}
+			return bSlice, nil
 		}
+		return nil, fmt.Errorf("Method '%s' param %d is a %s: Must supply a hex string", methodName, idx, requiredType)
+	case abi.SliceTy, abi.ArrayTy:
 		return tx.generateTypedArrayOrSlice(methodName, idx, requiredType, suppliedType, param)
 	default:
 		return nil, fmt.Errorf("Type '%s' is not yet supported", requiredType)

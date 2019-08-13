@@ -498,8 +498,11 @@
         },
         "param4": {
           "description": "bytes1[]: Parameter 4",
-          "type": "string",
-          "pattern": "^(0x)?[a-fA-F0-9]*$"
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(0x)?[a-fA-F0-9]{2}$"
+          }
         },
         "param5": {
           "description": "bytes32: Parameter 5",
@@ -545,8 +548,11 @@
         },
         "retval4": {
           "description": "bytes1[]",
-          "type": "string",
-          "pattern": "^(0x)?[a-fA-F0-9]*$"
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(0x)?[a-fA-F0-9]{2}$"
+          }
         },
         "retval5": {
           "description": "bytes32",

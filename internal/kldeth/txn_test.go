@@ -481,6 +481,7 @@ func TestSolidityBytesParamConversion1(t *testing.T) {
 	// use in favour of bytes8 etc.
 	testComplexParam(t, "byte[8] memory", []string{"fe", "ed", "be", "ef"}, "")
 	testComplexParam(t, "byte[] memory", []string{"fe", "ed", "be", "ef"}, "")
+	testComplexParam(t, "bytes1[] memory", []string{"fe", "ed", "be", "ef"}, "")
 }
 
 func TestTypeNotYetSupported(t *testing.T) {

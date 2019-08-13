@@ -517,20 +517,40 @@ func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, metho
 		}
 		return nil, fmt.Errorf("Method '%s' param %d is a %s: Must supply a hex address string", methodName, idx, requiredType)
 	case abi.BytesTy, abi.FixedBytesTy:
-		if suppliedType.Kind() == reflect.String {
-			bSlice := common.FromHex(param.(string))
-			if len(bSlice) == 0 {
-				return [0]byte{}, nil
-			} else if requiredType.Type.Kind() == reflect.Array {
-				// Create ourselves an array of the right size (ethereum won't accept a slice)
-				bArrayType := reflect.ArrayOf(len(bSlice), reflect.TypeOf(bSlice[0]))
-				bNewArray := reflect.New(bArrayType).Elem()
-				reflect.Copy(bNewArray, reflect.ValueOf(bSlice))
-				return bNewArray.Interface(), nil
+		var bSlice []byte
+		if suppliedType.Kind() == reflect.Slice {
+			paramV := reflect.ValueOf(param)
+			bSliceLen := paramV.Len()
+			bSlice = make([]byte, bSliceLen, bSliceLen)
+			for i := 0; i < bSliceLen; i++ {
+				valV := paramV.Index(i)
+				if valV.Kind() == reflect.Interface {
+					valV = valV.Elem()
+				}
+				if valV.Kind() != reflect.Float64 {
+					return nil, fmt.Errorf("Method '%s' param %d is a %s: Invalid entry in number array at index %d (%s)", methodName, idx, requiredType, i, valV.Kind())
+				}
+				floatVal := valV.Float()
+				if floatVal > 255 || floatVal < 0 {
+					return nil, fmt.Errorf("Method '%s' param %d is a %s: Invalid number - outside of range for byte", methodName, idx, requiredType)
+				}
+				bSlice[i] = byte(floatVal)
 			}
-			return bSlice, nil
+		} else if suppliedType.Kind() == reflect.String {
+			bSlice = common.FromHex(param.(string))
+		} else {
+			return nil, fmt.Errorf("Method '%s' param %d is a %s: Must supply a hex string, or number array", methodName, idx, requiredType)
 		}
-		return nil, fmt.Errorf("Method '%s' param %d is a %s: Must supply a hex string", methodName, idx, requiredType)
+		if len(bSlice) == 0 {
+			return [0]byte{}, nil
+		} else if requiredType.Type.Kind() == reflect.Array {
+			// Create ourselves an array of the right size (ethereum won't accept a slice)
+			bArrayType := reflect.ArrayOf(len(bSlice), reflect.TypeOf(bSlice[0]))
+			bNewArray := reflect.New(bArrayType).Elem()
+			reflect.Copy(bNewArray, reflect.ValueOf(bSlice))
+			return bNewArray.Interface(), nil
+		}
+		return bSlice, nil
 	case abi.SliceTy, abi.ArrayTy:
 		return tx.generateTypedArrayOrSlice(methodName, idx, requiredType, suppliedType, param)
 	default:
@@ -562,7 +582,7 @@ func (tx *Txn) generateTypedArgs(origParams []interface{}, method *abi.Method) (
 		log.Debugf("Arg %d requiredType: %s", idx, requiredType)
 		arg, err := tx.generateTypedArg(requiredType, param, methodName, idx)
 		if err != nil {
-			log.Errorf("%s [Required=%s Supplied=%s Value=%s]", err, requiredType, reflect.TypeOf(param), param)
+			log.Errorf("%s [Required=%s Supplied=%s Value=%+v]", err, requiredType, reflect.TypeOf(param), param)
 			return nil, err
 		}
 		log.Debugf("Arg %d value: %+v (type=%s)", idx, arg, reflect.TypeOf(arg))

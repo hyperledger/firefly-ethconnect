@@ -69,11 +69,11 @@ func TestProcessLogEntryNillAndTooFewFields(t *testing.T) {
 			},
 		},
 	}
-	err := lp.processLogEntry(&logEntry{
+	err := lp.processLogEntry("ut", &logEntry{
 		Topics: []*kldbind.Hash{nil},
 	})
 
-	assert.EqualError(err, "Ran out of topics for indexed fields at field 1 of e (one indexed , two indexed )")
+	assert.EqualError(err, "ut: Ran out of topics for indexed fields at field 1 of e (one indexed , two indexed )")
 }
 
 func TestProcessLogBadRLPData(t *testing.T) {
@@ -94,7 +94,7 @@ func TestProcessLogBadRLPData(t *testing.T) {
 			},
 		},
 	}
-	err := lp.processLogEntry(&logEntry{
+	err := lp.processLogEntry(t.Name(), &logEntry{
 		Data: "0x00",
 	})
 

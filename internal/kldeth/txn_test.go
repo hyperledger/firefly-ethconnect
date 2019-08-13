@@ -431,6 +431,18 @@ func TestSolidityIntArrayParamConversion(t *testing.T) {
 	testComplexParam(t, "uint8[] memory", []string{"abc"}, "Could not be converted to a number")
 }
 
+func TestSolidityBoolArrayParamConversion(t *testing.T) {
+	testComplexParam(t, "bool[] memory", []bool{true, false, true}, "")
+	testComplexParam(t, "bool[] memory", []string{"true", "ANYTHING"}, "")
+	testComplexParam(t, "bool[] memory", []float64{99}, "Must supply a boolean or a string")
+}
+
+func TestSolidityAddressArrayParamConversion(t *testing.T) {
+	testComplexParam(t, "address[] memory", []string{"df3394931699709b981a1d6e92f6dd2c93430840", "0x2de6181a8cbfb529207c131d4fc0bba97d3259a9"}, "")
+	testComplexParam(t, "address[] memory", []string{"0xfeedbeef"}, "Could not be converted to a hex address")
+	testComplexParam(t, "address[] memory", []bool{false}, "Must supply a hex address string")
+}
+
 func TestSolidityStringParamConversion(t *testing.T) {
 	testComplexParam(t, "string memory", "ok", "")
 	testComplexParam(t, "string memory", float64(5), "Must supply a string")
@@ -1160,6 +1172,25 @@ func TestProcessOutputsTooMany(t *testing.T) {
 	assert.EqualError(err, "Expected nil in JSON/RPC response. Received: [arg1]")
 }
 
+func TestProcessOutputsDefaultName(t *testing.T) {
+	assert := assert.New(t)
+
+	t1, _ := abi.NewType("string")
+	methodABI := &abi.Method{
+		Name:   "anonReturn",
+		Inputs: []abi.Argument{},
+		Outputs: []abi.Argument{
+			abi.Argument{Name: "", Type: t1},
+			abi.Argument{Name: "", Type: t1},
+		},
+	}
+
+	retval := make(map[string]interface{})
+	err := processOutputs(methodABI.Outputs, []interface{}{"arg1", "arg2"}, retval)
+	assert.NoError(err)
+	assert.Equal("arg1", retval["output"])
+	assert.Equal("arg2", retval["output1"])
+}
 func TestProcessOutputsBadArgs(t *testing.T) {
 	assert := assert.New(t)
 

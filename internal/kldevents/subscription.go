@@ -160,7 +160,7 @@ func (s *subscription) restartFilter(since *big.Int) error {
 	}
 	s.filteredOnce = false
 	s.filterStale = false
-	log.Infof("%s: created filter from block %s: %s", s.logName, since.String(), s.filterID.String())
+	log.Infof("%s: created filter from block %s: %s - %+v", s.logName, since.String(), s.filterID.String(), s.info.Filter)
 	return err
 }
 
@@ -178,9 +178,12 @@ func (s *subscription) processNewEvents() error {
 		}
 		return err
 	}
-	log.Debugf("%s: received %d events (%s)", s.logName, len(logs), rpcMethod)
+	if len(logs) > 0 {
+		// Only log if we received at least one event
+		log.Debugf("%s: received %d events (%s)", s.logName, len(logs), rpcMethod)
+	}
 	for _, logEntry := range logs {
-		if err := s.lp.processLogEntry(logEntry); err != nil {
+		if err := s.lp.processLogEntry(s.logName, logEntry); err != nil {
 			log.Errorf("Failed to processs event: %s", err)
 		}
 	}

@@ -421,7 +421,7 @@ func TestSolidityIntParamConversion(t *testing.T) {
 	testComplexParam(t, "int256", "abc", "Could not be converted to a number")
 }
 
-func TestSolidityIntArrayParamConversion(t *testing.T) {
+func TestSolidityIntSliceParamConversion(t *testing.T) {
 	testComplexParam(t, "int8[] memory", []float64{123, 456, 789}, "")
 	testComplexParam(t, "int8[] memory", []float64{}, "")
 	testComplexParam(t, "int256[] memory", []float64{123, 456, 789}, "")
@@ -429,6 +429,12 @@ func TestSolidityIntArrayParamConversion(t *testing.T) {
 	testComplexParam(t, "int256[] memory", float64(123), "Must supply an array")
 	testComplexParam(t, "uint8[] memory", []string{"123"}, "")
 	testComplexParam(t, "uint8[] memory", []string{"abc"}, "Could not be converted to a number")
+}
+
+func TestSolidityIntArrayParamConversion(t *testing.T) {
+	testComplexParam(t, "int8[3] memory", []float64{123, 456, 789}, "")
+	testComplexParam(t, "int256[3] memory", []float64{123, 456, 789}, "")
+	testComplexParam(t, "int256[3] memory", float64(123), "Must supply an array")
 }
 
 func TestSolidityBoolArrayParamConversion(t *testing.T) {

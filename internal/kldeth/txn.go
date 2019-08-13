@@ -435,7 +435,13 @@ func (tx *Txn) generateTypedArrayOrSlice(methodName string, idx int, requiredTyp
 		return nil, fmt.Errorf("Method '%s' param %d is a %s: Must supply an array", methodName, idx, requiredType)
 	}
 	paramV := reflect.ValueOf(param)
-	genericSlice := reflect.MakeSlice(requiredType.Type, paramV.Len(), paramV.Len())
+	var genericSlice reflect.Value
+	if requiredType.Type.Kind() == reflect.Array {
+		arrayType := reflect.ArrayOf(requiredType.Size, requiredType.Elem.Type)
+		genericSlice = reflect.New(arrayType).Elem()
+	} else {
+		genericSlice = reflect.MakeSlice(requiredType.Type, paramV.Len(), paramV.Len())
+	}
 	innerType := requiredType.Elem
 	for i := 0; i < paramV.Len(); i++ {
 		paramInSlice := paramV.Index(i).Interface()
@@ -445,7 +451,6 @@ func (tx *Txn) generateTypedArrayOrSlice(methodName string, idx int, requiredTyp
 		}
 		genericSlice.Index(i).Set(reflect.ValueOf(val))
 	}
-	log.Infof("genericSlice.Interface()=%+v", genericSlice.Interface())
 	return genericSlice.Interface(), nil
 }
 
@@ -558,12 +563,13 @@ func (tx *Txn) generateTypedArgs(origParams []interface{}, method *abi.Method) (
 		}
 		param := params[idx]
 		requiredType := &inputArg.Type
-		log.Debugf("Arg %d requiredType=%s", idx, requiredType)
+		log.Debugf("Arg %d requiredType: %s", idx, requiredType)
 		arg, err := tx.generateTypedArg(requiredType, param, methodName, idx)
 		if err != nil {
 			log.Errorf("%s [Required=%s Supplied=%s Value=%s]", err, requiredType, reflect.TypeOf(param), param)
 			return nil, err
 		}
+		log.Debugf("Arg %d value: %+v (type=%s)", idx, arg, reflect.TypeOf(arg))
 		typedArgs = append(typedArgs, arg)
 	}
 	return typedArgs, nil

@@ -89,13 +89,13 @@ func (lp *logProcessor) initBlockHWM(intVal *big.Int) {
 	lp.hwnSync.Unlock()
 }
 
-func (lp *logProcessor) processLogEntry(entry *logEntry) (err error) {
+func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry) (err error) {
 
 	var data []byte
 	if strings.HasPrefix(entry.Data, "0x") {
 		data, err = kldbind.HexDecode(entry.Data)
 		if err != nil {
-			return fmt.Errorf("Failed to decode data: %s", err)
+			return fmt.Errorf("%s: Failed to decode data: %s", subInfo, err)
 		}
 	}
 
@@ -120,7 +120,7 @@ func (lp *logProcessor) processLogEntry(entry *logEntry) (err error) {
 		var val interface{}
 		if input.Indexed {
 			if topicIdx >= len(entry.Topics) {
-				return fmt.Errorf("Ran out of topics for indexed fields at field %d of %s", idx, lp.event)
+				return fmt.Errorf("%s: Ran out of topics for indexed fields at field %d of %+v", subInfo, idx, lp.event)
 			}
 			topic := entry.Topics[topicIdx]
 			topicIdx++
@@ -138,13 +138,14 @@ func (lp *logProcessor) processLogEntry(entry *logEntry) (err error) {
 	// Retrieve the data args from the RLP and merge the results
 	dataMap, err := kldeth.ProcessRLPBytes(dataArgs, data)
 	if err != nil {
-		return fmt.Errorf("Failed to parse RLP data from event: %s", err)
+		return fmt.Errorf("%s: Failed to parse RLP data from event: %s", subInfo, err)
 	}
 	for k, v := range dataMap {
 		result.Data[k] = v
 	}
 
 	// Ok, now we have the full event in a friendly map output. Pass it down to the event processor
+	log.Infof("%s: Dispatching event. Address=%s BlockNumber=%s TxIndex=%s", subInfo, result.Address, result.BlockNumber, result.TransactionIndex)
 	lp.stream.handleEvent(result)
 	return nil
 }

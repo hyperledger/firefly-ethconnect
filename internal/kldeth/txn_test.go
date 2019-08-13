@@ -461,7 +461,7 @@ func TestTypeNotYetSupported(t *testing.T) {
 	assert := assert.New(t)
 	var tx Txn
 	var m abi.Method
-	m.Inputs = append(m.Inputs, abi.Argument{Name: "random", Type: abi.Type{Type: reflect.TypeOf(t)}})
+	m.Inputs = append(m.Inputs, abi.Argument{Name: "random", Type: abi.Type{Type: reflect.TypeOf(t), T: 42}})
 	_, err := tx.generateTypedArgs([]interface{}{"abc"}, &m)
 	assert.Regexp("Type '.*' is not yet supported", err)
 }

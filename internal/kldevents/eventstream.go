@@ -203,8 +203,12 @@ func (a *eventStream) resume() error {
 // after the retries etc. are complete
 func (a *eventStream) isBlocked() bool {
 	a.batchCond.L.Lock()
-	v := a.inFlight >= a.spec.BatchSize
+	inFlight := a.inFlight
+	v := inFlight >= a.spec.BatchSize
 	a.batchCond.L.Unlock()
+	if v {
+		log.Warnf("%s: Is currently blocked. InFlight=%d BatchSize=%d", a.spec.ID, inFlight, a.spec.BatchSize)
+	}
 	return v
 }
 

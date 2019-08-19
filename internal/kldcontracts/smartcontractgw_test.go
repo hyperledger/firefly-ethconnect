@@ -1290,6 +1290,7 @@ func TestAddStreamOK(t *testing.T) {
 	json.NewDecoder(res.Body).Decode(&newSpec)
 	assert.Equal(200, res.Result().StatusCode)
 	assert.Equal("webhook", newSpec.Type)
+	s.Shutdown()
 }
 
 func TestAddStreamBadData(t *testing.T) {

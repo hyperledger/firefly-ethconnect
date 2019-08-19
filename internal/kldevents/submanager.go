@@ -367,7 +367,9 @@ func (s *subscriptionMGR) recoverSubscriptions() {
 }
 
 func (s *subscriptionMGR) Close() {
+	log.Infof("Event stream subscription manager shutting down")
 	if s.db != nil {
 		s.db.Close()
+		s.db = nil
 	}
 }

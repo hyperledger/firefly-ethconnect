@@ -139,6 +139,10 @@ func TestBatchTimeout(t *testing.T) {
 	wg.Wait()
 	assert.Equal(10, len(e2s))
 	assert.Equal(9, len(e3s))
+	for i := 0; i < 10 && stream.inFlight > 0; i++ {
+		time.Sleep(10 * time.Millisecond)
+	}
+	assert.Equal(uint64(0), stream.inFlight)
 
 }
 
@@ -633,4 +637,20 @@ func TestStoreCheckpointStoreError(t *testing.T) {
 	for !stream.pollerDone {
 		time.Sleep(1 * time.Millisecond)
 	}
+}
+
+func TestProcessBatchEmptyArray(t *testing.T) {
+	sm, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingBlock,
+			Webhook:       &webhookAction{},
+		}, 200)
+	mockKV := newMockKV(nil)
+	mockKV.storeErr = fmt.Errorf("pop")
+	sm.db = mockKV
+	defer close(eventStream)
+	defer svr.Close()
+	defer stream.stop()
+
+	stream.processBatch(0, []*eventData{})
 }

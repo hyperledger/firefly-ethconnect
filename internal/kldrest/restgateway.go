@@ -285,7 +285,7 @@ func (g *RESTGateway) Start() (err error) {
 
 	// Clean up on SIGINT
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	// Complete the main routine if any child ends, or SIGINT
 	select {
 	case err = <-gwDone:

@@ -80,6 +80,7 @@ type subscriptionMGR struct {
 	rpc           kldeth.RPCClient
 	subscriptions map[string]*subscription
 	streams       map[string]*eventStream
+	closed        bool
 }
 
 // CobraInitSubscriptionManager standard naming for cobra command params
@@ -368,8 +369,11 @@ func (s *subscriptionMGR) recoverSubscriptions() {
 
 func (s *subscriptionMGR) Close() {
 	log.Infof("Event stream subscription manager shutting down")
-	if s.db != nil {
-		s.db.Close()
-		s.db = nil
+	for _, stream := range s.streams {
+		stream.stop()
 	}
+	if !s.closed && s.db != nil {
+		s.db.Close()
+	}
+	s.closed = true
 }

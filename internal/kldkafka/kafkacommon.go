@@ -279,7 +279,7 @@ func (k *kafkaCommon) Start() (err error) {
 	}
 
 	k.signals = make(chan os.Signal, 1)
-	signal.Notify(k.signals, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(k.signals, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	for {
 		select {
 		case <-k.signals:

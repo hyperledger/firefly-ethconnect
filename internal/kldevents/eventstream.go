@@ -311,7 +311,9 @@ func (a *eventStream) batchDispatcher() {
 		if timeout || uint64(len(currentBatch)) == a.spec.BatchSize {
 			// We are ready to dispatch the batch
 			a.batchCond.L.Lock()
-			a.inFlight++
+			if !timeout {
+				a.inFlight++
+			}
 			a.batchQueue.PushBack(currentBatch)
 			a.batchCond.Broadcast()
 			a.batchCond.L.Unlock()
@@ -381,6 +383,12 @@ func (a *eventStream) processBatch(batchNumber uint64, events []*eventData) {
 			processed = (a.spec.ErrorHandling == ErrorHandlingSkip)
 		}
 	}
+
+	// Always decrement the in-flight count once we've processed
+	a.batchCond.L.Lock()
+	a.inFlight -= uint64(len(events))
+	a.batchCond.L.Unlock()
+
 	// If we were suspended, do not ack the batch
 	if a.suspendOrStop() {
 		return
@@ -396,9 +404,6 @@ func (a *eventStream) processBatch(batchNumber uint64, events []*eventData) {
 	for _, event := range cbs {
 		event.batchComplete(event)
 	}
-	a.batchCond.L.Lock()
-	a.inFlight -= uint64(len(events))
-	a.batchCond.L.Unlock()
 }
 
 // performActionWithRetry performs an action, with exponential backoff retry up

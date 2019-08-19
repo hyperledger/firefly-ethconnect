@@ -20,7 +20,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/kaleido-io/ethconnect/internal/kldcontracts"
@@ -280,15 +282,24 @@ func (g *RESTGateway) Start() (err error) {
 		time.Sleep(250 * time.Millisecond)
 	}
 	readyToListen <- true
-	// Complete the main routine if any child ends
+
+	// Clean up on SIGINT
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+	// Complete the main routine if any child ends, or SIGINT
 	select {
 	case err = <-gwDone:
 		break
 	case err = <-svrDone:
 		break
+	case <-signals:
+		break
 	}
 
 	// Ensure we shutdown the server
+	if g.smartContractGW != nil {
+		g.smartContractGW.Shutdown()
+	}
 	log.Infof("Shutting down HTTP server")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	g.srv.Shutdown(ctx)

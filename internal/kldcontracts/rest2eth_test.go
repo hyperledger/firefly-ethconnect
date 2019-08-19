@@ -99,6 +99,7 @@ func (m *mockABILoader) checkNameAvailable(name string) error {
 func (m *mockABILoader) PreDeploy(msg *kldmessages.DeployContract) error      { return nil }
 func (m *mockABILoader) PostDeploy(msg *kldmessages.TransactionReceipt) error { return nil }
 func (m *mockABILoader) AddRoutes(router *httprouter.Router)                  { return }
+func (m *mockABILoader) Shutdown()                                            { return }
 
 type mockRPC struct {
 	capturedMethod string

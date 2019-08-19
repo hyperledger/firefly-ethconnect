@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/kaleido-io/ethconnect/internal/kldcontracts"
@@ -284,7 +285,7 @@ func (g *RESTGateway) Start() (err error) {
 
 	// Clean up on SIGINT
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt)
+	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 	// Complete the main routine if any child ends, or SIGINT
 	select {
 	case err = <-gwDone:

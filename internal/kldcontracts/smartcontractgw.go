@@ -62,6 +62,7 @@ type SmartContractGateway interface {
 	PreDeploy(msg *kldmessages.DeployContract) error
 	PostDeploy(msg *kldmessages.TransactionReceipt) error
 	AddRoutes(router *httprouter.Router)
+	Shutdown()
 }
 
 type smartContractGatewayInt interface {
@@ -1072,4 +1073,11 @@ func (g *smartContractGW) writeHTMLForUI(prefix, id, fromQuery string, factory b
 	res.Header().Set("Content-Type", "text/html; charset=utf-8")
 	res.WriteHeader(200)
 	res.Write([]byte(html))
+}
+
+// Shutdown performs a clean shutdown
+func (g *smartContractGW) Shutdown() {
+	if g.sm != nil {
+		g.sm.Close()
+	}
 }

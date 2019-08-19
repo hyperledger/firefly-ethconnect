@@ -44,6 +44,8 @@ func (m *mockContractGW) PostDeploy(*kldmessages.TransactionReceipt) error { ret
 
 func (m *mockContractGW) AddRoutes(*httprouter.Router) {}
 
+func (m *mockContractGW) Shutdown() {}
+
 type mockHandler struct{}
 
 func (*mockHandler) sendWebhookMsg(key, msgID string, msg map[string]interface{}, ack bool) (msgAck string, statusCode int, err error) {

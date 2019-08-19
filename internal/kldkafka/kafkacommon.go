@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -278,7 +279,7 @@ func (k *kafkaCommon) Start() (err error) {
 	}
 
 	k.signals = make(chan os.Signal, 1)
-	signal.Notify(k.signals, os.Interrupt)
+	signal.Notify(k.signals, syscall.SIGTERM, syscall.SIGINT)
 	for {
 		select {
 		case <-k.signals:

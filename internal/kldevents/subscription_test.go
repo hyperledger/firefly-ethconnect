@@ -182,6 +182,30 @@ func TestInitialFilterFail(t *testing.T) {
 	assert.EqualError(err, "eth_blockNumber: pop")
 }
 
+func TestInitialFilterBadInitialBlock(t *testing.T) {
+	assert := assert.New(t)
+	s := &subscription{
+		info: &SubscriptionInfo{
+			FromBlock: "!integer",
+		},
+		rpc: kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
+	}
+	_, err := s.setInitialBlockHeight()
+	assert.EqualError(err, "Failed to parse FromBlock as BigInt: !integer")
+}
+
+func TestInitialFilterCustomInitialBlock(t *testing.T) {
+	assert := assert.New(t)
+	s := &subscription{
+		info: &SubscriptionInfo{
+			FromBlock: "12345",
+		},
+	}
+	res, err := s.setInitialBlockHeight()
+	assert.NoError(err)
+	assert.Equal("12345", res.Text(10))
+}
+
 func TestRestartFilterFail(t *testing.T) {
 	assert := assert.New(t)
 	s := &subscription{

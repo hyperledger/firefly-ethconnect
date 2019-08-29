@@ -99,6 +99,11 @@
             "required": true,
             "schema": {
               "properties": {
+                "fromBlock": {
+                  "description": "The block number to start the subscription from",
+                  "type": "string",
+                  "default": "latest"
+                },
                 "stream": {
                   "description": "The ID of an event stream already configured in the REST Gateway",
                   "type": "string"
@@ -142,6 +147,11 @@
             "required": true,
             "schema": {
               "properties": {
+                "fromBlock": {
+                  "description": "The block number to start the subscription from",
+                  "type": "string",
+                  "default": "latest"
+                },
                 "stream": {
                   "description": "The ID of an event stream already configured in the REST Gateway",
                   "type": "string"
@@ -232,6 +242,11 @@
             "required": true,
             "schema": {
               "properties": {
+                "fromBlock": {
+                  "description": "The block number to start the subscription from",
+                  "type": "string",
+                  "default": "latest"
+                },
                 "stream": {
                   "description": "The ID of an event stream already configured in the REST Gateway",
                   "type": "string"
@@ -282,6 +297,11 @@
             "required": true,
             "schema": {
               "properties": {
+                "fromBlock": {
+                  "description": "The block number to start the subscription from",
+                  "type": "string",
+                  "default": "latest"
+                },
                 "stream": {
                   "description": "The ID of an event stream already configured in the REST Gateway",
                   "type": "string"

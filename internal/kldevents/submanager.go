@@ -50,7 +50,7 @@ type SubscriptionManager interface {
 	SuspendStream(id string) error
 	ResumeStream(id string) error
 	DeleteStream(id string) error
-	AddSubscription(addr *kldbind.Address, event *kldbind.ABIEvent, streamID string) (*SubscriptionInfo, error)
+	AddSubscription(addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock string) (*SubscriptionInfo, error)
 	Subscriptions() []*SubscriptionInfo
 	SubscriptionByID(id string) (*SubscriptionInfo, error)
 	DeleteSubscription(id string) error
@@ -120,7 +120,7 @@ func (s *subscriptionMGR) Subscriptions() []*SubscriptionInfo {
 }
 
 // AddSubscription adds a new subscription
-func (s *subscriptionMGR) AddSubscription(addr *kldbind.Address, event *kldbind.ABIEvent, streamID string) (*SubscriptionInfo, error) {
+func (s *subscriptionMGR) AddSubscription(addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock string) (*SubscriptionInfo, error) {
 	i := &SubscriptionInfo{
 		TimeSorted: kldmessages.TimeSorted{
 			CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
@@ -130,6 +130,16 @@ func (s *subscriptionMGR) AddSubscription(addr *kldbind.Address, event *kldbind.
 		Stream: streamID,
 	}
 	i.Path = SubPathPrefix + "/" + i.ID
+	// Check initial block number to subscribe from
+	if initialBlock == "" || initialBlock == FromBlockLatest {
+		i.FromBlock = FromBlockLatest
+	} else {
+		var bi big.Int
+		if _, ok := bi.SetString(initialBlock, 0); !ok {
+			return nil, fmt.Errorf("FromBlock cannot be parsed as a BigInt")
+		}
+		i.FromBlock = bi.Text(10)
+	}
 	// Create it
 	sub, err := newSubscription(s, s.rpc, addr, i)
 	if err != nil {

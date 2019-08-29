@@ -121,7 +121,7 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	})
 	assert.NoError(err)
 
-	sub, err := sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "ping"}, stream.ID)
+	sub, err := sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "ping"}, stream.ID, "")
 	assert.NoError(err)
 	assert.Equal(stream.ID, sub.Stream)
 
@@ -192,7 +192,7 @@ func TestActionChildCleanup(t *testing.T) {
 	})
 	assert.NoError(err)
 
-	_, err = sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "ping"}, stream.ID)
+	_, err = sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "ping"}, stream.ID, "12345")
 	err = sm.DeleteStream(stream.ID)
 	assert.NoError(err)
 
@@ -227,10 +227,12 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	err = sm.DeleteStream("teststream")
 	assert.EqualError(err, "pop")
 
-	_, err = sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "any"}, "nope")
+	_, err = sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "any"}, "nope", "")
 	assert.EqualError(err, "Stream with ID 'nope' not found")
-	_, err = sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "any"}, "teststream")
+	_, err = sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "any"}, "teststream", "")
 	assert.EqualError(err, "Failed to store stream: pop")
+	_, err = sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "any"}, "teststream", "!bad integer")
+	assert.EqualError(err, "FromBlock cannot be parsed as a BigInt")
 	sm.subscriptions["testsub"] = &subscription{info: &SubscriptionInfo{}, rpc: sm.rpc}
 	err = sm.DeleteSubscription("nope")
 	assert.EqualError(err, "Subscription with ID 'nope' not found")

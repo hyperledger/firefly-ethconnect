@@ -133,7 +133,7 @@ func (m *mockSubMgr) StreamByID(id string) (*kldevents.StreamInfo, error) { retu
 func (m *mockSubMgr) SuspendStream(id string) error                       { m.suspended = true; return m.err }
 func (m *mockSubMgr) ResumeStream(id string) error                        { m.resumed = true; return m.err }
 func (m *mockSubMgr) DeleteStream(id string) error                        { return m.err }
-func (m *mockSubMgr) AddSubscription(addr *kldbind.Address, event *kldbind.ABIEvent, streamID string) (*kldevents.SubscriptionInfo, error) {
+func (m *mockSubMgr) AddSubscription(addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock string) (*kldevents.SubscriptionInfo, error) {
 	return m.sub, m.err
 }
 func (m *mockSubMgr) Subscriptions() []*kldevents.SubscriptionInfo { return m.subs }

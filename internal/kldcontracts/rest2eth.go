@@ -317,12 +317,13 @@ func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, ad
 		r.restErrReply(res, req, fmt.Errorf("Must supply a 'stream' parameter in the body or query"), 400)
 		return
 	}
+	fromBlock := r.fromBodyOrForm(req, body, "fromBlock")
 	var addr *common.Address
 	if addrStr != "" {
 		address := common.HexToAddress("0x" + addrStr)
 		addr = &address
 	}
-	sub, err := r.subMgr.AddSubscription(addr, abiEvent, streamID)
+	sub, err := r.subMgr.AddSubscription(addr, abiEvent, streamID, fromBlock)
 	if err != nil {
 		r.restErrReply(res, req, err, 400)
 		return

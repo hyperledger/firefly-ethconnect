@@ -73,7 +73,7 @@ func TestProcessLogEntryNillAndTooFewFields(t *testing.T) {
 		Topics: []*kldbind.Hash{nil},
 	})
 
-	assert.EqualError(err, "ut: Ran out of topics for indexed fields at field 1 of e (one indexed , two indexed )")
+	assert.EqualError(err, "ut: Ran out of topics for indexed fields at field 1 of event ( indexed one,  indexed two)")
 }
 
 func TestProcessLogBadRLPData(t *testing.T) {

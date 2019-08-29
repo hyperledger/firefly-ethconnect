@@ -95,6 +95,9 @@ func (i *rest2EthSyncResponder) ReplyWithReceipt(receipt kldmessages.ReplyWithHe
 		i.r.gw.PostDeploy(txReceiptMsg)
 	}
 	status := 200
+	if receipt.ReplyHeaders().MsgType != kldmessages.MsgTypeTransactionSuccess {
+		status = 500
+	}
 	reply, _ := json.MarshalIndent(receipt, "", "  ")
 	log.Infof("<-- %s %s [%d]", i.req.Method, i.req.URL, status)
 	log.Debugf("<-- %s", reply)
@@ -285,7 +288,7 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 
 	if c.abiEvent != nil {
 		r.subscribeEvent(res, req, c.addr, c.abiEvent, c.body)
-	} else if (!c.abiMethod.Const) && strings.ToLower(getKLDParam("call", req, true)) != "true" {
+	} else if (req.Method == http.MethodPost && !c.abiMethod.Const) && strings.ToLower(getKLDParam("call", req, true)) != "true" {
 		if c.from == "" {
 			err = fmt.Errorf("Please specify a valid address in the 'kld-from' query string parameter or x-kaleido-from HTTP header")
 			r.restErrReply(res, req, err, 400)

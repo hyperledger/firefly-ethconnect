@@ -27,17 +27,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-openapi/spec"
 	"github.com/julienschmidt/httprouter"
-	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldevents"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
-	"github.com/tidwall/gjson"
 )
 
 var simpleEventsSol string
@@ -48,6 +45,22 @@ func simpleEventsSource() string {
 		simpleEventsSol = string(simpleEventsBytes)
 	}
 	return simpleEventsSol
+}
+
+type mockRR struct {
+	idCapture   string
+	addrCapture string
+	deployMsg   *kldmessages.DeployContract
+	err         error
+}
+
+func (rr *mockRR) loadFactoryByID(id string) (*kldmessages.DeployContract, error) {
+	rr.idCapture = id
+	return rr.deployMsg, rr.err
+}
+func (rr *mockRR) loadFactoryByAddress(id string) (*kldmessages.DeployContract, error) {
+	rr.addrCapture = id
+	return rr.deployMsg, rr.err
 }
 
 func TestCobraInitContractGateway(t *testing.T) {
@@ -154,18 +167,10 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	err = scgw.PostDeploy(&receipt)
 	assert.NoError(err)
 
-	swaggerBytes, err := ioutil.ReadFile(path.Join(dir, "contract_0123456789abcdef0123456789abcdef01234567.swagger.json"))
+	deployMsg, abiID, err := scgw.(*smartContractGW).loadDeployMsgForInstance("0123456789abcdef0123456789abcdef01234567")
 	assert.NoError(err)
-	assert.Equal("2.0", gjson.Get(string(swaggerBytes), "swagger").String())
-	assert.Equal("localhost", gjson.Get(string(swaggerBytes), "host").String())
-	assert.Equal("SimpleEvents", gjson.Get(string(swaggerBytes), "info.title").String())
-	assert.Equal("message1", gjson.Get(string(swaggerBytes), "info.x-kaleido-deployment-id").String())
-	assert.Equal("Test+1", gjson.Get(string(swaggerBytes), "info.x-kaleido-registered-name").String())
-	assert.Equal("/api/v1/contracts/Test+1", gjson.Get(string(swaggerBytes), "basePath").String())
-
-	abi, err := scgw.(*smartContractGW).loadABIForInstance("0123456789abcdef0123456789abcdef01234567")
-	assert.NoError(err)
-	assert.Equal("set", abi.ABI.Methods["set"].Name)
+	assert.NotEmpty(abiID)
+	assert.Equal("set", deployMsg.ABI.Methods["set"].Name)
 
 	// Check we can list it back over REST
 	router := &httprouter.Router{}
@@ -178,7 +183,6 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	err = json.NewDecoder(res.Body).Decode(&body)
 	assert.NoError(err)
 	assert.Equal(1, len(body))
-	assert.Equal("SimpleEvents", body[0].Name)
 	assert.Equal("0123456789abcdef0123456789abcdef01234567", body[0].Address)
 
 	// Check we can get it back over REST
@@ -189,15 +193,23 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	var info contractInfo
 	err = json.NewDecoder(res.Body).Decode(&info)
 	assert.NoError(err)
-	assert.Equal("SimpleEvents", info.Name)
 	assert.Equal("0123456789abcdef0123456789abcdef01234567", info.Address)
 
-	// Check we can get the full swagger back over REST
-	req = httptest.NewRequest("GET", "/contracts/0123456789abcdef0123456789abcdef01234567?swagger", bytes.NewReader([]byte{}))
+	// Check we can get the full ABI swagger back over REST
+	req = httptest.NewRequest("GET", "/abis/message1?swagger", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(200, res.Result().StatusCode)
 	var swagger spec.Swagger
+	err = json.NewDecoder(res.Body).Decode(&swagger)
+	assert.NoError(err)
+	assert.Equal("SimpleEvents", swagger.Info.Title)
+
+	// Check we can get the full contract swagger back over REST
+	req = httptest.NewRequest("GET", "/contracts/0123456789abcdef0123456789abcdef01234567?swagger", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(200, res.Result().StatusCode)
 	err = json.NewDecoder(res.Body).Decode(&swagger)
 	assert.NoError(err)
 	assert.Equal("SimpleEvents", swagger.Info.Title)
@@ -218,6 +230,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	assert.Equal("SimpleEvents", swagger.Info.Title)
 	assert.Equal("attachment; filename=\"0123456789abcdef0123456789abcdef01234567.swagger.json\"", res.HeaderMap.Get("Content-Disposition"))
 	assert.Equal("0x0123456789abcdef0123456789abcdef01234567", swagger.Parameters["fromParam"].SimpleSchema.Default)
+	assert.Equal("/api/v1/contracts/0123456789abcdef0123456789abcdef01234567", swagger.BasePath)
 }
 
 func TestRegisterExistingContract(t *testing.T) {
@@ -275,6 +288,7 @@ func TestRegisterExistingContract(t *testing.T) {
 	assert.Equal(200, res.Code)
 	json.NewDecoder(res.Body).Decode(&returnedSwagger)
 	assert.Equal("testcontract", returnedSwagger.Info.Extensions["x-kaleido-registered-name"])
+	assert.Equal("/api/v1/contracts/testcontract", returnedSwagger.BasePath)
 
 }
 
@@ -367,23 +381,7 @@ func TestRegisterContractBadABI(t *testing.T) {
 	assert.Equal(404, res.Code)
 	var resBody map[string]interface{}
 	json.NewDecoder(res.Body).Decode(&resBody)
-	assert.Regexp("Failed to find ABI with ID BADID", resBody["error"])
-}
-
-func TestLoadABIFailure(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: dir,
-		},
-		nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-	ioutil.WriteFile(path.Join(dir, "contract_addr1.abi.json"), []byte(":bad json"), 0644)
-	_, err := scgw.loadABIForInstance("addr1")
-	assert.Regexp("Failed to load installed ABI for contract address", err.Error())
+	assert.Regexp("No ABI found with ID BADID", resBody["error"])
 }
 
 func TestLoadDeployMsgOK(t *testing.T) {
@@ -416,7 +414,7 @@ func TestLoadDeployMsgMissing(t *testing.T) {
 	)
 	scgw := s.(*smartContractGW)
 	_, err := scgw.loadDeployMsgForFactory("abi1")
-	assert.Regexp("Failed to find ABI with ID abi1:", err.Error())
+	assert.Regexp("No ABI found with ID abi1", err.Error())
 }
 
 func TestLoadDeployMsgFailure(t *testing.T) {
@@ -433,6 +431,64 @@ func TestLoadDeployMsgFailure(t *testing.T) {
 	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), []byte(":bad json"), 0644)
 	_, err := scgw.loadDeployMsgForFactory("abi1")
 	assert.Regexp("Failed to load ABI with ID abi1", err.Error())
+}
+
+func TestLoadDeployMsgRemoteLookup(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+	s, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+		},
+		nil, nil, nil,
+	)
+	scgw := s.(*smartContractGW)
+	rr := &mockRR{
+		deployMsg: &kldmessages.DeployContract{
+			Compiled: []byte("Some Bytecode"),
+		},
+	}
+	scgw.rr = rr
+	res, err := scgw.loadDeployMsgForFactory("abi1")
+	assert.NoError(err)
+	assert.Equal([]byte("Some Bytecode"), res.Compiled)
+}
+
+func TestLoadDeployMsgRemoteLookupFail(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+	s, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+		},
+		nil, nil, nil,
+	)
+	scgw := s.(*smartContractGW)
+	rr := &mockRR{
+		err: fmt.Errorf("Remote lookup failed"),
+	}
+	scgw.rr = rr
+	_, err := scgw.loadDeployMsgForFactory("abi1")
+	assert.EqualError(err, "Failed to load ABI with ID abi1: Remote lookup failed")
+}
+
+func TestLoadDeployMsgRemoteLookupNotFound(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+	s, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+		},
+		nil, nil, nil,
+	)
+	scgw := s.(*smartContractGW)
+	rr := &mockRR{}
+	scgw.rr = rr
+	_, err := scgw.loadDeployMsgForFactory("abi1")
+	assert.EqualError(err, "No ABI found with ID abi1")
 }
 
 func TestPreDeployCompileFailure(t *testing.T) {
@@ -470,6 +526,40 @@ func TestPreDeployMsgWrite(t *testing.T) {
 	assert.Regexp("Failed to write deployment details", err.Error())
 }
 
+func TestPostDeployNoRegisteredName(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+	s, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+			BaseURL:     "http://localhost/api/v1",
+		},
+		nil, nil, nil,
+	)
+	contractAddr := common.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	scgw := s.(*smartContractGW)
+	replyMsg := &kldmessages.TransactionReceipt{
+		ReplyCommon: kldmessages.ReplyCommon{
+			Headers: kldmessages.ReplyHeaders{
+				ReqID: "message1",
+			},
+		},
+		ContractAddress: &contractAddr,
+	}
+
+	deployFile := path.Join(dir, "abi_message1.deploy.json")
+	deployMsg := &kldmessages.DeployContract{}
+	deployBytes, _ := json.Marshal(deployMsg)
+	ioutil.WriteFile(deployFile, deployBytes, 0644)
+	err := scgw.PostDeploy(replyMsg)
+	assert.NoError(err)
+
+	contractInfo := scgw.contractIndex["0123456789abcdef0123456789abcdef01234567"].(*contractInfo)
+	assert.Equal("", contractInfo.RegisteredAs)
+	assert.Equal("/contracts/0123456789abcdef0123456789abcdef01234567", contractInfo.Path)
+}
+
 func TestPostDeployOpenFail(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
@@ -494,6 +584,34 @@ func TestPostDeployOpenFail(t *testing.T) {
 
 	err := scgw.PostDeploy(replyMsg)
 	assert.Regexp("Unable to recover pre-deploy message", err.Error())
+}
+
+func TestPostDeployStuffFail(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+	s, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+			BaseURL:     "http://localhost/api/v1",
+		},
+		nil, nil, nil,
+	)
+	contractAddr := common.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	scgw := s.(*smartContractGW)
+	replyMsg := &kldmessages.TransactionReceipt{
+		ReplyCommon: kldmessages.ReplyCommon{
+			Headers: kldmessages.ReplyHeaders{
+				ReqID: "message1",
+			},
+		},
+		ContractAddress: &contractAddr,
+	}
+
+	deployFile := path.Join(dir, "abi_message1.deploy.json")
+	ioutil.WriteFile(deployFile, []byte("!JSON"), 0644)
+	err := scgw.PostDeploy(replyMsg)
+	assert.Regexp("Unable to read pre-deploy message", err.Error())
 }
 
 func TestPostDeployMissingContractAddress(t *testing.T) {
@@ -546,40 +664,6 @@ func TestPostDeployDecodeFail(t *testing.T) {
 	assert.Regexp("Unable to recover pre-deploy message", err.Error())
 }
 
-func TestPostDeploySwaggerGenFail(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: dir,
-		},
-		nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-	_, err := scgw.genSwagger("request1", "", nil, "", "", "")
-	assert.Regexp("ABI cannot be nil", err.Error())
-}
-
-func TestGenSwaggerWriteFail(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: path.Join(dir, "badpath"),
-		},
-		nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-
-	a := kldbind.ABI{
-		ABI: abi.ABI{},
-	}
-	_, err := scgw.genSwagger("req1", "", &a, "", "0123456789AbcdeF0123456789abCdef0123456", "")
-	assert.Regexp("Failed to write OpenAPI JSON", err.Error())
-}
-
 func TestStoreABIWriteFail(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
@@ -592,14 +676,14 @@ func TestStoreABIWriteFail(t *testing.T) {
 	)
 	scgw := s.(*smartContractGW)
 
-	a := kldbind.ABI{
-		ABI: abi.ABI{},
+	i := &contractInfo{
+		Address: "req1",
 	}
-	err := scgw.storeABI("req1", "0123456789AbcdeF0123456789abCdef0123456", &a)
+	err := scgw.storeContractInfo(i)
 	assert.Regexp("Failed to write ABI JSON", err.Error())
 }
 
-func TestLoadABIReadFail(t *testing.T) {
+func TestLoadABIForInstanceUnknown(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
@@ -611,8 +695,8 @@ func TestLoadABIReadFail(t *testing.T) {
 	)
 	scgw := s.(*smartContractGW)
 
-	_, err := scgw.loadABIForInstance("invalid")
-	assert.Regexp("Failed to find installed ABI for contract address", err.Error())
+	_, _, err := scgw.loadDeployMsgForInstance("invalid")
+	assert.Regexp("No contract instance registered with address invalid", err.Error())
 }
 
 func TestLoadABIBadData(t *testing.T) {
@@ -628,8 +712,8 @@ func TestLoadABIBadData(t *testing.T) {
 	scgw := s.(*smartContractGW)
 
 	ioutil.WriteFile(path.Join(dir, "badness.abi.json"), []byte(":not json"), 0644)
-	_, err := scgw.loadABIForInstance("badness")
-	assert.Regexp("Failed to find installed ABI for contract address", err.Error())
+	_, err := scgw.loadDeployMsgForFactory("badness")
+	assert.Regexp("No ABI found with ID badness", err.Error())
 }
 
 func TestBuildIndex(t *testing.T) {
@@ -637,9 +721,12 @@ func TestBuildIndex(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
+	// Migration of legacy contract interfaces
+
 	var emptySwagger spec.Swagger
 	swaggerBytes, _ := json.Marshal(&emptySwagger)
 	ioutil.WriteFile(path.Join(dir, "contract_0123456789abcdef0123456789abcdef01234567.swagger.json"), swaggerBytes, 0644)
+
 	okSwagger := spec.Swagger{
 		SwaggerProps: spec.SwaggerProps{
 			Info: &spec.Info{
@@ -649,13 +736,51 @@ func TestBuildIndex(t *testing.T) {
 			},
 		},
 	}
+	okSwagger.Info.AddExtension("x-kaleido-deployment-id", "840b629f-2e46-413b-9671-553a886ca7bb")
 	swaggerBytes, _ = json.Marshal(&okSwagger)
 	ioutil.WriteFile(path.Join(dir, "contract_123456789abcdef0123456789abcdef012345678.swagger.json"), swaggerBytes, 0644)
+
+	regSwagger := spec.Swagger{
+		SwaggerProps: spec.SwaggerProps{
+			Info: &spec.Info{
+				InfoProps: spec.InfoProps{
+					Title: "good one",
+				},
+			},
+		},
+	}
+	regSwagger.Info.AddExtension("x-kaleido-deployment-id", "840b629f-2e46-413b-9671-553a886ca7bb")
+	regSwagger.Info.AddExtension("x-kaleido-registered-name", "migratedcontract")
+	swaggerBytes, _ = json.Marshal(&regSwagger)
 	ioutil.WriteFile(path.Join(dir, "contract_23456789abcdef0123456789abcdef0123456789.swagger.json"), swaggerBytes, 0644)
+
 	ioutil.WriteFile(path.Join(dir, "contract_3456789abcdef0123456789abcdef01234567890.swagger.json"), []byte(":bad swagger"), 0644)
-	ioutil.WriteFile(path.Join(dir, "abi_840b629f-2e46-413b-9671-553a886ca7bb.swagger.json"), swaggerBytes, 0644)
-	ioutil.WriteFile(path.Join(dir, "abi_e27be4cf-6ae2-411e-8088-db2992618938.swagger.json"), swaggerBytes, 0644)
-	ioutil.WriteFile(path.Join(dir, "abi_519526b2-0879-41f4-93c0-09acaa62e2da.swagger.json"), []byte(":bad swagger"), 0644)
+
+	// New contract interfaces
+	info1 := &contractInfo{
+		Address:      "456789abcdef0123456789abcdef012345678901",
+		ABI:          "840b629f-2e46-413b-9671-553a886ca7bb",
+		Path:         "/contracts/456789abcdef0123456789abcdef012345678901",
+		SwaggerURL:   "http://localhost:8080/contracts/456789abcdef0123456789abcdef012345678901?swagger",
+		RegisteredAs: "",
+		TimeSorted: kldmessages.TimeSorted{
+			CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
+		},
+	}
+	info1Bytes, _ := json.Marshal(info1)
+	ioutil.WriteFile(path.Join(dir, "contract_456789abcdef0123456789abcdef012345678901.instance.json"), info1Bytes, 0644)
+	info2 := &contractInfo{
+		Address:      "56789abcdef0123456789abcdef0123456789012",
+		ABI:          "840b629f-2e46-413b-9671-553a886ca7bb",
+		Path:         "/contracts/somecontract",
+		SwaggerURL:   "http://localhost:8080/contracts/somecontract?swagger",
+		RegisteredAs: "somecontract",
+		TimeSorted: kldmessages.TimeSorted{
+			CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
+		},
+	}
+	info2Bytes, _ := json.Marshal(info2)
+	ioutil.WriteFile(path.Join(dir, "contract_56789abcdef0123456789abcdef0123456789012.instance.json"), info2Bytes, 0644)
 
 	deployMsg := &kldmessages.DeployContract{
 		ContractName: "abideployable",
@@ -673,9 +798,8 @@ func TestBuildIndex(t *testing.T) {
 	)
 	scgw := s.(*smartContractGW)
 
-	assert.Equal(2, len(scgw.contractIndex))
+	assert.Equal(4, len(scgw.contractIndex))
 	info := scgw.contractIndex["123456789abcdef0123456789abcdef012345678"].(*contractInfo)
-	assert.Equal("good one", info.Name)
 	assert.Equal("123456789abcdef0123456789abcdef012345678", info.Address)
 
 	req := httptest.NewRequest("GET", "/contracts", bytes.NewReader([]byte{}))
@@ -686,9 +810,19 @@ func TestBuildIndex(t *testing.T) {
 	var contractInfos []*contractInfo
 	err := json.NewDecoder(res.Body).Decode(&contractInfos)
 	assert.NoError(err)
-	assert.Equal(2, len(contractInfos))
+	assert.Equal(4, len(contractInfos))
 	assert.Equal("123456789abcdef0123456789abcdef012345678", contractInfos[0].Address)
 	assert.Equal("23456789abcdef0123456789abcdef0123456789", contractInfos[1].Address)
+	assert.Equal("456789abcdef0123456789abcdef012345678901", contractInfos[2].Address)
+	assert.Equal("56789abcdef0123456789abcdef0123456789012", contractInfos[3].Address)
+
+	somecontractAddr, err := scgw.resolveContractAddr("somecontract")
+	assert.NoError(err)
+	assert.Equal("56789abcdef0123456789abcdef0123456789012", somecontractAddr)
+
+	migratedcontractAddr, err := scgw.resolveContractAddr("migratedcontract")
+	assert.NoError(err)
+	assert.Equal("23456789abcdef0123456789abcdef0123456789", migratedcontractAddr)
 
 	req = httptest.NewRequest("GET", "/abis", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
@@ -701,23 +835,6 @@ func TestBuildIndex(t *testing.T) {
 	assert.Equal(2, len(abiInfos))
 	assert.Equal("840b629f-2e46-413b-9671-553a886ca7bb", abiInfos[0].ID)
 	assert.Equal("e27be4cf-6ae2-411e-8088-db2992618938", abiInfos[1].ID)
-}
-
-func TestAddFileToSwaggerIndexOpenFail(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: dir,
-		},
-		nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-
-	scgw.addFileToContractIndex("", path.Join(dir, "baddir", "0123456789abcdef0123456789abcdef01234567.swagger.json"), time.Now())
-	assert.Equal(0, len(scgw.contractIndex))
 }
 
 func TestGetContractOrABIFail(t *testing.T) {
@@ -734,9 +851,9 @@ func TestGetContractOrABIFail(t *testing.T) {
 	scgw := s.(*smartContractGW)
 
 	scgw.contractIndex["123456789abcdef0123456789abcdef012345678"] = &contractInfo{
-		Name:    "zombie",
 		Address: "123456789abcdef0123456789abcdef012345678",
 	}
+	scgw.abiIndex["badabi"] = &abiInfo{}
 
 	// One that exists in the index, but for some reason the file isn't there - should be a 500
 	req := httptest.NewRequest("GET", "/contracts/123456789abcdef0123456789abcdef012345678?openapi", bytes.NewReader([]byte{}))
@@ -746,13 +863,21 @@ func TestGetContractOrABIFail(t *testing.T) {
 	router.ServeHTTP(res, req)
 	assert.Equal(500, res.Result().StatusCode)
 
-	// One that exists in the index, but for some reason the file isn't there - should be a 500
+	// One that does not exist in the index
 	req = httptest.NewRequest("GET", "/contracts/nonexistent?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router = &httprouter.Router{}
 	scgw.AddRoutes(router)
 	router.ServeHTTP(res, req)
 	assert.Equal(404, res.Result().StatusCode)
+
+	// One that exists in the index, but for some reason the file isn't there - should be a 500
+	req = httptest.NewRequest("GET", "/abis/badabi?openapi", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router = &httprouter.Router{}
+	scgw.AddRoutes(router)
+	router.ServeHTTP(res, req)
+	assert.Equal(500, res.Result().StatusCode)
 
 	// One that simply doesn't exist in the index - should be a 404
 	req = httptest.NewRequest("GET", "/abis/23456789abcdef0123456789abcdef0123456789?openapi", bytes.NewReader([]byte{}))
@@ -777,7 +902,6 @@ func TestGetContractUI(t *testing.T) {
 	scgw := s.(*smartContractGW)
 
 	scgw.contractIndex["123456789abcdef0123456789abcdef012345678"] = &contractInfo{
-		Name:    "any",
 		Address: "123456789abcdef0123456789abcdef012345678",
 	}
 
@@ -968,40 +1092,6 @@ func TestAddABIZipNestedListContracts(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal(1, len(solFiles))
 	assert.Equal("solfiles/SimpleEvents.sol:SimpleEvents", solFiles[0])
-}
-
-func TestAddABIStoreFail(t *testing.T) {
-	log.SetLevel(log.DebugLevel)
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: path.Join(dir, "badness"),
-		},
-		nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("files", "SimpleEvents.sol")
-	part.Write([]byte(simpleEventsSource()))
-	writer.Close()
-
-	req := httptest.NewRequest("POST", "/abis", body)
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	res := httptest.NewRecorder()
-	router := &httprouter.Router{}
-	scgw.AddRoutes(router)
-	router.ServeHTTP(res, req)
-
-	assert.Equal(500, res.Result().StatusCode)
-	errInfo := &restErrMsg{}
-	err := json.NewDecoder(res.Body).Decode(errInfo)
-	assert.NoError(err)
-	assert.Regexp("Failed to write OpenAPI JSON", errInfo.Message)
 }
 
 func TestAddABIBadZip(t *testing.T) {
@@ -1238,6 +1328,38 @@ func TestStoreDeployableABIMissingABI(t *testing.T) {
 
 	_, err := scgw.storeDeployableABI(&kldmessages.DeployContract{}, nil)
 	assert.EqualError(err, "Must supply ABI to install an existing ABI into the REST Gateway")
+}
+
+func TestAddFileToContractIndexBadFileSwallowsError(t *testing.T) {
+	dir := tempdir()
+	defer cleanup(dir)
+
+	s, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+		},
+		nil, nil, nil,
+	)
+	scgw := s.(*smartContractGW)
+
+	scgw.addFileToContractIndex("", "badness")
+}
+
+func TestAddFileToContractIndexBadDataSwallowsError(t *testing.T) {
+	dir := tempdir()
+	defer cleanup(dir)
+
+	s, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+		},
+		nil, nil, nil,
+	)
+	scgw := s.(*smartContractGW)
+
+	fileName := path.Join(dir, "badness")
+	ioutil.WriteFile(fileName, []byte("!JSON"), 0644)
+	scgw.addFileToContractIndex("", fileName)
 }
 
 func TestAddFileToABIIndexBadFileSwallowsError(t *testing.T) {

@@ -67,8 +67,8 @@ type SmartContractGateway interface {
 
 type smartContractGatewayInt interface {
 	SmartContractGateway
-	loadABIForInstance(addrHexNo0x string) (*kldbind.ABI, error)
 	resolveContractAddr(registeredName string) (string, error)
+	loadDeployMsgForInstance(addrHexNo0x string) (*kldmessages.DeployContract, string, error)
 	loadDeployMsgForFactory(abi string) (*kldmessages.DeployContract, error)
 	checkNameAvailable(name string) error
 }
@@ -76,8 +76,9 @@ type smartContractGatewayInt interface {
 // SmartContractGatewayConf configuration
 type SmartContractGatewayConf struct {
 	kldevents.SubscriptionManagerConf
-	StoragePath string `json:"storagePath"`
-	BaseURL     string `json:"baseURL"`
+	StoragePath    string             `json:"storagePath"`
+	BaseURL        string             `json:"baseURL"`
+	RemoteRegistry RemoteRegistryConf `json:"registry,omitempty"` // JSON only config - no commandline
 }
 
 // CobraInitContractGateway standard naming for contract gateway command params
@@ -122,6 +123,7 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, rpc kldeth.RPCClien
 	abi2swagger := kldopenapi.NewABI2Swagger(baseURL.Host, baseURL.Path, []string{baseURL.Scheme})
 	gw := &smartContractGW{
 		conf:                  conf,
+		rr:                    NewRemoteRegistry(&conf.RemoteRegistry),
 		abi2swagger:           abi2swagger,
 		contractIndex:         make(map[string]kldmessages.TimeSortable),
 		contractRegistrations: make(map[string]*contractInfo),
@@ -143,6 +145,7 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, rpc kldeth.RPCClien
 type smartContractGW struct {
 	conf                  *SmartContractGatewayConf
 	sm                    kldevents.SubscriptionManager
+	rr                    RemoteRegistry
 	abi2swagger           *kldopenapi.ABI2Swagger
 	r2e                   *rest2eth
 	contractIndex         map[string]kldmessages.TimeSortable
@@ -154,12 +157,11 @@ type smartContractGW struct {
 // contractInfo is the minimal data structure we keep in memory, indexed by address
 type contractInfo struct {
 	kldmessages.TimeSorted
-	Address     string `json:"address"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Path        string `json:"path"`
-	ABI         string `json:"abi"`
-	SwaggerURL  string `json:"openapi"`
+	Address      string `json:"address"`
+	Path         string `json:"path"`
+	ABI          string `json:"abi"`
+	SwaggerURL   string `json:"openapi"`
+	RegisteredAs string `json:"registeredAs"`
 }
 
 // abiInfo is the minimal data structure we keep in memory, indexed by our own UUID
@@ -207,80 +209,72 @@ func (g *smartContractGW) PostDeploy(msg *kldmessages.TransactionReceipt) error 
 
 	// Generate and store the swagger
 	registeredName := msg.RegisterAs
-	swagger, err := g.genSwagger(requestID, deployMsg.ContractName, deployMsg.ABI, deployMsg.DevDoc, addrHexNo0x, registeredName)
-	if err != nil {
-		return err
+	if registeredName == "" {
+		registeredName = addrHexNo0x
 	}
-	if _, err = g.addToContractIndex(addrHexNo0x, swagger, time.Now().UTC()); err != nil {
+	contractInfo := &contractInfo{
+		Address:      addrHexNo0x,
+		ABI:          requestID,
+		Path:         "/contracts/" + registeredName,
+		SwaggerURL:   g.conf.BaseURL + "/contracts/" + registeredName + "?swagger",
+		RegisteredAs: msg.RegisterAs,
+		TimeSorted: kldmessages.TimeSorted{
+			CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
+		},
+	}
+	if err = g.storeContractInfo(contractInfo); err != nil {
 		return err
 	}
 
-	urlBase := g.conf.BaseURL + swagger.BasePath
-	msg.ContractSwagger = urlBase + "?openapi"
-	msg.ContractUI = urlBase + "?ui"
-
-	// Also store the corresponding ABI
-	return g.storeABI(requestID, addrHexNo0x, deployMsg.ABI)
+	msg.ContractSwagger = contractInfo.SwaggerURL
+	msg.ContractUI = g.conf.BaseURL + "/contracts/" + registeredName + "?ui"
+	return nil
 }
 
-func (g *smartContractGW) genSwagger(requestID, apiName string, abi *kldbind.ABI, devdoc string, addrHexNo0x, registerAs string) (*spec.Swagger, error) {
-
-	if abi == nil {
-		return nil, fmt.Errorf("ABI cannot be nil")
-	}
-
+func (g *smartContractGW) swaggerForABI(abiID, apiName string, abi *kldbind.ABI, devdoc string, addrHexNo0x, registerAs string) *spec.Swagger {
 	// Ensure we have a contract name in all cases, as the Swagger
 	// won't be valid without a title
 	if apiName == "" {
-		apiName = requestID
+		apiName = abiID
 	}
 	var swagger *spec.Swagger
-	var id, prefix string
 	if addrHexNo0x != "" {
 		pathSuffix := url.QueryEscape(registerAs)
 		if pathSuffix == "" {
 			pathSuffix = addrHexNo0x
 		}
 		swagger = g.abi2swagger.Gen4Instance("/contracts/"+pathSuffix, apiName, &abi.ABI, devdoc)
-		id = addrHexNo0x
-		prefix = "contract"
 		if registerAs != "" {
 			swagger.Info.AddExtension("x-kaleido-registered-name", pathSuffix)
 		}
 	} else {
-		swagger = g.abi2swagger.Gen4Factory("/abis/"+requestID, apiName, &abi.ABI, devdoc)
-		id = requestID
-		prefix = "abi"
+		swagger = g.abi2swagger.Gen4Factory("/abis/"+abiID, apiName, &abi.ABI, devdoc)
 	}
 
 	// Add in an extension to the Swagger that points back at the filename of the deployment info
-	if requestID != "" {
-		swagger.Info.AddExtension("x-kaleido-deployment-id", requestID)
+	if abiID != "" {
+		swagger.Info.AddExtension("x-kaleido-deployment-id", abiID)
 	}
 
-	swaggerFile := path.Join(g.conf.StoragePath, prefix+"_"+id+".swagger.json")
-	swaggerBytes, _ := json.MarshalIndent(&swagger, "", "  ")
-	if err := ioutil.WriteFile(swaggerFile, swaggerBytes, 0664); err != nil {
-		return nil, fmt.Errorf("Failed to write OpenAPI JSON: %s", err)
-	}
-	return swagger, nil
+	return swagger
 }
 
-func (g *smartContractGW) storeABI(requestID, addrHexNo0x string, abi *kldbind.ABI) error {
-	abiFile := path.Join(g.conf.StoragePath, "contract_"+addrHexNo0x+".abi.json")
-	abiBytes, _ := json.MarshalIndent(abi, "", "  ")
-	log.Infof("%s: Storing ABI JSON to '%s'", requestID, abiFile)
-	if err := ioutil.WriteFile(abiFile, abiBytes, 0664); err != nil {
+func (g *smartContractGW) storeContractInfo(info *contractInfo) error {
+	if err := g.addToContractIndex(info); err != nil {
+		return err
+	}
+	infoFile := path.Join(g.conf.StoragePath, "contract_"+info.Address+".instance.json")
+	instanceBytes, _ := json.MarshalIndent(info, "", "  ")
+	log.Infof("%s: Storing contract instance JSON to '%s'", info.ABI, infoFile)
+	if err := ioutil.WriteFile(infoFile, instanceBytes, 0664); err != nil {
 		return fmt.Errorf("Failed to write ABI JSON: %s", err)
 	}
 	return nil
 }
 
 func (g *smartContractGW) resolveContractAddr(registeredName string) (string, error) {
-	info, exists := g.contractRegistrations[registeredName]
-	if !exists {
-		info, exists = g.contractRegistrations[url.QueryEscape(registeredName)]
-	}
+	nameUnescaped, _ := url.QueryUnescape(registeredName)
+	info, exists := g.contractRegistrations[nameUnescaped]
 	if !exists {
 		return "", fmt.Errorf("Failed to find installed contract address for '%s'", registeredName)
 	}
@@ -288,28 +282,32 @@ func (g *smartContractGW) resolveContractAddr(registeredName string) (string, er
 	return info.Address, nil
 }
 
-func (g *smartContractGW) loadABIForInstance(addrHexNo0x string) (*kldbind.ABI, error) {
-	abiFile := path.Join(g.conf.StoragePath, "contract_"+addrHexNo0x+".abi.json")
-	abiBytes, err := ioutil.ReadFile(abiFile)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to find installed ABI for contract address 0x%s: %s", addrHexNo0x, err)
+func (g *smartContractGW) loadDeployMsgForInstance(addrHexNo0x string) (*kldmessages.DeployContract, string, error) {
+	info, exists := g.contractIndex[addrHexNo0x]
+	if !exists {
+		return nil, "", fmt.Errorf("No contract instance registered with address %s", addrHexNo0x)
 	}
-	a := kldbind.ABI{}
-	if err = json.Unmarshal(abiBytes, &a); err != nil {
-		return nil, fmt.Errorf("Failed to load installed ABI for contract address 0x%s: %s", addrHexNo0x, err)
-	}
-	return &a, nil
+	abiID := info.(*contractInfo).ABI
+	deployMsg, err := g.loadDeployMsgForFactory(abiID)
+	return deployMsg, abiID, err
 }
 
 func (g *smartContractGW) loadDeployMsgForFactory(id string) (*kldmessages.DeployContract, error) {
 	deployFile := path.Join(g.conf.StoragePath, "abi_"+id+".deploy.json")
 	deployBytes, err := ioutil.ReadFile(deployFile)
+	var msg *kldmessages.DeployContract
 	if err != nil {
-		return nil, fmt.Errorf("Failed to find ABI with ID %s: %s", id, err)
-	}
-	msg := &kldmessages.DeployContract{}
-	if err = json.Unmarshal(deployBytes, msg); err != nil {
-		return nil, fmt.Errorf("Failed to load ABI with ID %s: %s", id, err)
+		log.Infof("ABI with ID %s not found locally: %s", id, err)
+		if msg, err = g.rr.loadFactoryByID(id); err != nil {
+			return nil, fmt.Errorf("Failed to load ABI with ID %s: %s", id, err)
+		} else if msg == nil {
+			return nil, fmt.Errorf("No ABI found with ID %s", id)
+		}
+	} else {
+		msg = &kldmessages.DeployContract{}
+		if err = json.Unmarshal(deployBytes, msg); err != nil {
+			return nil, fmt.Errorf("Failed to load ABI with ID %s: %s", id, err)
+		}
 	}
 	return msg, nil
 }
@@ -349,10 +347,7 @@ func (g *smartContractGW) storeDeployableABI(msg *kldmessages.DeployContract, co
 	// We store the swagger in a generic format that can be used to deploy
 	// additional instances, or generically call other instances
 	// Generate and store the swagger
-	swagger, err := g.genSwagger(requestID, msg.ContractName, msg.ABI, msg.DevDoc, "", "")
-	if err != nil {
-		return nil, err
-	}
+	swagger := g.swaggerForABI(requestID, msg.ContractName, msg.ABI, msg.DevDoc, "", "")
 	msg.Description = swagger.Info.Description // Swagger generation parses the devdoc
 	info := g.addToABIIndex(requestID, msg, time.Now().UTC())
 
@@ -390,7 +385,8 @@ func (g *smartContractGW) writeAbiInfo(requestID string, msg *kldmessages.Deploy
 
 func (g *smartContractGW) buildIndex() {
 	log.Infof("Building installed smart contract index")
-	contractMatcher, _ := regexp.Compile("^contract_([0-9a-z]{40})\\.swagger\\.json$")
+	legacyContractMatcher, _ := regexp.Compile("^contract_([0-9a-z]{40})\\.swagger\\.json$")
+	instanceMatcher, _ := regexp.Compile("^contract_([0-9a-z]{40})\\.instance\\.json$")
 	abiMatcher, _ := regexp.Compile("^abi_([0-9a-z-]+)\\.deploy.json$")
 	files, err := ioutil.ReadDir(g.conf.StoragePath)
 	if err != nil {
@@ -399,10 +395,13 @@ func (g *smartContractGW) buildIndex() {
 	}
 	for _, file := range files {
 		fileName := file.Name()
-		contractGroups := contractMatcher.FindStringSubmatch(fileName)
+		legacyContractGroups := legacyContractMatcher.FindStringSubmatch(fileName)
 		abiGroups := abiMatcher.FindStringSubmatch(fileName)
-		if contractGroups != nil {
-			g.addFileToContractIndex(contractGroups[1], path.Join(g.conf.StoragePath, fileName), file.ModTime())
+		instanceGroups := instanceMatcher.FindStringSubmatch(fileName)
+		if legacyContractGroups != nil {
+			g.migrateLegacyContract(legacyContractGroups[1], path.Join(g.conf.StoragePath, fileName), file.ModTime())
+		} else if instanceGroups != nil {
+			g.addFileToContractIndex(instanceGroups[1], path.Join(g.conf.StoragePath, fileName))
 		} else if abiGroups != nil {
 			g.addFileToABIIndex(abiGroups[1], path.Join(g.conf.StoragePath, fileName), file.ModTime())
 		}
@@ -410,7 +409,7 @@ func (g *smartContractGW) buildIndex() {
 	log.Infof("Smart contract index built. %d entries", len(g.contractIndex))
 }
 
-func (g *smartContractGW) addFileToContractIndex(address, fileName string, createdTime time.Time) {
+func (g *smartContractGW) migrateLegacyContract(address, fileName string, createdTime time.Time) {
 	swaggerFile, err := os.OpenFile(fileName, os.O_RDONLY, 0)
 	if err != nil {
 		log.Errorf("Failed to load Swagger file %s: %s", fileName, err)
@@ -423,9 +422,54 @@ func (g *smartContractGW) addFileToContractIndex(address, fileName string, creat
 		log.Errorf("Failed to parse Swagger file %s: %s", fileName, err)
 		return
 	}
-	if swagger.Info != nil {
-		g.addToContractIndex(address, &swagger, createdTime)
+	if swagger.Info == nil {
+		log.Errorf("Failed to migrate invalid Swagger file %s", fileName)
+		return
 	}
+	var registeredAs string
+	if ext, exists := swagger.Info.Extensions["x-kaleido-registered-name"]; exists {
+		registeredAs = ext.(string)
+	}
+	if ext, exists := swagger.Info.Extensions["x-kaleido-deployment-id"]; exists {
+		info := &contractInfo{
+			Address:      address,
+			ABI:          ext.(string),
+			Path:         "/contracts/" + address,
+			SwaggerURL:   g.conf.BaseURL + "/contracts/" + address + "?swagger",
+			RegisteredAs: registeredAs,
+			TimeSorted: kldmessages.TimeSorted{
+				CreatedISO8601: createdTime.UTC().Format(time.RFC3339),
+			},
+		}
+		if err := g.storeContractInfo(info); err != nil {
+			log.Errorf("Failed to write migrated instance file: %s", err)
+			return
+		}
+
+		if err := os.Remove(fileName); err != nil {
+			log.Errorf("Failed to clean-up migrated file %s: %s", fileName, err)
+		}
+
+	} else {
+		log.Warnf("Swagger cannot be migrated due to missing 'x-kaleido-deployment-id' extension: %s", fileName)
+	}
+
+}
+
+func (g *smartContractGW) addFileToContractIndex(address, fileName string) {
+	contractFile, err := os.OpenFile(fileName, os.O_RDONLY, 0)
+	if err != nil {
+		log.Errorf("Failed to load contract instance file %s: %s", fileName, err)
+		return
+	}
+	defer contractFile.Close()
+	var contractInfo contractInfo
+	err = json.NewDecoder(bufio.NewReader(contractFile)).Decode(&contractInfo)
+	if err != nil {
+		log.Errorf("Failed to parse contract instnace deployment file %s: %s", fileName, err)
+		return
+	}
+	g.addToContractIndex(&contractInfo)
 }
 
 func (g *smartContractGW) addFileToABIIndex(id, fileName string, createdTime time.Time) {
@@ -451,35 +495,18 @@ func (g *smartContractGW) checkNameAvailable(registerAs string) error {
 	return nil
 }
 
-func (g *smartContractGW) addToContractIndex(address string, swagger *spec.Swagger, createdTime time.Time) (*contractInfo, error) {
+func (g *smartContractGW) addToContractIndex(info *contractInfo) error {
 	g.idxLock.Lock()
 	defer g.idxLock.Unlock()
-	var abiID string
-	if ext, exists := swagger.Info.Extensions["x-kaleido-deployment-id"]; exists {
-		abiID = ext.(string)
-	}
-	info := &contractInfo{
-		Address:     address,
-		Name:        swagger.Info.Title,
-		Description: swagger.Info.Description,
-		ABI:         abiID,
-		Path:        "/contracts/" + address,
-		SwaggerURL:  g.conf.BaseURL + "/contracts/" + address + "?swagger",
-		TimeSorted: kldmessages.TimeSorted{
-			CreatedISO8601: createdTime.UTC().Format(time.RFC3339),
-		},
-	}
-	if registerAs, exists := swagger.Info.Extensions["x-kaleido-registered-name"]; exists {
-		info.Path = "/contracts/" + registerAs.(string)
-		info.SwaggerURL = g.conf.BaseURL + "/contracts/" + registerAs.(string) + "?swagger"
+	if info.RegisteredAs != "" {
 		// Protect against overwrite
-		if err := g.checkNameAvailable(registerAs.(string)); err != nil {
-			return nil, err
+		if err := g.checkNameAvailable(info.RegisteredAs); err != nil {
+			return err
 		}
-		g.contractRegistrations[registerAs.(string)] = info
+		g.contractRegistrations[info.RegisteredAs] = info
 	}
-	g.contractIndex[address] = info
-	return info, nil
+	g.contractIndex[info.Address] = info
+	return nil
 }
 
 func (g *smartContractGW) addToABIIndex(id string, deployMsg *kldmessages.DeployContract, createdTime time.Time) *abiInfo {
@@ -711,9 +738,11 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 	// For safety we always check our sanitized address index in memory, before checking the filesystem
 	from := req.FormValue("from")
 	info, exists := index[id]
+	var registeredName string
+	var err error
 	if !exists && prefix == "contract" {
-		var err error
-		if id, err = g.resolveContractAddr(params.ByName("address")); err != nil {
+		registeredName = params.ByName("address")
+		if id, err = g.resolveContractAddr(registeredName); err != nil {
 			g.gatewayErrReply(res, req, err, 404)
 			return
 		}
@@ -727,28 +756,33 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 			}
 			g.writeHTMLForUI(prefix, id, fromQuery, (prefix == "abi"), res)
 		} else if swaggerRequest {
-			swaggerPath := path.Join(g.conf.StoragePath, prefix+"_"+id+".swagger.json")
-			log.Infof("Returning %s", swaggerPath)
-			swaggerBytes, err := ioutil.ReadFile(swaggerPath)
-			if err != nil {
-				g.gatewayErrReply(res, req, fmt.Errorf("Failed to read OpenAPI definition"), 500)
-				return
-			}
-			if from != "" {
-				var swagger spec.Swagger
-				err = json.Unmarshal(swaggerBytes, &swagger)
+			var deployMsg *kldmessages.DeployContract
+			var abiID string
+			if prefix == "contract" {
+				deployMsg, abiID, err = g.loadDeployMsgForInstance(id)
 				if err != nil {
-					g.gatewayErrReply(res, req, fmt.Errorf("Failed to parse stored OpenAPI definition"), 500)
+					g.gatewayErrReply(res, req, err, 500)
 					return
 				}
+			} else {
+				abiID = id
+				deployMsg, err = g.loadDeployMsgForFactory(abiID)
+				if err != nil {
+					g.gatewayErrReply(res, req, err, 500)
+					return
+				}
+			}
+			swagger := g.swaggerForABI(abiID, deployMsg.ContractName, deployMsg.ABI, deployMsg.DevDoc, params.ByName("address"), registeredName)
+			if from != "" {
 				if swagger.Parameters != nil {
 					if param, exists := swagger.Parameters["fromParam"]; exists {
 						param.SimpleSchema.Default = from
 						swagger.Parameters["fromParam"] = param
 					}
 				}
-				swaggerBytes, _ = json.Marshal(&swagger)
 			}
+			swaggerBytes, _ := json.MarshalIndent(&swagger, "", "  ")
+
 			log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
 			res.Header().Set("Content-Type", "application/json")
 			if vs := req.Form["download"]; len(vs) > 0 {
@@ -782,20 +816,29 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 	// Note: there is currently no body payload required for the POST
 
 	abiID := params.ByName("abi")
-	deployMsg, err := g.loadDeployMsgForFactory(abiID)
+	_, err := g.loadDeployMsgForFactory(abiID)
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 404)
 		return
 	}
 
-	registeredName := getKLDParam("register", req, false)
-	swagger, err := g.genSwagger(abiID, deployMsg.ContractName, deployMsg.ABI, deployMsg.DevDoc, addrHexNo0x, registeredName)
-	if err != nil {
-		g.gatewayErrReply(res, req, err, 400)
-		return
+	registerAs := getKLDParam("register", req, false)
+	registeredName := registerAs
+	if registeredName == "" {
+		registeredName = addrHexNo0x
+	}
+	contractInfo := &contractInfo{
+		Address:      addrHexNo0x,
+		ABI:          abiID,
+		Path:         "/contracts/" + registeredName,
+		SwaggerURL:   g.conf.BaseURL + "/contracts/" + registeredName + "?swagger",
+		RegisteredAs: registerAs,
+		TimeSorted: kldmessages.TimeSorted{
+			CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
+		},
 	}
 
-	contractInfo, err := g.addToContractIndex(addrHexNo0x, swagger, time.Now().UTC())
+	err = g.storeContractInfo(contractInfo)
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 409)
 		return

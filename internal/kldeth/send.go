@@ -75,15 +75,16 @@ func (tx *Txn) Call(rpc RPCClient) (res []byte, err error) {
 	if len(hexString) == 0 || hexString == "0x" {
 		return nil, nil
 	}
-	if strings.HasPrefix(hexString, errorFunctionSelector) {
+	retStrLen := uint64(len(hexString))
+	if strings.HasPrefix(hexString, errorFunctionSelector) && retStrLen > 138 {
 		// The call reverted. Process the error response
 		dataOffsetHex := new(big.Int)
 		dataOffsetHex.SetString(hexString[10:74], 16)
 		errorStringLen := new(big.Int)
 		errorStringLen.SetString(hexString[74:138], 16)
 		hexStringEnd := errorStringLen.Uint64()*2 + 138
-		if hexStringEnd > uint64(len(hexString)) {
-			hexStringEnd = uint64(len(hexString))
+		if hexStringEnd > retStrLen {
+			hexStringEnd = retStrLen
 		}
 		errorStringHex := hexString[138:hexStringEnd]
 		errorStringBytes, err := hex.DecodeString(errorStringHex)

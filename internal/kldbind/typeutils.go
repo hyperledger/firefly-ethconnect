@@ -52,14 +52,14 @@ func HexToHash(hex string) Hash {
 // ABITypeFor gives you a type for a string
 func ABITypeFor(typeName string) (ABIType, error) {
 	var t ABIType
-	t, err := abi.NewType(typeName)
+	t, err := abi.NewType(typeName, []abi.ArgumentMarshaling{})
 	return t, err
 }
 
 // ABITypeKnown gives you a type for a string you are sure is known
 func ABITypeKnown(typeName string) ABIType {
 	var t ABIType
-	t, _ = abi.NewType(typeName)
+	t, _ = abi.NewType(typeName, []abi.ArgumentMarshaling{})
 	return t
 }
 

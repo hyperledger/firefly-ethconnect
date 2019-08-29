@@ -693,7 +693,7 @@ func TestCallMethod(t *testing.T) {
 	method := &abi.Method{}
 	method.Name = "testFunc"
 
-	uint256Type, _ := abi.NewType("uint256")
+	uint256Type, _ := kldbind.ABITypeFor("uint256")
 	method.Outputs = append(method.Outputs, abi.Argument{Name: "retval1", Type: uint256Type})
 
 	rpc := &testRPCClient{
@@ -1174,15 +1174,15 @@ func TestSendTxnPackError(t *testing.T) {
 func TestProcessRLPBytesValidTypes(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := abi.NewType("string")
-	t2, _ := abi.NewType("int256[]")
-	t3, _ := abi.NewType("bool")
-	t4, _ := abi.NewType("bytes1")
-	t5, _ := abi.NewType("address")
-	t6, _ := abi.NewType("bytes4")
-	t7, _ := abi.NewType("uint256")
-	t8, _ := abi.NewType("int32[]")
-	t9, _ := abi.NewType("uint32[]")
+	t1, _ := kldbind.ABITypeFor("string")
+	t2, _ := kldbind.ABITypeFor("int256[]")
+	t3, _ := kldbind.ABITypeFor("bool")
+	t4, _ := kldbind.ABITypeFor("bytes1")
+	t5, _ := kldbind.ABITypeFor("address")
+	t6, _ := kldbind.ABITypeFor("bytes4")
+	t7, _ := kldbind.ABITypeFor("uint256")
+	t8, _ := kldbind.ABITypeFor("int32[]")
+	t9, _ := kldbind.ABITypeFor("uint32[]")
 	methodABI := &abi.Method{
 		Name:   "echoTypes2",
 		Inputs: []abi.Argument{},
@@ -1232,7 +1232,7 @@ func TestProcessRLPBytesValidTypes(t *testing.T) {
 func TestProcessRLPBytesInvalidNumber(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := abi.NewType("int32")
+	t1, _ := kldbind.ABITypeFor("int32")
 	_, err := mapOutput("test1", "int256", &t1, "not an int")
 	assert.EqualError(err, "Expected number type in JSON/RPC response for test1 (int256). Received string")
 }
@@ -1240,7 +1240,7 @@ func TestProcessRLPBytesInvalidNumber(t *testing.T) {
 func TestProcessRLPBytesInvalidBool(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := abi.NewType("bool")
+	t1, _ := kldbind.ABITypeFor("bool")
 	_, err := mapOutput("test1", "bool", &t1, "not a bool")
 	assert.EqualError(err, "Expected boolean in JSON/RPC response for test1 (bool). Received string")
 }
@@ -1248,7 +1248,7 @@ func TestProcessRLPBytesInvalidBool(t *testing.T) {
 func TestProcessRLPBytesInvalidString(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := abi.NewType("string")
+	t1, _ := kldbind.ABITypeFor("string")
 	_, err := mapOutput("test1", "string", &t1, 42)
 	assert.EqualError(err, "Expected string array in JSON/RPC response for test1 (string). Received int")
 }
@@ -1256,7 +1256,7 @@ func TestProcessRLPBytesInvalidString(t *testing.T) {
 func TestProcessRLPBytesInvalidByteArray(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := abi.NewType("address")
+	t1, _ := kldbind.ABITypeFor("address")
 	_, err := mapOutput("test1", "address", &t1, 42)
 	assert.EqualError(err, "Expected []byte array in JSON/RPC response for test1 (address). Received int")
 }
@@ -1264,7 +1264,7 @@ func TestProcessRLPBytesInvalidByteArray(t *testing.T) {
 func TestProcessRLPBytesInvalidArray(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := abi.NewType("int32[]")
+	t1, _ := kldbind.ABITypeFor("int32[]")
 	_, err := mapOutput("test1", "int32[]", &t1, 42)
 	assert.EqualError(err, "Expected slice in JSON/RPC response for test1 (int32[]). Received int")
 }
@@ -1272,7 +1272,7 @@ func TestProcessRLPBytesInvalidArray(t *testing.T) {
 func TestProcessRLPBytesInvalidArrayType(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := abi.NewType("int32[]")
+	t1, _ := kldbind.ABITypeFor("int32[]")
 	_, err := mapOutput("test1", "int32[]", &t1, []string{"wrong"})
 	assert.EqualError(err, "Expected number type in JSON/RPC response for test1 (int32[]). Received string")
 }
@@ -1280,7 +1280,7 @@ func TestProcessRLPBytesInvalidArrayType(t *testing.T) {
 func TestProcessRLPBytesInvalidTypeByte(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := abi.NewType("bool")
+	t1, _ := kldbind.ABITypeFor("bool")
 	t1.T = 42
 	_, err := mapOutput("test1", "randomness", &t1, 42)
 	assert.EqualError(err, "Unable to process type for test1 (randomness). Received int")
@@ -1289,7 +1289,7 @@ func TestProcessRLPBytesInvalidTypeByte(t *testing.T) {
 func TestProcessRLPBytesUnpackFailure(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := abi.NewType("string")
+	t1, _ := kldbind.ABITypeFor("string")
 	methodABI := &abi.Method{
 		Name:   "echoTypes2",
 		Inputs: []abi.Argument{},
@@ -1305,7 +1305,7 @@ func TestProcessRLPBytesUnpackFailure(t *testing.T) {
 func TestProcessOutputsTooFew(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := abi.NewType("string")
+	t1, _ := kldbind.ABITypeFor("string")
 	methodABI := &abi.Method{
 		Name:   "echoTypes2",
 		Inputs: []abi.Argument{},
@@ -1334,7 +1334,7 @@ func TestProcessOutputsTooMany(t *testing.T) {
 func TestProcessOutputsDefaultName(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := abi.NewType("string")
+	t1, _ := kldbind.ABITypeFor("string")
 	methodABI := &abi.Method{
 		Name:   "anonReturn",
 		Inputs: []abi.Argument{},
@@ -1353,7 +1353,7 @@ func TestProcessOutputsDefaultName(t *testing.T) {
 func TestProcessOutputsBadArgs(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := abi.NewType("int32[]")
+	t1, _ := kldbind.ABITypeFor("int32[]")
 	methodABI := &abi.Method{
 		Name:   "echoTypes2",
 		Inputs: []abi.Argument{},

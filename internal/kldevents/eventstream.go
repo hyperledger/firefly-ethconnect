@@ -36,6 +36,8 @@ import (
 )
 
 const (
+	// FromBlockLatest is the special string that means subscribe from the current block
+	FromBlockLatest = "latest"
 	// ErrorHandlingBlock blocks the event stream until the handler can accept the event
 	ErrorHandlingBlock = "block"
 	// ErrorHandlingSkip processes up to the retry behavior on the stream, then skips to the next event

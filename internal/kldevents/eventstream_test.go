@@ -401,7 +401,7 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 		},
 	}
 	addr := kldbind.HexToAddress("0x167f57a13a9c35ff92f0649d2be0e52b4f8ac3ca")
-	s, _ := sm.AddSubscription(&addr, event, stream.spec.ID)
+	s, _ := sm.AddSubscription(&addr, event, stream.spec.ID, "")
 	return s
 }
 

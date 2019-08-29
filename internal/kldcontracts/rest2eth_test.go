@@ -73,15 +73,15 @@ func (m *mockREST2EthDispatcher) DispatchDeployContractSync(msg *kldmessages.Dep
 
 type mockABILoader struct {
 	loadABIError           error
-	abi                    *kldbind.ABI
 	deployMsg              *kldmessages.DeployContract
+	abiID                  string
 	registeredContractAddr string
 	resolveContractErr     error
 	nameAvailableError     error
 }
 
-func (m *mockABILoader) loadABIForInstance(addrHexNo0x string) (*kldbind.ABI, error) {
-	return m.abi, m.loadABIError
+func (m *mockABILoader) loadDeployMsgForInstance(addrHexNo0x string) (*kldmessages.DeployContract, string, error) {
+	return m.deployMsg, m.abiID, m.loadABIError
 }
 
 func (m *mockABILoader) resolveContractAddr(registeredName string) (string, error) {
@@ -149,7 +149,6 @@ func newTestREST2Eth(dispatcher *mockREST2EthDispatcher) (*rest2eth, *mockRPC, *
 	a := &kldbind.ABI{ABI: *compiled.ABI}
 	deployMsg := &kldmessages.DeployContract{ABI: a}
 	abiLoader := &mockABILoader{
-		abi:       a,
 		deployMsg: deployMsg,
 	}
 	r := newREST2eth(abiLoader, mockRPC, nil, dispatcher, dispatcher)
@@ -551,7 +550,6 @@ func TestSendTransactionInvalidContract(t *testing.T) {
 	}
 	r, _, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
 	abiLoader := r.gw.(*mockABILoader)
-	abiLoader.abi = nil
 	abiLoader.loadABIError = fmt.Errorf("pop")
 	router.ServeHTTP(res, req)
 
@@ -582,7 +580,6 @@ func TestDeployContractInvalidABI(t *testing.T) {
 	req := httptest.NewRequest("POST", "/abis/abi1?kld-sync", bytes.NewReader(body))
 	req.Header.Add("x-kaleido-from", from)
 	abiLoader := r.gw.(*mockABILoader)
-	abiLoader.abi = nil
 	abiLoader.loadABIError = fmt.Errorf("pop")
 	router.ServeHTTP(res, req)
 

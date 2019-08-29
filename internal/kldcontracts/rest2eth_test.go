@@ -279,7 +279,15 @@ func TestSendTransactionSyncSuccess(t *testing.T) {
 	bodyMap["s"] = "testing"
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
-	receipt := &kldmessages.TransactionReceipt{}
+	receipt := &kldmessages.TransactionReceipt{
+		ReplyCommon: kldmessages.ReplyCommon{
+			Headers: kldmessages.ReplyHeaders{
+				CommonHeaders: kldmessages.CommonHeaders{
+					MsgType: kldmessages.MsgTypeTransactionSuccess,
+				},
+			},
+		},
+	}
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
 	}
@@ -296,6 +304,41 @@ func TestSendTransactionSyncSuccess(t *testing.T) {
 	assert.Equal(to, dispatcher.sendTransactionMsg.To)
 }
 
+func TestSendTransactionSyncFailure(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	bodyMap["i"] = 12345
+	bodyMap["s"] = "testing"
+	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
+	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
+	receipt := &kldmessages.TransactionReceipt{
+		ReplyCommon: kldmessages.ReplyCommon{
+			Headers: kldmessages.ReplyHeaders{
+				CommonHeaders: kldmessages.CommonHeaders{
+					MsgType: kldmessages.MsgTypeTransactionFailure,
+				},
+			},
+		},
+	}
+	dispatcher := &mockREST2EthDispatcher{
+		sendTransactionSyncReceipt: receipt,
+	}
+	_, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	body, _ := json.Marshal(&bodyMap)
+	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?kld-sync&kld-ethvalue=1234", bytes.NewReader(body))
+	req.Header.Add("x-kaleido-from", from)
+	router.ServeHTTP(res, req)
+
+	assert.Equal(json.Number("1234"), dispatcher.sendTransactionMsg.Value)
+
+	assert.Equal(500, res.Result().StatusCode)
+	assert.Equal(from, dispatcher.sendTransactionMsg.From)
+	assert.Equal(to, dispatcher.sendTransactionMsg.To)
+}
+
 func TestSendTransactionSyncViaABISuccess(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
@@ -307,7 +350,15 @@ func TestSendTransactionSyncViaABISuccess(t *testing.T) {
 	abi := "69a8898a-b6ef-4092-43bf-6cbffac56939"
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
-	receipt := &kldmessages.TransactionReceipt{}
+	receipt := &kldmessages.TransactionReceipt{
+		ReplyCommon: kldmessages.ReplyCommon{
+			Headers: kldmessages.ReplyHeaders{
+				CommonHeaders: kldmessages.CommonHeaders{
+					MsgType: kldmessages.MsgTypeTransactionSuccess,
+				},
+			},
+		},
+	}
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
 	}
@@ -333,7 +384,15 @@ func TestDeployContractSyncSuccess(t *testing.T) {
 	bodyMap["i"] = 12345
 	bodyMap["s"] = "testing"
 	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
-	receipt := &kldmessages.TransactionReceipt{}
+	receipt := &kldmessages.TransactionReceipt{
+		ReplyCommon: kldmessages.ReplyCommon{
+			Headers: kldmessages.ReplyHeaders{
+				CommonHeaders: kldmessages.CommonHeaders{
+					MsgType: kldmessages.MsgTypeTransactionSuccess,
+				},
+			},
+		},
+	}
 	dispatcher := &mockREST2EthDispatcher{
 		deployContractSyncReceipt: receipt,
 	}

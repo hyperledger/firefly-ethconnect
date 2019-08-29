@@ -16,12 +16,19 @@ package kldeth
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
+	"math/big"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	log "github.com/sirupsen/logrus"
+)
+
+const (
+	errorFunctionSelector = "0x08c379a0" // per https://solidity.readthedocs.io/en/v0.4.24/control-structures.html the signature of Error(string)
 )
 
 // calculateGas uses eth_estimateGas to estimate the gas required, providing a buffer
@@ -31,7 +38,14 @@ func (tx *Txn) calculateGas(rpc RPCClient, txArgs *sendTxArgs, gas *hexutil.Uint
 	defer cancel()
 
 	if err := rpc.CallContext(ctx, &gas, "eth_estimateGas", txArgs); err != nil {
-		return fmt.Errorf("Failed to calculate gas for transaction: %s", err)
+		// Now we attempt a call of the transaction, because that will return us a useful error in the case, of a revert.
+		estError := fmt.Errorf("Failed to calculate gas for transaction: %s", err)
+		log.Errorf(estError.Error())
+		if _, err := tx.Call(rpc); err != nil {
+			return err
+		}
+		// If the call succeeds, after estimate completed - we still need to fail with the estimate error
+		return estError
 	}
 	*gas = hexutil.Uint64(float64(*gas) * 1.2)
 	return nil
@@ -61,6 +75,26 @@ func (tx *Txn) Call(rpc RPCClient) (res []byte, err error) {
 	if len(hexString) == 0 || hexString == "0x" {
 		return nil, nil
 	}
+	retStrLen := uint64(len(hexString))
+	if strings.HasPrefix(hexString, errorFunctionSelector) && retStrLen > 138 {
+		// The call reverted. Process the error response
+		dataOffsetHex := new(big.Int)
+		dataOffsetHex.SetString(hexString[10:74], 16)
+		errorStringLen := new(big.Int)
+		errorStringLen.SetString(hexString[74:138], 16)
+		hexStringEnd := errorStringLen.Uint64()*2 + 138
+		if hexStringEnd > retStrLen {
+			hexStringEnd = retStrLen
+		}
+		errorStringHex := hexString[138:hexStringEnd]
+		errorStringBytes, err := hex.DecodeString(errorStringHex)
+		log.Warnf("EVM Reverted. Message='%s' Offset='%s'", errorStringBytes, dataOffsetHex.Text(10))
+		if err != nil {
+			return nil, fmt.Errorf("EVM reverted. Failed to decode error message")
+		}
+		return nil, fmt.Errorf("%s", errorStringBytes)
+	}
+	log.Debugf("eth_call response: %s", hexString)
 	res = common.FromHex(hexString)
 	return
 }

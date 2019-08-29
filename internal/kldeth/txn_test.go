@@ -32,10 +32,12 @@ import (
 // Slim interface for stubbing
 type testRPCClient struct {
 	mockError       error
+	firstFailOnly   bool
 	capturedMethod  string
 	capturedArgs    []interface{}
 	capturedMethod2 string
 	capturedArgs2   []interface{}
+	resultWrangler  func(interface{})
 }
 
 func (r *testRPCClient) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
@@ -46,7 +48,14 @@ func (r *testRPCClient) CallContext(ctx context.Context, result interface{}, met
 		r.capturedMethod2 = method
 		r.capturedArgs2 = args
 	}
-	return r.mockError
+	retErr := r.mockError
+	if r.firstFailOnly {
+		r.mockError = nil
+	}
+	if r.resultWrangler != nil {
+		r.resultWrangler(result)
+	}
+	return retErr
 }
 
 const (
@@ -147,7 +156,27 @@ func TestNewContractDeployTxnSimpleStoragePrivate(t *testing.T) {
 
 }
 
-func TestNewContractDeployTxnSimpleStorageCalcGasFail(t *testing.T) {
+func TestNewContractDeployTxnSimpleStorageCalcGasFailAndCallSucceeds(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.DeployContract
+	msg.Solidity = simpleStorage
+	msg.Parameters = []interface{}{float64(999999)}
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "0"
+	msg.GasPrice = "789"
+	tx, err := NewContractDeployTxn(&msg)
+	assert.Nil(err)
+	rpc := testRPCClient{}
+
+	rpc.mockError = fmt.Errorf("pop")
+	rpc.firstFailOnly = true
+	err = tx.Send(&rpc)
+	assert.EqualError(err, "Failed to calculate gas for transaction: pop")
+}
+
+func TestNewContractDeployTxnSimpleStorageCalcGasFailAndCallFailsAsExpected(t *testing.T) {
 	assert := assert.New(t)
 
 	var msg kldmessages.DeployContract
@@ -163,7 +192,7 @@ func TestNewContractDeployTxnSimpleStorageCalcGasFail(t *testing.T) {
 
 	rpc.mockError = fmt.Errorf("pop")
 	err = tx.Send(&rpc)
-	assert.EqualError(err, "Failed to calculate gas for transaction: pop")
+	assert.EqualError(err, "Call failed: pop")
 }
 
 func TestNewContractDeployMissingCompiledOrSolidity(t *testing.T) {
@@ -664,13 +693,24 @@ func TestCallMethod(t *testing.T) {
 	method := &abi.Method{}
 	method.Name = "testFunc"
 
-	rpc := &testRPCClient{}
+	uint256Type, _ := abi.NewType("uint256")
+	method.Outputs = append(method.Outputs, abi.Argument{Name: "retval1", Type: uint256Type})
 
-	_, err := CallMethod(rpc,
+	rpc := &testRPCClient{
+		resultWrangler: func(retString interface{}) {
+			retVal := "0x000000000000000000000000000000000000000000000000000000000000001"
+			reflect.ValueOf(retString).Elem().Set(reflect.ValueOf(retVal))
+		},
+	}
+
+	res, err := CallMethod(rpc,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
 		json.Number("12345"), method, params)
 	assert.NoError(err)
+	assert.Equal(map[string]interface{}{
+		"retval1": "1",
+	}, res)
 
 	assert.Equal("eth_call", rpc.capturedMethod)
 	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
@@ -703,6 +743,79 @@ func TestCallMethodFail(t *testing.T) {
 
 	assert.Equal("eth_call", rpc.capturedMethod)
 	assert.EqualError(err, "Call failed: pop")
+}
+
+func TestCallMethodRevert(t *testing.T) {
+	assert := assert.New(t)
+
+	params := []interface{}{}
+
+	method := &abi.Method{}
+	method.Name = "testFunc"
+
+	rpc := &testRPCClient{
+		resultWrangler: func(retString interface{}) {
+			retVal := "0x08c379a0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000114d75707065747279206465746563746564000000000000000000000000000000"
+			reflect.ValueOf(retString).Elem().Set(reflect.ValueOf(retVal))
+		},
+	}
+
+	_, err := CallMethod(rpc,
+		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
+		json.Number("12345"), method, params)
+
+	assert.Equal("eth_call", rpc.capturedMethod)
+	assert.EqualError(err, "Muppetry detected")
+}
+
+func TestCallMethodRevertBadStrLen(t *testing.T) {
+	assert := assert.New(t)
+
+	params := []interface{}{}
+
+	method := &abi.Method{}
+	method.Name = "testFunc"
+
+	rpc := &testRPCClient{
+		resultWrangler: func(retString interface{}) {
+			retVal := "0x08c379a0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000011111114d75707065747279206465746563746564000000000000000000000000000000"
+			reflect.ValueOf(retString).Elem().Set(reflect.ValueOf(retVal))
+		},
+	}
+
+	_, err := CallMethod(rpc,
+		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
+		json.Number("12345"), method, params)
+
+	assert.Equal("eth_call", rpc.capturedMethod)
+	// Should read up to the end of the padding, and not panic
+	assert.EqualError(err, "Muppetry detected\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+}
+
+func TestCallMethodRevertBadBytes(t *testing.T) {
+	assert := assert.New(t)
+
+	params := []interface{}{}
+
+	method := &abi.Method{}
+	method.Name = "testFunc"
+
+	rpc := &testRPCClient{
+		resultWrangler: func(retString interface{}) {
+			retVal := "0x08c379a0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000002!!!!"
+			reflect.ValueOf(retString).Elem().Set(reflect.ValueOf(retVal))
+		},
+	}
+
+	_, err := CallMethod(rpc,
+		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
+		json.Number("12345"), method, params)
+
+	assert.Equal("eth_call", rpc.capturedMethod)
+	assert.EqualError(err, "EVM reverted. Failed to decode error message")
 }
 
 func TestCallMethodBadArgs(t *testing.T) {
@@ -768,6 +881,32 @@ func TestSendTxnNodeAssignNonce(t *testing.T) {
 	assert.Equal("0x315", jsonSent["gasPrice"])
 	assert.Equal("0x0", jsonSent["value"])
 	assert.Regexp("0xe5537abb000000000000000000000000000000000000000000000000000000000000007b000000000000000000000000000000000000000000000000000000000000007b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000aa983ad2a0e0ed8ac639277f37be42f2a5d2618c00000000000000000000000000000000000000000000000000000000000000036162630000000000000000000000000000000000000000000000000000000000", jsonSent["data"])
+}
+
+func TestSendTxnRPFError(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{}
+
+	msg.MethodName = "testFunc"
+	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	msg.Nonce = "12345"
+	tx, err := NewSendTxn(&msg)
+	assert.Nil(err)
+	msgBytes, _ := json.Marshal(&msg)
+	log.Infof(string(msgBytes))
+
+	rpc := testRPCClient{
+		mockError: fmt.Errorf("pop"),
+	}
+
+	err = tx.Send(&rpc)
+	assert.EqualError(err, "pop")
 }
 
 func TestSendTxnInlineBadParamType(t *testing.T) {

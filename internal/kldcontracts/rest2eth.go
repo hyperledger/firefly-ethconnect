@@ -166,11 +166,12 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 			}
 			validAddress = true
 		}
-		a, err = r.gw.loadABIForInstance(c.addr)
+		deployMsg, _, err := r.gw.loadDeployMsgForInstance(addrParam)
 		if err != nil {
 			r.restErrReply(res, req, err, 404)
-			return
+			return c, err
 		}
+		a = deployMsg.ABI
 	}
 
 	// See addRoutes for all the various routes we support.

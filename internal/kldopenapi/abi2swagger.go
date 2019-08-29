@@ -539,6 +539,13 @@ func (c *ABI2Swagger) buildEventPOSTPath(eventSchema string, inst bool, event ab
 								Type:        []string{"string"},
 							},
 						},
+						"fromBlock": spec.Schema{
+							SchemaProps: spec.SchemaProps{
+								Description: "The block number to start the subscription from",
+								Type:        []string{"string"},
+								Default:     "latest",
+							},
+						},
 					},
 				},
 			},

@@ -43,12 +43,13 @@ type ethFilter struct {
 // SubscriptionInfo is the persisted data for the subscription
 type SubscriptionInfo struct {
 	kldmessages.TimeSorted
-	ID     string                     `json:"id,omitempty"`
-	Path   string                     `json:"path"`
-	Name   string                     `json:"name"`
-	Stream string                     `json:"stream"`
-	Filter persistedFilter            `json:"filter"`
-	Event  kldbind.MarshalledABIEvent `json:"event"`
+	ID        string                     `json:"id,omitempty"`
+	Path      string                     `json:"path"`
+	Name      string                     `json:"name"`
+	Stream    string                     `json:"stream"`
+	Filter    persistedFilter            `json:"filter"`
+	Event     kldbind.MarshalledABIEvent `json:"event"`
+	FromBlock string                     `json:"fromBlock,omitempty"`
 }
 
 // subscription is the runtime that manages the subscription
@@ -129,6 +130,13 @@ func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *Subscr
 }
 
 func (s *subscription) setInitialBlockHeight() (*big.Int, error) {
+	if s.info.FromBlock != "" && s.info.FromBlock != FromBlockLatest {
+		var i big.Int
+		if _, ok := i.SetString(s.info.FromBlock, 10); !ok {
+			return nil, fmt.Errorf("Failed to parse FromBlock as BigInt: %s", s.info.FromBlock)
+		}
+		return &i, nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	blockHeight := kldbind.HexBigInt{}

@@ -98,6 +98,9 @@ func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc kldeth.RPCClient)
 		subscriptions: make(map[string]*subscription),
 		streams:       make(map[string]*eventStream),
 	}
+	if conf.EventPollingIntervalSec <= 0 {
+		conf.EventPollingIntervalSec = 1
+	}
 	return sm
 }
 

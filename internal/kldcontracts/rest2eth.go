@@ -303,12 +303,12 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 }
 
 func (r *rest2eth) fromBodyOrForm(req *http.Request, body map[string]interface{}, param string) string {
-	val := body["stream"]
+	val := body[param]
 	valType := reflect.TypeOf(val)
 	if valType != nil && valType.Kind() == reflect.String && len(val.(string)) > 0 {
 		return val.(string)
 	}
-	return req.FormValue("stream")
+	return req.FormValue(param)
 }
 
 func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, addrStr string, abiEvent *abi.Event, body map[string]interface{}) {

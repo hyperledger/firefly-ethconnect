@@ -168,6 +168,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 				return
 			}
 			validAddress = true
+			addrParam = c.addr
 		}
 		deployMsg, _, err := r.gw.loadDeployMsgForInstance(addrParam)
 		if err != nil {

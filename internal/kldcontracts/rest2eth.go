@@ -154,7 +154,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 	var a *kldbind.ABI
 	abiID := params.ByName("abi")
 	if abiID != "" {
-		c.deployMsg, err = r.gw.loadDeployMsgForFactory(abiID)
+		c.deployMsg, _, err = r.gw.loadDeployMsgForFactory(abiID)
 		if err != nil {
 			r.restErrReply(res, req, err, 404)
 			return

@@ -512,6 +512,7 @@ func (g *smartContractGW) addToContractIndex(info *contractInfo) error {
 		if err := g.checkNameAvailable(info.RegisteredAs); err != nil {
 			return err
 		}
+		log.Infof("Registering %s as '%s'", info.Address, info.RegisteredAs)
 		g.contractRegistrations[info.RegisteredAs] = info
 	}
 	g.contractIndex[info.Address] = info
@@ -720,6 +721,22 @@ func (g *smartContractGW) suspendOrResumeStream(res http.ResponseWriter, req *ht
 	res.WriteHeader(status)
 }
 
+func (g *smartContractGW) resolveAddressOrName(id string) (deployMsg *kldmessages.DeployContract, registeredName string, info *contractInfo, err error) {
+	deployMsg, info, err = g.loadDeployMsgForInstance(id)
+	if err != nil {
+		var origErr = err
+		registeredName = id
+		if id, err = g.resolveContractAddr(registeredName); err != nil {
+			log.Infof("%s is not a friendly name: %s", registeredName, err)
+			return nil, "", nil, origErr
+		}
+		if deployMsg, info, err = g.loadDeployMsgForInstance(id); err != nil {
+			return nil, "", nil, err
+		}
+	}
+	return deployMsg, registeredName, info, err
+}
+
 func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
 
@@ -749,18 +766,9 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 	var info kldmessages.TimeSortable
 	var abiID string
 	if prefix == "contract" {
-		deployMsg, info, err = g.loadDeployMsgForInstance(id)
-		if err != nil {
-			registeredName = params.ByName("address")
-			var origErr = err
-			if id, err = g.resolveContractAddr(registeredName); err != nil {
-				g.gatewayErrReply(res, req, origErr, 404)
-				return
-			}
-			if deployMsg, info, err = g.loadDeployMsgForInstance(id); err != nil {
-				g.gatewayErrReply(res, req, err, 404)
-				return
-			}
+		if deployMsg, registeredName, info, err = g.resolveAddressOrName(params.ByName("address")); err != nil {
+			g.gatewayErrReply(res, req, err, 404)
+			return
 		}
 	} else {
 		abiID = id

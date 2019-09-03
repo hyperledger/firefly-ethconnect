@@ -79,9 +79,11 @@ type mockABILoader struct {
 	registeredContractAddr string
 	resolveContractErr     error
 	nameAvailableError     error
+	capturedAddr           string
 }
 
 func (m *mockABILoader) loadDeployMsgForInstance(addrHexNo0x string) (*kldmessages.DeployContract, *contractInfo, error) {
+	m.capturedAddr = addrHexNo0x
 	return m.deployMsg, m.contractInfo, m.loadABIError
 }
 
@@ -699,6 +701,30 @@ func TestSendTransactionParamInQuery(t *testing.T) {
 	assert.Equal(202, res.Result().StatusCode)
 }
 
+func TestSendTransactionRegisteredName(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	to := "transponster"
+	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
+	dispatcher := &mockREST2EthDispatcher{
+		asyncDispatchReply: &kldmessages.AsyncSentMsg{
+			Sent:    true,
+			Request: "request1",
+		},
+	}
+	r, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	abiLoader := r.gw.(*mockABILoader)
+	abiLoader.registeredContractAddr = "c6c572a18d31ff36d661d680c0060307e038dc47"
+	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?i=999&s=msg&kld-ethvalue=12345", bytes.NewReader([]byte("{}")))
+	req.Header.Set("x-kaleido-from", from)
+	router.ServeHTTP(res, req)
+
+	assert.Equal("c6c572a18d31ff36d661d680c0060307e038dc47", abiLoader.capturedAddr)
+	assert.Equal(202, res.Result().StatusCode)
+}
 func TestSendTransactionMissingParam(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()

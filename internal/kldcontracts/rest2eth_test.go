@@ -74,22 +74,23 @@ func (m *mockREST2EthDispatcher) DispatchDeployContractSync(msg *kldmessages.Dep
 type mockABILoader struct {
 	loadABIError           error
 	deployMsg              *kldmessages.DeployContract
-	abiID                  string
+	abiInfo                *abiInfo
+	contractInfo           *contractInfo
 	registeredContractAddr string
 	resolveContractErr     error
 	nameAvailableError     error
 }
 
-func (m *mockABILoader) loadDeployMsgForInstance(addrHexNo0x string) (*kldmessages.DeployContract, string, error) {
-	return m.deployMsg, m.abiID, m.loadABIError
+func (m *mockABILoader) loadDeployMsgForInstance(addrHexNo0x string) (*kldmessages.DeployContract, *contractInfo, error) {
+	return m.deployMsg, m.contractInfo, m.loadABIError
 }
 
 func (m *mockABILoader) resolveContractAddr(registeredName string) (string, error) {
 	return m.registeredContractAddr, m.resolveContractErr
 }
 
-func (m *mockABILoader) loadDeployMsgForFactory(addrHexNo0x string) (*kldmessages.DeployContract, error) {
-	return m.deployMsg, m.loadABIError
+func (m *mockABILoader) loadDeployMsgForFactory(addrHexNo0x string) (*kldmessages.DeployContract, *abiInfo, error) {
+	return m.deployMsg, m.abiInfo, m.loadABIError
 }
 
 func (m *mockABILoader) checkNameAvailable(name string) error {

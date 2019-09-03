@@ -384,7 +384,7 @@ func TestRegisterContractBadABI(t *testing.T) {
 	assert.Regexp("No ABI found with ID BADID", resBody["error"])
 }
 
-func TestLoadDeployMsgOK(t *testing.T) {
+func TestLoadDeployMsgOKNoABIInIndex(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
@@ -397,8 +397,9 @@ func TestLoadDeployMsgOK(t *testing.T) {
 	scgw := s.(*smartContractGW)
 	goodMsg := &kldmessages.DeployContract{}
 	deployBytes, _ := json.Marshal(goodMsg)
+	scgw.abiIndex["abi1"] = &abiInfo{}
 	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), deployBytes, 0644)
-	_, err := scgw.loadDeployMsgForFactory("abi1")
+	_, _, err := scgw.loadDeployMsgForFactory("abi1")
 	assert.NoError(err)
 }
 
@@ -413,7 +414,7 @@ func TestLoadDeployMsgMissing(t *testing.T) {
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
-	_, err := scgw.loadDeployMsgForFactory("abi1")
+	_, _, err := scgw.loadDeployMsgForFactory("abi1")
 	assert.Regexp("No ABI found with ID abi1", err.Error())
 }
 
@@ -428,9 +429,10 @@ func TestLoadDeployMsgFailure(t *testing.T) {
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
+	scgw.abiIndex["abi1"] = &abiInfo{}
 	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), []byte(":bad json"), 0644)
-	_, err := scgw.loadDeployMsgForFactory("abi1")
-	assert.Regexp("Failed to load ABI with ID abi1", err.Error())
+	_, _, err := scgw.loadDeployMsgForFactory("abi1")
+	assert.Regexp("Failed to parse ABI with ID abi1", err.Error())
 }
 
 func TestLoadDeployMsgRemoteLookup(t *testing.T) {
@@ -450,7 +452,7 @@ func TestLoadDeployMsgRemoteLookup(t *testing.T) {
 		},
 	}
 	scgw.rr = rr
-	res, err := scgw.loadDeployMsgForFactory("abi1")
+	res, _, err := scgw.loadDeployMsgForFactory("abi1")
 	assert.NoError(err)
 	assert.Equal([]byte("Some Bytecode"), res.Compiled)
 }
@@ -470,7 +472,7 @@ func TestLoadDeployMsgRemoteLookupFail(t *testing.T) {
 		err: fmt.Errorf("Remote lookup failed"),
 	}
 	scgw.rr = rr
-	_, err := scgw.loadDeployMsgForFactory("abi1")
+	_, _, err := scgw.loadDeployMsgForFactory("abi1")
 	assert.EqualError(err, "Failed to load ABI with ID abi1: Remote lookup failed")
 }
 
@@ -487,7 +489,7 @@ func TestLoadDeployMsgRemoteLookupNotFound(t *testing.T) {
 	scgw := s.(*smartContractGW)
 	rr := &mockRR{}
 	scgw.rr = rr
-	_, err := scgw.loadDeployMsgForFactory("abi1")
+	_, _, err := scgw.loadDeployMsgForFactory("abi1")
 	assert.EqualError(err, "No ABI found with ID abi1")
 }
 
@@ -712,7 +714,7 @@ func TestLoadABIBadData(t *testing.T) {
 	scgw := s.(*smartContractGW)
 
 	ioutil.WriteFile(path.Join(dir, "badness.abi.json"), []byte(":not json"), 0644)
-	_, err := scgw.loadDeployMsgForFactory("badness")
+	_, _, err := scgw.loadDeployMsgForFactory("badness")
 	assert.Regexp("No ABI found with ID badness", err.Error())
 }
 
@@ -855,13 +857,13 @@ func TestGetContractOrABIFail(t *testing.T) {
 	}
 	scgw.abiIndex["badabi"] = &abiInfo{}
 
-	// One that exists in the index, but for some reason the file isn't there - should be a 500
+	// One that exists in the index, but for some reason the file isn't there
 	req := httptest.NewRequest("GET", "/contracts/123456789abcdef0123456789abcdef012345678?openapi", bytes.NewReader([]byte{}))
 	res := httptest.NewRecorder()
 	router := &httprouter.Router{}
 	scgw.AddRoutes(router)
 	router.ServeHTTP(res, req)
-	assert.Equal(500, res.Result().StatusCode)
+	assert.Equal(404, res.Result().StatusCode)
 
 	// One that does not exist in the index
 	req = httptest.NewRequest("GET", "/contracts/nonexistent?openapi", bytes.NewReader([]byte{}))
@@ -871,13 +873,13 @@ func TestGetContractOrABIFail(t *testing.T) {
 	router.ServeHTTP(res, req)
 	assert.Equal(404, res.Result().StatusCode)
 
-	// One that exists in the index, but for some reason the file isn't there - should be a 500
+	// One that exists in the index, but for some reason the file isn't there
 	req = httptest.NewRequest("GET", "/abis/badabi?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router = &httprouter.Router{}
 	scgw.AddRoutes(router)
 	router.ServeHTTP(res, req)
-	assert.Equal(500, res.Result().StatusCode)
+	assert.Equal(404, res.Result().StatusCode)
 
 	// One that simply doesn't exist in the index - should be a 404
 	req = httptest.NewRequest("GET", "/abis/23456789abcdef0123456789abcdef0123456789?openapi", bytes.NewReader([]byte{}))
@@ -902,8 +904,11 @@ func TestGetContractUI(t *testing.T) {
 	scgw := s.(*smartContractGW)
 
 	scgw.contractIndex["123456789abcdef0123456789abcdef012345678"] = &contractInfo{
+		ABI:     "abi1",
 		Address: "123456789abcdef0123456789abcdef012345678",
 	}
+	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), []byte("{}"), 0644)
+	scgw.abiIndex["abi1"] = &abiInfo{}
 
 	req := httptest.NewRequest("GET", "/contracts/123456789abcdef0123456789abcdef012345678?ui", bytes.NewReader([]byte{}))
 	res := httptest.NewRecorder()

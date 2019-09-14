@@ -91,7 +91,7 @@ func (m *mockABILoader) resolveContractAddr(registeredName string) (string, erro
 	return m.registeredContractAddr, m.resolveContractErr
 }
 
-func (m *mockABILoader) loadDeployMsgForFactory(addrHexNo0x string) (*kldmessages.DeployContract, *abiInfo, error) {
+func (m *mockABILoader) loadDeployMsgByID(addrHexNo0x string) (*kldmessages.DeployContract, *abiInfo, error) {
 	return m.deployMsg, m.abiInfo, m.loadABIError
 }
 

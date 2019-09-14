@@ -15,13 +15,11 @@
 package kldevents
 
 import (
-	"path"
-	"testing"
-
-	"github.com/stretchr/testify/assert"
+	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
+// mockKV simple memory K/V store for testing
 type mockKV struct {
 	kvs       map[string][]byte
 	storeErr  error
@@ -33,6 +31,7 @@ func (m *mockKV) Put(key string, val []byte) error {
 	m.kvs[key] = val
 	return m.storeErr
 }
+
 func (m *mockKV) Get(key string) ([]byte, error) {
 	v, exists := m.kvs[key]
 	if m.loadErr == nil && !exists {
@@ -40,13 +39,16 @@ func (m *mockKV) Get(key string) ([]byte, error) {
 	}
 	return v, m.loadErr
 }
+
 func (m *mockKV) Delete(key string) error {
 	delete(m.kvs, key)
 	return m.deleteErr
 }
-func (m *mockKV) NewIterator() kvIterator {
+
+func (m *mockKV) NewIterator() kldkvstore.KVIterator {
 	return nil // not implemented in mock
 }
+
 func (m *mockKV) Close() {}
 
 func newMockKV(err error) *mockKV {
@@ -56,20 +58,4 @@ func newMockKV(err error) *mockKV {
 		deleteErr: err,
 		kvs:       make(map[string][]byte),
 	}
-}
-
-func TestLevelDBPutGet(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir(t)
-	defer cleanup(t, dir)
-	kv, err := newLDBKeyValueStore(path.Join(dir, "db"))
-	assert.NoError(err)
-	err = kv.Put("things", []byte("stuff"))
-	assert.NoError(err)
-	things, err := kv.Get("things")
-	assert.NoError(err)
-	assert.Equal("stuff", string(things))
-	err = kv.Delete("things")
-	assert.NoError(err)
-	kv.Close()
 }

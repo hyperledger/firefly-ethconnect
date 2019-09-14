@@ -50,15 +50,15 @@ func simpleEventsSource() string {
 type mockRR struct {
 	idCapture   string
 	addrCapture string
-	deployMsg   *kldmessages.DeployContract
+	deployMsg   *deployContractWithAddress
 	err         error
 }
 
-func (rr *mockRR) loadFactoryByID(id string) (*kldmessages.DeployContract, error) {
+func (rr *mockRR) loadFactoryForGateway(id string) (*kldmessages.DeployContract, error) {
 	rr.idCapture = id
-	return rr.deployMsg, rr.err
+	return &rr.deployMsg.DeployContract, rr.err
 }
-func (rr *mockRR) loadFactoryByAddress(id string) (*kldmessages.DeployContract, error) {
+func (rr *mockRR) loadFactoryForInstance(id string) (*deployContractWithAddress, error) {
 	rr.addrCapture = id
 	return rr.deployMsg, rr.err
 }
@@ -399,7 +399,7 @@ func TestLoadDeployMsgOKNoABIInIndex(t *testing.T) {
 	deployBytes, _ := json.Marshal(goodMsg)
 	scgw.abiIndex["abi1"] = &abiInfo{}
 	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), deployBytes, 0644)
-	_, _, err := scgw.loadDeployMsgForFactory("abi1")
+	_, _, err := scgw.loadDeployMsgByID("abi1")
 	assert.NoError(err)
 }
 
@@ -414,7 +414,7 @@ func TestLoadDeployMsgMissing(t *testing.T) {
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
-	_, _, err := scgw.loadDeployMsgForFactory("abi1")
+	_, _, err := scgw.loadDeployMsgByID("abi1")
 	assert.Regexp("No ABI found with ID abi1", err.Error())
 }
 
@@ -431,49 +431,8 @@ func TestLoadDeployMsgFailure(t *testing.T) {
 	scgw := s.(*smartContractGW)
 	scgw.abiIndex["abi1"] = &abiInfo{}
 	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), []byte(":bad json"), 0644)
-	_, _, err := scgw.loadDeployMsgForFactory("abi1")
+	_, _, err := scgw.loadDeployMsgByID("abi1")
 	assert.Regexp("Failed to parse ABI with ID abi1", err.Error())
-}
-
-func TestLoadDeployMsgRemoteLookup(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: dir,
-		},
-		nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-	rr := &mockRR{
-		deployMsg: &kldmessages.DeployContract{
-			Compiled: []byte("Some Bytecode"),
-		},
-	}
-	scgw.rr = rr
-	res, _, err := scgw.loadDeployMsgForFactory("abi1")
-	assert.NoError(err)
-	assert.Equal([]byte("Some Bytecode"), res.Compiled)
-}
-
-func TestLoadDeployMsgRemoteLookupFail(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: dir,
-		},
-		nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-	rr := &mockRR{
-		err: fmt.Errorf("Remote lookup failed"),
-	}
-	scgw.rr = rr
-	_, _, err := scgw.loadDeployMsgForFactory("abi1")
-	assert.EqualError(err, "Failed to load ABI with ID abi1: Remote lookup failed")
 }
 
 func TestLoadDeployMsgRemoteLookupNotFound(t *testing.T) {
@@ -489,7 +448,7 @@ func TestLoadDeployMsgRemoteLookupNotFound(t *testing.T) {
 	scgw := s.(*smartContractGW)
 	rr := &mockRR{}
 	scgw.rr = rr
-	_, _, err := scgw.loadDeployMsgForFactory("abi1")
+	_, _, err := scgw.loadDeployMsgByID("abi1")
 	assert.EqualError(err, "No ABI found with ID abi1")
 }
 
@@ -714,7 +673,7 @@ func TestLoadABIBadData(t *testing.T) {
 	scgw := s.(*smartContractGW)
 
 	ioutil.WriteFile(path.Join(dir, "badness.abi.json"), []byte(":not json"), 0644)
-	_, _, err := scgw.loadDeployMsgForFactory("badness")
+	_, _, err := scgw.loadDeployMsgByID("badness")
 	assert.Regexp("No ABI found with ID badness", err.Error())
 }
 

@@ -29,6 +29,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
+	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
@@ -109,7 +110,7 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	defer cleanup(t, dir)
 	sm := newTestSubscriptionManager()
 	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
-	sm.db, _ = newLDBKeyValueStore(path.Join(dir, "db"))
+	sm.db, _ = kldkvstore.NewLDBKeyValueStore(path.Join(dir, "db"))
 	defer sm.db.Close()
 
 	assert.Equal([]*SubscriptionInfo{}, sm.Subscriptions())
@@ -183,7 +184,7 @@ func TestActionChildCleanup(t *testing.T) {
 	defer cleanup(t, dir)
 	sm := newTestSubscriptionManager()
 	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
-	sm.db, _ = newLDBKeyValueStore(path.Join(dir, "db"))
+	sm.db, _ = kldkvstore.NewLDBKeyValueStore(path.Join(dir, "db"))
 	defer sm.db.Close()
 
 	stream, err := sm.AddStream(&StreamInfo{
@@ -245,7 +246,7 @@ func TestRecoverErrors(t *testing.T) {
 	dir := tempdir(t)
 	defer cleanup(t, dir)
 	sm := newTestSubscriptionManager()
-	sm.db, _ = newLDBKeyValueStore(path.Join(dir, "db"))
+	sm.db, _ = kldkvstore.NewLDBKeyValueStore(path.Join(dir, "db"))
 	defer sm.db.Close()
 
 	sm.db.Put(streamIDPrefix+"esid1", []byte(":bad json"))

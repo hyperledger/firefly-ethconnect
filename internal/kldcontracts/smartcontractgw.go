@@ -1114,4 +1114,7 @@ func (g *smartContractGW) Shutdown() {
 	if g.sm != nil {
 		g.sm.Close()
 	}
+	if g.rr != nil {
+		g.rr.close()
+	}
 }

@@ -27,6 +27,7 @@ import (
 
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
+	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -415,7 +416,7 @@ func TestProcessEventsEnd2End(t *testing.T) {
 			BatchSize: 1,
 			Webhook:   &webhookAction{},
 		}, 200)
-	sm.db, _ = newLDBKeyValueStore(dir)
+	sm.db, _ = kldkvstore.NewLDBKeyValueStore(dir)
 	defer svr.Close()
 
 	s := setupTestSubscription(assert, sm, stream)

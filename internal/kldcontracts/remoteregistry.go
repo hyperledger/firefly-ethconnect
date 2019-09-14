@@ -48,10 +48,12 @@ type deployContractWithAddress struct {
 type RemoteRegistry interface {
 	loadFactoryForGateway(lookupStr string) (*kldmessages.DeployContract, error)
 	loadFactoryForInstance(lookupStr string) (*deployContractWithAddress, error)
+	close()
 }
 
 // RemoteRegistryConf configuration
 type RemoteRegistryConf struct {
+	CacheDB           string                      `json:"cacheDB"`
 	GatewayURLPrefix  string                      `json:"gatewayURLPrefix"`
 	InstanceURLPrefix string                      `json:"instanceURLPrefix"`
 	Headers           map[string][]string         `json:"headers"`
@@ -219,4 +221,7 @@ func (rr *remoteRegistry) loadFactoryForInstance(lookupStr string) (*deployContr
 		return nil, nil
 	}
 	return rr.loadFactoryFromURL(rr.conf.InstanceURLPrefix + url.QueryEscape(lookupStr))
+}
+
+func (rr *remoteRegistry) close() {
 }

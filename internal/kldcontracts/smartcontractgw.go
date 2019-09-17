@@ -140,7 +140,7 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, rpc kldeth.RPCClien
 			return nil, fmt.Errorf("Event-stream subscription manager: %s", err)
 		}
 	}
-	gw.r2e = newREST2eth(gw, rpc, gw.sm, asyncDispatcher, syncDispatcher)
+	gw.r2e = newREST2eth(gw, rpc, gw.sm, gw.rr, asyncDispatcher, syncDispatcher)
 	gw.buildIndex()
 	return gw, nil
 }

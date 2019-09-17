@@ -254,9 +254,13 @@ func (g *smartContractGW) PostDeploy(msg *kldmessages.TransactionReceipt) error 
 	return nil
 }
 
-func (g *smartContractGW) swaggerForRemoteRegistry(apiName string, abi *kldbind.ABI, devdoc, path string) *spec.Swagger {
+func (g *smartContractGW) swaggerForRemoteRegistry(apiName, addr string, abi *kldbind.ABI, devdoc, path string) *spec.Swagger {
 	var swagger *spec.Swagger
-	swagger = g.abi2swagger.Gen4Instance(path, apiName, &abi.ABI, devdoc)
+	if addr == "" {
+		swagger = g.abi2swagger.Gen4Factory(path, apiName, &abi.ABI, devdoc)
+	} else {
+		swagger = g.abi2swagger.Gen4Instance(path, apiName, &abi.ABI, devdoc)
+	}
 	return swagger
 }
 
@@ -869,7 +873,7 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 	if uiRequest {
 		g.writeHTMLForUI(prefix, id, from, isGateway, res)
 	} else if swaggerRequest {
-		swagger := g.swaggerForRemoteRegistry(id, deployMsg.ABI, deployMsg.DevDoc, req.URL.Path)
+		swagger := g.swaggerForRemoteRegistry(id, addr, deployMsg.ABI, deployMsg.DevDoc, req.URL.Path)
 		g.replyWithSwagger(res, req, swagger, id, from)
 	} else {
 		ci := &remoteContractInfo{

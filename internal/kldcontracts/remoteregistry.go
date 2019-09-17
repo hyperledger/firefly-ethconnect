@@ -42,7 +42,7 @@ const (
 
 type deployContractWithAddress struct {
 	kldmessages.DeployContract
-	Address string
+	Address string `json:"address"`
 }
 
 // RemoteRegistry lookup of ABI, ByteCode and DevDocs against a conformant REST API

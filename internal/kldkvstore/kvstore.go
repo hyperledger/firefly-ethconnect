@@ -17,6 +17,7 @@ package kldkvstore
 import (
 	"fmt"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
@@ -39,19 +40,32 @@ type KVStore interface {
 }
 
 type levelDBKeyValueStore struct {
-	db *leveldb.DB
+	path string
+	db   *leveldb.DB
+}
+
+func (k *levelDBKeyValueStore) warnIfErr(op, key string, err error) {
+	if err != nil && err != leveldb.ErrNotFound {
+		log.Warnf("LDB %s %s '%s' failed: %s", k.path, op, key, err)
+	}
 }
 
 func (k *levelDBKeyValueStore) Put(key string, val []byte) error {
-	return k.db.Put([]byte(key), val, nil)
+	err := k.db.Put([]byte(key), val, nil)
+	k.warnIfErr("Put", key, err)
+	return err
 }
 
 func (k *levelDBKeyValueStore) Get(key string) ([]byte, error) {
-	return k.db.Get([]byte(key), nil)
+	b, err := k.db.Get([]byte(key), nil)
+	k.warnIfErr("Get", key, err)
+	return b, err
 }
 
 func (k *levelDBKeyValueStore) Delete(key string) error {
-	return k.db.Delete([]byte(key), nil)
+	err := k.db.Delete([]byte(key), nil)
+	k.warnIfErr("Delete", key, err)
+	return err
 }
 
 func (k *levelDBKeyValueStore) NewIterator() KVIterator {
@@ -86,7 +100,9 @@ func (k *levelDBKeyValueStore) Close() {
 
 // NewLDBKeyValueStore construct a new LevelDB instance of a KV store
 func NewLDBKeyValueStore(ldbPath string) (kv KVStore, err error) {
-	store := &levelDBKeyValueStore{}
+	store := &levelDBKeyValueStore{
+		path: ldbPath,
+	}
 	if store.db, err = leveldb.OpenFile(ldbPath, nil); err != nil {
 		return nil, fmt.Errorf("Failed to open DB at %s: %s", ldbPath, err)
 	}

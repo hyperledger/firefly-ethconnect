@@ -15,12 +15,15 @@
 package kldcontracts
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"path"
 	"testing"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -78,6 +81,40 @@ func TestRemoteRegistryDoRequestBadURL(t *testing.T) {
 	assert.EqualError(err, "Error querying contract registry")
 }
 
+func TestRemoteRegistryInitDB(t *testing.T) {
+	dir := tempdir()
+	defer cleanup(dir)
+
+	assert := assert.New(t)
+
+	r := NewRemoteRegistry(&RemoteRegistryConf{
+		CacheDB: path.Join(dir, "test"),
+	})
+	rr := r.(*remoteRegistry)
+
+	err := rr.init()
+	assert.NoError(err)
+	rr.close()
+}
+
+func TestRemoteRegistryInitBadDB(t *testing.T) {
+	dir := tempdir()
+	defer cleanup(dir)
+
+	assert := assert.New(t)
+
+	db := path.Join(dir, "test")
+	ioutil.WriteFile(db, []byte{}, 0644)
+	r := NewRemoteRegistry(&RemoteRegistryConf{
+		CacheDB: db,
+	})
+	rr := r.(*remoteRegistry)
+
+	err := rr.init()
+	assert.Regexp("Failed to initialize cache for remote registry", err.Error())
+	rr.close()
+}
+
 func TestRemoteRegistryloadFactoryForGatewaySuccess(t *testing.T) {
 	assert := assert.New(t)
 
@@ -103,6 +140,45 @@ func TestRemoteRegistryloadFactoryForGatewaySuccess(t *testing.T) {
 	assert.NotEmpty(res.Compiled)
 	assert.Equal("set", res.ABI.Methods["set"].Name)
 	assert.Contains(res.DevDoc, "set")
+}
+
+func TestRemoteRegistryloadFactoryForGatewayCached(t *testing.T) {
+	dir := tempdir()
+	defer cleanup(dir)
+
+	assert := assert.New(t)
+
+	firstCall := true
+	router := &httprouter.Router{}
+	router.GET("/somepath/:id", func(res http.ResponseWriter, req *http.Request, parms httprouter.Params) {
+		assert.True(firstCall)
+		firstCall = false
+		assert.Equal("testid", parms.ByName("id"))
+		testDataBytes, _ := ioutil.ReadFile("../../test/simpleevents.solc.output.json")
+		res.WriteHeader(200)
+		res.Write(testDataBytes)
+	})
+	server := httptest.NewServer(router)
+
+	r := NewRemoteRegistry(&RemoteRegistryConf{
+		CacheDB:          path.Join(dir, "testdb"),
+		GatewayURLPrefix: server.URL + "/somepath",
+		PropNames: RemoteRegistryPropNamesConf{
+			Bytecode: "bin",
+		},
+	})
+	rr := r.(*remoteRegistry)
+	rr.init()
+	defer rr.close()
+
+	res1, err := rr.loadFactoryForGateway("testid")
+	assert.NoError(err)
+	res2, err := rr.loadFactoryForGateway("testid")
+	assert.NoError(err)
+	assert.Equal(res1.Headers.ID, res2.Headers.ID)
+	assert.Equal(res1.ABI, res2.ABI)
+	assert.Equal(res1.DevDoc, res2.DevDoc)
+	assert.Equal(res1.Compiled, res2.Compiled)
 }
 
 func TestRemoteRegistryLoadFactoryMissingID(t *testing.T) {
@@ -410,4 +486,32 @@ func TestRemoteRegistryLoadInstanceNOOP(t *testing.T) {
 	res, err := rr.loadFactoryForInstance("testid")
 	assert.NoError(err)
 	assert.Nil(res)
+}
+
+func TestRemoteRegistryLoadFactoryFromCacheDBBadBytes(t *testing.T) {
+	dir := tempdir()
+	defer cleanup(dir)
+
+	assert := assert.New(t)
+
+	r := NewRemoteRegistry(&RemoteRegistryConf{
+		CacheDB: path.Join(dir, "testdb"),
+	})
+	rr := r.(*remoteRegistry)
+	rr.init()
+	defer rr.close()
+
+	rr.db.Put("testid", []byte("!Bad JSON!"))
+
+	msg := rr.loadFactoryFromCacheDB("testid")
+	assert.Nil(msg)
+}
+
+func TestRemoteRegistryStoreFactoryToCacheDBBadObj(t *testing.T) {
+	r := NewRemoteRegistry(&RemoteRegistryConf{})
+	rr := r.(*remoteRegistry)
+	mockKV := kldkvstore.NewMockKV(nil)
+	rr.db = mockKV
+	mockKV.StoreErr = fmt.Errorf("pop")
+	rr.storeFactoryToCacheDB("testid", nil)
 }

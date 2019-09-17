@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/kaleido-io/ethconnect/internal/kldevents"
@@ -146,15 +147,37 @@ func (m *mockSubMgr) SubscriptionByID(id string) (*kldevents.SubscriptionInfo, e
 func (m *mockSubMgr) DeleteSubscription(id string) error { return m.err }
 func (m *mockSubMgr) Close()                             {}
 
-func newTestREST2Eth(dispatcher *mockREST2EthDispatcher) (*rest2eth, *mockRPC, *httprouter.Router) {
-	mockRPC := &mockRPC{}
+type mockRemoteRegistry struct {
+	lookupError error
+	gatewayMsg  *kldmessages.DeployContract
+	instanceMsg *deployContractWithAddress
+}
+
+func (m *mockRemoteRegistry) loadFactoryForGateway(lookupStr string) (*kldmessages.DeployContract, error) {
+	return m.gatewayMsg, m.lookupError
+}
+func (m *mockRemoteRegistry) loadFactoryForInstance(lookupStr string) (*deployContractWithAddress, error) {
+	return m.instanceMsg, m.lookupError
+}
+func (m *mockRemoteRegistry) init() error { return nil }
+func (m *mockRemoteRegistry) close()      {}
+
+func newTestDeployMsg(addr string) *deployContractWithAddress {
 	compiled, _ := kldeth.CompileContract(simpleEventsSource(), "SimpleEvents", "")
 	a := &kldbind.ABI{ABI: *compiled.ABI}
-	deployMsg := &kldmessages.DeployContract{ABI: a}
-	abiLoader := &mockABILoader{
-		deployMsg: deployMsg,
+	return &deployContractWithAddress{
+		DeployContract: kldmessages.DeployContract{ABI: a},
+		Address:        addr,
 	}
-	r := newREST2eth(abiLoader, mockRPC, nil, dispatcher, dispatcher)
+}
+
+func newTestREST2Eth(dispatcher *mockREST2EthDispatcher) (*rest2eth, *mockRPC, *httprouter.Router) {
+	mockRPC := &mockRPC{}
+	deployMsg := newTestDeployMsg("")
+	abiLoader := &mockABILoader{
+		deployMsg: &deployMsg.DeployContract,
+	}
+	r := newREST2eth(abiLoader, mockRPC, nil, nil, dispatcher, dispatcher)
 	router := &httprouter.Router{}
 	r.addRoutes(router)
 
@@ -407,6 +430,142 @@ func TestDeployContractSyncSuccess(t *testing.T) {
 
 	assert.Equal(200, res.Result().StatusCode)
 	assert.Equal(from, dispatcher.deployContractMsg.From)
+}
+
+func TestDeployContractSyncRemoteRegitryInstance(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	bodyMap["i"] = 12345
+	bodyMap["s"] = "testing"
+	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
+	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
+	receipt := &kldmessages.TransactionReceipt{
+		ReplyCommon: kldmessages.ReplyCommon{
+			Headers: kldmessages.ReplyHeaders{
+				CommonHeaders: kldmessages.CommonHeaders{
+					MsgType: kldmessages.MsgTypeTransactionSuccess,
+				},
+			},
+		},
+	}
+	dispatcher := &mockREST2EthDispatcher{
+		sendTransactionSyncReceipt: receipt,
+	}
+	r, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	r.rr = &mockRemoteRegistry{
+		instanceMsg: newTestDeployMsg(strings.TrimPrefix(to, "0x")),
+	}
+	body, _ := json.Marshal(&bodyMap)
+	req := httptest.NewRequest("POST", "/instances/myinstance/set?kld-sync", bytes.NewReader(body))
+	req.Header.Add("x-kaleido-from", from)
+	router.ServeHTTP(res, req)
+
+	assert.Equal(200, res.Result().StatusCode)
+	assert.Equal(to, dispatcher.sendTransactionMsg.To)
+	assert.Equal(from, dispatcher.sendTransactionMsg.From)
+}
+
+func TestDeployContractSyncRemoteRegitryInstance500(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	r, _, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
+	r.rr = &mockRemoteRegistry{
+		lookupError: fmt.Errorf("pop"),
+	}
+	body, _ := json.Marshal(&bodyMap)
+	req := httptest.NewRequest("POST", "/instances/myinstance/set?kld-sync", bytes.NewReader(body))
+	router.ServeHTTP(res, req)
+
+	assert.Equal(500, res.Result().StatusCode)
+}
+
+func TestDeployContractSyncRemoteRegitryInstance404(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	r, _, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
+	r.rr = &mockRemoteRegistry{}
+	body, _ := json.Marshal(&bodyMap)
+	req := httptest.NewRequest("POST", "/instances/myinstance/set?kld-sync", bytes.NewReader(body))
+	router.ServeHTTP(res, req)
+
+	assert.Equal(404, res.Result().StatusCode)
+}
+
+func TestDeployContractSyncRemoteRegitryGateway500(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	r, _, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
+	r.rr = &mockRemoteRegistry{
+		lookupError: fmt.Errorf("pop"),
+	}
+	body, _ := json.Marshal(&bodyMap)
+	req := httptest.NewRequest("POST", "/g/mygw?kld-sync", bytes.NewReader(body))
+	router.ServeHTTP(res, req)
+
+	assert.Equal(500, res.Result().StatusCode)
+}
+
+func TestDeployContractSyncRemoteRegitryGateway404(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	r, _, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
+	r.rr = &mockRemoteRegistry{}
+	body, _ := json.Marshal(&bodyMap)
+	req := httptest.NewRequest("POST", "/g/mygw?kld-sync", bytes.NewReader(body))
+	router.ServeHTTP(res, req)
+
+	assert.Equal(404, res.Result().StatusCode)
+}
+
+func TestDeployContractSyncRemoteRegitryGateway(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	bodyMap["i"] = 12345
+	bodyMap["s"] = "testing"
+	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
+	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
+	receipt := &kldmessages.TransactionReceipt{
+		ReplyCommon: kldmessages.ReplyCommon{
+			Headers: kldmessages.ReplyHeaders{
+				CommonHeaders: kldmessages.CommonHeaders{
+					MsgType: kldmessages.MsgTypeTransactionSuccess,
+				},
+			},
+		},
+	}
+	dispatcher := &mockREST2EthDispatcher{
+		sendTransactionSyncReceipt: receipt,
+	}
+	r, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	r.rr = &mockRemoteRegistry{
+		gatewayMsg: &(newTestDeployMsg(strings.TrimPrefix(to, "0x")).DeployContract),
+	}
+	body, _ := json.Marshal(&bodyMap)
+	req := httptest.NewRequest("POST", "/g/mygateway/567a417717cb6c59ddc1035705f02c0fd1ab1872/set?kld-sync", bytes.NewReader(body))
+	req.Header.Add("x-kaleido-from", from)
+	router.ServeHTTP(res, req)
+
+	assert.Equal(200, res.Result().StatusCode)
+	assert.Equal(to, dispatcher.sendTransactionMsg.To)
+	assert.Equal(from, dispatcher.sendTransactionMsg.From)
 }
 
 func TestSendTransactionSyncFail(t *testing.T) {

@@ -156,12 +156,17 @@ func (rr *remoteRegistry) getResponseString(m map[string]interface{}, p string, 
 	if !exists {
 		return "", fmt.Errorf("'%s' missing in contract registry response", p)
 	}
-	stringVal, ok := genericVal.(string)
-	if !ok {
+	var stringVal string
+	switch genericVal.(type) {
+	case string:
+		stringVal = genericVal.(string)
+	case nil:
+		stringVal = ""
+	default:
 		return "", fmt.Errorf("'%s' not a string in contract registry response", p)
 	}
 	if !emptyOK && stringVal == "" {
-		return "", fmt.Errorf("'%s' empty in contract registry response", p)
+		return "", fmt.Errorf("'%s' empty (or null) in contract registry response", p)
 	}
 	return stringVal, nil
 }

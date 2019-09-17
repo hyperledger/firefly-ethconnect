@@ -166,9 +166,9 @@ func (rr *remoteRegistry) getResponseString(m map[string]interface{}, p string, 
 	return stringVal, nil
 }
 
-func (rr *remoteRegistry) loadFactoryFromURL(baseURL, lookupStr string) (*deployContractWithAddress, error) {
+func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string) (*deployContractWithAddress, error) {
 	safeLookupStr := url.QueryEscape(lookupStr)
-	msg := rr.loadFactoryFromCacheDB(safeLookupStr)
+	msg := rr.loadFactoryFromCacheDB(ns + "/" + safeLookupStr)
 	if msg != nil {
 		return msg, nil
 	}
@@ -220,7 +220,7 @@ func (rr *remoteRegistry) loadFactoryFromURL(baseURL, lookupStr string) (*deploy
 		},
 		Address: strings.ToLower(strings.TrimPrefix(addr, "0x")),
 	}
-	rr.storeFactoryToCacheDB(safeLookupStr, msg)
+	rr.storeFactoryToCacheDB(ns+"/"+safeLookupStr, msg)
 	return msg, nil
 }
 
@@ -256,7 +256,7 @@ func (rr *remoteRegistry) loadFactoryForGateway(lookupStr string) (*kldmessages.
 	if rr.conf.GatewayURLPrefix == "" {
 		return nil, nil
 	}
-	msg, err := rr.loadFactoryFromURL(rr.conf.GatewayURLPrefix, lookupStr)
+	msg, err := rr.loadFactoryFromURL(rr.conf.GatewayURLPrefix, "gateways", lookupStr)
 	if msg != nil {
 		// There is no address on a gateway, so we just return the DeployMsg
 		return &msg.DeployContract, err
@@ -268,7 +268,7 @@ func (rr *remoteRegistry) loadFactoryForInstance(lookupStr string) (*deployContr
 	if rr.conf.InstanceURLPrefix == "" {
 		return nil, nil
 	}
-	return rr.loadFactoryFromURL(rr.conf.InstanceURLPrefix, lookupStr)
+	return rr.loadFactoryFromURL(rr.conf.InstanceURLPrefix, "instances", lookupStr)
 }
 
 func (rr *remoteRegistry) close() {

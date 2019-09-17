@@ -293,7 +293,7 @@ func TestRemoteRegistryLoadFactoryBadDevDoc(t *testing.T) {
 		res.Write([]byte(`{
       "id": "12345",
       "abi": "[]",
-      "devdoc": null
+      "devdoc": 123
     }`))
 	})
 	server := httptest.NewServer(router)
@@ -320,7 +320,7 @@ func TestRemoteRegistryLoadFactoryEmptyBytecode(t *testing.T) {
 		res.Write([]byte(`{
       "id": "12345",
       "abi": "[]",
-      "devdoc": "",
+      "devdoc": null,
       "bin": ""
     }`))
 	})
@@ -335,7 +335,7 @@ func TestRemoteRegistryLoadFactoryEmptyBytecode(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.loadFactoryForGateway("testid")
-	assert.EqualError(err, "'bin' empty in contract registry response")
+	assert.EqualError(err, "'bin' empty (or null) in contract registry response")
 }
 
 func TestRemoteRegistryLoadFactoryBadBytecode(t *testing.T) {

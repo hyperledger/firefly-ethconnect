@@ -96,6 +96,10 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	router.GET("/abis", g.listContractsOrABIs)
 	router.GET("/abis/:abi", g.getContractOrABI)
 	router.POST("/abis/:abi/:address", g.registerContract)
+	router.GET("/instances/:instance_lookup", g.getRemoteRegistrySwaggerOrABI)
+	router.GET("/i/:instance_lookup", g.getRemoteRegistrySwaggerOrABI)
+	router.GET("/gateways/:gateway_lookup", g.getRemoteRegistrySwaggerOrABI)
+	router.GET("/g/:gateway_lookup", g.getRemoteRegistrySwaggerOrABI)
 	router.POST(kldevents.StreamPathPrefix, g.createStream)
 	router.GET(kldevents.StreamPathPrefix, g.listStreamsOrSubs)
 	router.GET(kldevents.SubPathPrefix, g.listStreamsOrSubs)
@@ -180,6 +184,13 @@ type abiInfo struct {
 	CompilerVersion string `json:"compilerVersion"`
 }
 
+// remoteContractInfo is the ABI raw data back out of the REST API gateway with bytecode
+type remoteContractInfo struct {
+	ID      string       `json:"id"`
+	Address string       `json:"address,omitempty"`
+	ABI     *kldbind.ABI `json:"abi"`
+}
+
 func (i *contractInfo) GetID() string {
 	return i.Address
 }
@@ -241,6 +252,12 @@ func (g *smartContractGW) PostDeploy(msg *kldmessages.TransactionReceipt) error 
 	msg.ContractSwagger = contractInfo.SwaggerURL
 	msg.ContractUI = g.conf.BaseURL + "/contracts/" + registeredName + "?ui"
 	return nil
+}
+
+func (g *smartContractGW) swaggerForRemoteRegistry(apiName string, abi *kldbind.ABI, devdoc, path string) *spec.Swagger {
+	var swagger *spec.Swagger
+	swagger = g.abi2swagger.Gen4Instance(path, apiName, &abi.ABI, devdoc)
+	return swagger
 }
 
 func (g *smartContractGW) swaggerForABI(abiID, apiName string, abi *kldbind.ABI, devdoc string, addrHexNo0x, registerAs string) *spec.Swagger {
@@ -731,12 +748,8 @@ func (g *smartContractGW) resolveAddressOrName(id string) (deployMsg *kldmessage
 	return deployMsg, registeredName, info, err
 }
 
-func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
-	log.Infof("--> %s %s", req.Method, req.URL)
-
+func (g *smartContractGW) isSwaggerRequest(req *http.Request) (swaggerRequest, uiRequest bool, from string) {
 	req.ParseForm()
-	swaggerRequest := false
-	uiRequest := false
 	if vs := req.Form["swagger"]; len(vs) > 0 {
 		swaggerRequest = true
 	}
@@ -746,6 +759,33 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 	if vs := req.Form["ui"]; len(vs) > 0 {
 		uiRequest = true
 	}
+	from = req.FormValue("from")
+	return
+}
+
+func (g *smartContractGW) replyWithSwagger(res http.ResponseWriter, req *http.Request, swagger *spec.Swagger, id, from string) {
+	if from != "" {
+		if swagger.Parameters != nil {
+			if param, exists := swagger.Parameters["fromParam"]; exists {
+				param.SimpleSchema.Default = from
+				swagger.Parameters["fromParam"] = param
+			}
+		}
+	}
+	swaggerBytes, _ := json.MarshalIndent(&swagger, "", "  ")
+
+	log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
+	res.Header().Set("Content-Type", "application/json")
+	if vs := req.Form["download"]; len(vs) > 0 {
+		res.Header().Set("Content-Disposition", "attachment; filename=\""+id+".swagger.json\"")
+	}
+	res.WriteHeader(200)
+	res.Write(swaggerBytes)
+}
+
+func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	log.Infof("--> %s %s", req.Method, req.URL)
+	swaggerRequest, uiRequest, from := g.isSwaggerRequest(req)
 	id := strings.TrimPrefix(strings.ToLower(params.ByName("address")), "0x")
 	prefix := "contract"
 	if id == "" {
@@ -753,7 +793,6 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 		prefix = "abi"
 	}
 	// For safety we always check our sanitized address index in memory, before checking the filesystem
-	from := req.FormValue("from")
 	var registeredName string
 	var err error
 	var deployMsg *kldmessages.DeployContract
@@ -773,30 +812,11 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 		}
 	}
 	if uiRequest {
-		fromQuery := ""
-		if from != "" {
-			fromQuery = "&from=" + url.QueryEscape(from)
-		}
-		g.writeHTMLForUI(prefix, id, fromQuery, (prefix == "abi"), res)
+		g.writeHTMLForUI(prefix, id, from, (prefix == "abi"), res)
 	} else if swaggerRequest {
-		swagger := g.swaggerForABI(abiID, deployMsg.ContractName, deployMsg.ABI, deployMsg.DevDoc, params.ByName("address"), registeredName)
-		if from != "" {
-			if swagger.Parameters != nil {
-				if param, exists := swagger.Parameters["fromParam"]; exists {
-					param.SimpleSchema.Default = from
-					swagger.Parameters["fromParam"] = param
-				}
-			}
-		}
-		swaggerBytes, _ := json.MarshalIndent(&swagger, "", "  ")
-
-		log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
-		res.Header().Set("Content-Type", "application/json")
-		if vs := req.Form["download"]; len(vs) > 0 {
-			res.Header().Set("Content-Disposition", "attachment; filename=\""+id+".swagger.json\"")
-		}
-		res.WriteHeader(200)
-		res.Write(swaggerBytes)
+		addr := params.ByName("address")
+		swagger := g.swaggerForABI(abiID, deployMsg.ContractName, deployMsg.ABI, deployMsg.DevDoc, addr, registeredName)
+		g.replyWithSwagger(res, req, swagger, id, from)
 	} else {
 		log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
 		res.Header().Set("Content-Type", "application/json")
@@ -804,6 +824,65 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 		enc := json.NewEncoder(res)
 		enc.SetIndent("", "  ")
 		enc.Encode(info)
+	}
+}
+
+func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	log.Infof("--> %s %s", req.Method, req.URL)
+
+	swaggerRequest, uiRequest, from := g.isSwaggerRequest(req)
+
+	var deployMsg *kldmessages.DeployContract
+	var err error
+	var isGateway = false
+	var prefix, id, addr string
+	if strings.HasPrefix(req.URL.Path, "/gateways/") || strings.HasPrefix(req.URL.Path, "/g/") {
+		isGateway = true
+		prefix = "gateway"
+		id = params.ByName("gateway_lookup")
+		deployMsg, err = g.rr.loadFactoryForGateway(id)
+		if err != nil {
+			g.gatewayErrReply(res, req, err, 500)
+			return
+		} else if deployMsg == nil {
+			err = fmt.Errorf("Gateway not found")
+			g.gatewayErrReply(res, req, err, 404)
+			return
+		}
+	} else {
+		prefix = "instance"
+		id = params.ByName("instance_lookup")
+		var msg *deployContractWithAddress
+		msg, err = g.rr.loadFactoryForInstance(id)
+		if err != nil {
+			g.gatewayErrReply(res, req, err, 500)
+			return
+		} else if msg == nil {
+			err = fmt.Errorf("Instance not found")
+			g.gatewayErrReply(res, req, err, 404)
+			return
+		}
+		deployMsg = &msg.DeployContract
+		addr = msg.Address
+	}
+
+	if uiRequest {
+		g.writeHTMLForUI(prefix, id, from, isGateway, res)
+	} else if swaggerRequest {
+		swagger := g.swaggerForRemoteRegistry(id, deployMsg.ABI, deployMsg.DevDoc, req.URL.Path)
+		g.replyWithSwagger(res, req, swagger, id, from)
+	} else {
+		ci := &remoteContractInfo{
+			ID:      deployMsg.Headers.ID,
+			ABI:     deployMsg.ABI,
+			Address: addr,
+		}
+		log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
+		res.Header().Set("Content-Type", "application/json")
+		res.WriteHeader(200)
+		enc := json.NewEncoder(res)
+		enc.SetIndent("", "  ")
+		enc.Encode(ci)
 	}
 }
 
@@ -1028,7 +1107,12 @@ func (g *smartContractGW) processIfArchive(dir, fileName string) error {
 }
 
 // Write out a nice little UI for exercising the Swagger
-func (g *smartContractGW) writeHTMLForUI(prefix, id, fromQuery string, factory bool, res http.ResponseWriter) {
+func (g *smartContractGW) writeHTMLForUI(prefix, id, from string, factory bool, res http.ResponseWriter) {
+	fromQuery := ""
+	if from != "" {
+		fromQuery = "&from=" + url.QueryEscape(from)
+	}
+
 	factoryMessage := ""
 	if factory {
 		factoryMessage =

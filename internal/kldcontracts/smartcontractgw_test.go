@@ -294,6 +294,92 @@ func TestRegisterExistingContract(t *testing.T) {
 
 }
 
+func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
+	assert := assert.New(t)
+
+	scgw, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			BaseURL: "http://localhost/api/v1",
+		},
+		nil, nil, nil,
+	)
+	iMsg := newTestDeployMsg("0123456789abcdef0123456789abcdef01234567")
+	iMsg.Headers.ID = "xyz12345"
+	rr := &mockRemoteRegistry{
+		instanceMsg: iMsg,
+		gatewayMsg:  &(newTestDeployMsg("").DeployContract),
+	}
+	scgw.(*smartContractGW).rr = rr
+
+	router := &httprouter.Router{}
+	scgw.AddRoutes(router)
+
+	req := httptest.NewRequest("GET", "/g/test?swagger", bytes.NewReader([]byte{}))
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	returnedSwagger := spec.Swagger{}
+	assert.Equal(200, res.Code)
+	json.NewDecoder(res.Body).Decode(&returnedSwagger)
+	assert.Equal("/api/v1/g/test", returnedSwagger.BasePath)
+
+	req = httptest.NewRequest("GET", "/i/test?openapi", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	returnedSwagger = spec.Swagger{}
+	assert.Equal(200, res.Code)
+	json.NewDecoder(res.Body).Decode(&returnedSwagger)
+	assert.Equal("/api/v1/i/test", returnedSwagger.BasePath)
+
+	req = httptest.NewRequest("GET", "/instances/test", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(200, res.Code)
+	jsonRes := make(map[string]interface{})
+	json.NewDecoder(res.Body).Decode(&jsonRes)
+	assert.Equal("xyz12345", jsonRes["id"].(string))
+	assert.Equal("0123456789abcdef0123456789abcdef01234567", jsonRes["address"].(string))
+
+	req = httptest.NewRequest("GET", "/i/test?ui", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(200, res.Code)
+	html, _ := ioutil.ReadAll(res.Body)
+	assert.Contains(string(html), "<html>")
+	assert.Contains(string(html), "/instances/test?swagger")
+
+	req = httptest.NewRequest("GET", "/g/test?ui&from=0x12345", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(200, res.Code)
+	html, _ = ioutil.ReadAll(res.Body)
+	assert.Contains(string(html), "<html>")
+	assert.Contains(string(html), "/gateways/test?swagger")
+	assert.Contains(string(html), "0x12345")
+
+	rr.instanceMsg = nil
+	req = httptest.NewRequest("GET", "/instances/test?openapi", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(404, res.Code)
+
+	rr.gatewayMsg = nil
+	req = httptest.NewRequest("GET", "/gateways/test?openapi", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(404, res.Code)
+
+	rr.lookupError = fmt.Errorf("pop")
+	req = httptest.NewRequest("GET", "/instances/test?openapi", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(500, res.Code)
+
+	req = httptest.NewRequest("GET", "/gateways/test?openapi", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(500, res.Code)
+
+}
 func TestRegisterContractBadAddress(t *testing.T) {
 	// writes real files and tests end to end
 	assert := assert.New(t)

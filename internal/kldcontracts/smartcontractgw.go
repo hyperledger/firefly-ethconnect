@@ -129,6 +129,9 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, rpc kldeth.RPCClien
 		contractRegistrations: make(map[string]*contractInfo),
 		abiIndex:              make(map[string]kldmessages.TimeSortable),
 	}
+	if err = gw.rr.init(); err != nil {
+		return nil, err
+	}
 	syncDispatcher := newSyncDispatcher(processor)
 	if conf.EventLevelDBPath != "" {
 		gw.sm = kldevents.NewSubscriptionManager(&conf.SubscriptionManagerConf, rpc)

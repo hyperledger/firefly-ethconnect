@@ -62,7 +62,7 @@ func newTestSubscriptionManager() *subscriptionMGR {
 	smconf := &SubscriptionManagerConf{}
 	sm := NewSubscriptionManager(smconf, nil).(*subscriptionMGR)
 	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
-	sm.db = newMockKV(nil)
+	sm.db = kldkvstore.NewMockKV(nil)
 	sm.config().WebhooksAllowPrivateIPs = true
 	sm.config().EventPollingIntervalSec = 0
 	return sm
@@ -208,7 +208,7 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	defer cleanup(t, dir)
 	sm := newTestSubscriptionManager()
 	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
-	sm.db = newMockKV(fmt.Errorf("pop"))
+	sm.db = kldkvstore.NewMockKV(fmt.Errorf("pop"))
 	defer sm.db.Close()
 
 	_, err := sm.AddStream(&StreamInfo{Type: "random"})

@@ -62,7 +62,8 @@ func (rr *mockRR) loadFactoryForInstance(id string) (*deployContractWithAddress,
 	rr.addrCapture = id
 	return rr.deployMsg, rr.err
 }
-func (rr *mockRR) close() {}
+func (rr *mockRR) close()      {}
+func (rr *mockRR) init() error { return nil }
 
 func TestCobraInitContractGateway(t *testing.T) {
 	assert := assert.New(t)

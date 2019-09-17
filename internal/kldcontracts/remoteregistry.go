@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
+	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
 )
@@ -48,6 +49,7 @@ type deployContractWithAddress struct {
 type RemoteRegistry interface {
 	loadFactoryForGateway(lookupStr string) (*kldmessages.DeployContract, error)
 	loadFactoryForInstance(lookupStr string) (*deployContractWithAddress, error)
+	init() error
 	close()
 }
 
@@ -111,6 +113,16 @@ func NewRemoteRegistry(conf *RemoteRegistryConf) RemoteRegistry {
 type remoteRegistry struct {
 	conf   *RemoteRegistryConf
 	client *http.Client
+	db     kldkvstore.KVStore
+}
+
+func (rr *remoteRegistry) init() (err error) {
+	if rr.conf.CacheDB != "" {
+		if rr.db, err = kldkvstore.NewLDBKeyValueStore(rr.conf.CacheDB); err != nil {
+			return fmt.Errorf("Failed to initialize cache for remote registry: %s", err)
+		}
+	}
+	return nil
 }
 
 func (rr *remoteRegistry) doRequest(method, url string) (map[string]interface{}, error) {
@@ -154,7 +166,13 @@ func (rr *remoteRegistry) getResponseString(m map[string]interface{}, p string, 
 	return stringVal, nil
 }
 
-func (rr *remoteRegistry) loadFactoryFromURL(queryURL string) (*deployContractWithAddress, error) {
+func (rr *remoteRegistry) loadFactoryFromURL(baseURL, lookupStr string) (*deployContractWithAddress, error) {
+	safeLookupStr := url.QueryEscape(lookupStr)
+	msg := rr.loadFactoryFromCacheDB(safeLookupStr)
+	if msg != nil {
+		return msg, nil
+	}
+	queryURL := baseURL + safeLookupStr
 	jsonRes, err := rr.doRequest("GET", queryURL)
 	if err != nil || jsonRes == nil {
 		return nil, err
@@ -187,7 +205,7 @@ func (rr *remoteRegistry) loadFactoryFromURL(queryURL string) (*deployContractWi
 		return nil, fmt.Errorf(genericRegistryResponseErrorMsg)
 	}
 	addr, _ := rr.getResponseString(jsonRes, rr.conf.PropNames.Address, true)
-	return &deployContractWithAddress{
+	msg = &deployContractWithAddress{
 		DeployContract: kldmessages.DeployContract{
 			TransactionCommon: kldmessages.TransactionCommon{
 				RequestCommon: kldmessages.RequestCommon{
@@ -201,16 +219,46 @@ func (rr *remoteRegistry) loadFactoryFromURL(queryURL string) (*deployContractWi
 			Compiled: bytecode,
 		},
 		Address: strings.ToLower(strings.TrimPrefix(addr, "0x")),
-	}, nil
+	}
+	rr.storeFactoryToCacheDB(safeLookupStr, msg)
+	return msg, nil
+}
+
+func (rr *remoteRegistry) loadFactoryFromCacheDB(cacheKey string) *deployContractWithAddress {
+	if rr.db == nil {
+		return nil
+	}
+	b, err := rr.db.Get(cacheKey)
+	if err != nil {
+		return nil
+	}
+	var msg deployContractWithAddress
+	err = json.Unmarshal(b, &msg)
+	if err != nil {
+		log.Warnf("Failed to deserialized cached bytes for key %s: %s", cacheKey, err)
+		return nil
+	}
+	return &msg
+}
+
+func (rr *remoteRegistry) storeFactoryToCacheDB(cacheKey string, msg *deployContractWithAddress) {
+	if rr.db == nil {
+		return
+	}
+	b, _ := json.Marshal(msg)
+	if err := rr.db.Put(cacheKey, b); err != nil {
+		log.Warnf("Failed to write bytes to cache for key %s: %s", cacheKey, err)
+		return
+	}
 }
 
 func (rr *remoteRegistry) loadFactoryForGateway(lookupStr string) (*kldmessages.DeployContract, error) {
 	if rr.conf.GatewayURLPrefix == "" {
 		return nil, nil
 	}
-	msg, err := rr.loadFactoryFromURL(rr.conf.GatewayURLPrefix + url.QueryEscape(lookupStr))
+	msg, err := rr.loadFactoryFromURL(rr.conf.GatewayURLPrefix, lookupStr)
 	if msg != nil {
-		// There is no address on a gateway
+		// There is no address on a gateway, so we just return the DeployMsg
 		return &msg.DeployContract, err
 	}
 	return nil, err
@@ -220,7 +268,7 @@ func (rr *remoteRegistry) loadFactoryForInstance(lookupStr string) (*deployContr
 	if rr.conf.InstanceURLPrefix == "" {
 		return nil, nil
 	}
-	return rr.loadFactoryFromURL(rr.conf.InstanceURLPrefix + url.QueryEscape(lookupStr))
+	return rr.loadFactoryFromURL(rr.conf.InstanceURLPrefix, lookupStr)
 }
 
 func (rr *remoteRegistry) close() {

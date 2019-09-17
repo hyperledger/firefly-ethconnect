@@ -81,3 +81,8 @@ func TestLevelDBBadPath(t *testing.T) {
 	_, err := NewLDBKeyValueStore(dbPath)
 	assert.Regexp("Failed to open DB", err.Error())
 }
+
+func TestLevelDBWarnIfError(t *testing.T) {
+	db := &levelDBKeyValueStore{}
+	db.warnIfErr("Put", "A Key", fmt.Errorf("pop"))
+}

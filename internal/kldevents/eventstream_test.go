@@ -593,7 +593,7 @@ func TestStoreCheckpointLoadError(t *testing.T) {
 			ErrorHandling: ErrorHandlingBlock,
 			Webhook:       &webhookAction{},
 		}, 200)
-	mockKV := newMockKV(fmt.Errorf("pop"))
+	mockKV := kldkvstore.NewMockKV(fmt.Errorf("pop"))
 	sm.db = mockKV
 	defer close(eventStream)
 	defer svr.Close()
@@ -616,8 +616,8 @@ func TestStoreCheckpointStoreError(t *testing.T) {
 			ErrorHandling: ErrorHandlingBlock,
 			Webhook:       &webhookAction{},
 		}, 200)
-	mockKV := newMockKV(nil)
-	mockKV.storeErr = fmt.Errorf("pop")
+	mockKV := kldkvstore.NewMockKV(nil)
+	mockKV.StoreErr = fmt.Errorf("pop")
 	sm.db = mockKV
 	defer close(eventStream)
 	defer svr.Close()
@@ -646,8 +646,8 @@ func TestProcessBatchEmptyArray(t *testing.T) {
 			ErrorHandling: ErrorHandlingBlock,
 			Webhook:       &webhookAction{},
 		}, 200)
-	mockKV := newMockKV(nil)
-	mockKV.storeErr = fmt.Errorf("pop")
+	mockKV := kldkvstore.NewMockKV(nil)
+	mockKV.StoreErr = fmt.Errorf("pop")
 	sm.db = mockKV
 	defer close(eventStream)
 	defer svr.Close()

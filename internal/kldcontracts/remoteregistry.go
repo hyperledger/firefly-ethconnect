@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
+	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
 )
@@ -31,21 +32,31 @@ import (
 const (
 	genericRegistryRequestErrorMsg  = "Error querying contract registry"
 	genericRegistryResponseErrorMsg = "Error processing contract registry response"
+	defaultIDProp                   = "id"
 	defaultABIProp                  = "abi"
 	defaultBytecodeProp             = "bytecode"
 	defaultDevdocProp               = "devdoc"
 	defaultDeployableProp           = "deployable"
+	defaultAddressProp              = "address"
 )
+
+type deployContractWithAddress struct {
+	kldmessages.DeployContract
+	Address string `json:"address"`
+}
 
 // RemoteRegistry lookup of ABI, ByteCode and DevDocs against a conformant REST API
 type RemoteRegistry interface {
-	loadFactoryByID(id string) (*kldmessages.DeployContract, error)
-	loadFactoryByAddress(addr string) (*kldmessages.DeployContract, error)
+	loadFactoryForGateway(lookupStr string) (*kldmessages.DeployContract, error)
+	loadFactoryForInstance(lookupStr string) (*deployContractWithAddress, error)
+	init() error
+	close()
 }
 
 // RemoteRegistryConf configuration
 type RemoteRegistryConf struct {
-	FactoryURLPrefix  string                      `json:"factoryURLPrefix"`
+	CacheDB           string                      `json:"cacheDB"`
+	GatewayURLPrefix  string                      `json:"gatewayURLPrefix"`
 	InstanceURLPrefix string                      `json:"instanceURLPrefix"`
 	Headers           map[string][]string         `json:"headers"`
 	PropNames         RemoteRegistryPropNamesConf `json:"propNames"`
@@ -53,10 +64,12 @@ type RemoteRegistryConf struct {
 
 // RemoteRegistryPropNamesConf configures the JSON property names to extract from the GET response on the API
 type RemoteRegistryPropNamesConf struct {
+	ID         string `json:"id"`
 	ABI        string `json:"abi"`
 	Bytecode   string `json:"bytecode"`
 	Devdoc     string `json:"devdoc"`
 	Deployable string `json:"deployable"`
+	Address    string `json:"address"`
 }
 
 // NewRemoteRegistry construtor
@@ -70,6 +83,9 @@ func NewRemoteRegistry(conf *RemoteRegistryConf) RemoteRegistry {
 		},
 	}
 	propNames := &conf.PropNames
+	if propNames.ID == "" {
+		propNames.ID = defaultIDProp
+	}
 	if propNames.ABI == "" {
 		propNames.ABI = defaultABIProp
 	}
@@ -82,8 +98,11 @@ func NewRemoteRegistry(conf *RemoteRegistryConf) RemoteRegistry {
 	if propNames.Deployable == "" {
 		propNames.Deployable = defaultDeployableProp
 	}
-	if rr.conf.FactoryURLPrefix != "" && !strings.HasSuffix(rr.conf.FactoryURLPrefix, "/") {
-		rr.conf.FactoryURLPrefix += "/"
+	if propNames.Address == "" {
+		propNames.Address = defaultAddressProp
+	}
+	if rr.conf.GatewayURLPrefix != "" && !strings.HasSuffix(rr.conf.GatewayURLPrefix, "/") {
+		rr.conf.GatewayURLPrefix += "/"
 	}
 	if rr.conf.InstanceURLPrefix != "" && !strings.HasSuffix(rr.conf.InstanceURLPrefix, "/") {
 		rr.conf.InstanceURLPrefix += "/"
@@ -94,6 +113,16 @@ func NewRemoteRegistry(conf *RemoteRegistryConf) RemoteRegistry {
 type remoteRegistry struct {
 	conf   *RemoteRegistryConf
 	client *http.Client
+	db     kldkvstore.KVStore
+}
+
+func (rr *remoteRegistry) init() (err error) {
+	if rr.conf.CacheDB != "" {
+		if rr.db, err = kldkvstore.NewLDBKeyValueStore(rr.conf.CacheDB); err != nil {
+			return fmt.Errorf("Failed to initialize cache for remote registry: %s", err)
+		}
+	}
+	return nil
 }
 
 func (rr *remoteRegistry) doRequest(method, url string) (map[string]interface{}, error) {
@@ -127,23 +156,34 @@ func (rr *remoteRegistry) getResponseString(m map[string]interface{}, p string, 
 	if !exists {
 		return "", fmt.Errorf("'%s' missing in contract registry response", p)
 	}
-	stringVal, ok := genericVal.(string)
-	if !ok {
+	var stringVal string
+	switch genericVal.(type) {
+	case string:
+		stringVal = genericVal.(string)
+	case nil:
+		stringVal = ""
+	default:
 		return "", fmt.Errorf("'%s' not a string in contract registry response", p)
 	}
 	if !emptyOK && stringVal == "" {
-		return "", fmt.Errorf("'%s' empty in contract registry response", p)
+		return "", fmt.Errorf("'%s' empty (or null) in contract registry response", p)
 	}
 	return stringVal, nil
 }
 
-func (rr *remoteRegistry) loadFactoryByID(id string) (*kldmessages.DeployContract, error) {
-	if rr.conf.FactoryURLPrefix == "" {
-		return nil, nil
+func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string) (*deployContractWithAddress, error) {
+	safeLookupStr := url.QueryEscape(lookupStr)
+	msg := rr.loadFactoryFromCacheDB(ns + "/" + safeLookupStr)
+	if msg != nil {
+		return msg, nil
 	}
-	url := rr.conf.FactoryURLPrefix + url.QueryEscape(id)
-	jsonRes, err := rr.doRequest("GET", url)
+	queryURL := baseURL + safeLookupStr
+	jsonRes, err := rr.doRequest("GET", queryURL)
 	if err != nil || jsonRes == nil {
+		return nil, err
+	}
+	idString, err := rr.getResponseString(jsonRes, rr.conf.PropNames.ID, false)
+	if err != nil {
 		return nil, err
 	}
 	abiString, err := rr.getResponseString(jsonRes, rr.conf.PropNames.ABI, false)
@@ -153,7 +193,7 @@ func (rr *remoteRegistry) loadFactoryByID(id string) (*kldmessages.DeployContrac
 	var abi *kldbind.ABI
 	err = json.Unmarshal([]byte(abiString), &abi)
 	if err != nil {
-		log.Errorf("GET %s <-- !Failed to decode ABI: %s\n%s", url, err, abiString)
+		log.Errorf("GET %s <-- !Failed to decode ABI: %s\n%s", queryURL, err, abiString)
 		return nil, fmt.Errorf(genericRegistryResponseErrorMsg)
 	}
 	devdoc, err := rr.getResponseString(jsonRes, rr.conf.PropNames.Devdoc, true)
@@ -166,16 +206,75 @@ func (rr *remoteRegistry) loadFactoryByID(id string) (*kldmessages.DeployContrac
 	}
 	var bytecode []byte
 	if bytecode, err = hex.DecodeString(strings.TrimPrefix(bytecodeStr, "0x")); err != nil {
-		log.Errorf("GET %s <-- !Failed to parse bytecode: %s\n%s", url, err, bytecodeStr)
+		log.Errorf("GET %s <-- !Failed to parse bytecode: %s\n%s", queryURL, err, bytecodeStr)
 		return nil, fmt.Errorf(genericRegistryResponseErrorMsg)
 	}
-	return &kldmessages.DeployContract{
-		ABI:      abi,
-		DevDoc:   devdoc,
-		Compiled: bytecode,
-	}, nil
+	addr, _ := rr.getResponseString(jsonRes, rr.conf.PropNames.Address, false)
+	msg = &deployContractWithAddress{
+		DeployContract: kldmessages.DeployContract{
+			TransactionCommon: kldmessages.TransactionCommon{
+				RequestCommon: kldmessages.RequestCommon{
+					Headers: kldmessages.CommonHeaders{
+						ID: idString,
+					},
+				},
+			},
+			ABI:      abi,
+			DevDoc:   devdoc,
+			Compiled: bytecode,
+		},
+		Address: strings.ToLower(strings.TrimPrefix(addr, "0x")),
+	}
+	rr.storeFactoryToCacheDB(ns+"/"+safeLookupStr, msg)
+	return msg, nil
 }
 
-func (rr *remoteRegistry) loadFactoryByAddress(id string) (*kldmessages.DeployContract, error) {
-	return nil, fmt.Errorf("Not implemented")
+func (rr *remoteRegistry) loadFactoryFromCacheDB(cacheKey string) *deployContractWithAddress {
+	if rr.db == nil {
+		return nil
+	}
+	b, err := rr.db.Get(cacheKey)
+	if err != nil {
+		return nil
+	}
+	var msg deployContractWithAddress
+	err = json.Unmarshal(b, &msg)
+	if err != nil {
+		log.Warnf("Failed to deserialized cached bytes for key %s: %s", cacheKey, err)
+		return nil
+	}
+	return &msg
+}
+
+func (rr *remoteRegistry) storeFactoryToCacheDB(cacheKey string, msg *deployContractWithAddress) {
+	if rr.db == nil {
+		return
+	}
+	b, _ := json.Marshal(msg)
+	if err := rr.db.Put(cacheKey, b); err != nil {
+		log.Warnf("Failed to write bytes to cache for key %s: %s", cacheKey, err)
+		return
+	}
+}
+
+func (rr *remoteRegistry) loadFactoryForGateway(lookupStr string) (*kldmessages.DeployContract, error) {
+	if rr.conf.GatewayURLPrefix == "" {
+		return nil, nil
+	}
+	msg, err := rr.loadFactoryFromURL(rr.conf.GatewayURLPrefix, "gateways", lookupStr)
+	if msg != nil {
+		// There is no address on a gateway, so we just return the DeployMsg
+		return &msg.DeployContract, err
+	}
+	return nil, err
+}
+
+func (rr *remoteRegistry) loadFactoryForInstance(lookupStr string) (*deployContractWithAddress, error) {
+	if rr.conf.InstanceURLPrefix == "" {
+		return nil, nil
+	}
+	return rr.loadFactoryFromURL(rr.conf.InstanceURLPrefix, "instances", lookupStr)
+}
+
+func (rr *remoteRegistry) close() {
 }

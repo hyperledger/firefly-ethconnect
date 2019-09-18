@@ -209,7 +209,7 @@ func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string) (*de
 		log.Errorf("GET %s <-- !Failed to parse bytecode: %s\n%s", queryURL, err, bytecodeStr)
 		return nil, fmt.Errorf(genericRegistryResponseErrorMsg)
 	}
-	addr, _ := rr.getResponseString(jsonRes, rr.conf.PropNames.Address, true)
+	addr, _ := rr.getResponseString(jsonRes, rr.conf.PropNames.Address, false)
 	msg = &deployContractWithAddress{
 		DeployContract: kldmessages.DeployContract{
 			TransactionCommon: kldmessages.TransactionCommon{

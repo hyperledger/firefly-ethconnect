@@ -128,25 +128,28 @@ func (r *rest2eth) addRoutes(router *httprouter.Router) {
 	router.POST("/contracts/:address/:method", r.restHandler)
 	router.GET("/contracts/:address/:method", r.restHandler)
 	router.POST("/contracts/:address/:method/:subcommand", r.restHandler)
+
 	router.POST("/abis/:abi", r.restHandler)
 	router.POST("/abis/:abi/:address/:method", r.restHandler)
 	router.GET("/abis/:abi/:address/:method", r.restHandler)
-	router.GET("/abis/:abi/:address/:method/:subcommand", r.restHandler)
+	router.POST("/abis/:abi/:address/:method/:subcommand", r.restHandler)
+
 	// Remote registry managed address routes, with long and short names
 	router.POST("/instances/:instance_lookup/:method", r.restHandler)
 	router.GET("/instances/:instance_lookup/:method", r.restHandler)
 	router.POST("/instances/:instance_lookup/:method/:subcommand", r.restHandler)
+
 	router.POST("/i/:instance_lookup/:method", r.restHandler)
 	router.GET("/i/:instance_lookup/:method", r.restHandler)
 	router.POST("/i/:instance_lookup/:method/:subcommand", r.restHandler)
+
 	router.POST("/gateways/:gateway_lookup", r.restHandler)
 	router.POST("/gateways/:gateway_lookup/:address/:method", r.restHandler)
 	router.GET("/gateways/:gateway_lookup/:address/:method", r.restHandler)
-	router.GET("/gateways/:gateway_lookup/:address/:method/:subcommand", r.restHandler)
+
 	router.POST("/g/:gateway_lookup", r.restHandler)
 	router.POST("/g/:gateway_lookup/:address/:method", r.restHandler)
 	router.GET("/g/:gateway_lookup/:address/:method", r.restHandler)
-	router.GET("/g/:gateway_lookup/:address/:method/:subcommand", r.restHandler)
 }
 
 type restCmd struct {

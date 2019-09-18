@@ -12,47 +12,63 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package kldevents
+package kldkvstore
 
 import (
 	"fmt"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
 
-type kvIterator interface {
+// KVIterator interface for key value iterators
+type KVIterator interface {
 	Key() string
 	Value() []byte
 	Next() bool
 	Release()
 }
 
-type kvStore interface {
+// KVStore interface for key value stores
+type KVStore interface {
 	Put(key string, val []byte) error
 	Get(key string) ([]byte, error)
 	Delete(key string) error
-	NewIterator() kvIterator
+	NewIterator() KVIterator
 	Close()
 }
 
 type levelDBKeyValueStore struct {
-	db *leveldb.DB
+	path string
+	db   *leveldb.DB
+}
+
+func (k *levelDBKeyValueStore) warnIfErr(op, key string, err error) {
+	if err != nil && err != leveldb.ErrNotFound {
+		log.Warnf("LDB %s %s '%s' failed: %s", k.path, op, key, err)
+	}
 }
 
 func (k *levelDBKeyValueStore) Put(key string, val []byte) error {
-	return k.db.Put([]byte(key), val, nil)
+	err := k.db.Put([]byte(key), val, nil)
+	k.warnIfErr("Put", key, err)
+	return err
 }
 
 func (k *levelDBKeyValueStore) Get(key string) ([]byte, error) {
-	return k.db.Get([]byte(key), nil)
+	b, err := k.db.Get([]byte(key), nil)
+	k.warnIfErr("Get", key, err)
+	return b, err
 }
 
 func (k *levelDBKeyValueStore) Delete(key string) error {
-	return k.db.Delete([]byte(key), nil)
+	err := k.db.Delete([]byte(key), nil)
+	k.warnIfErr("Delete", key, err)
+	return err
 }
 
-func (k *levelDBKeyValueStore) NewIterator() kvIterator {
+func (k *levelDBKeyValueStore) NewIterator() KVIterator {
 	return &levelDBKeyIterator{
 		i: k.db.NewIterator(nil, nil),
 	}
@@ -82,8 +98,11 @@ func (k *levelDBKeyValueStore) Close() {
 	k.db.Close()
 }
 
-func newLDBKeyValueStore(ldbPath string) (kv kvStore, err error) {
-	store := &levelDBKeyValueStore{}
+// NewLDBKeyValueStore construct a new LevelDB instance of a KV store
+func NewLDBKeyValueStore(ldbPath string) (kv KVStore, err error) {
+	store := &levelDBKeyValueStore{
+		path: ldbPath,
+	}
 	if store.db, err = leveldb.OpenFile(ldbPath, nil); err != nil {
 		return nil, fmt.Errorf("Failed to open DB at %s: %s", ldbPath, err)
 	}

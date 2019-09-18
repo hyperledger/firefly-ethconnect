@@ -63,6 +63,7 @@ type rest2eth struct {
 	asyncDispatcher REST2EthAsyncDispatcher
 	syncDispatcher  rest2EthSyncDispatcher
 	subMgr          kldevents.SubscriptionManager
+	rr              RemoteRegistry
 }
 
 type restErrMsg struct {
@@ -109,7 +110,7 @@ func (i *rest2EthSyncResponder) ReplyWithReceipt(receipt kldmessages.ReplyWithHe
 	return
 }
 
-func newREST2eth(gw smartContractGatewayInt, rpc kldeth.RPCClient, subMgr kldevents.SubscriptionManager, asyncDispatcher REST2EthAsyncDispatcher, syncDispatcher rest2EthSyncDispatcher) *rest2eth {
+func newREST2eth(gw smartContractGatewayInt, rpc kldeth.RPCClient, subMgr kldevents.SubscriptionManager, rr RemoteRegistry, asyncDispatcher REST2EthAsyncDispatcher, syncDispatcher rest2EthSyncDispatcher) *rest2eth {
 	addrCheck, _ := regexp.Compile("^(0x)?[0-9a-z]{40}$")
 	return &rest2eth{
 		gw:              gw,
@@ -118,17 +119,39 @@ func newREST2eth(gw smartContractGatewayInt, rpc kldeth.RPCClient, subMgr kldeve
 		asyncDispatcher: asyncDispatcher,
 		rpc:             rpc,
 		subMgr:          subMgr,
+		rr:              rr,
 	}
 }
 
 func (r *rest2eth) addRoutes(router *httprouter.Router) {
+	// Built-in registry managed routes
 	router.POST("/contracts/:address/:method", r.restHandler)
 	router.GET("/contracts/:address/:method", r.restHandler)
 	router.POST("/contracts/:address/:method/:subcommand", r.restHandler)
+
 	router.POST("/abis/:abi", r.restHandler)
 	router.POST("/abis/:abi/:address/:method", r.restHandler)
 	router.GET("/abis/:abi/:address/:method", r.restHandler)
-	router.GET("/abis/:abi/:address/:method/:subcommand", r.restHandler)
+	router.POST("/abis/:abi/:address/:method/:subcommand", r.restHandler)
+
+	// Remote registry managed address routes, with long and short names
+	router.POST("/instances/:instance_lookup/:method", r.restHandler)
+	router.GET("/instances/:instance_lookup/:method", r.restHandler)
+	router.POST("/instances/:instance_lookup/:method/:subcommand", r.restHandler)
+
+	router.POST("/i/:instance_lookup/:method", r.restHandler)
+	router.GET("/i/:instance_lookup/:method", r.restHandler)
+	router.POST("/i/:instance_lookup/:method/:subcommand", r.restHandler)
+
+	router.POST("/gateways/:gateway_lookup", r.restHandler)
+	router.POST("/gateways/:gateway_lookup/:address/:method", r.restHandler)
+	router.GET("/gateways/:gateway_lookup/:address/:method", r.restHandler)
+	router.POST("/gateways/:gateway_lookup/:address/:method/:subcommand", r.restHandler)
+
+	router.POST("/g/:gateway_lookup", r.restHandler)
+	router.POST("/g/:gateway_lookup/:address/:method", r.restHandler)
+	router.GET("/g/:gateway_lookup/:address/:method", r.restHandler)
+	router.POST("/g/:gateway_lookup/:address/:method/:subcommand", r.restHandler)
 }
 
 type restCmd struct {
@@ -150,35 +173,68 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 	c.addr = strings.ToLower(strings.TrimPrefix(addrParam, "0x"))
 	validAddress := r.addrCheck.MatchString(c.addr)
 
-	// Check we have a valid ABI
+	// There are multiple ways we resolve the path into an ABI
+	// 1. we lookup it up remotely in a REST attached contract registry (the newer option)
+	//    - /gateways  is for factory interfaces that can talk to any instance
+	//    - /instances is for known individual instances
+	// 2. we lookup it up locally in a simple filestore managed in ethconnect (the original option)
+	//    - /abis      is for factory interfaces installed into ethconnect by uploading the Solidity
+	//    - /contracts is for individual instances deployed via ethconnect factory interfaces
 	var a *kldbind.ABI
-	abiID := params.ByName("abi")
-	if abiID != "" {
-		c.deployMsg, _, err = r.gw.loadDeployMsgForFactory(abiID)
+	if strings.HasPrefix(req.URL.Path, "/gateways/") || strings.HasPrefix(req.URL.Path, "/g/") {
+		c.deployMsg, err = r.rr.loadFactoryForGateway(params.ByName("gateway_lookup"))
 		if err != nil {
+			r.restErrReply(res, req, err, 500)
+			return
+		} else if c.deployMsg == nil {
+			err = fmt.Errorf("Gateway not found")
 			r.restErrReply(res, req, err, 404)
 			return
 		}
-		a = c.deployMsg.ABI
+	} else if strings.HasPrefix(req.URL.Path, "/instances/") || strings.HasPrefix(req.URL.Path, "/i/") {
+		var msg *deployContractWithAddress
+		msg, err = r.rr.loadFactoryForInstance(params.ByName("instance_lookup"))
+		if err != nil {
+			r.restErrReply(res, req, err, 500)
+			return
+		} else if msg == nil {
+			err = fmt.Errorf("Instance not found")
+			r.restErrReply(res, req, err, 404)
+			return
+		}
+		c.deployMsg = &msg.DeployContract
+		c.addr = msg.Address
+		validAddress = true // assume registry only returns valid addresses
 	} else {
-		if !validAddress {
-			// Resolve the address as a registered name, to an actual contract address
-			if c.addr, err = r.gw.resolveContractAddr(addrParam); err != nil {
+		// Local logic
+		abiID := params.ByName("abi")
+		if abiID != "" {
+			c.deployMsg, _, err = r.gw.loadDeployMsgByID(abiID)
+			if err != nil {
 				r.restErrReply(res, req, err, 404)
 				return
 			}
-			validAddress = true
-			addrParam = c.addr
+			a = c.deployMsg.ABI
+		} else {
+			if !validAddress {
+				// Resolve the address as a registered name, to an actual contract address
+				if c.addr, err = r.gw.resolveContractAddr(addrParam); err != nil {
+					r.restErrReply(res, req, err, 404)
+					return
+				}
+				validAddress = true
+				addrParam = c.addr
+			}
+			c.deployMsg, _, err = r.gw.loadDeployMsgForInstance(addrParam)
+			if err != nil {
+				r.restErrReply(res, req, err, 404)
+				return c, err
+			}
 		}
-		deployMsg, _, err := r.gw.loadDeployMsgForInstance(addrParam)
-		if err != nil {
-			r.restErrReply(res, req, err, 404)
-			return c, err
-		}
-		a = deployMsg.ABI
 	}
+	a = c.deployMsg.ABI
 
-	// See addRoutes for all the various routes we support.
+	// See addRoutes for all the various routes we support under the factory/instance.
 	// We need to handle the special case of
 	// /abis/:abi/EVENTNAME/subscribe
 	// ... where 'EVENTNAME' is passed as :address and is a valid event

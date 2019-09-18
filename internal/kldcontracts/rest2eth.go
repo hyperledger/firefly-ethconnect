@@ -146,10 +146,12 @@ func (r *rest2eth) addRoutes(router *httprouter.Router) {
 	router.POST("/gateways/:gateway_lookup", r.restHandler)
 	router.POST("/gateways/:gateway_lookup/:address/:method", r.restHandler)
 	router.GET("/gateways/:gateway_lookup/:address/:method", r.restHandler)
+	router.POST("/gateways/:gateway_lookup/:address/:method/:subcommand", r.restHandler)
 
 	router.POST("/g/:gateway_lookup", r.restHandler)
 	router.POST("/g/:gateway_lookup/:address/:method", r.restHandler)
 	router.GET("/g/:gateway_lookup/:address/:method", r.restHandler)
+	router.POST("/g/:gateway_lookup/:address/:method/:subcommand", r.restHandler)
 }
 
 type restCmd struct {

@@ -21,6 +21,7 @@ import (
 
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
+	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -239,9 +240,9 @@ func TestUnsubscribeFail(t *testing.T) {
 func TestLoadCheckpointBadJSON(t *testing.T) {
 	assert := assert.New(t)
 	sm := newTestSubscriptionManager()
-	mockKV := newMockKV(nil)
+	mockKV := kldkvstore.NewMockKV(nil)
 	sm.db = mockKV
-	mockKV.kvs[checkpointIDPrefix+"id1"] = []byte(":bad json")
+	mockKV.KVS[checkpointIDPrefix+"id1"] = []byte(":bad json")
 	_, err := sm.loadCheckpoint("id1")
 	assert.Error(err)
 }

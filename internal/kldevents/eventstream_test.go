@@ -27,6 +27,7 @@ import (
 
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
+	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -415,7 +416,7 @@ func TestProcessEventsEnd2End(t *testing.T) {
 			BatchSize: 1,
 			Webhook:   &webhookAction{},
 		}, 200)
-	sm.db, _ = newLDBKeyValueStore(dir)
+	sm.db, _ = kldkvstore.NewLDBKeyValueStore(dir)
 	defer svr.Close()
 
 	s := setupTestSubscription(assert, sm, stream)
@@ -592,7 +593,7 @@ func TestStoreCheckpointLoadError(t *testing.T) {
 			ErrorHandling: ErrorHandlingBlock,
 			Webhook:       &webhookAction{},
 		}, 200)
-	mockKV := newMockKV(fmt.Errorf("pop"))
+	mockKV := kldkvstore.NewMockKV(fmt.Errorf("pop"))
 	sm.db = mockKV
 	defer close(eventStream)
 	defer svr.Close()
@@ -615,8 +616,8 @@ func TestStoreCheckpointStoreError(t *testing.T) {
 			ErrorHandling: ErrorHandlingBlock,
 			Webhook:       &webhookAction{},
 		}, 200)
-	mockKV := newMockKV(nil)
-	mockKV.storeErr = fmt.Errorf("pop")
+	mockKV := kldkvstore.NewMockKV(nil)
+	mockKV.StoreErr = fmt.Errorf("pop")
 	sm.db = mockKV
 	defer close(eventStream)
 	defer svr.Close()
@@ -645,8 +646,8 @@ func TestProcessBatchEmptyArray(t *testing.T) {
 			ErrorHandling: ErrorHandlingBlock,
 			Webhook:       &webhookAction{},
 		}, 200)
-	mockKV := newMockKV(nil)
-	mockKV.storeErr = fmt.Errorf("pop")
+	mockKV := kldkvstore.NewMockKV(nil)
+	mockKV.StoreErr = fmt.Errorf("pop")
 	sm.db = mockKV
 	defer close(eventStream)
 	defer svr.Close()

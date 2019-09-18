@@ -25,6 +25,7 @@ import (
 
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
+	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
@@ -76,7 +77,7 @@ type SubscriptionManagerConf struct {
 type subscriptionMGR struct {
 	conf          *SubscriptionManagerConf
 	rpcConf       *kldeth.RPCConnOpts
-	db            kvStore
+	db            kldkvstore.KVStore
 	rpc           kldeth.RPCClient
 	subscriptions map[string]*subscription
 	streams       map[string]*eventStream
@@ -326,7 +327,7 @@ func (s *subscriptionMGR) deleteCheckpoint(streamID string) {
 }
 
 func (s *subscriptionMGR) Init() (err error) {
-	if s.db, err = newLDBKeyValueStore(s.conf.EventLevelDBPath); err != nil {
+	if s.db, err = kldkvstore.NewLDBKeyValueStore(s.conf.EventLevelDBPath); err != nil {
 		return fmt.Errorf("Failed to open DB at %s: %s", s.conf.EventLevelDBPath, err)
 	}
 	s.recoverStreams()

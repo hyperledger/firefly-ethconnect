@@ -38,7 +38,7 @@ func TestABI2SwaggerERC20Generic(t *testing.T) {
 	c := NewABI2Swagger("localhost:80", "/contracts", []string{"http"})
 	abi, err := abi.JSON(strings.NewReader(erc20ABI))
 	assert.NoError(err)
-	swagger := c.Gen4Factory("/erc20", "erc20", &abi, erc20DevDocs)
+	swagger := c.Gen4Factory("/erc20", "erc20", false, &abi, erc20DevDocs)
 
 	swaggerBytes, err := json.MarshalIndent(&swagger, "", "  ")
 	assert.NoError(err)
@@ -46,6 +46,18 @@ func TestABI2SwaggerERC20Generic(t *testing.T) {
 
 	expectedJSON, _ := ioutil.ReadFile("../../test/erc20.swagger.json")
 	assert.Equal(string(expectedJSON), string(swaggerBytes))
+	return
+}
+
+func TestABI2SwaggerERC20GenericFactoryOnly(t *testing.T) {
+	assert := assert.New(t)
+
+	c := NewABI2Swagger("localhost:80", "/contracts", []string{"http"})
+	abi, err := abi.JSON(strings.NewReader(erc20ABI))
+	assert.NoError(err)
+	swagger := c.Gen4Factory("/erc20", "erc20", true, &abi, erc20DevDocs)
+
+	assert.Equal(1, len(swagger.Paths.Paths))
 	return
 }
 

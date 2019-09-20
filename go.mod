@@ -6,6 +6,7 @@ require (
 	github.com/allegro/bigcache v1.1.0 // indirect
 	github.com/aristanetworks/goarista v0.0.0-20190121184617-8f049bdb8feb // indirect
 	github.com/bsm/sarama-cluster v2.1.15+incompatible
+	github.com/btcsuite/btcd v0.0.0-20190824003749-130ea5bddde3 // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
 	github.com/docker/docker v1.13.1 // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
@@ -22,6 +23,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.1 // indirect
 	github.com/huin/goupnp v1.0.0 // indirect
 	github.com/icza/dyno v0.0.0-20180601094105-0c96289f9585
+	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.1 // indirect
 	github.com/julienschmidt/httprouter v1.2.0
 	github.com/karalabe/hid v0.0.0-20181128192157-d815e0c1a2e2 // indirect
@@ -56,6 +58,7 @@ require (
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	go.uber.org/atomic v1.4.0
 	golang.org/x/tools v0.0.0-20190425222832-ad9eeb80039a // indirect
+	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect
 	gopkg.in/urfave/cli.v1 v1.20.0 // indirect
 	gopkg.in/yaml.v2 v2.2.2
 )

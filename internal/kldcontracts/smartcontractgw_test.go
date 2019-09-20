@@ -337,6 +337,14 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	assert.Contains(string(html), "/gateways/test?swagger")
 	assert.Contains(string(html), "0x12345")
 
+	req = httptest.NewRequest("GET", "/g/test?ui&from=0x12345&factory", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(200, res.Code)
+	html, _ = ioutil.ReadAll(res.Body)
+	assert.Contains(string(html), "<html>")
+	assert.Contains(string(html), "Factory API")
+
 	rr.deployMsg = nil
 
 	req = httptest.NewRequest("GET", "/instances/test?openapi", bytes.NewReader([]byte{}))
@@ -360,6 +368,7 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	router.ServeHTTP(res, req)
 	assert.Equal(500, res.Code)
 
+	scgw.Shutdown()
 }
 func TestRegisterContractBadAddress(t *testing.T) {
 	// writes real files and tests end to end

@@ -93,7 +93,9 @@ func (i *rest2EthSyncResponder) ReplyWithError(err error) {
 func (i *rest2EthSyncResponder) ReplyWithReceipt(receipt kldmessages.ReplyWithHeaders) {
 	txReceiptMsg := receipt.IsReceipt()
 	if txReceiptMsg != nil && txReceiptMsg.ContractAddress != nil {
-		i.r.gw.PostDeploy(txReceiptMsg)
+		if err := i.r.gw.PostDeploy(txReceiptMsg); err != nil {
+			log.Warnf("Failed to perform post-deploy processing: %s", err)
+		}
 	}
 	status := 200
 	if receipt.ReplyHeaders().MsgType != kldmessages.MsgTypeTransactionSuccess {
@@ -425,9 +427,11 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 	deployMsg.Parameters = msgParams
 	r.addPrivateTx(&deployMsg.TransactionCommon, req)
 	deployMsg.RegisterAs = getKLDParam("register", req, false)
-	if err := r.gw.checkNameAvailable(deployMsg.RegisterAs); err != nil {
-		r.restErrReply(res, req, err, 409)
-		return
+	if deployMsg.RegisterAs != "" {
+		if err := r.gw.checkNameAvailable(deployMsg.RegisterAs, isRemote(deployMsg.Headers)); err != nil {
+			r.restErrReply(res, req, err, 409)
+			return
+		}
 	}
 	if strings.ToLower(getKLDParam("sync", req, true)) == "true" {
 		responder := &rest2EthSyncResponder{

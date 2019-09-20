@@ -96,7 +96,7 @@ func (m *mockABILoader) loadDeployMsgByID(addrHexNo0x string) (*kldmessages.Depl
 	return m.deployMsg, m.abiInfo, m.loadABIError
 }
 
-func (m *mockABILoader) checkNameAvailable(name string) error {
+func (m *mockABILoader) checkNameAvailable(name string, isRemote bool) error {
 	return m.nameAvailableError
 }
 
@@ -146,21 +146,6 @@ func (m *mockSubMgr) SubscriptionByID(id string) (*kldevents.SubscriptionInfo, e
 }
 func (m *mockSubMgr) DeleteSubscription(id string) error { return m.err }
 func (m *mockSubMgr) Close()                             {}
-
-type mockRemoteRegistry struct {
-	lookupError error
-	gatewayMsg  *kldmessages.DeployContract
-	instanceMsg *deployContractWithAddress
-}
-
-func (m *mockRemoteRegistry) loadFactoryForGateway(lookupStr string) (*kldmessages.DeployContract, error) {
-	return m.gatewayMsg, m.lookupError
-}
-func (m *mockRemoteRegistry) loadFactoryForInstance(lookupStr string) (*deployContractWithAddress, error) {
-	return m.instanceMsg, m.lookupError
-}
-func (m *mockRemoteRegistry) init() error { return nil }
-func (m *mockRemoteRegistry) close()      {}
 
 func newTestDeployMsg(addr string) *deployContractWithAddress {
 	compiled, _ := kldeth.CompileContract(simpleEventsSource(), "SimpleEvents", "")
@@ -287,6 +272,7 @@ func TestDeployContractAsyncDuplicate(t *testing.T) {
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/abis/abi1?kld-privateFrom=0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90&kld-privateFor=0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745&kld-privateFor=0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C", bytes.NewReader(body))
 	req.Header.Add("x-kaleido-from", from)
+	req.Header.Add("x-kaleido-register", "random")
 	router.ServeHTTP(res, req)
 
 	assert.Equal(409, res.Result().StatusCode)
@@ -447,6 +433,9 @@ func TestDeployContractSyncRemoteRegitryInstance(t *testing.T) {
 			Headers: kldmessages.ReplyHeaders{
 				CommonHeaders: kldmessages.CommonHeaders{
 					MsgType: kldmessages.MsgTypeTransactionSuccess,
+					Context: map[string]interface{}{
+						remoteRegistryContextKey: true,
+					},
 				},
 			},
 		},
@@ -455,8 +444,8 @@ func TestDeployContractSyncRemoteRegitryInstance(t *testing.T) {
 		sendTransactionSyncReceipt: receipt,
 	}
 	r, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
-	r.rr = &mockRemoteRegistry{
-		instanceMsg: newTestDeployMsg(strings.TrimPrefix(to, "0x")),
+	r.rr = &mockRR{
+		deployMsg: newTestDeployMsg(strings.TrimPrefix(to, "0x")),
 	}
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?kld-sync", bytes.NewReader(body))
@@ -475,8 +464,8 @@ func TestDeployContractSyncRemoteRegitryInstance500(t *testing.T) {
 
 	bodyMap := make(map[string]interface{})
 	r, _, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
-	r.rr = &mockRemoteRegistry{
-		lookupError: fmt.Errorf("pop"),
+	r.rr = &mockRR{
+		err: fmt.Errorf("pop"),
 	}
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?kld-sync", bytes.NewReader(body))
@@ -492,7 +481,7 @@ func TestDeployContractSyncRemoteRegitryInstance404(t *testing.T) {
 
 	bodyMap := make(map[string]interface{})
 	r, _, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
-	r.rr = &mockRemoteRegistry{}
+	r.rr = &mockRR{}
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?kld-sync", bytes.NewReader(body))
 	router.ServeHTTP(res, req)
@@ -507,8 +496,8 @@ func TestDeployContractSyncRemoteRegitryGateway500(t *testing.T) {
 
 	bodyMap := make(map[string]interface{})
 	r, _, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
-	r.rr = &mockRemoteRegistry{
-		lookupError: fmt.Errorf("pop"),
+	r.rr = &mockRR{
+		err: fmt.Errorf("pop"),
 	}
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygw?kld-sync", bytes.NewReader(body))
@@ -524,7 +513,7 @@ func TestDeployContractSyncRemoteRegitryGateway404(t *testing.T) {
 
 	bodyMap := make(map[string]interface{})
 	r, _, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
-	r.rr = &mockRemoteRegistry{}
+	r.rr = &mockRR{}
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygw?kld-sync", bytes.NewReader(body))
 	router.ServeHTTP(res, req)
@@ -555,8 +544,8 @@ func TestDeployContractSyncRemoteRegitryGateway(t *testing.T) {
 		sendTransactionSyncReceipt: receipt,
 	}
 	r, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
-	r.rr = &mockRemoteRegistry{
-		gatewayMsg: &(newTestDeployMsg(strings.TrimPrefix(to, "0x")).DeployContract),
+	r.rr = &mockRR{
+		deployMsg: newTestDeployMsg(strings.TrimPrefix(to, "0x")),
 	}
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygateway/567a417717cb6c59ddc1035705f02c0fd1ab1872/set?kld-sync", bytes.NewReader(body))

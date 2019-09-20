@@ -64,10 +64,10 @@ type AsyncSentMsg struct {
 
 // CommonHeaders are common to all messages
 type CommonHeaders struct {
-	ID      string      `json:"id,omitempty"`
-	MsgType string      `json:"type"`
-	Account string      `json:"account,omitempty"`
-	Context interface{} `json:"ctx,omitempty"`
+	ID      string                 `json:"id,omitempty"`
+	MsgType string                 `json:"type"`
+	Account string                 `json:"account,omitempty"`
+	Context map[string]interface{} `json:"ctx,omitempty"`
 }
 
 // RequestCommon is a common interface to all requests

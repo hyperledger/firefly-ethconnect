@@ -54,7 +54,7 @@ func TestJSONEncodingAssumptions(t *testing.T) {
 	assert.Equal(float64(123), sendTxnMsg.Parameters[1]) // JSON numbers go to floats
 	assert.Equal("abc", sendTxnMsg.Parameters[2])
 	assert.Equal("0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", sendTxnMsg.Parameters[3])
-	ctx := sendTxnMsg.Headers.Context.(map[string]interface{})
+	ctx := sendTxnMsg.Headers.Context
 	assert.Equal("hello world", ctx["myContext"])
 
 	// Simulate an error for this transaction, and check it marshals/unmarshals with the embedded request payload

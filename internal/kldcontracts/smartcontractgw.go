@@ -53,8 +53,9 @@ import (
 )
 
 const (
-	maxFormParsingMemory   = 32 << 20 // 32 MB
-	errEventSupportMissing = "Event support is not configured on this gateway"
+	maxFormParsingMemory     = 32 << 20 // 32 MB
+	errEventSupportMissing   = "Event support is not configured on this gateway"
+	remoteRegistryContextKey = "isRemoteRegistry"
 )
 
 // SmartContractGateway provides gateway functions for OpenAPI 2.0 processing of Solidity contracts
@@ -70,7 +71,7 @@ type smartContractGatewayInt interface {
 	resolveContractAddr(registeredName string) (string, error)
 	loadDeployMsgForInstance(addrHexNo0x string) (*kldmessages.DeployContract, *contractInfo, error)
 	loadDeployMsgByID(abi string) (*kldmessages.DeployContract, *abiInfo, error)
-	checkNameAvailable(name string) error
+	checkNameAvailable(name string, isRemote bool) error
 }
 
 // SmartContractGatewayConf configuration
@@ -216,6 +217,16 @@ func (g *smartContractGW) storeNewContractInfo(addrHexNo0x, abiID, pathName, reg
 	return contractInfo, nil
 }
 
+func isRemote(msg kldmessages.CommonHeaders) bool {
+	ctxMap := msg.Context
+	if isRemoteGeneric, ok := ctxMap[remoteRegistryContextKey]; ok {
+		if isRemote, ok := isRemoteGeneric.(bool); ok {
+			return isRemote
+		}
+	}
+	return false
+}
+
 // PostDeploy callback processes the transaction receipt and generates the Swagger
 func (g *smartContractGW) PostDeploy(msg *kldmessages.TransactionReceipt) error {
 
@@ -228,30 +239,28 @@ func (g *smartContractGW) PostDeploy(msg *kldmessages.TransactionReceipt) error 
 	}
 	addrHexNo0x := strings.ToLower(msg.ContractAddress.Hex()[2:])
 
-	requestFile := path.Join(g.conf.StoragePath, "abi_"+requestID+".deploy.json")
-	var deployMsg kldmessages.DeployContract
-	f, err := os.Open(requestFile)
-	if err != nil {
-		return fmt.Errorf("%s: Unable to recover pre-deploy message: %s", requestID, err)
-	}
-	defer f.Close()
-	if err := json.NewDecoder(f).Decode(&deployMsg); err != nil {
-		return fmt.Errorf("%s: Unable to read pre-deploy message: %s", requestID, err)
-	}
-
 	// Generate and store the swagger
+	basePath := "/contracts/"
+	isRemote := isRemote(msg.Headers.CommonHeaders)
+	if isRemote {
+		basePath = "/instances/"
+	}
 	registeredName := msg.RegisterAs
 	if registeredName == "" {
 		registeredName = addrHexNo0x
 	}
-	contractInfo, err := g.storeNewContractInfo(addrHexNo0x, requestID, registeredName, msg.RegisterAs)
-	if err != nil {
-		return err
-	}
+	msg.ContractSwagger = g.conf.BaseURL + basePath + registeredName + "?openapi"
+	msg.ContractUI = g.conf.BaseURL + basePath + registeredName + "?ui"
 
-	msg.ContractSwagger = contractInfo.SwaggerURL
-	msg.ContractUI = g.conf.BaseURL + "/contracts/" + registeredName + "?ui"
-	return nil
+	var err error
+	if isRemote {
+		if msg.RegisterAs != "" {
+			err = g.rr.registerInstance(msg.RegisterAs, "0x"+addrHexNo0x)
+		}
+	} else {
+		_, err = g.storeNewContractInfo(addrHexNo0x, requestID, registeredName, msg.RegisterAs)
+	}
+	return err
 }
 
 func (g *smartContractGW) swaggerForRemoteRegistry(apiName, addr string, abi *kldbind.ABI, devdoc, path string) *spec.Swagger {
@@ -358,7 +367,9 @@ func (g *smartContractGW) PreDeploy(msg *kldmessages.DeployContract) (err error)
 			return err
 		}
 	}
-	_, err = g.storeDeployableABI(msg, compiled)
+	if !isRemote(msg.Headers) {
+		_, err = g.storeDeployableABI(msg, compiled)
+	}
 	return err
 }
 
@@ -512,7 +523,16 @@ func (g *smartContractGW) addFileToABIIndex(id, fileName string, createdTime tim
 	g.addToABIIndex(id, &deployMsg, createdTime)
 }
 
-func (g *smartContractGW) checkNameAvailable(registerAs string) error {
+func (g *smartContractGW) checkNameAvailable(registerAs string, isRemote bool) error {
+	if isRemote {
+		msg, err := g.rr.loadFactoryForInstance(registerAs)
+		if err != nil {
+			return err
+		} else if msg != nil {
+			return fmt.Errorf("Contract address %s is already registered for name '%s'", msg.Address, registerAs)
+		}
+		return nil
+	}
 	if existing, exists := g.contractRegistrations[registerAs]; exists {
 		return fmt.Errorf("Contract address %s is already registered for name '%s'", existing.Address, registerAs)
 	}
@@ -524,7 +544,7 @@ func (g *smartContractGW) addToContractIndex(info *contractInfo) error {
 	defer g.idxLock.Unlock()
 	if info.RegisteredAs != "" {
 		// Protect against overwrite
-		if err := g.checkNameAvailable(info.RegisteredAs); err != nil {
+		if err := g.checkNameAvailable(info.RegisteredAs, false); err != nil {
 			return err
 		}
 		log.Infof("Registering %s as '%s'", info.Address, info.RegisteredAs)

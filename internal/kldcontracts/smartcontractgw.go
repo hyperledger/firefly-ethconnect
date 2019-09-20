@@ -263,17 +263,17 @@ func (g *smartContractGW) PostDeploy(msg *kldmessages.TransactionReceipt) error 
 	return err
 }
 
-func (g *smartContractGW) swaggerForRemoteRegistry(apiName, addr string, abi *kldbind.ABI, devdoc, path string) *spec.Swagger {
+func (g *smartContractGW) swaggerForRemoteRegistry(apiName, addr string, factoryOnly bool, abi *kldbind.ABI, devdoc, path string) *spec.Swagger {
 	var swagger *spec.Swagger
 	if addr == "" {
-		swagger = g.abi2swagger.Gen4Factory(path, apiName, &abi.ABI, devdoc)
+		swagger = g.abi2swagger.Gen4Factory(path, apiName, factoryOnly, &abi.ABI, devdoc)
 	} else {
 		swagger = g.abi2swagger.Gen4Instance(path, apiName, &abi.ABI, devdoc)
 	}
 	return swagger
 }
 
-func (g *smartContractGW) swaggerForABI(abiID, apiName string, abi *kldbind.ABI, devdoc string, addrHexNo0x, registerAs string) *spec.Swagger {
+func (g *smartContractGW) swaggerForABI(abiID, apiName string, factoryOnly bool, abi *kldbind.ABI, devdoc string, addrHexNo0x, registerAs string) *spec.Swagger {
 	// Ensure we have a contract name in all cases, as the Swagger
 	// won't be valid without a title
 	if apiName == "" {
@@ -290,7 +290,7 @@ func (g *smartContractGW) swaggerForABI(abiID, apiName string, abi *kldbind.ABI,
 			swagger.Info.AddExtension("x-kaleido-registered-name", pathSuffix)
 		}
 	} else {
-		swagger = g.abi2swagger.Gen4Factory("/abis/"+abiID, apiName, &abi.ABI, devdoc)
+		swagger = g.abi2swagger.Gen4Factory("/abis/"+abiID, apiName, factoryOnly, &abi.ABI, devdoc)
 	}
 
 	// Add in an extension to the Swagger that points back at the filename of the deployment info
@@ -391,7 +391,7 @@ func (g *smartContractGW) storeDeployableABI(msg *kldmessages.DeployContract, co
 	// We store the swagger in a generic format that can be used to deploy
 	// additional instances, or generically call other instances
 	// Generate and store the swagger
-	swagger := g.swaggerForABI(requestID, msg.ContractName, msg.ABI, msg.DevDoc, "", "")
+	swagger := g.swaggerForABI(requestID, msg.ContractName, false, msg.ABI, msg.DevDoc, "", "")
 	msg.Description = swagger.Info.Description // Swagger generation parses the devdoc
 	info := g.addToABIIndex(requestID, msg, time.Now().UTC())
 
@@ -772,7 +772,7 @@ func (g *smartContractGW) resolveAddressOrName(id string) (deployMsg *kldmessage
 	return deployMsg, registeredName, info, err
 }
 
-func (g *smartContractGW) isSwaggerRequest(req *http.Request) (swaggerRequest, uiRequest bool, from string) {
+func (g *smartContractGW) isSwaggerRequest(req *http.Request) (swaggerRequest, uiRequest, factoryOnly bool, from string) {
 	req.ParseForm()
 	if vs := req.Form["swagger"]; len(vs) > 0 {
 		swaggerRequest = true
@@ -782,6 +782,9 @@ func (g *smartContractGW) isSwaggerRequest(req *http.Request) (swaggerRequest, u
 	}
 	if vs := req.Form["ui"]; len(vs) > 0 {
 		uiRequest = true
+	}
+	if vs := req.Form["factory"]; len(vs) > 0 {
+		factoryOnly = true
 	}
 	from = req.FormValue("from")
 	return
@@ -809,7 +812,7 @@ func (g *smartContractGW) replyWithSwagger(res http.ResponseWriter, req *http.Re
 
 func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
-	swaggerRequest, uiRequest, from := g.isSwaggerRequest(req)
+	swaggerRequest, uiRequest, factoryOnly, from := g.isSwaggerRequest(req)
 	id := strings.TrimPrefix(strings.ToLower(params.ByName("address")), "0x")
 	prefix := "contract"
 	if id == "" {
@@ -836,10 +839,10 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 		}
 	}
 	if uiRequest {
-		g.writeHTMLForUI(prefix, id, from, (prefix == "abi"), res)
+		g.writeHTMLForUI(prefix, id, from, (prefix == "abi"), factoryOnly, res)
 	} else if swaggerRequest {
 		addr := params.ByName("address")
-		swagger := g.swaggerForABI(abiID, deployMsg.ContractName, deployMsg.ABI, deployMsg.DevDoc, addr, registeredName)
+		swagger := g.swaggerForABI(abiID, deployMsg.ContractName, factoryOnly, deployMsg.ABI, deployMsg.DevDoc, addr, registeredName)
 		g.replyWithSwagger(res, req, swagger, id, from)
 	} else {
 		log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
@@ -854,7 +857,7 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
 
-	swaggerRequest, uiRequest, from := g.isSwaggerRequest(req)
+	swaggerRequest, uiRequest, factoryOnly, from := g.isSwaggerRequest(req)
 
 	var deployMsg *kldmessages.DeployContract
 	var err error
@@ -891,9 +894,9 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 	}
 
 	if uiRequest {
-		g.writeHTMLForUI(prefix, id, from, isGateway, res)
+		g.writeHTMLForUI(prefix, id, from, isGateway, factoryOnly, res)
 	} else if swaggerRequest {
-		swagger := g.swaggerForRemoteRegistry(id, addr, deployMsg.ABI, deployMsg.DevDoc, req.URL.Path)
+		swagger := g.swaggerForRemoteRegistry(id, addr, factoryOnly, deployMsg.ABI, deployMsg.DevDoc, req.URL.Path)
 		g.replyWithSwagger(res, req, swagger, id, from)
 	} else {
 		ci := &remoteContractInfo{
@@ -1131,19 +1134,44 @@ func (g *smartContractGW) processIfArchive(dir, fileName string) error {
 }
 
 // Write out a nice little UI for exercising the Swagger
-func (g *smartContractGW) writeHTMLForUI(prefix, id, from string, factory bool, res http.ResponseWriter) {
+func (g *smartContractGW) writeHTMLForUI(prefix, id, from string, isGateway, factoryOnly bool, res http.ResponseWriter) {
 	fromQuery := ""
 	if from != "" {
 		fromQuery = "&from=" + url.QueryEscape(from)
 	}
 
 	factoryMessage := ""
-	if factory {
+	if isGateway {
 		factoryMessage =
 			`       <li><code>POST</code> against <code>/</code> (the constructor) will deploy a new instance of the smart contract
         <ul>
           <li>A dedicated API will be generated for each instance deployed via this API, scoped to that contract Address</li>
         </ul></li>`
+	}
+	factoryOnlyQuery := ""
+	helpHeader := `
+  <p>Welcome to the built-in API exerciser of Ethconnect</p>
+  `
+	hasMethodsMessage := ""
+	if factoryOnly {
+		factoryOnlyQuery = "&factory"
+		helpHeader = `<p>Factory API to deploy contract instances</p>
+  <p>Use the <code>[POST]</code> panel below to set the input parameters for your constructor, and tick <code>[TRY]</code> to deploy a contract instance.</p>
+  <p>If you want to configure a friendly API path name to invoke your contract, then set the <code>kld-register</code> parameter.</p>`
+	} else {
+		hasMethodsMessage = `<li><code>GET</code> actions <b>never</b> write to the chain. Even for actions that update state - so you can simulate execution</li>
+    <li><code>POST</code> actions against <code>/subscribe</code> paths marked <code>[event]</code> add subscriptions to event streams
+    <ul>
+      <li>Pre-configure your event streams with actions in the Kaleido console, or via the <code>/eventstreams</code> API route on Ethconnect</b></li>
+      <li>Once you add a subscription, all matching events will be reliably read, batched and delivered over your event stream</li>
+    </ul></li>
+    <li>Data type conversion is automatic for all actions an events.
+      <ul>
+          <li>Numbers are encoded as strings, to avoid loss of precision.</li>
+          <li>Byte arrays, including Address fields, are encoded in Hex with an <code>0x</code> prefix</li>
+          <li>See the 'Model' of each method and event input/output below for details</li>
+      </ul>
+    </li>`
 	}
 	html := `<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
 <html>
@@ -1153,7 +1181,7 @@ func (g *smartContractGW) writeHTMLForUI(prefix, id, from string, factory bool, 
 </head>
 <body>
   <rapi-doc 
-    spec-url="` + g.conf.BaseURL + "/" + prefix + "s/" + id + "?swagger" + fromQuery + `"
+    spec-url="` + g.conf.BaseURL + "/" + prefix + "s/" + id + "?swagger" + factoryOnlyQuery + fromQuery + `"
     allow-authentication="false"
     allow-spec-url-load="false"
     allow-spec-file-load="false"
@@ -1172,30 +1200,21 @@ func (g *smartContractGW) writeHTMLForUI(prefix, id, from string, factory bool, 
     <div style="border: #f2f2f2 1px solid; padding: 25px; margin-top: 25px;
       display: flex; flex-direction: row; flex-wrap: wrap;">
       <div style="flex: 1;">
-        <p>Welcome to the built-in API exerciser of Ethconnect</p>
-        <p><a href="#quickstart" style="text-decoration: none" onclick="document.getElementById('kaleido-quickstart-header').style.display = 'block'; this.style.display = 'none'; return false;">Show quickstart instructions</a></p>
+      ` + helpHeader + `
+        <p><a href="#quickstart" style="text-decoration: none" onclick="document.getElementById('kaleido-quickstart-header').style.display = 'block'; this.style.display = 'none'; return false;">Show additional instructions</a></p>
         <div id="kaleido-quickstart-header" style="display: none;">
           <ul>
+            <li>Authorization with Kaleido Applicaiton Credentials has already been performed when loading this page, and is passed to API calls by your browser.</code>
             <li><code>POST</code> actions against Solidity methods will <b>write to the chain</b> unless <code>kld-call</code> is set, or the method is marked <code>[read-only]</code>
             <ul>
               <li>When <code>kld-sync</code> is set, the response will not be returned until the transaction is mined <b>taking a few seconds</b></li>
               <li>When <code>kld-sync</code> is unset, the transaction is reliably streamed to the node over Kafka</li>
               <li>Use the <a href="/replies" target="_blank" style="text-decoration: none">/replies</a> API route on Ethconnect to view receipts for streamed transactions</li>
+              <li>Gas limit estimation is performed automatically, unless <code>kld-gas</code> is set.</li>
+              <li>During the gas estimation we will return any revert messages if there is a execution failure.</li>
             </ul></li>
             ` + factoryMessage + `
-            <li><code>GET</code> actions <b>never</b> write to the chain. Even for actions that update state - so you can simulate execution</li>
-            <li><code>POST</code> actions against <code>/subscribe</code> paths marked <code>[event]</code> add subscriptions to event streams
-            <ul>
-              <li>Pre-configure your event streams with actions in the Kaleido console, or via the <code>/eventstreams</code> API route on Ethconnect</b></li>
-              <li>Once you add a subscription, all matching events will be reliably read, batched and delivered over your event stream</li>
-            </ul></li>
-            <li>Data type conversion is automatic for all actions an events.
-              <ul>
-                  <li>Numbers are encoded as strings, to avoid loss of precision.</li>
-                  <li>Byte arrays, including Address fields, are encoded in Hex with an <code>0x</code> prefix</li>
-                  <li>See the 'Model' of each method and event input/output below for details</li>
-              </ul>
-            </li>
+            ` + hasMethodsMessage + `
             <li>Descriptions are taken from the devdoc included in the Solidity code comments</li>
           </ul>        
         </div>

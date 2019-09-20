@@ -51,16 +51,16 @@ func NewABI2Swagger(externalHost, externalRootPath string, externalSchemes []str
 
 // Gen4Instance generates OpenAPI for a single contract instance with an address
 func (c *ABI2Swagger) Gen4Instance(basePath, name string, abi *abi.ABI, devdocsJSON string) *spec.Swagger {
-	return c.convert(basePath, name, abi, devdocsJSON, true)
+	return c.convert(basePath, name, abi, devdocsJSON, true, false)
 }
 
 // Gen4Factory generates OpenAPI for a contract factory, with a constructor, and child methods on any addres
-func (c *ABI2Swagger) Gen4Factory(basePath, name string, abi *abi.ABI, devdocsJSON string) *spec.Swagger {
-	return c.convert(basePath, name, abi, devdocsJSON, false)
+func (c *ABI2Swagger) Gen4Factory(basePath, name string, factoryOnly bool, abi *abi.ABI, devdocsJSON string) *spec.Swagger {
+	return c.convert(basePath, name, abi, devdocsJSON, false, factoryOnly)
 }
 
 // convert does the conversion and fills in the details on the Swagger Schema
-func (c *ABI2Swagger) convert(basePath, name string, abi *abi.ABI, devdocsJSON string, inst bool) *spec.Swagger {
+func (c *ABI2Swagger) convert(basePath, name string, abi *abi.ABI, devdocsJSON string, inst, factoryOnly bool) *spec.Swagger {
 
 	basePath = c.externalRootPath + basePath
 
@@ -70,7 +70,7 @@ func (c *ABI2Swagger) convert(basePath, name string, abi *abi.ABI, devdocsJSON s
 	paths.Paths = make(map[string]spec.PathItem)
 	definitions := make(map[string]spec.Schema)
 	parameters := c.getCommonParameters()
-	c.buildDefinitionsAndPaths(inst, abi, definitions, paths.Paths, devdocs)
+	c.buildDefinitionsAndPaths(inst, factoryOnly, abi, definitions, paths.Paths, devdocs)
 	return &spec.Swagger{
 		SwaggerProps: spec.SwaggerProps{
 			Swagger: "2.0",
@@ -98,21 +98,25 @@ func (c *ABI2Swagger) convert(basePath, name string, abi *abi.ABI, devdocsJSON s
 	}
 }
 
-func (c *ABI2Swagger) buildDefinitionsAndPaths(inst bool, abi *abi.ABI, defs map[string]spec.Schema, paths map[string]spec.PathItem, devdocs gjson.Result) {
+func (c *ABI2Swagger) buildDefinitionsAndPaths(inst, factoryOnly bool, abi *abi.ABI, defs map[string]spec.Schema, paths map[string]spec.PathItem, devdocs gjson.Result) {
 	methodsDocs := devdocs.Get("methods")
 	if !inst {
 		c.buildMethodDefinitionsAndPath(inst, defs, paths, "constructor", abi.Constructor, methodsDocs)
-		c.addRegisterPath(paths)
 	}
-	for _, method := range abi.Methods {
-		c.buildMethodDefinitionsAndPath(inst, defs, paths, method.Name, method, methodsDocs)
-	}
-	for _, event := range abi.Events {
-		c.buildEventDefinitionsAndPath(inst, defs, paths, event.Name, event, devdocs.Get("events"))
+	if !factoryOnly {
 		if !inst {
-			// We add the event again at the top level (as if it were an instance) on non-instance
-			// swagger definitions, so you can subscribe to all events of this type on all instances
-			c.buildEventDefinitionsAndPath(true, defs, paths, event.Name, event, devdocs.Get("events"))
+			c.addRegisterPath(paths)
+		}
+		for _, method := range abi.Methods {
+			c.buildMethodDefinitionsAndPath(inst, defs, paths, method.Name, method, methodsDocs)
+		}
+		for _, event := range abi.Events {
+			c.buildEventDefinitionsAndPath(inst, defs, paths, event.Name, event, devdocs.Get("events"))
+			if !inst {
+				// We add the event again at the top level (as if it were an instance) on non-instance
+				// swagger definitions, so you can subscribe to all events of this type on all instances
+				c.buildEventDefinitionsAndPath(true, defs, paths, event.Name, event, devdocs.Get("events"))
+			}
 		}
 	}
 	errSchema := spec.Schema{

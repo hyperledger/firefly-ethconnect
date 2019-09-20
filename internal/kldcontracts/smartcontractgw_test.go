@@ -47,24 +47,6 @@ func simpleEventsSource() string {
 	return simpleEventsSol
 }
 
-type mockRR struct {
-	idCapture   string
-	addrCapture string
-	deployMsg   *deployContractWithAddress
-	err         error
-}
-
-func (rr *mockRR) loadFactoryForGateway(id string) (*kldmessages.DeployContract, error) {
-	rr.idCapture = id
-	return &rr.deployMsg.DeployContract, rr.err
-}
-func (rr *mockRR) loadFactoryForInstance(id string) (*deployContractWithAddress, error) {
-	rr.addrCapture = id
-	return rr.deployMsg, rr.err
-}
-func (rr *mockRR) close()      {}
-func (rr *mockRR) init() error { return nil }
-
 func TestCobraInitContractGateway(t *testing.T) {
 	assert := assert.New(t)
 	cmd := cobra.Command{}
@@ -305,9 +287,8 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	)
 	iMsg := newTestDeployMsg("0123456789abcdef0123456789abcdef01234567")
 	iMsg.Headers.ID = "xyz12345"
-	rr := &mockRemoteRegistry{
-		instanceMsg: iMsg,
-		gatewayMsg:  &(newTestDeployMsg("").DeployContract),
+	rr := &mockRR{
+		deployMsg: iMsg,
 	}
 	scgw.(*smartContractGW).rr = rr
 
@@ -356,19 +337,19 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	assert.Contains(string(html), "/gateways/test?swagger")
 	assert.Contains(string(html), "0x12345")
 
-	rr.instanceMsg = nil
+	rr.deployMsg = nil
+
 	req = httptest.NewRequest("GET", "/instances/test?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(404, res.Code)
 
-	rr.gatewayMsg = nil
 	req = httptest.NewRequest("GET", "/gateways/test?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(404, res.Code)
 
-	rr.lookupError = fmt.Errorf("pop")
+	rr.err = fmt.Errorf("pop")
 	req = httptest.NewRequest("GET", "/instances/test?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
@@ -609,33 +590,7 @@ func TestPostDeployNoRegisteredName(t *testing.T) {
 	assert.Equal("/contracts/0123456789abcdef0123456789abcdef01234567", contractInfo.Path)
 }
 
-func TestPostDeployOpenFail(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: path.Join(dir, "badpath"),
-			BaseURL:     "http://localhost/api/v1",
-		},
-		nil, nil, nil,
-	)
-	contractAddr := common.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
-	scgw := s.(*smartContractGW)
-	replyMsg := &kldmessages.TransactionReceipt{
-		ReplyCommon: kldmessages.ReplyCommon{
-			Headers: kldmessages.ReplyHeaders{
-				ReqID: "message1",
-			},
-		},
-		ContractAddress: &contractAddr,
-	}
-
-	err := scgw.PostDeploy(replyMsg)
-	assert.Regexp("Unable to recover pre-deploy message", err.Error())
-}
-
-func TestPostDeployStuffFail(t *testing.T) {
+func TestPostDeployRemoteRegisteredName(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
@@ -646,21 +601,35 @@ func TestPostDeployStuffFail(t *testing.T) {
 		},
 		nil, nil, nil,
 	)
+	rr := &mockRR{}
+	s.(*smartContractGW).rr = rr
+
 	contractAddr := common.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	scgw := s.(*smartContractGW)
 	replyMsg := &kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{
 			Headers: kldmessages.ReplyHeaders{
+				CommonHeaders: kldmessages.CommonHeaders{
+					Context: map[string]interface{}{
+						remoteRegistryContextKey: true,
+					},
+				},
 				ReqID: "message1",
 			},
 		},
 		ContractAddress: &contractAddr,
+		RegisterAs:      "lobster",
 	}
 
 	deployFile := path.Join(dir, "abi_message1.deploy.json")
-	ioutil.WriteFile(deployFile, []byte("!JSON"), 0644)
+	deployMsg := &kldmessages.DeployContract{}
+	deployBytes, _ := json.Marshal(deployMsg)
+	ioutil.WriteFile(deployFile, deployBytes, 0644)
 	err := scgw.PostDeploy(replyMsg)
-	assert.Regexp("Unable to read pre-deploy message", err.Error())
+	assert.NoError(err)
+
+	assert.Equal("0x0123456789abcdef0123456789abcdef01234567", rr.addrCapture)
+	assert.Equal("http://localhost/api/v1/instances/lobster?openapi", replyMsg.ContractSwagger)
 }
 
 func TestPostDeployMissingContractAddress(t *testing.T) {
@@ -685,32 +654,6 @@ func TestPostDeployMissingContractAddress(t *testing.T) {
 
 	err := scgw.PostDeploy(replyMsg)
 	assert.Regexp("message1: Missing contract address in receipt", err.Error())
-}
-
-func TestPostDeployDecodeFail(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: dir,
-		},
-		nil, nil, nil,
-	)
-	contractAddr := common.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
-	scgw := s.(*smartContractGW)
-	replyMsg := &kldmessages.TransactionReceipt{
-		ReplyCommon: kldmessages.ReplyCommon{
-			Headers: kldmessages.ReplyHeaders{
-				ReqID: "message1",
-			},
-		},
-		ContractAddress: &contractAddr,
-	}
-	ioutil.WriteFile(path.Join(dir, "message1.deploy.json"), []byte("invalid json"), 0664)
-
-	err := scgw.PostDeploy(replyMsg)
-	assert.Regexp("Unable to recover pre-deploy message", err.Error())
 }
 
 func TestStoreABIWriteFail(t *testing.T) {
@@ -1662,4 +1605,42 @@ func TestSuspendNoSubMgr(t *testing.T) {
 
 	res := testGWPath("POST", kldevents.StreamPathPrefix+"/123/resume", nil, nil)
 	assert.Equal(405, res.Result().StatusCode)
+}
+
+func TestCheckNameAvailableRRDuplicate(t *testing.T) {
+	assert := assert.New(t)
+
+	scgw, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			BaseURL: "http://localhost/api/v1",
+		},
+		nil, nil, nil,
+	)
+	rr := &mockRR{
+		deployMsg: newTestDeployMsg("12345"),
+	}
+	s := scgw.(*smartContractGW)
+	s.rr = rr
+
+	err := s.checkNameAvailable("lobster", true)
+	assert.EqualError(err, "Contract address 12345 is already registered for name 'lobster'")
+}
+
+func TestCheckNameAvailableRRFail(t *testing.T) {
+	assert := assert.New(t)
+
+	scgw, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			BaseURL: "http://localhost/api/v1",
+		},
+		nil, nil, nil,
+	)
+	rr := &mockRR{
+		err: fmt.Errorf("pop"),
+	}
+	s := scgw.(*smartContractGW)
+	s.rr = rr
+
+	err := s.checkNameAvailable("lobster", true)
+	assert.EqualError(err, "pop")
 }

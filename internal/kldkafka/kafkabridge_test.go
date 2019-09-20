@@ -214,12 +214,10 @@ func TestSingleMessageWithReply(t *testing.T) {
 	// Send a minimal test message
 	msg1 := kldmessages.RequestCommon{}
 	msg1.Headers.MsgType = "TestSingleMessageWithReply"
-	msg1Ctx := struct {
-		Some string `json:"some"`
-	}{
-		Some: "data",
+	msg1Ctx := map[string]interface{}{
+		"some": "data",
 	}
-	msg1.Headers.Context = &msg1Ctx
+	msg1.Headers.Context = msg1Ctx
 	msg1.Headers.Account = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 	msg1bytes, err := json.Marshal(&msg1)
 	log.Infof("Sent message: %s", string(msg1bytes))
@@ -235,7 +233,7 @@ func TestSingleMessageWithReply(t *testing.T) {
 	msgContext1 := <-processor.messages
 	assert.NotEmpty(msgContext1.Headers().ID) // Generated one as not supplied
 	assert.Equal(msg1.Headers.MsgType, msgContext1.Headers().MsgType)
-	assert.Equal("data", msgContext1.Headers().Context.(map[string]interface{})["some"])
+	assert.Equal("data", msgContext1.Headers().Context["some"])
 	assert.Equal(len(msgContext1.(*msgContext).replyBytes), msgContext1.(*msgContext).Length())
 	var msgUnmarshaled kldmessages.RequestCommon
 	msgContext1.Unmarshal(&msgUnmarshaled)
@@ -266,7 +264,7 @@ func TestSingleMessageWithReply(t *testing.T) {
 	assert.NotEqual(msgContext1.Headers().ID, replySent.Headers.ID)
 	assert.Equal(msgContext1.Headers().ID, replySent.Headers.ReqID)
 	assert.Equal("in-topic:5:500", replySent.Headers.ReqOffset)
-	assert.Equal("data", replySent.Headers.Context.(map[string]interface{})["some"])
+	assert.Equal("data", replySent.Headers.Context["some"])
 
 	// Shut down
 	mockProducer.AsyncClose()

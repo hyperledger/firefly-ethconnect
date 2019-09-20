@@ -15,9 +15,11 @@
 package kldcontracts
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -33,6 +35,7 @@ const (
 	genericRegistryRequestErrorMsg  = "Error querying contract registry"
 	genericRegistryResponseErrorMsg = "Error processing contract registry response"
 	defaultIDProp                   = "id"
+	defaultNameProp                 = "name"
 	defaultABIProp                  = "abi"
 	defaultBytecodeProp             = "bytecode"
 	defaultDevdocProp               = "devdoc"
@@ -49,6 +52,7 @@ type deployContractWithAddress struct {
 type RemoteRegistry interface {
 	loadFactoryForGateway(lookupStr string) (*kldmessages.DeployContract, error)
 	loadFactoryForInstance(lookupStr string) (*deployContractWithAddress, error)
+	registerInstance(lookupStr, address string) error
 	init() error
 	close()
 }
@@ -65,6 +69,7 @@ type RemoteRegistryConf struct {
 // RemoteRegistryPropNamesConf configures the JSON property names to extract from the GET response on the API
 type RemoteRegistryPropNamesConf struct {
 	ID         string `json:"id"`
+	Name       string `json:"name"`
 	ABI        string `json:"abi"`
 	Bytecode   string `json:"bytecode"`
 	Devdoc     string `json:"devdoc"`
@@ -85,6 +90,9 @@ func NewRemoteRegistry(conf *RemoteRegistryConf) RemoteRegistry {
 	propNames := &conf.PropNames
 	if propNames.ID == "" {
 		propNames.ID = defaultIDProp
+	}
+	if propNames.Name == "" {
+		propNames.Name = defaultNameProp
 	}
 	if propNames.ABI == "" {
 		propNames.ABI = defaultABIProp
@@ -125,28 +133,47 @@ func (rr *remoteRegistry) init() (err error) {
 	return nil
 }
 
-func (rr *remoteRegistry) doRequest(method, url string) (map[string]interface{}, error) {
-	log.Infof("GET %s -->", url)
-	req, _ := http.NewRequest("GET", url, nil)
-	req.Header = rr.conf.Headers
+func (rr *remoteRegistry) doRequest(method, url string, bodyMap map[string]interface{}) (map[string]interface{}, error) {
+	log.Infof("%s %s -->", method, url)
+	var body io.Reader
+	if bodyMap != nil {
+		bodyBytes, err := json.Marshal(bodyMap)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to serialize request payload: %s", err)
+		}
+		body = bytes.NewReader(bodyBytes)
+	}
+	req, _ := http.NewRequest(method, url, body)
+	req.Header = http.Header{}
+	if rr.conf.Headers != nil {
+		req.Header = rr.conf.Headers
+	}
+	req.Header.Add("content-type", "application/json")
 	res, err := rr.client.Do(req)
 	if err != nil {
-		log.Errorf("GET %s <-- !Failed: %s", url, err)
+		log.Errorf("%s %s <-- !Failed: %s", method, url, err)
 		return nil, fmt.Errorf(genericRegistryRequestErrorMsg)
 	}
-	log.Infof("GET %s <-- [%d]", url, res.StatusCode)
+	log.Infof("%s %s <-- [%d]", method, url, res.StatusCode)
 	if res.StatusCode == 404 {
 		return nil, nil
 	}
-	resBody, err := ioutil.ReadAll(res.Body)
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		log.Errorf("GET %s <-- !Failed to ready body: %s", url, err)
-		return nil, fmt.Errorf(genericRegistryRequestErrorMsg)
-	}
 	var jsonBody map[string]interface{}
-	if err = json.Unmarshal(resBody, &jsonBody); err != nil {
-		log.Errorf("GET %s <-- !Failed to ready body: %s", url, err)
-		return nil, fmt.Errorf(genericRegistryResponseErrorMsg)
+	if res.StatusCode == 204 {
+		jsonBody = make(map[string]interface{})
+	} else {
+		resBody, err := ioutil.ReadAll(res.Body)
+		if err = json.Unmarshal(resBody, &jsonBody); err != nil {
+			log.Errorf("%s %s <-- [%d] !Failed to read body: %s", method, url, res.StatusCode, err)
+			return nil, fmt.Errorf("Could not process registry [%d] response", res.StatusCode)
+		}
+		if res.StatusCode < 200 || res.StatusCode >= 300 {
+			log.Errorf("%s %s <-- [%d]: %+v", method, url, res.StatusCode, resBody)
+			if errMsg, ok := jsonBody["errorMessage"]; ok {
+				return nil, fmt.Errorf("Contract registry returned [%d]: %s", res.StatusCode, errMsg)
+			}
+			return nil, fmt.Errorf(genericRegistryRequestErrorMsg)
+		}
 	}
 	return jsonBody, nil
 }
@@ -178,7 +205,7 @@ func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string) (*de
 		return msg, nil
 	}
 	queryURL := baseURL + safeLookupStr
-	jsonRes, err := rr.doRequest("GET", queryURL)
+	jsonRes, err := rr.doRequest("GET", queryURL, nil)
 	if err != nil || jsonRes == nil {
 		return nil, err
 	}
@@ -216,6 +243,9 @@ func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string) (*de
 				RequestCommon: kldmessages.RequestCommon{
 					Headers: kldmessages.CommonHeaders{
 						ID: idString,
+						Context: map[string]interface{}{
+							remoteRegistryContextKey: true,
+						},
 					},
 				},
 			},
@@ -274,6 +304,23 @@ func (rr *remoteRegistry) loadFactoryForInstance(lookupStr string) (*deployContr
 		return nil, nil
 	}
 	return rr.loadFactoryFromURL(rr.conf.InstanceURLPrefix, "instances", lookupStr)
+}
+
+func (rr *remoteRegistry) registerInstance(lookupStr, address string) error {
+	if rr.conf.InstanceURLPrefix == "" {
+		return fmt.Errorf("No remote registry is configured")
+	}
+	safeLookupStr := url.QueryEscape(lookupStr)
+	requestURL := strings.TrimSuffix(rr.conf.InstanceURLPrefix, "/")
+	bodyMap := make(map[string]interface{})
+	bodyMap[rr.conf.PropNames.Name] = safeLookupStr
+	bodyMap[rr.conf.PropNames.Address] = address
+	log.Debugf("Registering contract: %+v", bodyMap)
+	_, err := rr.doRequest("POST", requestURL, bodyMap)
+	if err != nil {
+		return fmt.Errorf("Failed to register instance in remote registry: %s", err)
+	}
+	return nil
 }
 
 func (rr *remoteRegistry) close() {

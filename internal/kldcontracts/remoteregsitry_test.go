@@ -15,6 +15,7 @@
 package kldcontracts
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -24,8 +25,36 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
+	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/stretchr/testify/assert"
 )
+
+type mockRR struct {
+	idCapture     string
+	addrCapture   string
+	lookupCapture string
+	deployMsg     *deployContractWithAddress
+	err           error
+}
+
+func (rr *mockRR) loadFactoryForGateway(id string) (*kldmessages.DeployContract, error) {
+	rr.idCapture = id
+	if rr.deployMsg == nil {
+		return nil, rr.err
+	}
+	return &rr.deployMsg.DeployContract, rr.err
+}
+func (rr *mockRR) loadFactoryForInstance(id string) (*deployContractWithAddress, error) {
+	rr.addrCapture = id
+	return rr.deployMsg, rr.err
+}
+func (rr *mockRR) registerInstance(lookupStr, address string) error {
+	rr.lookupCapture = lookupStr
+	rr.addrCapture = address
+	return rr.err
+}
+func (rr *mockRR) close()      {}
+func (rr *mockRR) init() error { return nil }
 
 func TestNewRemoteRegistryDefaultPropNames(t *testing.T) {
 	assert := assert.New(t)
@@ -38,6 +67,7 @@ func TestNewRemoteRegistryDefaultPropNames(t *testing.T) {
 	assert.Equal("http://www.example1.com/", rr.conf.GatewayURLPrefix)
 	assert.Equal("http://www.example2.com/", rr.conf.InstanceURLPrefix)
 	assert.Equal(defaultIDProp, rr.conf.PropNames.ID)
+	assert.Equal(defaultNameProp, rr.conf.PropNames.Name)
 	assert.Equal(defaultABIProp, rr.conf.PropNames.ABI)
 	assert.Equal(defaultBytecodeProp, rr.conf.PropNames.Bytecode)
 	assert.Equal(defaultDevdocProp, rr.conf.PropNames.Devdoc)
@@ -53,6 +83,7 @@ func TestNewRemoteRegistryCustomPropNames(t *testing.T) {
 		InstanceURLPrefix: "http://www.example2.com",
 		PropNames: RemoteRegistryPropNamesConf{
 			ID:         "idProp",
+			Name:       "nameProp",
 			ABI:        "abiProp",
 			Bytecode:   "bytecodeProp",
 			Devdoc:     "devdocsProp",
@@ -64,6 +95,7 @@ func TestNewRemoteRegistryCustomPropNames(t *testing.T) {
 	assert.Equal("http://www.example1.com/", rr.conf.GatewayURLPrefix)
 	assert.Equal("http://www.example2.com/", rr.conf.InstanceURLPrefix)
 	assert.Equal("idProp", rr.conf.PropNames.ID)
+	assert.Equal("nameProp", rr.conf.PropNames.Name)
 	assert.Equal("abiProp", rr.conf.PropNames.ABI)
 	assert.Equal("bytecodeProp", rr.conf.PropNames.Bytecode)
 	assert.Equal("devdocsProp", rr.conf.PropNames.Devdoc)
@@ -77,8 +109,20 @@ func TestRemoteRegistryDoRequestBadURL(t *testing.T) {
 	r := NewRemoteRegistry(&RemoteRegistryConf{})
 	rr := r.(*remoteRegistry)
 
-	_, err := rr.doRequest("GET", "! a URL")
+	_, err := rr.doRequest("GET", "! a URL", nil)
 	assert.EqualError(err, "Error querying contract registry")
+}
+
+func TestRemoteRegistryDoRequestBadPayload(t *testing.T) {
+	assert := assert.New(t)
+
+	r := NewRemoteRegistry(&RemoteRegistryConf{})
+	rr := r.(*remoteRegistry)
+
+	bodyMap := make(map[string]interface{})
+	bodyMap["unserializable"] = map[bool]interface{}{true: "JSON does not like this"}
+	_, err := rr.doRequest("GET", "http://localhost", bodyMap)
+	assert.Regexp("Failed to serialize request payload", err.Error())
 }
 
 func TestRemoteRegistryInitDB(t *testing.T) {
@@ -126,6 +170,7 @@ func TestRemoteRegistryloadFactoryForGatewaySuccess(t *testing.T) {
 		res.Write(testDataBytes)
 	})
 	server := httptest.NewServer(router)
+	defer server.Close()
 
 	r := NewRemoteRegistry(&RemoteRegistryConf{
 		GatewayURLPrefix: server.URL + "/somepath",
@@ -159,6 +204,7 @@ func TestRemoteRegistryloadFactoryForGatewayCached(t *testing.T) {
 		res.Write(testDataBytes)
 	})
 	server := httptest.NewServer(router)
+	defer server.Close()
 
 	r := NewRemoteRegistry(&RemoteRegistryConf{
 		CacheDB:          path.Join(dir, "testdb"),
@@ -181,6 +227,69 @@ func TestRemoteRegistryloadFactoryForGatewayCached(t *testing.T) {
 	assert.Equal(res1.Compiled, res2.Compiled)
 }
 
+func TestRemoteRegistryRegisterInstanceSuccess(t *testing.T) {
+	assert := assert.New(t)
+
+	router := &httprouter.Router{}
+	router.POST("/somepath", func(res http.ResponseWriter, req *http.Request, parms httprouter.Params) {
+		var bodyMap map[string]string
+		json.NewDecoder(req.Body).Decode(&bodyMap)
+		assert.Equal("testid", bodyMap["name"])
+		assert.Equal("12345", bodyMap["address"])
+		assert.Equal("application/json", req.Header.Get("content-type"))
+		res.WriteHeader(204)
+	})
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	r := NewRemoteRegistry(&RemoteRegistryConf{
+		InstanceURLPrefix: server.URL + "/somepath",
+		PropNames: RemoteRegistryPropNamesConf{
+			Bytecode: "bin",
+		},
+	})
+	rr := r.(*remoteRegistry)
+
+	err := rr.registerInstance("testid", "12345")
+	assert.NoError(err)
+}
+
+func TestRemoteRegistryRegisterInstanceFail(t *testing.T) {
+	assert := assert.New(t)
+
+	router := &httprouter.Router{}
+	router.POST("/somepath", func(res http.ResponseWriter, req *http.Request, parms httprouter.Params) {
+		res.WriteHeader(500)
+	})
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	r := NewRemoteRegistry(&RemoteRegistryConf{
+		InstanceURLPrefix: server.URL + "/somepath",
+		PropNames: RemoteRegistryPropNamesConf{
+			Bytecode: "bin",
+		},
+	})
+	rr := r.(*remoteRegistry)
+
+	err := rr.registerInstance("testid", "12345")
+	assert.Regexp("Failed to register instance in remote registry", err)
+}
+
+func TestRemoteRegistryRegisterNoInstanceURL(t *testing.T) {
+	assert := assert.New(t)
+
+	r := NewRemoteRegistry(&RemoteRegistryConf{
+		PropNames: RemoteRegistryPropNamesConf{
+			Bytecode: "bin",
+		},
+	})
+	rr := r.(*remoteRegistry)
+
+	err := rr.registerInstance("testid", "12345")
+	assert.EqualError(err, "No remote registry is configured")
+}
+
 func TestRemoteRegistryLoadFactoryMissingID(t *testing.T) {
 	assert := assert.New(t)
 
@@ -193,6 +302,7 @@ func TestRemoteRegistryLoadFactoryMissingID(t *testing.T) {
     }`))
 	})
 	server := httptest.NewServer(router)
+	defer server.Close()
 
 	r := NewRemoteRegistry(&RemoteRegistryConf{
 		GatewayURLPrefix: server.URL + "/somepath",
@@ -218,6 +328,7 @@ func TestRemoteRegistryLoadFactoryMissingABI(t *testing.T) {
     }`))
 	})
 	server := httptest.NewServer(router)
+	defer server.Close()
 
 	r := NewRemoteRegistry(&RemoteRegistryConf{
 		GatewayURLPrefix: server.URL + "/somepath",
@@ -244,6 +355,7 @@ func TestRemoteRegistryLoadFactoryBadABIJSON(t *testing.T) {
     }`))
 	})
 	server := httptest.NewServer(router)
+	defer server.Close()
 
 	r := NewRemoteRegistry(&RemoteRegistryConf{
 		GatewayURLPrefix: server.URL + "/somepath",
@@ -270,6 +382,7 @@ func TestRemoteRegistryLoadFactoryMissingDevDoc(t *testing.T) {
     }`))
 	})
 	server := httptest.NewServer(router)
+	defer server.Close()
 
 	r := NewRemoteRegistry(&RemoteRegistryConf{
 		GatewayURLPrefix: server.URL + "/somepath",
@@ -297,6 +410,7 @@ func TestRemoteRegistryLoadFactoryBadDevDoc(t *testing.T) {
     }`))
 	})
 	server := httptest.NewServer(router)
+	defer server.Close()
 
 	r := NewRemoteRegistry(&RemoteRegistryConf{
 		GatewayURLPrefix: server.URL + "/somepath",
@@ -325,6 +439,7 @@ func TestRemoteRegistryLoadFactoryEmptyBytecode(t *testing.T) {
     }`))
 	})
 	server := httptest.NewServer(router)
+	defer server.Close()
 
 	r := NewRemoteRegistry(&RemoteRegistryConf{
 		GatewayURLPrefix: server.URL + "/somepath",
@@ -353,6 +468,7 @@ func TestRemoteRegistryLoadFactoryBadBytecode(t *testing.T) {
     }`))
 	})
 	server := httptest.NewServer(router)
+	defer server.Close()
 
 	r := NewRemoteRegistry(&RemoteRegistryConf{
 		GatewayURLPrefix: server.URL + "/somepath",
@@ -366,7 +482,7 @@ func TestRemoteRegistryLoadFactoryBadBytecode(t *testing.T) {
 	assert.EqualError(err, "Error processing contract registry response")
 }
 
-func TestRemoteRegistryLoadFactoryErrorStatus(t *testing.T) {
+func TestRemoteRegistryLoadFactoryErrorStatusGeneric(t *testing.T) {
 	assert := assert.New(t)
 
 	router := &httprouter.Router{}
@@ -375,6 +491,7 @@ func TestRemoteRegistryLoadFactoryErrorStatus(t *testing.T) {
 		res.WriteHeader(500)
 	})
 	server := httptest.NewServer(router)
+	defer server.Close()
 
 	r := NewRemoteRegistry(&RemoteRegistryConf{
 		GatewayURLPrefix: server.URL + "/somepath",
@@ -385,7 +502,31 @@ func TestRemoteRegistryLoadFactoryErrorStatus(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.loadFactoryForGateway("testid")
-	assert.EqualError(err, "Error querying contract registry")
+	assert.EqualError(err, "Could not process registry [500] response")
+}
+
+func TestRemoteRegistryLoadFactoryErrorStatus(t *testing.T) {
+	assert := assert.New(t)
+
+	router := &httprouter.Router{}
+	router.GET("/somepath/:id", func(res http.ResponseWriter, req *http.Request, parms httprouter.Params) {
+		assert.Equal("testid", parms.ByName("id"))
+		res.WriteHeader(500)
+		res.Write([]byte("{\"errorMessage\":\"poof\"}"))
+	})
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	r := NewRemoteRegistry(&RemoteRegistryConf{
+		GatewayURLPrefix: server.URL + "/somepath",
+		PropNames: RemoteRegistryPropNamesConf{
+			Bytecode: "bin",
+		},
+	})
+	rr := r.(*remoteRegistry)
+
+	_, err := rr.loadFactoryForGateway("testid")
+	assert.EqualError(err, "Contract registry returned [500]: poof")
 }
 
 func TestRemoteRegistryLoadFactoryNotFound(t *testing.T) {
@@ -397,6 +538,7 @@ func TestRemoteRegistryLoadFactoryNotFound(t *testing.T) {
 		res.WriteHeader(404)
 	})
 	server := httptest.NewServer(router)
+	defer server.Close()
 
 	r := NewRemoteRegistry(&RemoteRegistryConf{
 		GatewayURLPrefix: server.URL + "/somepath",
@@ -417,10 +559,11 @@ func TestRemoteRegistryLoadFactoryBadBody(t *testing.T) {
 	router := &httprouter.Router{}
 	router.GET("/somepath/:id", func(res http.ResponseWriter, req *http.Request, parms httprouter.Params) {
 		assert.Equal("testid", parms.ByName("id"))
-		res.Write([]byte("!JSON"))
 		res.WriteHeader(200)
+		res.Write([]byte("!JSON"))
 	})
 	server := httptest.NewServer(router)
+	defer server.Close()
 
 	r := NewRemoteRegistry(&RemoteRegistryConf{
 		GatewayURLPrefix: server.URL + "/somepath",
@@ -431,7 +574,7 @@ func TestRemoteRegistryLoadFactoryBadBody(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.loadFactoryForGateway("testid")
-	assert.EqualError(err, "Error processing contract registry response")
+	assert.EqualError(err, "Could not process registry [200] response")
 }
 
 func TestRemoteRegistryLoadFactoryNOOP(t *testing.T) {
@@ -463,6 +606,7 @@ func TestRemoteRegistryloadFactoryForInstanceSuccess(t *testing.T) {
     `))
 	})
 	server := httptest.NewServer(router)
+	defer server.Close()
 
 	r := NewRemoteRegistry(&RemoteRegistryConf{
 		InstanceURLPrefix: server.URL + "/somepath",

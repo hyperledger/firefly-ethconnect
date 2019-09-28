@@ -32,25 +32,24 @@ import (
 // Slim interface for stubbing
 type testRPCClient struct {
 	mockError       error
-	firstFailOnly   bool
 	capturedMethod  string
 	capturedArgs    []interface{}
+	mockError2      error
 	capturedMethod2 string
 	capturedArgs2   []interface{}
 	resultWrangler  func(interface{})
 }
 
 func (r *testRPCClient) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
+	var retErr error
 	if r.capturedMethod == "" {
 		r.capturedMethod = method
 		r.capturedArgs = args
+		retErr = r.mockError
 	} else {
 		r.capturedMethod2 = method
 		r.capturedArgs2 = args
-	}
-	retErr := r.mockError
-	if r.firstFailOnly {
-		r.mockError = nil
+		retErr = r.mockError2
 	}
 	if r.resultWrangler != nil {
 		r.resultWrangler(result)
@@ -156,6 +155,56 @@ func TestNewContractDeployTxnSimpleStoragePrivate(t *testing.T) {
 
 }
 
+func TestNewContractDeployTxnSimpleStoragePrivateOrion(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.DeployContract
+	msg.Solidity = simpleStorage
+	msg.Parameters = []interface{}{float64(999999)}
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "678"
+	msg.GasPrice = "0"
+	msg.PrivateFrom = "oD76ZRgu6py/WKrsXbtF9++Mf1mxVxzqficE1Uiw6S8="
+	tx, err := NewContractDeployTxn(&msg)
+	assert.Nil(err)
+	tx.PrivacyGroupID = "P8SxRUussJKqZu4+nUkMJpscQeWOR3HqbAXLakatsk8="
+	rpc := testRPCClient{}
+
+	tx.Send(&rpc)
+
+	assert.Equal("eth_estimateGas", rpc.capturedMethod)
+	assert.Equal("eea_sendTransaction", rpc.capturedMethod2)
+	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
+	var jsonSent map[string]interface{}
+	json.Unmarshal(jsonBytesSent, &jsonSent)
+	assert.Equal("0x0", jsonSent["gasPrice"])
+	assert.Equal("0x2a6", jsonSent["value"])
+	assert.Equal("0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", jsonSent["from"])
+	assert.Equal("oD76ZRgu6py/WKrsXbtF9++Mf1mxVxzqficE1Uiw6S8=", jsonSent["privateFrom"])
+	assert.Equal("P8SxRUussJKqZu4+nUkMJpscQeWOR3HqbAXLakatsk8=", jsonSent["privacyGroupId"])
+
+}
+
+func TestNewContractDeployTxnSimpleStoragePrivateOrionMissingPrivateFrom(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.DeployContract
+	msg.Solidity = simpleStorage
+	msg.Parameters = []interface{}{float64(999999)}
+	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg.Nonce = "123"
+	msg.Value = "678"
+	msg.GasPrice = "0"
+	tx, err := NewContractDeployTxn(&msg)
+	assert.Nil(err)
+	tx.OrionPrivateAPIS = true
+	tx.PrivacyGroupID = "s6a3mQ8I+rI2ZgHqHZlJaELiJs10HxlZNIwNd669FH4="
+	rpc := testRPCClient{}
+
+	err = tx.Send(&rpc)
+	assert.EqualError(err, "private-from is required when submitting private transactions via Orion")
+}
 func TestNewContractDeployTxnSimpleStorageCalcGasFailAndCallSucceeds(t *testing.T) {
 	assert := assert.New(t)
 
@@ -171,7 +220,6 @@ func TestNewContractDeployTxnSimpleStorageCalcGasFailAndCallSucceeds(t *testing.
 	rpc := testRPCClient{}
 
 	rpc.mockError = fmt.Errorf("pop")
-	rpc.firstFailOnly = true
 	err = tx.Send(&rpc)
 	assert.EqualError(err, "Failed to calculate gas for transaction: pop")
 }
@@ -190,9 +238,10 @@ func TestNewContractDeployTxnSimpleStorageCalcGasFailAndCallFailsAsExpected(t *t
 	assert.Nil(err)
 	rpc := testRPCClient{}
 
-	rpc.mockError = fmt.Errorf("pop")
+	rpc.mockError = fmt.Errorf("estimate gas fails")
+	rpc.mockError2 = fmt.Errorf("call fails")
 	err = tx.Send(&rpc)
-	assert.EqualError(err, "Call failed: pop")
+	assert.EqualError(err, "Call failed: call fails")
 }
 
 func TestNewContractDeployMissingCompiledOrSolidity(t *testing.T) {

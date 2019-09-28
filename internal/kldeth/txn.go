@@ -37,13 +37,15 @@ import (
 // Txn wraps an ethereum transaction, along with the logic to send it over
 // JSON/RPC to a node
 type Txn struct {
-	NodeAssignNonce bool
-	From            common.Address
-	EthTX           *types.Transaction
-	Hash            string
-	Receipt         TxnReceipt
-	PrivateFrom     string
-	PrivateFor      []string
+	NodeAssignNonce  bool
+	OrionPrivateAPIS bool
+	From             common.Address
+	EthTX            *types.Transaction
+	Hash             string
+	Receipt          TxnReceipt
+	PrivateFrom      string
+	PrivateFor       []string
+	PrivacyGroupID   string
 }
 
 // TxnReceipt is the receipt obtained over JSON/RPC from the ethereum client

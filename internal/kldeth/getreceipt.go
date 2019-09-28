@@ -16,6 +16,7 @@ package kldeth
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -29,10 +30,17 @@ func (tx *Txn) GetTXReceipt(rpc RPCClient) (bool, error) {
 	defer cancel()
 
 	if err := rpc.CallContext(ctx, &tx.Receipt, "eth_getTransactionReceipt", tx.Hash); err != nil {
-		return false, err
+		return false, fmt.Errorf("eth_getTransactionReceipt returned: %s", err)
 	}
 	callTime := time.Now().UTC().Sub(start)
 	isMined := tx.Receipt.BlockNumber != nil && tx.Receipt.BlockNumber.ToInt().Uint64() > 0
 	log.Debugf("eth_getTransactionReceipt(%x,latest)=%t [%.2fs]", tx.Hash, isMined, callTime.Seconds())
+
+	if tx.PrivacyGroupID != "" {
+		if err := rpc.CallContext(ctx, &tx.Receipt, "priv_getTransactionReceipt", tx.Hash); err != nil {
+			return false, fmt.Errorf("priv_getTransactionReceipt returned: %s", err)
+		}
+	}
+
 	return isMined, nil
 }

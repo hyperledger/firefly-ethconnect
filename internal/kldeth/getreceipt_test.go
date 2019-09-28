@@ -15,6 +15,7 @@
 package kldeth
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -56,5 +57,71 @@ func TestGetTXReceiptNotMined(t *testing.T) {
 
 	assert.Equal(nil, err)
 	assert.Equal("eth_getTransactionReceipt", r.capturedMethod)
+	assert.Equal(false, isMined)
+}
+
+func TestGetTXReceiptFail(t *testing.T) {
+
+	log.SetLevel(log.DebugLevel)
+	assert := assert.New(t)
+
+	r := testRPCClient{
+		mockError: fmt.Errorf("pop"),
+	}
+
+	tx := Txn{}
+	var blockNumber hexutil.Big
+	tx.Receipt.BlockNumber = &blockNumber
+
+	isMined, err := tx.GetTXReceipt(&r)
+
+	assert.EqualError(err, "eth_getTransactionReceipt returned: pop")
+	assert.Equal("eth_getTransactionReceipt", r.capturedMethod)
+	assert.Equal(false, isMined)
+}
+
+func TestGetTXReceiptOrionTX(t *testing.T) {
+
+	log.SetLevel(log.DebugLevel)
+	assert := assert.New(t)
+
+	r := testRPCClient{}
+
+	tx := Txn{
+		PrivacyGroupID: "test",
+	}
+	var blockNumber hexutil.Big
+	blockNumber.ToInt().SetInt64(10)
+	tx.Receipt.BlockNumber = &blockNumber
+
+	isMined, err := tx.GetTXReceipt(&r)
+
+	assert.Equal(nil, err)
+	assert.Equal("eth_getTransactionReceipt", r.capturedMethod)
+	assert.Equal("priv_getTransactionReceipt", r.capturedMethod2)
+	assert.Equal(true, isMined)
+}
+
+func TestGetTXReceiptOrionTXFail(t *testing.T) {
+
+	log.SetLevel(log.DebugLevel)
+	assert := assert.New(t)
+
+	r := testRPCClient{
+		mockError2: fmt.Errorf("pop"),
+	}
+
+	tx := Txn{
+		PrivacyGroupID: "test",
+	}
+	var blockNumber hexutil.Big
+	blockNumber.ToInt().SetInt64(10)
+	tx.Receipt.BlockNumber = &blockNumber
+
+	isMined, err := tx.GetTXReceipt(&r)
+
+	assert.EqualError(err, "priv_getTransactionReceipt returned: pop")
+	assert.Equal("eth_getTransactionReceipt", r.capturedMethod)
+	assert.Equal("priv_getTransactionReceipt", r.capturedMethod2)
 	assert.Equal(false, isMined)
 }

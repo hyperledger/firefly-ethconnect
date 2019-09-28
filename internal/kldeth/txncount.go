@@ -16,6 +16,7 @@ package kldeth
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -23,6 +24,24 @@ import (
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 )
+
+// GetOrionTXCount uses the special Pantheon/Orion interface to check the
+// next nonce for the privacy group associated with the privateFrom/privateFor combination
+func GetOrionTXCount(rpc RPCClient, addr *common.Address, privacyGroup string) (int64, error) {
+	start := time.Now().UTC()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var txnCount hexutil.Uint64
+	if err := rpc.CallContext(ctx, &txnCount, "priv_getTransactionCount", addr, privacyGroup); err != nil {
+		return 0, fmt.Errorf("priv_getTransactionCount for privacy group '%s' returned: %s", privacyGroup, err)
+	}
+	callTime := time.Now().UTC().Sub(start)
+	log.Debugf("priv_getTransactionCount(%x,%s)=%d [%.2fs]", addr, privacyGroup, txnCount, callTime.Seconds())
+	log.Infof("Addr=%s PrivacyGroup=%s Nonce=%d", addr.String(), privacyGroup, txnCount)
+	return int64(txnCount), nil
+}
 
 // GetTransactionCount gets the transaction count for an address
 func GetTransactionCount(rpc RPCClient, addr *common.Address, blockNumber string) (int64, error) {
@@ -33,7 +52,7 @@ func GetTransactionCount(rpc RPCClient, addr *common.Address, blockNumber string
 
 	var txnCount hexutil.Uint64
 	if err := rpc.CallContext(ctx, &txnCount, "eth_getTransactionCount", addr, blockNumber); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("eth_getTransactionCount returned: %s", err)
 	}
 	callTime := time.Now().UTC().Sub(start)
 	log.Debugf("eth_getTransactionCount(%x,latest)=%d [%.2fs]", addr, txnCount, callTime.Seconds())

@@ -15,6 +15,7 @@
 package kldeth
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -33,4 +34,45 @@ func TestGetTransactionCount(t *testing.T) {
 
 	assert.Equal(nil, err)
 	assert.Equal("eth_getTransactionCount", r.capturedMethod)
+}
+
+func TestGetTransactionCountErr(t *testing.T) {
+	log.SetLevel(log.DebugLevel)
+	assert := assert.New(t)
+
+	r := testRPCClient{
+		mockError: fmt.Errorf("pop"),
+	}
+
+	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
+	_, err := GetTransactionCount(&r, &addr, "latest")
+
+	assert.EqualError(err, "eth_getTransactionCount returned: pop")
+}
+
+func TestGetOrionPrivateTransactionCount(t *testing.T) {
+	log.SetLevel(log.DebugLevel)
+	assert := assert.New(t)
+
+	r := testRPCClient{}
+
+	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
+	_, err := GetOrionTXCount(&r, &addr, "negmDcN2P4ODpqn/6WkJ02zT/0w0bjhGpkZ8UP6vARk=")
+
+	assert.Equal(nil, err)
+	assert.Equal("priv_getTransactionCount", r.capturedMethod)
+}
+
+func TestGetOrionPrivateTransactionCountErr(t *testing.T) {
+	log.SetLevel(log.DebugLevel)
+	assert := assert.New(t)
+
+	r := testRPCClient{
+		mockError: fmt.Errorf("pop"),
+	}
+
+	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
+	_, err := GetOrionTXCount(&r, &addr, "negmDcN2P4ODpqn/6WkJ02zT/0w0bjhGpkZ8UP6vARk=")
+
+	assert.EqualError(err, "priv_getTransactionCount for privacy group 'negmDcN2P4ODpqn/6WkJ02zT/0w0bjhGpkZ8UP6vARk=' returned: pop")
 }

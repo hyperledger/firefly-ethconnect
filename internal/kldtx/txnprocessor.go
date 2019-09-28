@@ -42,6 +42,7 @@ type inflightTxn struct {
 	from            string // normalized to 0x prefix and lower case
 	nodeAssignNonce bool
 	nonce           int64
+	privacyGroupID  string
 	txnContext      TxnContext
 	tx              *kldeth.Txn
 	wg              sync.WaitGroup
@@ -64,6 +65,7 @@ func (i *inflightTxn) String() string {
 type TxnProcessorConf struct {
 	PredictNonces      bool `json:"alwaysManageNonce"`
 	MaxTXWaitTime      int  `json:"maxTXWaitTime"`
+	OrionPrivateAPIS   bool `json:"orionPrivateAPIs"`
 	HexValuesInReceipt bool `json:"hexValuesInReceipt"`
 }
 
@@ -96,6 +98,7 @@ func CobraInitTxnProcessor(cmd *cobra.Command, txconf *TxnProcessorConf) {
 	cmd.Flags().IntVarP(&txconf.MaxTXWaitTime, "tx-timeout", "x", kldutils.DefInt("ETH_TX_TIMEOUT", 0), "Maximum wait time for an individual transaction (seconds)")
 	cmd.Flags().BoolVarP(&txconf.HexValuesInReceipt, "hex-values", "H", false, "Include hex values for large numbers in receipts (as well as numeric strings)")
 	cmd.Flags().BoolVarP(&txconf.PredictNonces, "predict-nonces", "P", false, "Predict the next nonce before sending (default=false for node-signed txns)")
+	cmd.Flags().BoolVarP(&txconf.OrionPrivateAPIS, "orion-privapi", "G", false, "Use Orion JSON/RPC API semantics for private transactions")
 	return
 }
 
@@ -138,22 +141,30 @@ func (p *txnProcessor) OnMessage(txnContext TxnContext) {
 // nonce for the transaction.
 // Builds a new wrapper containing this information, that can be added to
 // the inflight list if the transaction is submitted
-func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, suppliedFrom string, suppliedNonce json.Number) (inflight *inflightTxn, err error) {
+func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessages.TransactionCommon) (inflight *inflightTxn, err error) {
 
 	inflight = &inflightTxn{
 		txnContext: txnContext,
 	}
 
 	// Validate the from address, and normalize to lower case with 0x prefix
-	from, err := kldutils.StrToAddress("from", suppliedFrom)
+	from, err := kldutils.StrToAddress("from", msg.From)
 	if err != nil {
 		return
 	}
 	inflight.from = strings.ToLower(from.Hex())
 
+	// Need to resolve privateFrom/privateFor to a privacyGroupID for Orion
+	if p.conf.OrionPrivateAPIS && len(msg.PrivateFor) > 0 {
+		if inflight.privacyGroupID, err = kldeth.GetOrionPrivacyGroup(p.rpc, &from, msg.PrivateFrom, msg.PrivateFor); err != nil {
+			return
+		}
+	}
+
 	// The user can supply a nonce and manage them externally, using their own
 	// application-side list of transactions, to prevent the possibility of
 	// duplication that exists when dynamically calculating the nonce
+	suppliedNonce := msg.Nonce
 	if suppliedNonce != "" {
 		if inflight.nonce, err = suppliedNonce.Int64(); err != nil {
 			err = fmt.Errorf("Converting supplied 'nonce' to integer: %s", err)
@@ -176,17 +187,20 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, suppliedFrom st
 	}
 	p.inflightTxnsLock.Unlock()
 
-	// If we found a nonce, return one higher.
-	if highestNonce > 0 {
-		inflight.nonce = highestNonce + 1
-		return
-	}
-
 	// We want to submit this transaction with the next nonce in the chain.
 	// If this is a node-signed transaction, then we can ask the node
 	// to simply use the next available nonce.
 	// We provide an override to force the Go code to always assign the nonce.
-	if !p.conf.PredictNonces {
+	if p.conf.OrionPrivateAPIS && len(msg.PrivateFor) > 0 {
+		// If are using orion private transactions, then we need the private TX
+		// group ID and nonce (the public transactdion will be submitted by the pantheon node)
+		// Note: We do not have highestNonce calculation for in-flight private transactions,
+		//       so attempting to submit more than one per block currently will FAIL
+		inflight.nonce, err = kldeth.GetOrionTXCount(p.rpc, &from, inflight.privacyGroupID)
+	} else if highestNonce > 0 {
+		// If we found a nonce in-flight in memory, return one higher.
+		inflight.nonce = highestNonce + 1
+	} else if !p.conf.PredictNonces {
 		inflight.nodeAssignNonce = true
 	} else {
 		// Alternatively (will be required when we support externally signed tranactions)
@@ -329,7 +343,7 @@ func (p *txnProcessor) addInflight(inflight *inflightTxn, tx *kldeth.Txn) {
 
 func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *kldmessages.DeployContract) {
 
-	inflightWrapper, err := p.newInflightWrapper(txnContext, msg.From, msg.Nonce)
+	inflightWrapper, err := p.newInflightWrapper(txnContext, &msg.TransactionCommon)
 	inflightWrapper.registerAs = msg.RegisterAs
 	if err != nil {
 		txnContext.SendErrorReply(400, err)
@@ -342,6 +356,8 @@ func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *kldme
 		txnContext.SendErrorReply(400, err)
 		return
 	}
+	tx.OrionPrivateAPIS = p.conf.OrionPrivateAPIS
+	tx.PrivacyGroupID = inflightWrapper.privacyGroupID
 	tx.NodeAssignNonce = inflightWrapper.nodeAssignNonce
 
 	if err = tx.Send(p.rpc); err != nil {
@@ -354,7 +370,7 @@ func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *kldme
 
 func (p *txnProcessor) OnSendTransactionMessage(txnContext TxnContext, msg *kldmessages.SendTransaction) {
 
-	inflightWrapper, err := p.newInflightWrapper(txnContext, msg.From, msg.Nonce)
+	inflightWrapper, err := p.newInflightWrapper(txnContext, &msg.TransactionCommon)
 	if err != nil {
 		txnContext.SendErrorReply(400, err)
 		return

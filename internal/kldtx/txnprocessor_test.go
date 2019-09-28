@@ -54,6 +54,8 @@ type testRPC struct {
 	ethGetTransactionCountErr      error
 	ethGetTransactionReceiptResult kldeth.TxnReceipt
 	ethGetTransactionReceiptErr    error
+	privFindPrivacyGroupResult     []kldeth.OrionPrivacyGroup
+	privFindPrivacyGroupErr        error
 	calls                          []string
 	params                         [][]interface{}
 }
@@ -91,9 +93,12 @@ func (r *testRPC) CallContext(ctx context.Context, result interface{}, method st
 	if method == "eth_sendTransaction" {
 		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethSendTransactionResult))
 		return r.ethSendTransactionErr
-	} else if method == "eth_getTransactionCount" {
+	} else if method == "eth_getTransactionCount" || method == "priv_getTransactionCount" {
 		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethGetTransactionCountResult))
 		return r.ethGetTransactionCountErr
+	} else if method == "priv_findPrivacyGroup" {
+		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.privFindPrivacyGroupResult))
+		return r.privFindPrivacyGroupErr
 	} else if method == "eth_getTransactionReceipt" {
 		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethGetTransactionReceiptResult))
 		return r.ethGetTransactionReceiptErr
@@ -436,7 +441,7 @@ func TestOnDeployContractMessageFailedToGetNonce(t *testing.T) {
 
 	txnProcessor.OnMessage(testTxnContext)
 
-	assert.Equal("ding", testTxnContext.errorRepies[0].err.Error())
+	assert.Equal("eth_getTransactionCount returned: ding", testTxnContext.errorRepies[0].err.Error())
 	assert.EqualValues([]string{"eth_getTransactionCount"}, testRPC.calls)
 }
 
@@ -576,7 +581,7 @@ func TestOnSendTransactionMessageFailedToGetNonce(t *testing.T) {
 
 	txnProcessor.OnMessage(testTxnContext)
 
-	assert.Equal("poof", testTxnContext.errorRepies[0].err.Error())
+	assert.Equal("eth_getTransactionCount returned: poof", testTxnContext.errorRepies[0].err.Error())
 	assert.EqualValues([]string{"eth_getTransactionCount"}, testRPC.calls)
 }
 
@@ -604,6 +609,40 @@ func TestOnSendTransactionMessageInflightNonce(t *testing.T) {
 
 	assert.Empty(testTxnContext.errorRepies)
 	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
+}
+
+func TestOnSendTransactionMessageOrion(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime:    1,
+		OrionPrivateAPIS: true,
+	}).(*txnProcessor)
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] =
+		[]*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "{" +
+		"  \"headers\":{\"type\": \"SendTransaction\"}," +
+		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
+		"  \"gas\":\"123\"," +
+		"  \"method\":{\"name\":\"test\"}," +
+		"  \"privateFrom\":\"jO6dpqnMhmnrCHqUumyK09+18diF7quq/rROGs2HFWI=\"," +
+		"  \"privateFor\":[\"2QiZG7rYPzRvRsioEn6oYUff1DOvPA22EZr0+/o3RUg=\"]" +
+		"}"
+	testRPC := &testRPC{
+		ethSendTransactionResult: "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b",
+		privFindPrivacyGroupResult: []kldeth.OrionPrivacyGroup{
+			kldeth.OrionPrivacyGroup{
+				PrivacyGroupID: "P8SxRUussJKqZu4+nUkMJpscQeWOR3HqbAXLakatsk8=",
+			},
+		},
+	}
+	txnProcessor.Init(testRPC)
+
+	txnProcessor.OnMessage(testTxnContext)
+
+	assert.Empty(testTxnContext.errorRepies)
+	assert.EqualValues([]string{"priv_findPrivacyGroup", "priv_getTransactionCount", "eth_sendTransaction"}, testRPC.calls)
 }
 
 func TestCobraInitTxnProcessor(t *testing.T) {

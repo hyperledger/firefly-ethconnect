@@ -148,8 +148,10 @@ type sendTxArgs struct {
 	Value    hexutil.Big     `json:"value,omitempty"`
 	Data     *hexutil.Bytes  `json:"data"`
 	// EEA spec extensions
-	PrivateFrom string   `json:"privateFrom,omitempty"`
-	PrivateFor  []string `json:"privateFor,omitempty"`
+	PrivateFrom    string   `json:"privateFrom,omitempty"`
+	PrivateFor     []string `json:"privateFor,omitempty"`
+	PrivacyGroupID string   `json:"privacyGroupId,omitempty"`
+	Restriction    string   `json:"restriction,omitempty"`
 }
 
 // sendUnsignedTxn sends a transaction for internal signing by the node
@@ -160,11 +162,24 @@ func (tx *Txn) sendUnsignedTxn(ctx context.Context, rpc RPCClient, txArgs *sendT
 		nonce = &hexNonce
 	}
 	txArgs.Nonce = nonce
-	if len(tx.PrivateFor) > 0 {
+	jsonRPCMethod := "eth_sendTransaction"
+	if tx.PrivacyGroupID != "" {
+		// This means we have an Orion style private TX.
+		// Earlier logic for Orion resolved the privateFor array down to a privacyGroupId
+		jsonRPCMethod = "eea_sendTransaction"
+		txArgs.PrivateFrom = tx.PrivateFrom
+		txArgs.PrivacyGroupID = tx.PrivacyGroupID
+		txArgs.Restriction = "restricted"
+		// PrivateFrom is requires for Orion transactions
+		if txArgs.PrivateFrom == "" {
+			return "", fmt.Errorf("private-from is required when submitting private transactions via Orion")
+		}
+	} else if len(tx.PrivateFor) > 0 {
+		// Note that PrivateFrom is optional for Quorum/Tessera transactions
 		txArgs.PrivateFrom = tx.PrivateFrom
 		txArgs.PrivateFor = tx.PrivateFor
 	}
 	var txHash string
-	err := rpc.CallContext(ctx, &txHash, "eth_sendTransaction", txArgs)
+	err := rpc.CallContext(ctx, &txHash, jsonRPCMethod, txArgs)
 	return txHash, err
 }

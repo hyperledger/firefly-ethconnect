@@ -34,6 +34,9 @@ func GetOrionPrivacyGroup(rpc RPCClient, addr *common.Address, privateFrom strin
 
 	allMembers := []string{privateFrom}
 	allMembers = append(allMembers, privateFor...)
+	params := map[string]interface{}{
+		"addresses": allMembers,
+	}
 	// var privacyGroup OrionPrivacyGroup
 	var privacyGroups []OrionPrivacyGroup
 	var privacyGroup string
@@ -41,7 +44,7 @@ func GetOrionPrivacyGroup(rpc RPCClient, addr *common.Address, privateFrom strin
 		return "", fmt.Errorf("priv_findPrivacyGroup returned: %s", err)
 	}
 	if len(privacyGroups) == 0 {
-		if err := rpc.CallContext(ctx, &privacyGroup, "priv_createPrivacyGroup", allMembers); err != nil {
+		if err := rpc.CallContext(ctx, &privacyGroup, "priv_createPrivacyGroup", params); err != nil {
 			return "", fmt.Errorf("priv_createPrivacyGroup returned: %s", err)
 		}
 	} else {

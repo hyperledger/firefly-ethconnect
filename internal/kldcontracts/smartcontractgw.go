@@ -249,18 +249,22 @@ func (g *smartContractGW) PostDeploy(msg *kldmessages.TransactionReceipt) error 
 	if registeredName == "" {
 		registeredName = addrHexNo0x
 	}
-	msg.ContractSwagger = g.conf.BaseURL + basePath + registeredName + "?openapi"
-	msg.ContractUI = g.conf.BaseURL + basePath + registeredName + "?ui"
 
-	var err error
-	if isRemote {
-		if msg.RegisterAs != "" {
-			err = g.rr.registerInstance(msg.RegisterAs, "0x"+addrHexNo0x)
+	if msg.Headers.MsgType == kldmessages.MsgTypeTransactionSuccess {
+		msg.ContractSwagger = g.conf.BaseURL + basePath + registeredName + "?openapi"
+		msg.ContractUI = g.conf.BaseURL + basePath + registeredName + "?ui"
+
+		var err error
+		if isRemote {
+			if msg.RegisterAs != "" {
+				err = g.rr.registerInstance(msg.RegisterAs, "0x"+addrHexNo0x)
+			}
+		} else {
+			_, err = g.storeNewContractInfo(addrHexNo0x, requestID, registeredName, msg.RegisterAs)
 		}
-	} else {
-		_, err = g.storeNewContractInfo(addrHexNo0x, requestID, registeredName, msg.RegisterAs)
+		return err
 	}
-	return err
+	return nil
 }
 
 func (g *smartContractGW) swaggerForRemoteRegistry(apiName, addr string, factoryOnly bool, abi *kldbind.ABI, devdoc, path string) *spec.Swagger {

@@ -140,7 +140,8 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 		ReplyCommon: kldmessages.ReplyCommon{
 			Headers: kldmessages.ReplyHeaders{
 				CommonHeaders: kldmessages.CommonHeaders{
-					ID: "message2",
+					ID:      "message2",
+					MsgType: kldmessages.MsgTypeTransactionSuccess,
 				},
 				ReqID: "message1",
 			},
@@ -581,6 +582,9 @@ func TestPostDeployNoRegisteredName(t *testing.T) {
 	replyMsg := &kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{
 			Headers: kldmessages.ReplyHeaders{
+				CommonHeaders: kldmessages.CommonHeaders{
+					MsgType: kldmessages.MsgTypeTransactionSuccess,
+				},
 				ReqID: "message1",
 			},
 		},
@@ -622,6 +626,7 @@ func TestPostDeployRemoteRegisteredName(t *testing.T) {
 					Context: map[string]interface{}{
 						remoteRegistryContextKey: true,
 					},
+					MsgType: kldmessages.MsgTypeTransactionSuccess,
 				},
 				ReqID: "message1",
 			},
@@ -639,6 +644,49 @@ func TestPostDeployRemoteRegisteredName(t *testing.T) {
 
 	assert.Equal("0x0123456789abcdef0123456789abcdef01234567", rr.addrCapture)
 	assert.Equal("http://localhost/api/v1/instances/lobster?openapi", replyMsg.ContractSwagger)
+}
+
+func TestPostDeployRemoteRegisteredNameNotSuccess(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+	s, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+			BaseURL:     "http://localhost/api/v1",
+		},
+		nil, nil, nil,
+	)
+	rr := &mockRR{}
+	s.(*smartContractGW).rr = rr
+
+	contractAddr := common.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	scgw := s.(*smartContractGW)
+	replyMsg := &kldmessages.TransactionReceipt{
+		ReplyCommon: kldmessages.ReplyCommon{
+			Headers: kldmessages.ReplyHeaders{
+				CommonHeaders: kldmessages.CommonHeaders{
+					Context: map[string]interface{}{
+						remoteRegistryContextKey: true,
+					},
+					MsgType: kldmessages.MsgTypeTransactionFailure,
+				},
+				ReqID: "message1",
+			},
+		},
+		ContractAddress: &contractAddr,
+		RegisterAs:      "lobster",
+	}
+
+	deployFile := path.Join(dir, "abi_message1.deploy.json")
+	deployMsg := &kldmessages.DeployContract{}
+	deployBytes, _ := json.Marshal(deployMsg)
+	ioutil.WriteFile(deployFile, deployBytes, 0644)
+	err := scgw.PostDeploy(replyMsg)
+	assert.NoError(err)
+
+	assert.Empty(rr.addrCapture)
+	assert.Empty(replyMsg.ContractSwagger)
 }
 
 func TestPostDeployMissingContractAddress(t *testing.T) {

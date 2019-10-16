@@ -265,10 +265,13 @@ func (p *txnProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 		p.inflightTxnDelayer.ReportSuccess(elapsed)
 		p.inflightTxnsLock.Unlock()
 
-		// Build our reply
 		receipt := iTX.tx.Receipt
+		isSuccess := (receipt.Status != nil && receipt.Status.ToInt().Int64() > 0)
+		log.Infof("Receipt for %s obtained after %.2fs Success=%t", iTX.tx.Hash, elapsed.Seconds(), isSuccess)
+
+		// Build our reply
 		var reply kldmessages.TransactionReceipt
-		if receipt.Status != nil && receipt.Status.ToInt().Int64() > 0 {
+		if isSuccess {
 			reply.Headers.MsgType = kldmessages.MsgTypeTransactionSuccess
 		} else {
 			reply.Headers.MsgType = kldmessages.MsgTypeTransactionFailure

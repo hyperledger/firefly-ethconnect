@@ -741,6 +741,7 @@ func TestCallMethod(t *testing.T) {
 
 	method := &abi.Method{}
 	method.Name = "testFunc"
+	method.RawName = "testFunc"
 
 	uint256Type, _ := kldbind.ABITypeFor("uint256")
 	method.Outputs = append(method.Outputs, abi.Argument{Name: "retval1", Type: uint256Type})

@@ -28,7 +28,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Shopify/sarama"
-	cluster "github.com/bsm/sarama-cluster"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -189,7 +188,6 @@ func TestExecuteWithNoTLS(t *testing.T) {
 	assert.Equal(sarama.WaitForLocal, f.ClientConf.Producer.RequiredAcks)
 	assert.Equal(500*time.Millisecond, f.ClientConf.Producer.Flush.Frequency)
 	assert.Equal(true, f.ClientConf.Consumer.Return.Errors)
-	assert.Equal(true, f.ClientConf.Group.Return.Notifications)
 	assert.Equal(false, f.ClientConf.Net.TLS.Enable)
 	assert.Equal((*tls.Config)(nil), f.ClientConf.Net.TLS.Config)
 	assert.Regexp("\\w+", f.ClientConf.ClientID) // generated UUID
@@ -359,22 +357,6 @@ func TestConsumerErrorLoopLogsAndContinues(t *testing.T) {
 	}
 
 	f.Consumer.MockErrors <- fmt.Errorf("fizzle")
-
-	// Shut down
-	k.signals <- os.Interrupt
-	wg.Wait()
-}
-
-func TestConsumerNotificationsLoop(t *testing.T) {
-	assert := assert.New(t)
-
-	f := NewMockKafkaFactory()
-	k, wg, err := startTestKafkaCommon(assert, kcMinWorkingArgs, f)
-	if err != nil {
-		return
-	}
-
-	f.Consumer.MockNotifications <- &cluster.Notification{}
 
 	// Shut down
 	k.signals <- os.Interrupt

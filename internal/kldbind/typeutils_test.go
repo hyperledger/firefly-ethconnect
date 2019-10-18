@@ -57,8 +57,9 @@ func TestABIMarshalUnMarshal(t *testing.T) {
 			},
 			Methods: map[string]abi.Method{
 				"method1": abi.Method{
-					Name:  "method1",
-					Const: true,
+					Name:    "method1",
+					RawName: "method1",
+					Const:   true,
 					Inputs: abi.Arguments{
 						abi.Argument{Name: "marg1", Type: tUint256, Indexed: true},
 					},
@@ -70,6 +71,7 @@ func TestABIMarshalUnMarshal(t *testing.T) {
 			Events: map[string]abi.Event{
 				"event1": abi.Event{
 					Name:      "event1",
+					RawName:   "event1",
 					Anonymous: true,
 					Inputs: abi.Arguments{
 						abi.Argument{Name: "earg1", Type: tUint256, Indexed: true},
@@ -89,7 +91,6 @@ func TestABIMarshalUnMarshal(t *testing.T) {
 	t.Log(string(jsonBytes))
 
 	assert.Equal(a1, a2)
-
 }
 
 func TestABIEventMarshalUnMarshal(t *testing.T) {

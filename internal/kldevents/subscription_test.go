@@ -73,7 +73,8 @@ func TestCreateWebhookSub(t *testing.T) {
 
 	rpc := kldeth.NewMockRPCClientForSync(nil, nil)
 	event := &kldbind.ABIEvent{
-		Name: "glastonbury",
+		Name:    "glastonbury",
+		RawName: "glastonbury",
 		Inputs: []kldbind.ABIArgument{
 			kldbind.ABIArgument{
 				Name: "field",
@@ -103,7 +104,7 @@ func TestCreateWebhookSub(t *testing.T) {
 
 	assert.Equal(s.info.ID, s1.info.ID)
 	assert.Equal("*:glastonbury(address,uint256,bool)", s1.info.Name)
-	assert.Equal(event.Id(), s.info.Filter.Topics[0][0])
+	assert.Equal(event.ID(), s.info.Filter.Topics[0][0])
 }
 
 func TestCreateWebhookSubWithAddr(t *testing.T) {
@@ -113,6 +114,7 @@ func TestCreateWebhookSubWithAddr(t *testing.T) {
 	m := &mockSubMgr{stream: newTestStream()}
 	event := &kldbind.ABIEvent{
 		Name:      "devcon",
+		RawName:   "devcon",
 		Anonymous: true,
 	}
 
@@ -120,7 +122,7 @@ func TestCreateWebhookSubWithAddr(t *testing.T) {
 	s, err := newSubscription(m, rpc, &addr, testSubInfo(event))
 	assert.NoError(err)
 	assert.NotEmpty(s.info.ID)
-	assert.Equal(event.Id(), s.info.Filter.Topics[0][0])
+	assert.Equal(event.ID(), s.info.Filter.Topics[0][0])
 	assert.Equal("0x0123456789abcDEF0123456789abCDef01234567:devcon()", s.info.Name)
 }
 

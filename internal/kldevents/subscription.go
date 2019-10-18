@@ -68,11 +68,12 @@ func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind
 	if err != nil {
 		return nil, err
 	}
+	i.Event.E.RawName = i.Event.E.Name
 	s := &subscription{
 		info:        i,
 		rpc:         rpc,
 		lp:          newLogProcessor(i.ID, &i.Event.E, stream),
-		logName:     i.ID + ":" + eventSummary(&i.Event.E),
+		logName:     i.ID + ":" + i.Event.E.Sig(),
 		filterStale: true,
 	}
 	f := &i.Filter
@@ -82,33 +83,19 @@ func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind
 		addrStr = addr.String()
 	}
 	event := &i.Event.E
-	i.Name = addrStr + ":" + eventSummary(event)
+	i.Name = addrStr + ":" + event.Sig()
 	if event == nil || event.Name == "" {
 		return nil, fmt.Errorf("Solidity event name must be specified")
 	}
 	// For now we only support filtering on the event type
-	f.Topics = [][]kldbind.Hash{[]kldbind.Hash{event.Id()}}
-	log.Infof("Created subscription %s %s topic:%s", i.ID, i.Name, event.Id().String())
+	f.Topics = [][]kldbind.Hash{[]kldbind.Hash{event.ID()}}
+	log.Infof("Created subscription %s %s topic:%s", i.ID, i.Name, event.ID().String())
 	return s, nil
 }
 
 // GetID returns the ID (for sorting)
 func (info *SubscriptionInfo) GetID() string {
 	return info.ID
-}
-
-func eventSummary(e *kldbind.ABIEvent) string {
-	var sb strings.Builder
-	sb.WriteString(e.Name)
-	sb.WriteString("(")
-	for idx, input := range e.Inputs {
-		if idx > 0 {
-			sb.WriteString(",")
-		}
-		sb.WriteString(input.Type.String())
-	}
-	sb.WriteString(")")
-	return sb.String()
 }
 
 func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *SubscriptionInfo) (*subscription, error) {
@@ -119,11 +106,12 @@ func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *Subscr
 	if err != nil {
 		return nil, err
 	}
+	i.Event.E.RawName = i.Event.E.Name
 	s := &subscription{
 		rpc:         rpc,
 		info:        i,
 		lp:          newLogProcessor(i.ID, &i.Event.E, stream),
-		logName:     i.ID + ":" + eventSummary(&i.Event.E),
+		logName:     i.ID + ":" + i.Event.E.Sig(),
 		filterStale: true,
 	}
 	return s, nil

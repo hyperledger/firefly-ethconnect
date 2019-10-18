@@ -137,7 +137,7 @@ func newSaramaKafkaConsumerGroupHandler(f consumerGroupFactory, c sarama.Client,
 
 func (h *saramaKafkaConsumerGroupHandler) consumerGoRoutine() {
 	for !h.closed {
-		log.Debugf("Kafka consumer starting. Group: '%s' Topics: %+v", h.group, h.topics)
+		log.Infof("Kafka consumer starting. Group: '%s' Topics: %+v", h.group, h.topics)
 
 		var err error
 		var wg sync.WaitGroup
@@ -174,12 +174,12 @@ func (h *saramaKafkaConsumerGroupHandler) consumerGoRoutine() {
 
 func (h *saramaKafkaConsumerGroupHandler) Setup(session sarama.ConsumerGroupSession) error {
 	h.session = session
-	log.Debugf("Consumer session setup. Claims=%+v Member=%s Generation=%d", session.Claims(), session.MemberID(), session.GenerationID())
+	log.Infof("Consumer session setup. Claims=%+v Member=%s Generation=%d", session.Claims(), session.MemberID(), session.GenerationID())
 	return nil
 }
 
 func (h *saramaKafkaConsumerGroupHandler) Cleanup(session sarama.ConsumerGroupSession) error {
-	log.Debugf("Consumer session cleanup. Claims=%+v Member=%s Generation=%d", session.Claims(), session.MemberID(), session.GenerationID())
+	log.Infof("Consumer session cleanup. Claims=%+v Member=%s Generation=%d", session.Claims(), session.MemberID(), session.GenerationID())
 	h.session = nil
 	return nil
 }

@@ -255,7 +255,8 @@ func NewSendTxn(msg *kldmessages.SendTransaction) (tx *Txn, err error) {
 	if msg.Method == nil || msg.Method.Name == "" {
 		if msg.MethodName != "" {
 			methodABI = &abi.Method{
-				Name: msg.MethodName,
+				Name:    msg.MethodName,
+				RawName: msg.MethodName,
 			}
 		} else {
 			err = fmt.Errorf("Method missing - must provide inline 'param' type/value pairs with a 'methodName', or an ABI in 'method'")
@@ -290,12 +291,12 @@ func buildTX(msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json
 	// Pack the arguments
 	packedArgs, err := methodABI.Inputs.Pack(typedArgs...)
 	if err != nil {
-		err = fmt.Errorf("Packing arguments for method '%s': %s", methodABI.Name, err)
+		err = fmt.Errorf("Packing arguments for method '%s': %s", methodABI.RawName, err)
 		log.Errorf("Attempted to pack args %+v: %s", typedArgs, err)
 		return
 	}
-	methodID := methodABI.Id()
-	log.Infof("Method Name=%s ID=%x PackedArgs=%x", methodABI.Name, methodID, packedArgs)
+	methodID := methodABI.ID()
+	log.Infof("Method Name=%s ID=%x PackedArgs=%x", methodABI.RawName, methodID, packedArgs)
 	packedCall := append(methodID, packedArgs...)
 
 	// Generate the ethereum transaction
@@ -306,6 +307,7 @@ func buildTX(msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json
 func genMethodABI(jsonABI *kldmessages.ABIMethod) (method *abi.Method, err error) {
 	method = &abi.Method{}
 	method.Name = jsonABI.Name
+	method.RawName = jsonABI.Name
 	for i := 0; i < len(jsonABI.Inputs); i++ {
 		jsonInput := jsonABI.Inputs[i]
 		var arg abi.Argument

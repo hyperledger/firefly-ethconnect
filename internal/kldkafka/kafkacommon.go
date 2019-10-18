@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	cluster "github.com/bsm/sarama-cluster"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
@@ -167,7 +166,7 @@ func (k *kafkaCommon) connect() (err error) {
 	}
 
 	sarama.Logger = k.saramaLogger
-	clientConf := cluster.NewConfig()
+	clientConf := sarama.NewConfig()
 
 	var tlsConfig *tls.Config
 	if tlsConfig, err = kldutils.CreateTLSConfiguration(&k.conf.TLS); err != nil {
@@ -186,7 +185,7 @@ func (k *kafkaCommon) connect() (err error) {
 	clientConf.Producer.Flush.Frequency = 500 * time.Millisecond
 	clientConf.Metadata.Retry.Backoff = 2 * time.Second
 	clientConf.Consumer.Return.Errors = true
-	clientConf.Group.Return.Notifications = true
+	clientConf.Version = sarama.V2_0_0_0
 	clientConf.Net.TLS.Enable = (tlsConfig != nil)
 	clientConf.Net.TLS.Config = tlsConfig
 	clientConf.ClientID = k.conf.ClientID
@@ -240,16 +239,10 @@ func (k *kafkaCommon) createConsumer() (err error) {
 
 func (k *kafkaCommon) startConsumer() (err error) {
 
-	k.consumerWG.Add(3)
+	k.consumerWG.Add(2) // messages and errors
 	go func() {
 		for err := range k.consumer.Errors() {
 			log.Error("Kafka consumer failed:", err)
-		}
-		k.consumerWG.Done()
-	}()
-	go func() {
-		for ntf := range k.consumer.Notifications() {
-			log.Debugf("Kafka consumer rebalanced. Current=%+v", ntf.Current)
 		}
 		k.consumerWG.Done()
 	}()
@@ -278,6 +271,7 @@ func (k *kafkaCommon) Start() (err error) {
 		return
 	}
 
+	log.Debugf("Kafka initialization complete")
 	k.signals = make(chan os.Signal, 1)
 	signal.Notify(k.signals, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	for {

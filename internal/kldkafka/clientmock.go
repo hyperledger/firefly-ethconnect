@@ -18,12 +18,11 @@ import (
 	"sync"
 
 	"github.com/Shopify/sarama"
-	cluster "github.com/bsm/sarama-cluster"
 )
 
 // MockKafkaFactory - mock
 type MockKafkaFactory struct {
-	ClientConf         *cluster.Config
+	ClientConf         *sarama.Config
 	ErrorOnNewClient   error
 	ErrorOnNewProducer error
 	ErrorOnNewConsumer error
@@ -46,7 +45,7 @@ func NewErrorMockKafkaFactory(errorOnNewClient error, errorOnNewConsumer error, 
 }
 
 // NewClient - mock
-func (f *MockKafkaFactory) NewClient(k KafkaCommon, clientConf *cluster.Config) (KafkaClient, error) {
+func (f *MockKafkaFactory) NewClient(k KafkaCommon, clientConf *sarama.Config) (KafkaClient, error) {
 	f.ClientConf = clientConf
 	return f, f.ErrorOnNewClient
 }
@@ -72,7 +71,6 @@ func (f *MockKafkaFactory) NewProducer(k KafkaCommon) (KafkaProducer, error) {
 func (f *MockKafkaFactory) NewConsumer(k KafkaCommon) (KafkaConsumer, error) {
 	f.Consumer = &MockKafkaConsumer{
 		MockMessages:       make(chan *sarama.ConsumerMessage),
-		MockNotifications:  make(chan *cluster.Notification),
 		MockErrors:         make(chan error),
 		OffsetsByPartition: make(map[int32]int64),
 	}
@@ -122,7 +120,6 @@ func (p *MockKafkaProducer) Errors() <-chan *sarama.ProducerError {
 // MockKafkaConsumer - mock
 type MockKafkaConsumer struct {
 	MockMessages       chan *sarama.ConsumerMessage
-	MockNotifications  chan *cluster.Notification
 	MockErrors         chan error
 	OffsetsByPartition map[int32]int64
 }
@@ -131,9 +128,6 @@ type MockKafkaConsumer struct {
 func (c *MockKafkaConsumer) Close() error {
 	if c.MockMessages != nil {
 		close(c.MockMessages)
-	}
-	if c.MockNotifications != nil {
-		close(c.MockNotifications)
 	}
 	if c.MockErrors != nil {
 		close(c.MockErrors)
@@ -144,11 +138,6 @@ func (c *MockKafkaConsumer) Close() error {
 // Messages - mock
 func (c *MockKafkaConsumer) Messages() <-chan *sarama.ConsumerMessage {
 	return c.MockMessages
-}
-
-// Notifications - mock
-func (c *MockKafkaConsumer) Notifications() <-chan *cluster.Notification {
-	return c.MockNotifications
 }
 
 // Errors - mock

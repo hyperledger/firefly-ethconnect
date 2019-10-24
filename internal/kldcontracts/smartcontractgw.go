@@ -367,7 +367,7 @@ func (g *smartContractGW) PreDeploy(msg *kldmessages.DeployContract) (err error)
 	solidity := msg.Solidity
 	var compiled *kldeth.CompiledSolidity
 	if solidity != "" {
-		if compiled, err = kldeth.CompileContract(solidity, msg.ContractName, msg.CompilerVersion); err != nil {
+		if compiled, err = kldeth.CompileContract(solidity, msg.ContractName, msg.CompilerVersion, msg.EVMVersion); err != nil {
 			return err
 		}
 	}
@@ -1056,11 +1056,8 @@ func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Req
 		}
 	}
 
-	solcArgs := []string{
-		"--combined-json", "bin,bin-runtime,srcmap,srcmap-runtime,abi,userdoc,devdoc,metadata",
-		"--optimize",
-		"--allow-paths", ".",
-	}
+	evmVersion := req.FormValue("evm")
+	solcArgs := kldeth.GetSolcArgs(evmVersion)
 	if sourceFiles := req.Form["source"]; len(sourceFiles) > 0 {
 		solcArgs = append(solcArgs, sourceFiles...)
 	} else if len(solFiles) > 0 {
@@ -1069,14 +1066,9 @@ func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Req
 		return nil, fmt.Errorf("No .sol files found in root. Please set a 'source' query param or form field to the relative path of your solidity")
 	}
 
-	solcExec, err := kldeth.GetSolc(req.FormValue("compiler"))
+	solcVer, err := kldeth.GetSolc(req.FormValue("compiler"))
 	if err != nil {
-		return nil, err
-	}
-	solcVer, err := compiler.SolidityVersion(solcExec)
-	if err != nil {
-		log.Errorf("Failed to find solc: %s", err)
-		return nil, fmt.Errorf("Failed checking solc version")
+		return nil, fmt.Errorf("Failed checking solc version: %s", err)
 	}
 	solOptionsString := strings.Join(append([]string{solcVer.Path}, solcArgs...), " ")
 	log.Infof("Compiling: %s", solOptionsString)
@@ -1181,7 +1173,7 @@ func (g *smartContractGW) writeHTMLForUI(prefix, id, from string, isGateway, fac
 <html>
 <head>
   <meta charset="utf-8"> <!-- Important: rapi-doc uses utf8 charecters -->
-  <script src="https://unpkg.com/rapidoc/dist/rapidoc-min.js"></script>
+  <script src="http://localhost:8080/rapidoc-min.js"></script>
 </head>
 <body>
   <rapi-doc 
@@ -1192,7 +1184,7 @@ func (g *smartContractGW) writeHTMLForUI(prefix, id, from string, isGateway, fac
     heading-text="Ethconnect REST Gateway"
     header-color="#3842C1"
     theme="light"
-    primary-color="#3842C1"
+		primary-color="#3842C1"
   >
     <img 
       slot="logo" 

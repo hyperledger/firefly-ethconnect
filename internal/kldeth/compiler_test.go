@@ -93,7 +93,7 @@ func TestSolcDefaultVersion(t *testing.T) {
 	assert := assert.New(t)
 	os.Setenv("KLD_SOLC_DEFAULT", "")
 	defaultSolc = ""
-	solc, err := GetSolc("")
+	solc, err := getSolcExecutable("")
 	assert.NoError(err)
 	assert.Equal("solc", solc)
 	os.Unsetenv("KLD_SOLC_DEFAULT")
@@ -103,7 +103,7 @@ func TestSolcDefaultVersionEnvVar(t *testing.T) {
 	assert := assert.New(t)
 	os.Setenv("KLD_SOLC_DEFAULT", "solc123")
 	defaultSolc = ""
-	solc, err := GetSolc("")
+	solc, err := getSolcExecutable("")
 	assert.NoError(err)
 	assert.Equal("solc123", solc)
 	os.Unsetenv("KLD_SOLC_DEFAULT")
@@ -113,7 +113,7 @@ func TestSolcCustomVersionValidMajor(t *testing.T) {
 	assert := assert.New(t)
 	os.Setenv("KLD_SOLC_0_4", "solc04")
 	defaultSolc = ""
-	solc, err := GetSolc("0.4")
+	solc, err := getSolcExecutable("0.4")
 	assert.NoError(err)
 	assert.Equal("solc04", solc)
 }
@@ -122,7 +122,7 @@ func TestSolcCustomVersionValidMinor(t *testing.T) {
 	assert := assert.New(t)
 	os.Setenv("KLD_SOLC_0_4", "solc04")
 	defaultSolc = ""
-	solc, err := GetSolc("0.4.23.some interesting things")
+	solc, err := getSolcExecutable("0.4.23.some interesting things")
 	assert.NoError(err)
 	assert.Equal("solc04", solc)
 }
@@ -130,20 +130,20 @@ func TestSolcCustomVersionValidMinor(t *testing.T) {
 func TestSolcCustomVersionUnknown(t *testing.T) {
 	assert := assert.New(t)
 	defaultSolc = ""
-	_, err := GetSolc("0.5")
+	_, err := getSolcExecutable("0.5")
 	assert.EqualError(err, "Could not find a configured compiler for requested Solidity major version 0.5")
 }
 
 func TestSolcCustomVersionInvalid(t *testing.T) {
 	assert := assert.New(t)
 	defaultSolc = ""
-	_, err := GetSolc("0.")
+	_, err := getSolcExecutable("0.")
 	assert.EqualError(err, "Invalid Solidity version requested for compiler. Ensure the string starts with two dot separated numbers, such as 0.5")
 }
 
 func TestSolcCompileInvalidVersion(t *testing.T) {
 	assert := assert.New(t)
 	defaultSolc = ""
-	_, err := CompileContract("", "", "zero.four")
+	_, err := CompileContract("", "", "zero.four", "")
 	assert.EqualError(err, "Invalid Solidity version requested for compiler. Ensure the string starts with two dot separated numbers, such as 0.5")
 }

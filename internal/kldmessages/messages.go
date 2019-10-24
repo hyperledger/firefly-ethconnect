@@ -137,6 +137,7 @@ type DeployContract struct {
 	TransactionCommon
 	Solidity        string       `json:"solidity,omitempty"`
 	CompilerVersion string       `json:"compilerVersion,omitempty"`
+	EVMVersion      string       `json:"evmVersion,omitempty"`
 	ABI             *kldbind.ABI `json:"abi,omitempty"`
 	DevDoc          string       `json:"devDocs,omitempty"`
 	Compiled        []byte       `json:"compiled,omitempty"`

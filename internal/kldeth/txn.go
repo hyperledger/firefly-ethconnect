@@ -77,7 +77,7 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract) (tx *Txn, err error) 
 		}
 	} else if msg.Solidity != "" {
 		// Compile the solidity contract
-		if compiled, err = CompileContract(msg.Solidity, msg.ContractName, msg.CompilerVersion); err != nil {
+		if compiled, err = CompileContract(msg.Solidity, msg.ContractName, msg.CompilerVersion, msg.EVMVersion); err != nil {
 			return
 		}
 	} else {

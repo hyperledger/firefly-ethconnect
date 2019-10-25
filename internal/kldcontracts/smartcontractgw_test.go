@@ -1280,7 +1280,7 @@ func TestCompileMultipartFormSolidityBadSolc(t *testing.T) {
 	ioutil.WriteFile(path.Join(dir, "solidity.sol"), []byte(simpleEventsSource()), 0644)
 	req := httptest.NewRequest("POST", "/abis?compiler=0.99", bytes.NewReader([]byte{}))
 	_, err := scgw.compileMultipartFormSolidity(dir, req)
-	assert.EqualError(err, "Failed checking solc version")
+	assert.Regexp("Failed checking solc version", err.Error())
 	os.Unsetenv("KLD_SOLC_0_99")
 }
 
@@ -1301,7 +1301,7 @@ func TestCompileMultipartFormSolidityBadCompilerVerReq(t *testing.T) {
 	ioutil.WriteFile(path.Join(dir, "solidity.sol"), []byte(simpleEventsSource()), 0644)
 	req := httptest.NewRequest("POST", "/abis?compiler=0.99", bytes.NewReader([]byte{}))
 	_, err := scgw.compileMultipartFormSolidity(dir, req)
-	assert.EqualError(err, "Could not find a configured compiler for requested Solidity major version 0.99")
+	assert.EqualError(err, "Failed checking solc version: Could not find a configured compiler for requested Solidity major version 0.99")
 }
 
 func TestCompileMultipartFormSolidityBadSolidity(t *testing.T) {

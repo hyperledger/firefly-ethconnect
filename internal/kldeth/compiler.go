@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"reflect"
 	"regexp"
 	"strings"
@@ -28,6 +29,11 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common/compiler"
+)
+
+const (
+	// DefaultEVMVersion is the EVMVersion to be used when not specified explicity
+	defaultEVMVersion = "byzantium"
 )
 
 // CompiledSolidity wraps solc compilation of solidity and ABI generation
@@ -42,9 +48,7 @@ type CompiledSolidity struct {
 var solcVerChecker *regexp.Regexp
 var defaultSolc string
 
-// GetSolc returns the appropriate solc command based on the combination of env vars, and message-specific request
-// parameters passed in
-func GetSolc(requestedVersion string) (string, error) {
+func getSolcExecutable(requestedVersion string) (string, error) {
 	log.Infof("Solidity compiler requested: %s", requestedVersion)
 	if solcVerChecker == nil {
 		solcVerChecker, _ = regexp.Compile("^([0-9]+)\\.?([0-9]+)")
@@ -71,18 +75,48 @@ func GetSolc(requestedVersion string) (string, error) {
 	return solc, nil
 }
 
-// CompileContract uses solc to compile the Solidity source and
-func CompileContract(soliditySource, contractName, requestedVersion string) (*CompiledSolidity, error) {
-	// Compile the solidity
-	solc, err := GetSolc(requestedVersion)
+// GetSolc returns the appropriate solc command based on the combination of env vars, and message-specific request
+// parameters passed in
+func GetSolc(requestedVersion string) (*compiler.Solidity, error) {
+	solc, err := getSolcExecutable(requestedVersion)
 	if err != nil {
 		return nil, err
 	}
-	compiled, err := compiler.CompileSolidityString(solc, soliditySource)
-	if err != nil {
-		return nil, fmt.Errorf("Solidity compilation failed: %s", err)
+	return compiler.SolidityVersion(solc)
+}
+
+// GetSolcArgs get the correct solc args
+func GetSolcArgs(evmVersion string) []string {
+	if evmVersion == "" {
+		evmVersion = defaultEVMVersion
 	}
-	return ProcessCompiled(compiled, contractName, true)
+	return []string{
+		"--combined-json", "bin,bin-runtime,srcmap,srcmap-runtime,abi,userdoc,devdoc,metadata",
+		"--optimize",
+		"--evm-version", evmVersion,
+		"--allow-paths", ".",
+	}
+}
+
+// CompileContract uses solc to compile the Solidity source and
+func CompileContract(soliditySource, contractName, requestedVersion, evmVersion string) (*CompiledSolidity, error) {
+	// Compile the solidity
+	s, err := GetSolc(requestedVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	solcArgs := GetSolcArgs(evmVersion)
+	cmd := exec.Command(s.Path, append(solcArgs, "--", "-")...)
+	cmd.Stdin = strings.NewReader(soliditySource)
+	var stderr, stdout bytes.Buffer
+	cmd.Stderr = &stderr
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("Solidity compilation failed: solc: %v\n%s", err, stderr.Bytes())
+	}
+	c, err := compiler.ParseCombinedJSON(stdout.Bytes(), soliditySource, s.Version, s.Version, strings.Join(solcArgs, " "))
+	return ProcessCompiled(c, contractName, true)
 }
 
 // ProcessCompiled takes solc output and packs it into our CompiledSolidity structure

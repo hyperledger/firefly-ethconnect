@@ -148,7 +148,7 @@ func (m *mockSubMgr) DeleteSubscription(id string) error { return m.err }
 func (m *mockSubMgr) Close()                             {}
 
 func newTestDeployMsg(addr string) *deployContractWithAddress {
-	compiled, _ := kldeth.CompileContract(simpleEventsSource(), "SimpleEvents", "")
+	compiled, _ := kldeth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")
 	a := &kldbind.ABI{ABI: *compiled.ABI}
 	return &deployContractWithAddress{
 		DeployContract: kldmessages.DeployContract{ABI: a},

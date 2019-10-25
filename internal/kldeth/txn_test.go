@@ -261,7 +261,7 @@ func TestNewContractDeployMissingCompiledOrSolidity(t *testing.T) {
 func TestNewContractDeployPrecompiledSimpleStorage(t *testing.T) {
 	assert := assert.New(t)
 
-	c, _ := CompileContract(simpleStorage, "simplestorage", "")
+	c, _ := CompileContract(simpleStorage, "simplestorage", "", "")
 
 	var msg kldmessages.DeployContract
 	msg.Compiled = c.Compiled

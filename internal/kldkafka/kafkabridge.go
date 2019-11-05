@@ -294,7 +294,7 @@ func NewKafkaBridge(printYAML *bool) *KafkaBridge {
 		inFlight:     make(map[string]*msgContext),
 		inFlightCond: sync.NewCond(&sync.Mutex{}),
 	}
-	k.processor = kldtx.NewTxnProcessor(&k.conf.TxnProcessorConf)
+	k.processor = kldtx.NewTxnProcessor(&k.conf.TxnProcessorConf, &k.conf.RPCConf)
 	k.kafka = NewKafkaCommon(&SaramaKafkaFactory{}, &k.conf.Kafka, k)
 	return k
 }

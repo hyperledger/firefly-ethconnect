@@ -63,10 +63,11 @@ func (i *inflightTxn) String() string {
 
 // TxnProcessorConf configuration for the message processor
 type TxnProcessorConf struct {
-	PredictNonces      bool `json:"alwaysManageNonce"`
-	MaxTXWaitTime      int  `json:"maxTXWaitTime"`
-	OrionPrivateAPIS   bool `json:"orionPrivateAPIs"`
-	HexValuesInReceipt bool `json:"hexValuesInReceipt"`
+	PredictNonces      bool            `json:"alwaysManageNonce"`
+	MaxTXWaitTime      int             `json:"maxTXWaitTime"`
+	OrionPrivateAPIS   bool            `json:"orionPrivateAPIs"`
+	HexValuesInReceipt bool            `json:"hexValuesInReceipt"`
+	AddressBookConf    AddressBookConf `json:"addressBook"`
 }
 
 type txnProcessor struct {
@@ -75,17 +76,22 @@ type txnProcessor struct {
 	inflightTxns       map[string][]*inflightTxn
 	inflightTxnDelayer TxnDelayTracker
 	rpc                kldeth.RPCClient
+	addressBook        AddressBook
 	conf               *TxnProcessorConf
 }
 
 // NewTxnProcessor constructor for message procss
-func NewTxnProcessor(conf *TxnProcessorConf) TxnProcessor {
-	return &txnProcessor{
+func NewTxnProcessor(conf *TxnProcessorConf, rpcConf *kldeth.RPCConf) TxnProcessor {
+	p := &txnProcessor{
 		inflightTxnsLock:   &sync.Mutex{},
 		inflightTxns:       make(map[string][]*inflightTxn),
 		inflightTxnDelayer: NewTxnDelayTracker(),
 		conf:               conf,
 	}
+	if conf.AddressBookConf.AddressbookURLPrefix != "" {
+		p.addressBook = NewAddressBook(&conf.AddressBookConf, rpcConf)
+	}
+	return p
 }
 
 func (p *txnProcessor) Init(rpc kldeth.RPCClient) {
@@ -363,7 +369,17 @@ func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *kldme
 	tx.PrivacyGroupID = inflightWrapper.privacyGroupID
 	tx.NodeAssignNonce = inflightWrapper.nodeAssignNonce
 
-	if err = tx.Send(p.rpc); err != nil {
+	// Use the correct RPC for sending transactions
+	rpc := p.rpc
+	if p.addressBook != nil {
+		rpc, err = p.addressBook.lookup(tx.From.String())
+		if err != nil {
+			txnContext.SendErrorReply(500, err)
+			return
+		}
+	}
+
+	if err = tx.Send(rpc); err != nil {
 		txnContext.SendErrorReply(400, err)
 		return
 	}
@@ -387,7 +403,17 @@ func (p *txnProcessor) OnSendTransactionMessage(txnContext TxnContext, msg *kldm
 	}
 	tx.NodeAssignNonce = inflightWrapper.nodeAssignNonce
 
-	if err = tx.Send(p.rpc); err != nil {
+	// Use the correct RPC for sending transactions
+	rpc := p.rpc
+	if p.addressBook != nil {
+		rpc, err = p.addressBook.lookup(tx.From.String())
+		if err != nil {
+			txnContext.SendErrorReply(500, err)
+			return
+		}
+	}
+
+	if err = tx.Send(rpc); err != nil {
 		txnContext.SendErrorReply(400, err)
 		return
 	}

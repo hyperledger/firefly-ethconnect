@@ -2,10 +2,10 @@ language: go
 env:
   - BUILD_VERSION=travis-CI GO111MODULE=on
 before_install:
-  - sudo curl -Lo /usr/local/bin/solc https://github.com/ethereum/solidity/releases/download/v0.4.25/solc-static-linux
+  - sudo curl -Lo /usr/local/bin/solc https://github.com/ethereum/solidity/releases/download/v0.5.12/solc-static-linux
   - sudo chmod 755 /usr/local/bin/solc
 after_success:
   - bash <(curl -s https://codecov.io/bash)
 go:
-  - "1.11.x"
+  - "1.13.x"
 

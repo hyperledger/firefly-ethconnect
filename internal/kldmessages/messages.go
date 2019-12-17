@@ -111,17 +111,20 @@ func (r *TransactionReceipt) IsReceipt() *TransactionReceipt {
 }
 
 // TransactionCommon is the common fields from https://github.com/ethereum/wiki/wiki/JavaScript-API#web3ethsendtransaction
-// for sending either contract call or creation transactions
+// for sending either contract call or creation transactions, with eea extensions for private transactions
+// from https://entethalliance.github.io/client-spec/spec.html#sec-eea-sendTransaction
+// TODO - do Orion/Tessera support "unrestricted" private transactions?
 type TransactionCommon struct {
 	RequestCommon
-	Nonce       json.Number   `json:"nonce,omitempty"`
-	From        string        `json:"from"`
-	Value       json.Number   `json:"value"`
-	Gas         json.Number   `json:"gas"`
-	GasPrice    json.Number   `json:"gasPrice"`
-	Parameters  []interface{} `json:"params"`
-	PrivateFrom string        `json:"privateFrom,omitempty"`
-	PrivateFor  []string      `json:"privateFor,omitempty"`
+	Nonce          json.Number   `json:"nonce,omitempty"`
+	From           string        `json:"from"`
+	Value          json.Number   `json:"value"`
+	Gas            json.Number   `json:"gas"`
+	GasPrice       json.Number   `json:"gasPrice"`
+	Parameters     []interface{} `json:"params"`
+	PrivateFrom    string        `json:"privateFrom,omitempty"`
+	PrivateFor     []string      `json:"privateFor,omitempty"`
+	PrivacyGroupID string        `json:"privacyGroupId,omitempty"`
 }
 
 // SendTransaction message instructs the bridge to install a contract

@@ -336,6 +336,18 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 			Type: "string",
 		},
 	}
+	params["privacyGroupIdParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description:     "Private transaction group ID - 'x-kaleido-privacyGroupId' header can also be used",
+			Name:            "kld-privacyGroupId",
+			In:              "query",
+			Required:        false,
+			AllowEmptyValue: false,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "string",
+		},
+	}
 	params["registerParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
 			Description:     "Register the installed contract on a friendly path (overwrites existing) - 'x-kaleido-register' header can also be used",
@@ -363,6 +375,7 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 	callParam, _ := spec.NewRef("#/parameters/callParam")
 	privateFromParam, _ := spec.NewRef("#/parameters/privateFromParam")
 	privateForParam, _ := spec.NewRef("#/parameters/privateForParam")
+	privacyGroupIdParam, _ := spec.NewRef("#/parameters/privacyGroupIdParam")
 	registerParam, _ := spec.NewRef("#/parameters/registerParam")
 	op.Parameters = append(op.Parameters, spec.Parameter{
 		Refable: spec.Refable{
@@ -403,6 +416,11 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 		op.Parameters = append(op.Parameters, spec.Parameter{
 			Refable: spec.Refable{
 				Ref: privateForParam,
+			},
+		})
+		op.Parameters = append(op.Parameters, spec.Parameter{
+			Refable: spec.Refable{
+				Ref: privacyGroupIdParam,
 			},
 		})
 	}

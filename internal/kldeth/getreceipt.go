@@ -37,7 +37,8 @@ func (tx *Txn) GetTXReceipt(rpc RPCClient) (bool, error) {
 	log.Debugf("eth_getTransactionReceipt(%x,latest)=%t [%.2fs]", tx.Hash, isMined, callTime.Seconds())
 
 	if tx.PrivacyGroupID != "" {
-		if err := rpc.CallContext(ctx, &tx.Receipt, "priv_getTransactionReceipt", tx.Hash); err != nil {
+		// priv_getTransactionReceipt expects the txHash and the public key of enclave (privateFrom)
+		if err := rpc.CallContext(ctx, &tx.Receipt, "priv_getTransactionReceipt", tx.Hash, tx.PrivateFrom); err != nil {
 			return false, fmt.Errorf("priv_getTransactionReceipt returned: %s", err)
 		}
 	}

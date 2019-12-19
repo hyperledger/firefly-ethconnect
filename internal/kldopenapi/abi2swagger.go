@@ -51,16 +51,16 @@ func NewABI2Swagger(externalHost, externalRootPath string, externalSchemes []str
 
 // Gen4Instance generates OpenAPI for a single contract instance with an address
 func (c *ABI2Swagger) Gen4Instance(basePath, name string, abi *abi.ABI, devdocsJSON string) *spec.Swagger {
-	return c.convert(basePath, name, abi, devdocsJSON, true, false)
+	return c.convert(basePath, name, abi, devdocsJSON, true, false, false)
 }
 
 // Gen4Factory generates OpenAPI for a contract factory, with a constructor, and child methods on any addres
-func (c *ABI2Swagger) Gen4Factory(basePath, name string, factoryOnly bool, abi *abi.ABI, devdocsJSON string) *spec.Swagger {
-	return c.convert(basePath, name, abi, devdocsJSON, false, factoryOnly)
+func (c *ABI2Swagger) Gen4Factory(basePath, name string, factoryOnly, externalRegistry bool, abi *abi.ABI, devdocsJSON string) *spec.Swagger {
+	return c.convert(basePath, name, abi, devdocsJSON, false, factoryOnly, externalRegistry)
 }
 
 // convert does the conversion and fills in the details on the Swagger Schema
-func (c *ABI2Swagger) convert(basePath, name string, abi *abi.ABI, devdocsJSON string, inst, factoryOnly bool) *spec.Swagger {
+func (c *ABI2Swagger) convert(basePath, name string, abi *abi.ABI, devdocsJSON string, inst, factoryOnly, externalRegistry bool) *spec.Swagger {
 
 	basePath = c.externalRootPath + basePath
 
@@ -70,7 +70,7 @@ func (c *ABI2Swagger) convert(basePath, name string, abi *abi.ABI, devdocsJSON s
 	paths.Paths = make(map[string]spec.PathItem)
 	definitions := make(map[string]spec.Schema)
 	parameters := c.getCommonParameters()
-	c.buildDefinitionsAndPaths(inst, factoryOnly, abi, definitions, paths.Paths, devdocs)
+	c.buildDefinitionsAndPaths(inst, factoryOnly, externalRegistry, abi, definitions, paths.Paths, devdocs)
 	return &spec.Swagger{
 		SwaggerProps: spec.SwaggerProps{
 			Swagger: "2.0",
@@ -98,13 +98,13 @@ func (c *ABI2Swagger) convert(basePath, name string, abi *abi.ABI, devdocsJSON s
 	}
 }
 
-func (c *ABI2Swagger) buildDefinitionsAndPaths(inst, factoryOnly bool, abi *abi.ABI, defs map[string]spec.Schema, paths map[string]spec.PathItem, devdocs gjson.Result) {
+func (c *ABI2Swagger) buildDefinitionsAndPaths(inst, factoryOnly, externalRegistry bool, abi *abi.ABI, defs map[string]spec.Schema, paths map[string]spec.PathItem, devdocs gjson.Result) {
 	methodsDocs := devdocs.Get("methods")
 	if !inst {
 		c.buildMethodDefinitionsAndPath(inst, defs, paths, "constructor", abi.Constructor, methodsDocs)
 	}
 	if !factoryOnly {
-		if !inst {
+		if !inst && !externalRegistry {
 			c.addRegisterPath(paths)
 		}
 		for _, method := range abi.Methods {

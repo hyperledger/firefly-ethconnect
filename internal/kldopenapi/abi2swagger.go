@@ -30,6 +30,7 @@ type ABI2Swagger struct {
 	externalHost     string
 	externalSchemes  []string
 	externalRootPath string
+	orionPrivateAPI  bool
 }
 
 const (
@@ -37,11 +38,12 @@ const (
 )
 
 // NewABI2Swagger constructor
-func NewABI2Swagger(externalHost, externalRootPath string, externalSchemes []string) *ABI2Swagger {
+func NewABI2Swagger(externalHost, externalRootPath string, externalSchemes []string, orionPrivateAPI bool) *ABI2Swagger {
 	c := &ABI2Swagger{
 		externalHost:     externalHost,
 		externalRootPath: externalRootPath,
 		externalSchemes:  externalSchemes,
+		orionPrivateAPI:  orionPrivateAPI,
 	}
 	if len(c.externalSchemes) == 0 {
 		c.externalSchemes = []string{"http", "https"}
@@ -418,11 +420,13 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 				Ref: privateForParam,
 			},
 		})
-		op.Parameters = append(op.Parameters, spec.Parameter{
-			Refable: spec.Refable{
-				Ref: privacyGroupIdParam,
-			},
-		})
+		if c.orionPrivateAPI {
+			op.Parameters = append(op.Parameters, spec.Parameter{
+				Refable: spec.Refable{
+					Ref: privacyGroupIdParam,
+				},
+			})
+		}
 	}
 	if isConstructor {
 		op.Parameters = append(op.Parameters, spec.Parameter{

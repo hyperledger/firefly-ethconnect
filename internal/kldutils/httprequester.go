@@ -25,7 +25,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// HTTPRequester perofrms common HTTP request logging/processing for utilities
+// HTTPRequester performs common HTTP request logging/processing for utilities
 type HTTPRequester struct {
 	name   string
 	client *http.Client

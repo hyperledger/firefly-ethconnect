@@ -143,12 +143,12 @@ func (ab *addressBook) mapEndpoint(endpoint string) (kldeth.RPCClient, error) {
 	}
 
 	// Connect and cache the RPC connection
-	rpc, err = kldeth.RPCConnect(&kldeth.RPCConnOpts{
+	if rpc, err = kldeth.RPCConnect(&kldeth.RPCConnOpts{
 		URL: url.String(),
-	})
-	if err == nil {
-		ab.hostToRPC[endpoint] = rpc
+	}); err != nil {
+		return nil, err
 	}
+	ab.hostToRPC[endpoint] = rpc
 	return rpc, err
 }
 

@@ -125,7 +125,6 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *kldtx.TxnP
 		baseURL, _ = url.Parse("http://localhost:8080")
 	}
 	log.Infof("OpenAPI Smart Contract Gateway configured with base URL '%s'", baseURL.String())
-	// TODO - is there a way to access OrionPrivateAPIS cmdline flag here?
 	abi2swagger := kldopenapi.NewABI2Swagger(baseURL.Host, baseURL.Path, []string{baseURL.Scheme}, txnConf.OrionPrivateAPIS)
 	gw := &smartContractGW{
 		conf:                  conf,

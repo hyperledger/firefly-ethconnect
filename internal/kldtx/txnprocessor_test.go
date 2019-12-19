@@ -614,6 +614,33 @@ func TestOnSendTransactionMessageInflightNonce(t *testing.T) {
 	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
 }
 
+func TestOnSendTransactionMessageOrionNoPrivacyGroup(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		OrionPrivateAPIS: true,
+	}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "{" +
+		"  \"headers\":{\"type\": \"SendTransaction\"}," +
+		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
+		"  \"gas\":\"123\"," +
+		"  \"method\":{\"name\":\"test\"}," +
+		"  \"privateFrom\":\"jO6dpqnMhmnrCHqUumyK09+18diF7quq/rROGs2HFWI=\"," +
+		"  \"privateFor\":[\"2QiZG7rYPzRvRsioEn6oYUff1DOvPA22EZr0+/o3RUg=\"]" +
+		"}"
+	testRPC := &testRPC{
+		ethSendTransactionResult: "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b",
+		privFindPrivacyGroupErr:  fmt.Errorf("pop"),
+	}
+	txnProcessor.Init(testRPC)
+	txnProcessor.OnMessage(testTxnContext)
+
+	assert.NotEmpty(testTxnContext.errorReplies)
+	assert.Empty(testTxnContext.replies)
+	assert.Regexp("priv_findPrivacyGroup returned: pop", testTxnContext.errorReplies[0].err.Error())
+}
+
 func TestOnSendTransactionMessageOrionCannotUsePrivacyGroupIdAndPrivateFor(t *testing.T) {
 	assert := assert.New(t)
 

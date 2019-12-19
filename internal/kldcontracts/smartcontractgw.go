@@ -270,7 +270,7 @@ func (g *smartContractGW) PostDeploy(msg *kldmessages.TransactionReceipt) error 
 func (g *smartContractGW) swaggerForRemoteRegistry(apiName, addr string, factoryOnly bool, abi *kldbind.ABI, devdoc, path string) *spec.Swagger {
 	var swagger *spec.Swagger
 	if addr == "" {
-		swagger = g.abi2swagger.Gen4Factory(path, apiName, factoryOnly, &abi.ABI, devdoc)
+		swagger = g.abi2swagger.Gen4Factory(path, apiName, factoryOnly, true, &abi.ABI, devdoc)
 	} else {
 		swagger = g.abi2swagger.Gen4Instance(path, apiName, &abi.ABI, devdoc)
 	}
@@ -294,7 +294,7 @@ func (g *smartContractGW) swaggerForABI(abiID, apiName string, factoryOnly bool,
 			swagger.Info.AddExtension("x-kaleido-registered-name", pathSuffix)
 		}
 	} else {
-		swagger = g.abi2swagger.Gen4Factory("/abis/"+abiID, apiName, factoryOnly, &abi.ABI, devdoc)
+		swagger = g.abi2swagger.Gen4Factory("/abis/"+abiID, apiName, factoryOnly, false, &abi.ABI, devdoc)
 	}
 
 	// Add in an extension to the Swagger that points back at the filename of the deployment info

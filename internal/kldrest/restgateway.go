@@ -212,7 +212,7 @@ func (g *RESTGateway) Start() (err error) {
 		if err != nil {
 			return err
 		}
-		processor = kldtx.NewTxnProcessor(&g.conf.TxnProcessorConf)
+		processor = kldtx.NewTxnProcessor(&g.conf.TxnProcessorConf, &g.conf.RPCConf)
 		processor.Init(rpcClient)
 	}
 

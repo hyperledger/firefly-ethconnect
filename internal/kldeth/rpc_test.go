@@ -107,7 +107,7 @@ func TestSubscribeWrapper(t *testing.T) {
 	assert.NotNil(sub.Err())
 	sub.Unsubscribe()
 	assert.False(mockRPC.SubResult.Subscribed)
-	iRPC.Close()
+	iRPC.(RPCClosable).Close()
 	assert.True(mockRPC.Closed)
 }
 

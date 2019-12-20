@@ -49,7 +49,8 @@ func RPCConnect(conf *RPCConnOpts) (RPCClientAll, error) {
 	if err != nil {
 		return nil, fmt.Errorf("JSON/RPC connection to %s failed: %s", u, err)
 	}
-	log.Infof("JSON/RPC connected to %s", u)
+	log.Infof("New JSON/RPC connection established")
+	log.Debugf("JSON/RPC connected to %s", u)
 	return &rpcWrapper{rpc: rpcClient}, nil
 }
 
@@ -104,8 +105,14 @@ func (w *rpcWrapper) Close() {
 
 // RPCClientAll has both sync and async interfaces (splitting out helps callers with limiting their mocks)
 type RPCClientAll interface {
+	RPCClosable
 	RPCClient
 	RPCClientAsync
+}
+
+// RPCClosable contains the close
+type RPCClosable interface {
+	Close()
 }
 
 // RPCClient refers to the functions from the ethereum RPC client that we use
@@ -116,5 +123,4 @@ type RPCClient interface {
 // RPCClientAsync refers to the async functions from the ethereum RPC client that we use
 type RPCClientAsync interface {
 	Subscribe(ctx context.Context, namespace string, channel interface{}, args ...interface{}) (RPCClientSubscription, error)
-	Close()
 }

@@ -103,28 +103,6 @@ func TestNewRemoteRegistryCustomPropNames(t *testing.T) {
 	assert.Equal("addressProp", rr.conf.PropNames.Address)
 }
 
-func TestRemoteRegistryDoRequestBadURL(t *testing.T) {
-	assert := assert.New(t)
-
-	r := NewRemoteRegistry(&RemoteRegistryConf{})
-	rr := r.(*remoteRegistry)
-
-	_, err := rr.doRequest("GET", "! a URL", nil)
-	assert.EqualError(err, "Error querying contract registry")
-}
-
-func TestRemoteRegistryDoRequestBadPayload(t *testing.T) {
-	assert := assert.New(t)
-
-	r := NewRemoteRegistry(&RemoteRegistryConf{})
-	rr := r.(*remoteRegistry)
-
-	bodyMap := make(map[string]interface{})
-	bodyMap["unserializable"] = map[bool]interface{}{true: "JSON does not like this"}
-	_, err := rr.doRequest("GET", "http://localhost", bodyMap)
-	assert.Regexp("Failed to serialize request payload", err.Error())
-}
-
 func TestRemoteRegistryInitDB(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
@@ -313,7 +291,7 @@ func TestRemoteRegistryLoadFactoryMissingID(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.loadFactoryForGateway("testid")
-	assert.EqualError(err, "'id' missing in contract registry response")
+	assert.EqualError(err, "'id' missing in Contract registry response")
 }
 
 func TestRemoteRegistryLoadFactoryMissingABI(t *testing.T) {
@@ -339,7 +317,7 @@ func TestRemoteRegistryLoadFactoryMissingABI(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.loadFactoryForGateway("testid")
-	assert.EqualError(err, "'abi' missing in contract registry response")
+	assert.EqualError(err, "'abi' missing in Contract registry response")
 }
 
 func TestRemoteRegistryLoadFactoryBadABIJSON(t *testing.T) {
@@ -393,7 +371,7 @@ func TestRemoteRegistryLoadFactoryMissingDevDoc(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.loadFactoryForGateway("testid")
-	assert.EqualError(err, "'devdoc' missing in contract registry response")
+	assert.EqualError(err, "'devdoc' missing in Contract registry response")
 }
 
 func TestRemoteRegistryLoadFactoryBadDevDoc(t *testing.T) {
@@ -421,7 +399,7 @@ func TestRemoteRegistryLoadFactoryBadDevDoc(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.loadFactoryForGateway("testid")
-	assert.EqualError(err, "'devdoc' not a string in contract registry response")
+	assert.EqualError(err, "'devdoc' not a string in Contract registry response")
 }
 
 func TestRemoteRegistryLoadFactoryEmptyBytecode(t *testing.T) {
@@ -450,7 +428,7 @@ func TestRemoteRegistryLoadFactoryEmptyBytecode(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.loadFactoryForGateway("testid")
-	assert.EqualError(err, "'bin' empty (or null) in contract registry response")
+	assert.EqualError(err, "'bin' empty (or null) in Contract registry response")
 }
 
 func TestRemoteRegistryLoadFactoryBadBytecode(t *testing.T) {
@@ -502,7 +480,7 @@ func TestRemoteRegistryLoadFactoryErrorStatusGeneric(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.loadFactoryForGateway("testid")
-	assert.EqualError(err, "Could not process registry [500] response")
+	assert.EqualError(err, "Could not process Contract registry [500] response")
 }
 
 func TestRemoteRegistryLoadFactoryErrorStatus(t *testing.T) {
@@ -574,7 +552,7 @@ func TestRemoteRegistryLoadFactoryBadBody(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.loadFactoryForGateway("testid")
-	assert.EqualError(err, "Could not process registry [200] response")
+	assert.EqualError(err, "Could not process Contract registry [200] response")
 }
 
 func TestRemoteRegistryLoadFactoryNOOP(t *testing.T) {

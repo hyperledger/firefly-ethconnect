@@ -19,12 +19,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/julienschmidt/httprouter"
 	"github.com/spf13/cobra"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -147,7 +150,7 @@ func (c *testTxnContext) Reply(replyMsg kldmessages.ReplyWithHeaders) {
 func TestOnMessageBadMessage(t *testing.T) {
 	assert := assert.New(t)
 
-	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}).(*txnProcessor)
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"badness\"}" +
@@ -163,7 +166,7 @@ func TestOnMessageBadMessage(t *testing.T) {
 func TestOnDeployContractMessageBadMsg(t *testing.T) {
 	assert := assert.New(t)
 
-	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}).(*txnProcessor)
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"DeployContract\"}," +
@@ -180,7 +183,7 @@ func TestOnDeployContractMessageBadMsg(t *testing.T) {
 func TestOnDeployContractMessageBadJSON(t *testing.T) {
 	assert := assert.New(t)
 
-	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}).(*txnProcessor)
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "badness"
 	testTxnContext.badMsgType = kldmessages.MsgTypeDeployContract
@@ -196,7 +199,7 @@ func TestOnDeployContractMessageGoodTxnErrOnReceipt(t *testing.T) {
 
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
-	}).(*txnProcessor)
+	}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodDeployTxnJSON
 	testRPC := &testRPC{
@@ -253,7 +256,7 @@ func TestOnDeployContractMessageGoodTxnMined(t *testing.T) {
 
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
-	}).(*txnProcessor)
+	}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodDeployTxnJSON
 
@@ -293,7 +296,7 @@ func TestOnDeployContractPrivateMessageGoodTxnMined(t *testing.T) {
 
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
-	}).(*txnProcessor)
+	}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodDeployTxnPrivateJSON
 
@@ -339,7 +342,7 @@ func TestOnDeployContractMessageGoodTxnMinedWithHex(t *testing.T) {
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime:      1,
 		HexValuesInReceipt: true,
-	}).(*txnProcessor)
+	}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodDeployTxnJSON
 
@@ -385,7 +388,7 @@ func TestOnDeployContractMessageFailedTxnMined(t *testing.T) {
 
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
-	}).(*txnProcessor)
+	}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodDeployTxnJSON
 
@@ -408,7 +411,7 @@ func TestOnDeployContractMessageFailedTxn(t *testing.T) {
 
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 5000,
-	}).(*txnProcessor)
+	}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodDeployTxnJSON
 	testRPC := &testRPC{
@@ -427,7 +430,7 @@ func TestOnDeployContractMessageFailedToGetNonce(t *testing.T) {
 
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
-	}).(*txnProcessor)
+	}, &kldeth.RPCConf{}).(*txnProcessor)
 	txnProcessor.conf.PredictNonces = true
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
@@ -448,7 +451,7 @@ func TestOnDeployContractMessageFailedToGetNonce(t *testing.T) {
 func TestOnSendTransactionMessageMissingFrom(t *testing.T) {
 	assert := assert.New(t)
 
-	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}).(*txnProcessor)
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
@@ -465,7 +468,7 @@ func TestOnSendTransactionMessageMissingFrom(t *testing.T) {
 func TestOnSendTransactionMessageBadNonce(t *testing.T) {
 	assert := assert.New(t)
 
-	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}).(*txnProcessor)
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
@@ -483,7 +486,7 @@ func TestOnSendTransactionMessageBadNonce(t *testing.T) {
 func TestOnSendTransactionMessageBadMsg(t *testing.T) {
 	assert := assert.New(t)
 
-	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}).(*txnProcessor)
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
@@ -503,7 +506,7 @@ func TestOnSendTransactionMessageBadMsg(t *testing.T) {
 func TestOnSendTransactionMessageBadJSON(t *testing.T) {
 	assert := assert.New(t)
 
-	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}).(*txnProcessor)
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "badness"
 	testTxnContext.badMsgType = kldmessages.MsgTypeSendTransaction
@@ -521,7 +524,7 @@ func TestOnSendTransactionMessageTxnTimeout(t *testing.T) {
 	txHash := "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b"
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
-	}).(*txnProcessor)
+	}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodSendTxnJSON
 	testRPC := &testRPC{
@@ -548,7 +551,7 @@ func TestOnSendTransactionMessageFailedTxn(t *testing.T) {
 
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
-	}).(*txnProcessor)
+	}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodSendTxnJSON
 	testRPC := &testRPC{
@@ -567,7 +570,7 @@ func TestOnSendTransactionMessageFailedToGetNonce(t *testing.T) {
 
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
-	}).(*txnProcessor)
+	}, &kldeth.RPCConf{}).(*txnProcessor)
 	txnProcessor.conf.PredictNonces = true
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
@@ -590,7 +593,7 @@ func TestOnSendTransactionMessageInflightNonce(t *testing.T) {
 
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
-	}).(*txnProcessor)
+	}, &kldeth.RPCConf{}).(*txnProcessor)
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] =
 		[]*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
 	testTxnContext := &testTxnContext{}
@@ -617,7 +620,7 @@ func TestOnSendTransactionMessageOrion(t *testing.T) {
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime:    1,
 		OrionPrivateAPIS: true,
-	}).(*txnProcessor)
+	}, &kldeth.RPCConf{}).(*txnProcessor)
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] =
 		[]*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
 	testTxnContext := &testTxnContext{}
@@ -656,4 +659,47 @@ func TestCobraInitTxnProcessor(t *testing.T) {
 	})
 	assert.Equal(10, txconf.MaxTXWaitTime)
 	assert.Equal(true, txconf.PredictNonces)
+}
+
+func TestOnSendTransactionAddressBook(t *testing.T) {
+	assert := assert.New(t)
+
+	router := &httprouter.Router{}
+	router.POST("/", func(res http.ResponseWriter, req *http.Request, parms httprouter.Params) {
+		res.WriteHeader(500)
+	})
+	router.GET("/:address", func(res http.ResponseWriter, req *http.Request, parms httprouter.Params) {
+		res.WriteHeader(404)
+	})
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime:    1,
+		OrionPrivateAPIS: true,
+		AddressBookConf: AddressBookConf{
+			AddressbookURLPrefix: server.URL,
+		},
+	}, &kldeth.RPCConf{
+		RPC: kldeth.RPCConnOpts{
+			URL: server.URL,
+		},
+	}).(*txnProcessor)
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] =
+		[]*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "{" +
+		"  \"headers\":{\"type\": \"SendTransaction\"}," +
+		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
+		"  \"gas\":\"123\"," +
+		"  \"method\":{\"name\":\"test\"}" +
+		"}"
+	testRPC := &testRPC{
+		ethSendTransactionResult: "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b",
+	}
+	txnProcessor.Init(testRPC)
+
+	txnProcessor.OnMessage(testTxnContext)
+
+	assert.EqualError(testTxnContext.errorRepies[0].err, "500 Internal Server Error ")
 }

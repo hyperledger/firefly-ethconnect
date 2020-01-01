@@ -409,11 +409,17 @@ func (r *rest2eth) doubleURLDecode(s string) string {
 	return strings.ReplaceAll(doubleDecoded, " ", "+")
 }
 
-func (r *rest2eth) addPrivateTx(msg *kldmessages.TransactionCommon, req *http.Request) {
+func (r *rest2eth) addPrivateTx(msg *kldmessages.TransactionCommon, req *http.Request, res http.ResponseWriter) {
 	msg.PrivateFrom = r.doubleURLDecode(getKLDParam("privatefrom", req, false))
 	msg.PrivateFor = getKLDParamMulti("privatefor", req)
 	for idx, val := range msg.PrivateFor {
 		msg.PrivateFor[idx] = r.doubleURLDecode(val)
+	}
+	msg.PrivacyGroupID = r.doubleURLDecode(getKLDParam("privacygroupid", req, false))
+	if len(msg.PrivateFor) > 0 && msg.PrivacyGroupID != "" {
+		err := fmt.Errorf("kld-privatefor and kld-privacygroupid are mutually exclusive")
+		r.restErrReply(res, req, err, 400)
+		return
 	}
 }
 
@@ -425,7 +431,7 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 	deployMsg.GasPrice = json.Number(getKLDParam("gasprice", req, false))
 	deployMsg.Value = value
 	deployMsg.Parameters = msgParams
-	r.addPrivateTx(&deployMsg.TransactionCommon, req)
+	r.addPrivateTx(&deployMsg.TransactionCommon, req, res)
 	deployMsg.RegisterAs = getKLDParam("register", req, false)
 	if deployMsg.RegisterAs != "" {
 		if err := r.gw.checkNameAvailable(deployMsg.RegisterAs, isRemote(deployMsg.Headers)); err != nil {
@@ -474,7 +480,7 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 	msg.GasPrice = json.Number(getKLDParam("gasprice", req, false))
 	msg.Value = value
 	msg.Parameters = msgParams
-	r.addPrivateTx(&msg.TransactionCommon, req)
+	r.addPrivateTx(&msg.TransactionCommon, req, res)
 
 	if strings.ToLower(getKLDParam("sync", req, true)) == "true" {
 		responder := &rest2EthSyncResponder{

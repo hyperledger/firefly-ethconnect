@@ -619,7 +619,7 @@ func TestOnSendTransactionMessageOrionNoPrivacyGroup(t *testing.T) {
 
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		OrionPrivateAPIS: true,
-	}).(*txnProcessor)
+	}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
@@ -646,7 +646,7 @@ func TestOnSendTransactionMessageOrionCannotUsePrivacyGroupIdAndPrivateFor(t *te
 
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		OrionPrivateAPIS: true,
-	}).(*txnProcessor)
+	}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
@@ -704,7 +704,7 @@ func TestOnSendTransactionMessageOrionPrivacyGroupId(t *testing.T) {
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime:    1,
 		OrionPrivateAPIS: true,
-	}).(*txnProcessor)
+	}, &kldeth.RPCConf{}).(*txnProcessor)
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] =
 		[]*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
 	testTxnContext := &testTxnContext{}
@@ -780,5 +780,5 @@ func TestOnSendTransactionAddressBook(t *testing.T) {
 
 	txnProcessor.OnMessage(testTxnContext)
 
-	assert.EqualError(testTxnContext.errorRepies[0].err, "500 Internal Server Error ")
+	assert.EqualError(testTxnContext.errorReplies[0].err, "500 Internal Server Error ")
 }

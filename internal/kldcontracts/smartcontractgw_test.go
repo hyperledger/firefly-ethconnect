@@ -32,6 +32,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/kaleido-io/ethconnect/internal/kldevents"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+	"github.com/kaleido-io/ethconnect/internal/kldtx"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -61,6 +62,9 @@ func TestNewSmartContractGatewayBadURL(t *testing.T) {
 		&SmartContractGatewayConf{
 			BaseURL: " :",
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: true,
+		},
 		nil, nil, nil,
 	)
 }
@@ -75,6 +79,9 @@ func TestNewSmartContractGatewayWithEvents(t *testing.T) {
 			SubscriptionManagerConf: kldevents.SubscriptionManagerConf{
 				EventLevelDBPath: path.Join(dir, "db"),
 			},
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: true,
 		},
 		nil, nil, nil,
 	)
@@ -94,6 +101,9 @@ func TestNewSmartContractGatewayWithEventsFail(t *testing.T) {
 			SubscriptionManagerConf: kldevents.SubscriptionManagerConf{
 				EventLevelDBPath: dbpath,
 			},
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: true,
 		},
 		nil, nil, nil,
 	)
@@ -115,6 +125,9 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 			BaseURL:     "http://localhost/api/v1",
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: true,
 		},
 		nil, nil, nil,
 	)
@@ -229,6 +242,9 @@ func TestRegisterExistingContract(t *testing.T) {
 			StoragePath: dir,
 			BaseURL:     "http://localhost/api/v1",
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: true,
+		},
 		nil, nil, nil,
 	)
 
@@ -283,6 +299,9 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	scgw, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			BaseURL: "http://localhost/api/v1",
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
 		},
 		nil, nil, nil,
 	)
@@ -382,6 +401,9 @@ func TestRegisterContractBadAddress(t *testing.T) {
 			StoragePath: dir,
 			BaseURL:     "http://localhost/api/v1",
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
 		nil, nil, nil,
 	)
 	router := &httprouter.Router{}
@@ -406,6 +428,9 @@ func TestRegisterContractNoRegisteredName(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 			BaseURL:     "http://localhost/api/v1",
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
 		},
 		nil, nil, nil,
 	)
@@ -449,6 +474,9 @@ func TestRegisterContractBadABI(t *testing.T) {
 			StoragePath: dir,
 			BaseURL:     "http://localhost/api/v1",
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
 		nil, nil, nil,
 	)
 	router := &httprouter.Router{}
@@ -471,6 +499,9 @@ func TestLoadDeployMsgOKNoABIInIndex(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -490,6 +521,9 @@ func TestLoadDeployMsgMissing(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -504,6 +538,9 @@ func TestLoadDeployMsgFailure(t *testing.T) {
 	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
 		},
 		nil, nil, nil,
 	)
@@ -522,6 +559,9 @@ func TestLoadDeployMsgRemoteLookupNotFound(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -536,6 +576,9 @@ func TestPreDeployCompileFailure(t *testing.T) {
 	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: "/anypath",
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
 		},
 		nil, nil, nil,
 	)
@@ -554,6 +597,9 @@ func TestPreDeployMsgWrite(t *testing.T) {
 	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: path.Join(dir, "badpath"),
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
 		},
 		nil, nil, nil,
 	)
@@ -574,6 +620,9 @@ func TestPostDeployNoRegisteredName(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 			BaseURL:     "http://localhost/api/v1",
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
 		},
 		nil, nil, nil,
 	)
@@ -611,6 +660,9 @@ func TestPostDeployRemoteRegisteredName(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 			BaseURL:     "http://localhost/api/v1",
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
 		},
 		nil, nil, nil,
 	)
@@ -655,6 +707,9 @@ func TestPostDeployRemoteRegisteredNameNotSuccess(t *testing.T) {
 			StoragePath: dir,
 			BaseURL:     "http://localhost/api/v1",
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
 		nil, nil, nil,
 	)
 	rr := &mockRR{}
@@ -697,6 +752,9 @@ func TestPostDeployMissingContractAddress(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -721,6 +779,9 @@ func TestStoreABIWriteFail(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: path.Join(dir, "badpath"),
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -740,6 +801,9 @@ func TestLoadABIForInstanceUnknown(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: path.Join(dir, "badpath"),
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -755,6 +819,9 @@ func TestLoadABIBadData(t *testing.T) {
 	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
 		},
 		nil, nil, nil,
 	)
@@ -843,6 +910,9 @@ func TestBuildIndex(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -895,6 +965,9 @@ func TestGetContractOrABIFail(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: true,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -946,6 +1019,9 @@ func TestGetContractUI(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: true,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -976,6 +1052,9 @@ func TestAddABISingleSolidity(t *testing.T) {
 	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
 		},
 		nil, nil, nil,
 	)
@@ -1011,6 +1090,9 @@ func TestAddABISingleSolidityBadContractName(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -1039,6 +1121,9 @@ func TestAddABIZipNested(t *testing.T) {
 	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
 		},
 		nil, nil, nil,
 	)
@@ -1077,6 +1162,9 @@ func TestAddABIZipNestedListSolidity(t *testing.T) {
 	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
 		},
 		nil, nil, nil,
 	)
@@ -1117,6 +1205,9 @@ func TestAddABIZipNestedListContracts(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -1156,6 +1247,9 @@ func TestAddABIBadZip(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -1189,6 +1283,9 @@ func TestAddABIZipNestedNoSource(t *testing.T) {
 	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
 		},
 		nil, nil, nil,
 	)
@@ -1227,6 +1324,9 @@ func TestAddABIZiNotMultipart(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -1254,6 +1354,9 @@ func TestCompileMultipartFormSolidityBadDir(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -1271,6 +1374,9 @@ func TestCompileMultipartFormSolidityBadSolc(t *testing.T) {
 	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
 		},
 		nil, nil, nil,
 	)
@@ -1294,6 +1400,9 @@ func TestCompileMultipartFormSolidityBadCompilerVerReq(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -1313,6 +1422,9 @@ func TestCompileMultipartFormSolidityBadSolidity(t *testing.T) {
 	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: true,
 		},
 		nil, nil, nil,
 	)
@@ -1334,6 +1446,9 @@ func TestExtractMultiPartFileBadFile(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: true,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -1353,6 +1468,9 @@ func TestExtractMultiPartFileBadInput(t *testing.T) {
 	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: true,
 		},
 		nil, nil, nil,
 	)
@@ -1374,6 +1492,9 @@ func TestStoreDeployableABIMissingABI(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: true,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -1390,6 +1511,9 @@ func TestAddFileToContractIndexBadFileSwallowsError(t *testing.T) {
 		&SmartContractGatewayConf{
 			StoragePath: dir,
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: true,
+		},
 		nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
@@ -1404,6 +1528,9 @@ func TestAddFileToContractIndexBadDataSwallowsError(t *testing.T) {
 	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: true,
 		},
 		nil, nil, nil,
 	)
@@ -1421,6 +1548,9 @@ func TestAddFileToABIIndexBadFileSwallowsError(t *testing.T) {
 	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			StoragePath: dir,
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: true,
 		},
 		nil, nil, nil,
 	)
@@ -1671,6 +1801,9 @@ func TestCheckNameAvailableRRDuplicate(t *testing.T) {
 		&SmartContractGatewayConf{
 			BaseURL: "http://localhost/api/v1",
 		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
 		nil, nil, nil,
 	)
 	rr := &mockRR{
@@ -1689,6 +1822,9 @@ func TestCheckNameAvailableRRFail(t *testing.T) {
 	scgw, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
 			BaseURL: "http://localhost/api/v1",
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
 		},
 		nil, nil, nil,
 	)

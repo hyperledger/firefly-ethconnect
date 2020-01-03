@@ -113,7 +113,7 @@ func CompileContract(soliditySource, contractName, requestedVersion, evmVersion 
 	cmd.Stderr = &stderr
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("Solidity compilation failed: solc: %v\n%s", err, stderr.Bytes())
+		return nil, fmt.Errorf("Solidity compilation failed: solc: %v\n%s", err, stderr.String())
 	}
 	c, err := compiler.ParseCombinedJSON(stdout.Bytes(), soliditySource, s.Version, s.Version, strings.Join(solcArgs, " "))
 	return ProcessCompiled(c, contractName, true)

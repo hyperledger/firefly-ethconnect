@@ -44,10 +44,10 @@ type errorReply struct {
 }
 
 type testTxnContext struct {
-	jsonMsg     string
-	badMsgType  string
-	replies     []kldmessages.ReplyWithHeaders
-	errorRepies []*errorReply
+	jsonMsg      string
+	badMsgType   string
+	replies      []kldmessages.ReplyWithHeaders
+	errorReplies []*errorReply
 }
 
 type testRPC struct {
@@ -135,7 +135,7 @@ func (c *testTxnContext) SendErrorReply(status int, err error) {
 
 func (c *testTxnContext) SendErrorReplyWithTX(status int, err error, txHash string) {
 	log.Infof("Sending error reply. Status=%d Err=%s", status, err)
-	c.errorRepies = append(c.errorRepies, &errorReply{
+	c.errorReplies = append(c.errorReplies, &errorReply{
 		status: status,
 		err:    err,
 		txHash: txHash,
@@ -158,9 +158,9 @@ func TestOnMessageBadMessage(t *testing.T) {
 	txnProcessor.OnMessage(testTxnContext)
 
 	assert.Empty(testTxnContext.replies)
-	assert.NotEmpty(testTxnContext.errorRepies)
-	assert.Equal(400, testTxnContext.errorRepies[0].status)
-	assert.Regexp("Unknown message type", testTxnContext.errorRepies[0].err.Error())
+	assert.NotEmpty(testTxnContext.errorReplies)
+	assert.Equal(400, testTxnContext.errorReplies[0].status)
+	assert.Regexp("Unknown message type", testTxnContext.errorReplies[0].err.Error())
 }
 
 func TestOnDeployContractMessageBadMsg(t *testing.T) {
@@ -175,9 +175,9 @@ func TestOnDeployContractMessageBadMsg(t *testing.T) {
 		"}"
 	txnProcessor.OnMessage(testTxnContext)
 
-	assert.NotEmpty(testTxnContext.errorRepies)
+	assert.NotEmpty(testTxnContext.errorReplies)
 	assert.Empty(testTxnContext.replies)
-	assert.Equal("Missing Compliled Code + ABI, or Solidity", testTxnContext.errorRepies[0].err.Error())
+	assert.Equal("Missing Compiled Code + ABI, or Solidity", testTxnContext.errorReplies[0].err.Error())
 
 }
 func TestOnDeployContractMessageBadJSON(t *testing.T) {
@@ -189,9 +189,9 @@ func TestOnDeployContractMessageBadJSON(t *testing.T) {
 	testTxnContext.badMsgType = kldmessages.MsgTypeDeployContract
 	txnProcessor.OnMessage(testTxnContext)
 
-	assert.NotEmpty(testTxnContext.errorRepies)
+	assert.NotEmpty(testTxnContext.errorReplies)
 	assert.Empty(testTxnContext.replies)
-	assert.Regexp("invalid character", testTxnContext.errorRepies[0].err.Error())
+	assert.Regexp("invalid character", testTxnContext.errorReplies[0].err.Error())
 
 }
 func TestOnDeployContractMessageGoodTxnErrOnReceipt(t *testing.T) {
@@ -213,12 +213,12 @@ func TestOnDeployContractMessageGoodTxnErrOnReceipt(t *testing.T) {
 	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
 
 	txnWG.Wait()
-	assert.Equal(1, len(testTxnContext.errorRepies))
+	assert.Equal(1, len(testTxnContext.errorReplies))
 
 	assert.Equal("eth_sendTransaction", testRPC.calls[0])
 	assert.Equal("eth_getTransactionReceipt", testRPC.calls[1])
 
-	assert.Regexp("Error obtaining transaction receipt", testTxnContext.errorRepies[0].err.Error())
+	assert.Regexp("Error obtaining transaction receipt", testTxnContext.errorReplies[0].err.Error())
 
 }
 
@@ -268,7 +268,7 @@ func TestOnDeployContractMessageGoodTxnMined(t *testing.T) {
 	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
 
 	txnWG.Wait()
-	assert.Equal(0, len(testTxnContext.errorRepies))
+	assert.Equal(0, len(testTxnContext.errorReplies))
 
 	assert.Equal("eth_sendTransaction", testRPC.calls[0])
 	assert.Equal("eth_getTransactionReceipt", testRPC.calls[1])
@@ -308,7 +308,7 @@ func TestOnDeployContractPrivateMessageGoodTxnMined(t *testing.T) {
 	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
 
 	txnWG.Wait()
-	assert.Equal(0, len(testTxnContext.errorRepies))
+	assert.Equal(0, len(testTxnContext.errorReplies))
 
 	assert.Equal("eth_sendTransaction", testRPC.calls[0])
 	sendTxArg0JSON, _ := json.Marshal(testRPC.params[0][0])
@@ -354,7 +354,7 @@ func TestOnDeployContractMessageGoodTxnMinedWithHex(t *testing.T) {
 	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
 
 	txnWG.Wait()
-	assert.Equal(0, len(testTxnContext.errorRepies))
+	assert.Equal(0, len(testTxnContext.errorReplies))
 
 	assert.Equal("eth_sendTransaction", testRPC.calls[0])
 	assert.Equal("eth_getTransactionReceipt", testRPC.calls[1])
@@ -421,7 +421,7 @@ func TestOnDeployContractMessageFailedTxn(t *testing.T) {
 
 	txnProcessor.OnMessage(testTxnContext)
 
-	assert.Equal("fizzle", testTxnContext.errorRepies[0].err.Error())
+	assert.Equal("fizzle", testTxnContext.errorReplies[0].err.Error())
 	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
 }
 
@@ -444,7 +444,7 @@ func TestOnDeployContractMessageFailedToGetNonce(t *testing.T) {
 
 	txnProcessor.OnMessage(testTxnContext)
 
-	assert.Equal("eth_getTransactionCount returned: ding", testTxnContext.errorRepies[0].err.Error())
+	assert.Equal("eth_getTransactionCount returned: ding", testTxnContext.errorReplies[0].err.Error())
 	assert.EqualValues([]string{"eth_getTransactionCount"}, testRPC.calls)
 }
 
@@ -459,9 +459,9 @@ func TestOnSendTransactionMessageMissingFrom(t *testing.T) {
 		"}"
 	txnProcessor.OnMessage(testTxnContext)
 
-	assert.NotEmpty(testTxnContext.errorRepies)
+	assert.NotEmpty(testTxnContext.errorReplies)
 	assert.Empty(testTxnContext.replies)
-	assert.Regexp("'from' must be supplied", testTxnContext.errorRepies[0].err.Error())
+	assert.Regexp("'from' must be supplied", testTxnContext.errorReplies[0].err.Error())
 
 }
 
@@ -477,9 +477,9 @@ func TestOnSendTransactionMessageBadNonce(t *testing.T) {
 		"}"
 	txnProcessor.OnMessage(testTxnContext)
 
-	assert.NotEmpty(testTxnContext.errorRepies)
+	assert.NotEmpty(testTxnContext.errorReplies)
 	assert.Empty(testTxnContext.replies)
-	assert.Regexp("Converting supplied 'nonce' to integer", testTxnContext.errorRepies[0].err.Error())
+	assert.Regexp("Converting supplied 'nonce' to integer", testTxnContext.errorReplies[0].err.Error())
 
 }
 
@@ -497,9 +497,9 @@ func TestOnSendTransactionMessageBadMsg(t *testing.T) {
 		"}"
 	txnProcessor.OnMessage(testTxnContext)
 
-	assert.NotEmpty(testTxnContext.errorRepies)
+	assert.NotEmpty(testTxnContext.errorReplies)
 	assert.Empty(testTxnContext.replies)
-	assert.Regexp("Converting supplied 'value' to big integer", testTxnContext.errorRepies[0].err.Error())
+	assert.Regexp("Converting supplied 'value' to big integer", testTxnContext.errorReplies[0].err.Error())
 
 }
 
@@ -512,9 +512,9 @@ func TestOnSendTransactionMessageBadJSON(t *testing.T) {
 	testTxnContext.badMsgType = kldmessages.MsgTypeSendTransaction
 	txnProcessor.OnMessage(testTxnContext)
 
-	assert.NotEmpty(testTxnContext.errorRepies)
+	assert.NotEmpty(testTxnContext.errorReplies)
 	assert.Empty(testTxnContext.replies)
-	assert.Regexp("invalid character", testTxnContext.errorRepies[0].err.Error())
+	assert.Regexp("invalid character", testTxnContext.errorReplies[0].err.Error())
 
 }
 
@@ -536,13 +536,13 @@ func TestOnSendTransactionMessageTxnTimeout(t *testing.T) {
 	txnProcessor.OnMessage(testTxnContext)
 	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
 	txnWG.Wait()
-	assert.Equal(1, len(testTxnContext.errorRepies))
+	assert.Equal(1, len(testTxnContext.errorReplies))
 
 	assert.Equal("eth_sendTransaction", testRPC.calls[0])
 	assert.Equal("eth_getTransactionReceipt", testRPC.calls[1])
 
-	assert.Regexp("Timed out waiting for transaction receipt", testTxnContext.errorRepies[0].err.Error())
-	assert.Equal(txHash, testTxnContext.errorRepies[0].txHash)
+	assert.Regexp("Timed out waiting for transaction receipt", testTxnContext.errorReplies[0].err.Error())
+	assert.Equal(txHash, testTxnContext.errorReplies[0].txHash)
 
 }
 
@@ -561,7 +561,7 @@ func TestOnSendTransactionMessageFailedTxn(t *testing.T) {
 
 	txnProcessor.OnMessage(testTxnContext)
 
-	assert.Equal("pop", testTxnContext.errorRepies[0].err.Error())
+	assert.Equal("pop", testTxnContext.errorReplies[0].err.Error())
 	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
 }
 
@@ -584,7 +584,7 @@ func TestOnSendTransactionMessageFailedToGetNonce(t *testing.T) {
 
 	txnProcessor.OnMessage(testTxnContext)
 
-	assert.Equal("eth_getTransactionCount returned: poof", testTxnContext.errorRepies[0].err.Error())
+	assert.Equal("eth_getTransactionCount returned: poof", testTxnContext.errorReplies[0].err.Error())
 	assert.EqualValues([]string{"eth_getTransactionCount"}, testRPC.calls)
 }
 
@@ -610,8 +610,58 @@ func TestOnSendTransactionMessageInflightNonce(t *testing.T) {
 
 	txnProcessor.OnMessage(testTxnContext)
 
-	assert.Empty(testTxnContext.errorRepies)
+	assert.Empty(testTxnContext.errorReplies)
 	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
+}
+
+func TestOnSendTransactionMessageOrionNoPrivacyGroup(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		OrionPrivateAPIS: true,
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "{" +
+		"  \"headers\":{\"type\": \"SendTransaction\"}," +
+		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
+		"  \"gas\":\"123\"," +
+		"  \"method\":{\"name\":\"test\"}," +
+		"  \"privateFrom\":\"jO6dpqnMhmnrCHqUumyK09+18diF7quq/rROGs2HFWI=\"," +
+		"  \"privateFor\":[\"2QiZG7rYPzRvRsioEn6oYUff1DOvPA22EZr0+/o3RUg=\"]" +
+		"}"
+	testRPC := &testRPC{
+		ethSendTransactionResult: "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b",
+		privFindPrivacyGroupErr:  fmt.Errorf("pop"),
+	}
+	txnProcessor.Init(testRPC)
+	txnProcessor.OnMessage(testTxnContext)
+
+	assert.NotEmpty(testTxnContext.errorReplies)
+	assert.Empty(testTxnContext.replies)
+	assert.Regexp("priv_findPrivacyGroup returned: pop", testTxnContext.errorReplies[0].err.Error())
+}
+
+func TestOnSendTransactionMessageOrionCannotUsePrivacyGroupIdAndPrivateFor(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		OrionPrivateAPIS: true,
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "{" +
+		"  \"headers\":{\"type\": \"SendTransaction\"}," +
+		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
+		"  \"gas\":\"123\"," +
+		"  \"method\":{\"name\":\"test\"}," +
+		"  \"privateFrom\":\"jO6dpqnMhmnrCHqUumyK09+18diF7quq/rROGs2HFWI=\"," +
+		"  \"privateFor\":[\"2QiZG7rYPzRvRsioEn6oYUff1DOvPA22EZr0+/o3RUg=\"]," +
+		"  \"privacyGroupId\":\"o6fFj1vwysfp92Xt2GZlVuq14KX9HWn7oVJ+64Mfoic=\"" +
+		"}"
+	txnProcessor.OnMessage(testTxnContext)
+
+	assert.NotEmpty(testTxnContext.errorReplies)
+	assert.Empty(testTxnContext.replies)
+	assert.Regexp("privacyGroupId and privateFor are mutually exclusive", testTxnContext.errorReplies[0].err.Error())
 }
 
 func TestOnSendTransactionMessageOrion(t *testing.T) {
@@ -644,8 +694,37 @@ func TestOnSendTransactionMessageOrion(t *testing.T) {
 
 	txnProcessor.OnMessage(testTxnContext)
 
-	assert.Empty(testTxnContext.errorRepies)
+	assert.Empty(testTxnContext.errorReplies)
 	assert.EqualValues([]string{"priv_findPrivacyGroup", "priv_getTransactionCount", "eth_sendTransaction"}, testRPC.calls)
+}
+
+func TestOnSendTransactionMessageOrionPrivacyGroupId(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime:    1,
+		OrionPrivateAPIS: true,
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] =
+		[]*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "{" +
+		"  \"headers\":{\"type\": \"SendTransaction\"}," +
+		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
+		"  \"gas\":\"123\"," +
+		"  \"method\":{\"name\":\"test\"}," +
+		"  \"privateFrom\":\"jO6dpqnMhmnrCHqUumyK09+18diF7quq/rROGs2HFWI=\"," +
+		"  \"privacyGroupId\":\"P8SxRUussJKqZu4+nUkMJpscQeWOR3HqbAXLakatsk8=\"" +
+		"}"
+	testRPC := &testRPC{
+		ethSendTransactionResult: "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b",
+	}
+	txnProcessor.Init(testRPC)
+
+	txnProcessor.OnMessage(testTxnContext)
+
+	assert.Empty(testTxnContext.errorReplies)
+	assert.EqualValues([]string{"priv_getTransactionCount", "eth_sendTransaction"}, testRPC.calls)
 }
 
 func TestCobraInitTxnProcessor(t *testing.T) {
@@ -701,5 +780,5 @@ func TestOnSendTransactionAddressBook(t *testing.T) {
 
 	txnProcessor.OnMessage(testTxnContext)
 
-	assert.EqualError(testTxnContext.errorRepies[0].err, "500 Internal Server Error ")
+	assert.EqualError(testTxnContext.errorReplies[0].err, "500 Internal Server Error ")
 }

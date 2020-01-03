@@ -161,9 +161,16 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessage
 	inflight.from = strings.ToLower(from.Hex())
 
 	// Need to resolve privateFrom/privateFor to a privacyGroupID for Orion
-	if p.conf.OrionPrivateAPIS && len(msg.PrivateFor) > 0 {
-		if inflight.privacyGroupID, err = kldeth.GetOrionPrivacyGroup(p.rpc, &from, msg.PrivateFrom, msg.PrivateFor); err != nil {
+	if p.conf.OrionPrivateAPIS {
+		if msg.PrivacyGroupID != "" && len(msg.PrivateFor) > 0 {
+			err = fmt.Errorf("privacyGroupId and privateFor are mutually exclusive")
 			return
+		} else if msg.PrivacyGroupID != "" {
+			inflight.privacyGroupID = msg.PrivacyGroupID
+		} else if len(msg.PrivateFor) > 0 {
+			if inflight.privacyGroupID, err = kldeth.GetOrionPrivacyGroup(p.rpc, &from, msg.PrivateFrom, msg.PrivateFor); err != nil {
+				return
+			}
 		}
 	}
 
@@ -197,9 +204,9 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessage
 	// If this is a node-signed transaction, then we can ask the node
 	// to simply use the next available nonce.
 	// We provide an override to force the Go code to always assign the nonce.
-	if p.conf.OrionPrivateAPIS && len(msg.PrivateFor) > 0 {
+	if p.conf.OrionPrivateAPIS && (len(msg.PrivateFor) > 0 || msg.PrivacyGroupID != "") {
 		// If are using orion private transactions, then we need the private TX
-		// group ID and nonce (the public transactdion will be submitted by the pantheon node)
+		// group ID and nonce (the public transaction will be submitted by the pantheon node)
 		// Note: We do not have highestNonce calculation for in-flight private transactions,
 		//       so attempting to submit more than one per block currently will FAIL
 		inflight.nonce, err = kldeth.GetOrionTXCount(p.rpc, &from, inflight.privacyGroupID)

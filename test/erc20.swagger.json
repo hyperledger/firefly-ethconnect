@@ -61,6 +61,9 @@
             "$ref": "#/parameters/privateForParam"
           },
           {
+            "$ref": "#/parameters/privacyGroupIdParam"
+          },
+          {
             "$ref": "#/parameters/registerParam"
           }
         ],
@@ -444,6 +447,9 @@
           },
           {
             "$ref": "#/parameters/privateForParam"
+          },
+          {
+            "$ref": "#/parameters/privacyGroupIdParam"
           }
         ],
         "responses": {
@@ -580,6 +586,9 @@
           },
           {
             "$ref": "#/parameters/privateForParam"
+          },
+          {
+            "$ref": "#/parameters/privacyGroupIdParam"
           }
         ],
         "responses": {
@@ -709,6 +718,9 @@
           },
           {
             "$ref": "#/parameters/privateForParam"
+          },
+          {
+            "$ref": "#/parameters/privacyGroupIdParam"
           }
         ],
         "responses": {
@@ -845,6 +857,9 @@
           },
           {
             "$ref": "#/parameters/privateForParam"
+          },
+          {
+            "$ref": "#/parameters/privacyGroupIdParam"
           }
         ],
         "responses": {
@@ -981,6 +996,9 @@
           },
           {
             "$ref": "#/parameters/privateForParam"
+          },
+          {
+            "$ref": "#/parameters/privacyGroupIdParam"
           }
         ],
         "responses": {
@@ -1103,6 +1121,9 @@
           },
           {
             "$ref": "#/parameters/privateForParam"
+          },
+          {
+            "$ref": "#/parameters/privacyGroupIdParam"
           }
         ],
         "responses": {
@@ -1239,6 +1260,9 @@
           },
           {
             "$ref": "#/parameters/privateForParam"
+          },
+          {
+            "$ref": "#/parameters/privacyGroupIdParam"
           }
         ],
         "responses": {
@@ -1382,6 +1406,9 @@
           },
           {
             "$ref": "#/parameters/privateForParam"
+          },
+          {
+            "$ref": "#/parameters/privacyGroupIdParam"
           }
         ],
         "responses": {
@@ -1644,6 +1671,12 @@
       "name": "kld-gasprice",
       "in": "query",
       "allowEmptyValue": true
+    },
+    "privacyGroupIdParam": {
+      "type": "string",
+      "description": "Private transaction group ID - 'x-kaleido-privacyGroupId' header can also be used",
+      "name": "kld-privacygroupid",
+      "in": "query"
     },
     "privateForParam": {
       "type": "string",

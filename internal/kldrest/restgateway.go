@@ -217,7 +217,7 @@ func (g *RESTGateway) Start() (err error) {
 	}
 
 	if g.conf.OpenAPI.StoragePath != "" {
-		g.smartContractGW, err = kldcontracts.NewSmartContractGateway(&g.conf.OpenAPI, rpcClient, processor, g)
+		g.smartContractGW, err = kldcontracts.NewSmartContractGateway(&g.conf.OpenAPI, &g.conf.TxnProcessorConf, rpcClient, processor, g)
 		if err != nil {
 			return err
 		}

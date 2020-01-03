@@ -81,7 +81,7 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract) (tx *Txn, err error) 
 			return
 		}
 	} else {
-		err = fmt.Errorf("Missing Compliled Code + ABI, or Solidity")
+		err = fmt.Errorf("Missing Compiled Code + ABI, or Solidity")
 		return
 	}
 
@@ -109,6 +109,7 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract) (tx *Txn, err error) 
 	// retain private transaction fields
 	tx.PrivateFrom = msg.PrivateFrom
 	tx.PrivateFor = msg.PrivateFor
+	tx.PrivacyGroupID = msg.PrivacyGroupID
 	return
 }
 

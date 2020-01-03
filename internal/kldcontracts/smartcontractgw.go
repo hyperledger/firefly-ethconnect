@@ -113,7 +113,7 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 }
 
 // NewSmartContractGateway construtor
-func NewSmartContractGateway(conf *SmartContractGatewayConf, rpc kldeth.RPCClient, processor kldtx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher) (SmartContractGateway, error) {
+func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *kldtx.TxnProcessorConf, rpc kldeth.RPCClient, processor kldtx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher) (SmartContractGateway, error) {
 	var baseURL *url.URL
 	var err error
 	if conf.BaseURL != "" {
@@ -125,7 +125,7 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, rpc kldeth.RPCClien
 		baseURL, _ = url.Parse("http://localhost:8080")
 	}
 	log.Infof("OpenAPI Smart Contract Gateway configured with base URL '%s'", baseURL.String())
-	abi2swagger := kldopenapi.NewABI2Swagger(baseURL.Host, baseURL.Path, []string{baseURL.Scheme})
+	abi2swagger := kldopenapi.NewABI2Swagger(baseURL.Host, baseURL.Path, []string{baseURL.Scheme}, txnConf.OrionPrivateAPIS)
 	gw := &smartContractGW{
 		conf:                  conf,
 		rr:                    NewRemoteRegistry(&conf.RemoteRegistry),

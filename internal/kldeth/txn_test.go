@@ -255,7 +255,7 @@ func TestNewContractDeployMissingCompiledOrSolidity(t *testing.T) {
 	msg.Gas = "456"
 	msg.GasPrice = "789"
 	_, err := NewContractDeployTxn(&msg)
-	assert.EqualError(err, "Missing Compliled Code + ABI, or Solidity")
+	assert.EqualError(err, "Missing Compiled Code + ABI, or Solidity")
 }
 
 func TestNewContractDeployPrecompiledSimpleStorage(t *testing.T) {

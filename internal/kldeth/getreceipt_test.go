@@ -89,6 +89,7 @@ func TestGetTXReceiptOrionTX(t *testing.T) {
 
 	tx := Txn{
 		PrivacyGroupID: "test",
+		PrivateFrom:    "foo",
 	}
 	var blockNumber hexutil.Big
 	blockNumber.ToInt().SetInt64(10)
@@ -113,6 +114,7 @@ func TestGetTXReceiptOrionTXFail(t *testing.T) {
 
 	tx := Txn{
 		PrivacyGroupID: "test",
+		PrivateFrom:    "foo",
 	}
 	var blockNumber hexutil.Big
 	blockNumber.ToInt().SetInt64(10)

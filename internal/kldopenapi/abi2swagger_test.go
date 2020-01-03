@@ -35,7 +35,7 @@ const (
 func TestABI2SwaggerERC20Generic(t *testing.T) {
 	assert := assert.New(t)
 
-	c := NewABI2Swagger("localhost:80", "/contracts", []string{"http"})
+	c := NewABI2Swagger("localhost:80", "/contracts", []string{"http"}, true)
 	abi, err := abi.JSON(strings.NewReader(erc20ABI))
 	assert.NoError(err)
 	swagger := c.Gen4Factory("/erc20", "erc20", false, false, &abi, erc20DevDocs)
@@ -52,7 +52,7 @@ func TestABI2SwaggerERC20Generic(t *testing.T) {
 func TestABI2SwaggerERC20GenericFactoryOnly(t *testing.T) {
 	assert := assert.New(t)
 
-	c := NewABI2Swagger("localhost:80", "/contracts", []string{"http"})
+	c := NewABI2Swagger("localhost:80", "/contracts", []string{"http"}, false)
 	abi, err := abi.JSON(strings.NewReader(erc20ABI))
 	assert.NoError(err)
 	swagger := c.Gen4Factory("/erc20", "erc20", true, false, &abi, erc20DevDocs)
@@ -64,7 +64,7 @@ func TestABI2SwaggerERC20GenericFactoryOnly(t *testing.T) {
 func TestABI2SwaggerLotsOfTypesInstance(t *testing.T) {
 	assert := assert.New(t)
 
-	c := NewABI2Swagger("localhost", "/contracts", nil)
+	c := NewABI2Swagger("localhost", "/contracts", nil, true)
 	abi, err := abi.JSON(strings.NewReader(lotsOfTypesABI))
 	assert.NoError(err)
 	swagger := c.Gen4Instance("/0x0123456789abcdef0123456789abcdef0123456", "lotsOfTypes", &abi, lotsOfTypesDevDocs)

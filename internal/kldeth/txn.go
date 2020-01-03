@@ -109,6 +109,7 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract) (tx *Txn, err error) 
 	// retain private transaction fields
 	tx.PrivateFrom = msg.PrivateFrom
 	tx.PrivateFor = msg.PrivateFor
+	tx.PrivacyGroupID = msg.PrivacyGroupID
 	return
 }
 

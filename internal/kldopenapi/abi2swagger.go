@@ -341,7 +341,7 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	params["privacyGroupIdParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
 			Description:     "Private transaction group ID - 'x-kaleido-privacyGroupId' header can also be used",
-			Name:            "kld-privacyGroupId",
+			Name:            "kld-privacygroupid",
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: false,

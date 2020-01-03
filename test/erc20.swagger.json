@@ -1675,7 +1675,7 @@
     "privacyGroupIdParam": {
       "type": "string",
       "description": "Private transaction group ID - 'x-kaleido-privacyGroupId' header can also be used",
-      "name": "kld-privacyGroupId",
+      "name": "kld-privacygroupid",
       "in": "query"
     },
     "privateForParam": {

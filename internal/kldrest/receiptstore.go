@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -33,9 +34,11 @@ const (
 	defaultReceiptLimit = 10
 )
 
+var uuidCharsVerifier, _ = regexp.Compile("^[0-9a-zA-Z-]+$")
+
 // ReceiptStorePersistence interface implemented by persistence layers
 type ReceiptStorePersistence interface {
-	GetReceipts(skip, limit int) (*[]map[string]interface{}, error)
+	GetReceipts(skip, limit int, ids []string) (*[]map[string]interface{}, error)
 	GetReceipt(requestID string) (*map[string]interface{}, error)
 	AddReceipt(receipt *map[string]interface{}) error
 }
@@ -144,8 +147,22 @@ func (r *receiptStore) getReplies(res http.ResponseWriter, req *http.Request, pa
 		return
 	}
 
-	// Extract limit
+	// Default limit - which is set to zero (infinite) if we have specific IDs being request
 	limit := defaultReceiptLimit
+	req.ParseForm()
+	ids, ok := req.Form["id"]
+	if ok {
+		limit = 0 // can be explicitly set below, but no imposed limit when we have a list of IDs
+		for idx, id := range ids {
+			if !uuidCharsVerifier.MatchString(id) {
+				log.Errorf("Invalid id '%s' %d", id, idx)
+				sendRESTError(res, req, fmt.Errorf("Invalid 'id' query parameter"), 400)
+				return
+			}
+		}
+	}
+
+	// Extract limit
 	limitStr := req.FormValue("limit")
 	if limitStr != "" {
 		if customLimit, err := strconv.ParseInt(limitStr, 10, 32); err == nil {
@@ -177,7 +194,7 @@ func (r *receiptStore) getReplies(res http.ResponseWriter, req *http.Request, pa
 	}
 
 	// Call the persistence tier - which must return an empty array when no results (not an error)
-	results, err := r.persistence.GetReceipts(skip, limit)
+	results, err := r.persistence.GetReceipts(skip, limit, ids)
 	if err != nil {
 		log.Errorf("Error querying replies: %s", err)
 		sendRESTError(res, req, fmt.Errorf("Error querying replies: %s", err), 500)

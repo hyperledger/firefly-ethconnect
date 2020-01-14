@@ -46,3 +46,17 @@ func TestMemReceiptsWrapping(t *testing.T) {
 
 	return
 }
+
+func TestMemReceiptsNoIDFilterImpl(t *testing.T) {
+	assert := assert.New(t)
+
+	conf := &ReceiptStoreConf{
+		MaxDocs: 50,
+	}
+	r := newMemoryReceipts(conf)
+
+	_, err := r.GetReceipts(0, 0, []string{"test"})
+	assert.EqualError(err, "Memory receipts do not support id filtering")
+
+	return
+}

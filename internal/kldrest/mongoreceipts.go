@@ -83,10 +83,18 @@ func (m *mongoReceipts) AddReceipt(receipt *map[string]interface{}) error {
 }
 
 // GetReceipts Returns recent receipts with skip & limit
-func (m *mongoReceipts) GetReceipts(skip, limit int) (*[]map[string]interface{}, error) {
-	query := m.collection.Find(bson.M{})
+func (m *mongoReceipts) GetReceipts(skip, limit int, ids []string) (*[]map[string]interface{}, error) {
+	filter := bson.M{}
+	if len(ids) > 0 {
+		filter["_id"] = bson.M{
+			"$in": ids,
+		}
+	}
+	query := m.collection.Find(filter)
 	query.Sort("-receivedAt")
-	query.Limit(limit)
+	if limit > 0 {
+		query.Limit(limit)
+	}
 	if skip > 0 {
 		query.Skip(skip)
 	}

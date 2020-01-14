@@ -243,6 +243,14 @@ func TestSingleMessageWithReply(t *testing.T) {
 	msgContext1.Unmarshal(&msgUnmarshaled)
 	assert.Equal(msg1.Headers.MsgType, msgUnmarshaled.Headers.MsgType)
 
+	// Send a duplicate
+	mockConsumer.MockMessages <- &sarama.ConsumerMessage{
+		Topic:     "in-topic",
+		Partition: 5,
+		Offset:    500,
+		Value:     msg1bytes,
+	}
+
 	// Send the reply in a go routine
 	go func() {
 		reply1 := kldmessages.ReplyCommon{}

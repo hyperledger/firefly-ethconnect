@@ -32,7 +32,7 @@ import (
 
 type mockReceiptErrs struct{ err error }
 
-func (m *mockReceiptErrs) GetReceipts(skip, limit int) (*[]map[string]interface{}, error) {
+func (m *mockReceiptErrs) GetReceipts(skip, limit int, ids []string) (*[]map[string]interface{}, error) {
 	return nil, m.err
 }
 
@@ -263,7 +263,10 @@ func testGETArray(ts *httptest.Server, path string) (int, []map[string]interface
 		return 0, nil, httpErr
 	}
 	respJSON := make([]map[string]interface{}, 0)
-	err := json.NewDecoder(resp.Body).Decode(&respJSON)
+	var err error
+	if resp.StatusCode == 200 {
+		err = json.NewDecoder(resp.Body).Decode(&respJSON)
+	}
 	return resp.StatusCode, respJSON, err
 }
 
@@ -346,6 +349,17 @@ func TestGetRepliesEmpty(t *testing.T) {
 	assert.NoError(httpErr)
 	assert.Equal(200, status)
 	assert.Len(respArr, 0)
+}
+
+func TestGetRepliesBadFilter(t *testing.T) {
+	assert := assert.New(t)
+	_, _, ts := newReceiptsTestServer()
+	defer ts.Close()
+
+	status, respJSON, httpErr := testGETArray(ts, "/replies?id=!!!!")
+	assert.NoError(httpErr)
+	assert.Equal(400, status)
+	assert.Equal(0, len(respJSON))
 }
 
 func TestGetRepliesError(t *testing.T) {

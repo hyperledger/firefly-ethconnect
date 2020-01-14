@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/globalsign/mgo"
+	"github.com/globalsign/mgo/bson"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -49,6 +50,7 @@ type mockCollection struct {
 	collErr        error
 	ensureIndexErr error
 	mockQuery      mockQuery
+	captureQuery   interface{}
 }
 
 func (m *mockCollection) Insert(payloads ...interface{}) error {
@@ -62,6 +64,7 @@ func (m *mockCollection) Create(info *mgo.CollectionInfo) error {
 }
 
 func (m *mockCollection) Find(query interface{}) MongoQuery {
+	m.captureQuery = query
 	return &m.mockQuery
 }
 
@@ -238,10 +241,42 @@ func TestMongoReceiptsGetReceiptsOK(t *testing.T) {
 	}
 
 	r.connect()
-	results, err := r.GetReceipts(5, 2)
+	results, err := r.GetReceipts(5, 2, nil)
 	assert.NoError(err)
 	assert.Equal(5, mgoMock.collection.mockQuery.skip)
 	assert.Equal(2, mgoMock.collection.mockQuery.limit)
+	assert.Equal("value1", (*results)[0]["key1"])
+	assert.Equal("value2", (*results)[1]["key2"])
+	return
+}
+
+func TestMongoReceiptsFilter(t *testing.T) {
+	assert := assert.New(t)
+
+	mgoMock := &mockMongo{}
+	r := &mongoReceipts{
+		conf: &MongoDBReceiptStoreConf{},
+		mgo:  mgoMock,
+	}
+
+	mgoMock.collection.mockQuery.resultWranger = func(result interface{}) {
+		resArray := result.(*[]map[string]interface{})
+		res1 := make(map[string]interface{})
+		res1["key1"] = "value1"
+		*resArray = append(*resArray, res1)
+		res2 := make(map[string]interface{})
+		res2["key2"] = "value2"
+		*resArray = append(*resArray, res2)
+		return
+	}
+
+	r.connect()
+	results, err := r.GetReceipts(0, 0, []string{"key1", "key2"})
+	assert.NoError(err)
+	queryBSON := mgoMock.collection.captureQuery.(bson.M)
+	assert.Equal([]string{"key1", "key2"}, queryBSON["_id"].(bson.M)["$in"])
+	assert.Equal(0, mgoMock.collection.mockQuery.skip)
+	assert.Equal(0, mgoMock.collection.mockQuery.limit)
 	assert.Equal("value1", (*results)[0]["key1"])
 	assert.Equal("value2", (*results)[1]["key2"])
 	return
@@ -259,7 +294,7 @@ func TestMongoReceiptsGetReceiptsNotFound(t *testing.T) {
 	mgoMock.collection.mockQuery.allErr = mgo.ErrNotFound
 
 	r.connect()
-	results, err := r.GetReceipts(5, 2)
+	results, err := r.GetReceipts(5, 2, nil)
 	assert.NoError(err)
 	assert.Len(*results, 0)
 	return
@@ -277,7 +312,7 @@ func TestMongoReceiptsGetReceiptsError(t *testing.T) {
 	mgoMock.collection.mockQuery.allErr = fmt.Errorf("pop")
 
 	r.connect()
-	_, err := r.GetReceipts(5, 2)
+	_, err := r.GetReceipts(5, 2, nil)
 	assert.EqualError(err, "pop")
 	return
 }

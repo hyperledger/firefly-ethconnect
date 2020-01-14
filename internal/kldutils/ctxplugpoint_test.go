@@ -34,8 +34,19 @@ func TestSystemContext(t *testing.T) {
 func TestAccessToken(t *testing.T) {
 	assert := assert.New(t)
 
-	assert.Equal("testat", GetAccessToken(WithAccessToken(context.Background(), "testat")))
-	assert.Equal("", GetAccessToken(context.Background()))
-	assert.Equal("", GetAccessToken(context.WithValue(context.Background(), kldContextKeyAccessToken, 10)))
+	ctx, err := WithAccessToken(context.Background(), "testat")
+	assert.NoError(err)
+	assert.Equal(nil, GetAccessToken(ctx))
 
+	RegisterSecurityModule(&TestSecurityModule{})
+
+	ctx, err = WithAccessToken(context.Background(), "testat")
+	assert.NoError(err)
+	assert.Equal("verified", GetAccessToken(ctx))
+	assert.Equal(nil, GetAccessToken(context.Background()))
+
+	ctx, err = WithAccessToken(context.Background(), "badone")
+	assert.EqualError(err, "badness")
+
+	RegisterSecurityModule(nil)
 }

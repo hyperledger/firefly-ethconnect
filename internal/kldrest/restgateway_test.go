@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -59,8 +60,61 @@ func TestValidateConfInvalidOpenAPIArgs(t *testing.T) {
 	assert.EqualError(err, "RPC URL and Storage Path must be supplied to enable the Open API REST Gateway")
 }
 
-func TestStartStatusStopNoKafkaWebhooks(t *testing.T) {
+func TestStartStatusStopNoKafkaWebhooksAccessToken(t *testing.T) {
 	assert := assert.New(t)
+
+	kldutils.RegisterSecurityModule(&kldutils.TestSecurityModule{})
+	router := &httprouter.Router{}
+	fakeRPC := httptest.NewServer(router)
+	// Add username/pass to confirm we don't log
+	u, _ := url.Parse(fakeRPC.URL)
+	u.User = url.UserPassword("user1", "pass1")
+
+	var printYAML = false
+	g := NewRESTGateway(&printYAML)
+	g.conf.HTTP.Port = lastPort
+	g.conf.HTTP.LocalAddr = "127.0.0.1"
+	g.conf.RPC.URL = u.String()
+	g.conf.OpenAPI.StoragePath = "/tmp/t"
+	lastPort++
+	var err error
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		err = g.Start()
+		wg.Done()
+	}()
+
+	url, _ := url.Parse(fmt.Sprintf("http://localhost:%d/status", g.conf.HTTP.Port))
+	var resp *http.Response
+	for i := 0; i < 5; i++ {
+		time.Sleep(200 * time.Millisecond)
+		req := &http.Request{URL: url, Method: http.MethodGet, Header: http.Header{
+			"AUTHORIZATION": []string{"BeaRER testat"},
+		}}
+		resp, err = http.DefaultClient.Do(req)
+		if err == nil && resp.StatusCode == 200 {
+			break
+		}
+	}
+	assert.NoError(err)
+	assert.Equal(200, resp.StatusCode)
+	var statusResp statusMsg
+	err = json.NewDecoder(resp.Body).Decode(&statusResp)
+	assert.Equal(true, statusResp.OK)
+
+	g.srv.Close()
+	wg.Wait()
+	assert.EqualError(err, "http: Server closed")
+
+	kldutils.RegisterSecurityModule(nil)
+
+}
+
+func TestStartStatusStopNoKafkaWebhooksMissingToken(t *testing.T) {
+	assert := assert.New(t)
+
+	kldutils.RegisterSecurityModule(&kldutils.TestSecurityModule{})
 
 	router := &httprouter.Router{}
 	fakeRPC := httptest.NewServer(router)
@@ -83,24 +137,30 @@ func TestStartStatusStopNoKafkaWebhooks(t *testing.T) {
 		wg.Done()
 	}()
 
-	url := fmt.Sprintf("http://localhost:%d/status", g.conf.HTTP.Port)
+	url, _ := url.Parse(fmt.Sprintf("http://localhost:%d/status", g.conf.HTTP.Port))
 	var resp *http.Response
 	for i := 0; i < 5; i++ {
 		time.Sleep(200 * time.Millisecond)
-		resp, err = http.Get(url)
-		if err == nil && resp.StatusCode == 200 {
+		req := &http.Request{URL: url, Method: http.MethodGet, Header: http.Header{
+			"authorization": []string{"bearer"},
+		}}
+		resp, err = http.DefaultClient.Do(req)
+		if err == nil && resp.StatusCode == 401 {
 			break
 		}
 	}
 	assert.NoError(err)
-	assert.Equal(200, resp.StatusCode)
-	var statusResp statusMsg
-	err = json.NewDecoder(resp.Body).Decode(&statusResp)
-	assert.Equal(true, statusResp.OK)
+	assert.Equal(401, resp.StatusCode)
+	var errResp errMsg
+	err = json.NewDecoder(resp.Body).Decode(&errResp)
+	assert.Equal("Not authorized", errResp.Message)
 
 	g.srv.Close()
 	wg.Wait()
 	assert.EqualError(err, "http: Server closed")
+
+	kldutils.RegisterSecurityModule(nil)
+
 }
 
 func TestStartWithKafkaWebhooks(t *testing.T) {

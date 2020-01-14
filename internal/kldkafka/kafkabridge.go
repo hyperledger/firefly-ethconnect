@@ -154,7 +154,15 @@ func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage, producer Kafka
 		return
 	}
 	headers := &ctx.requestCommon.Headers
-	ctx.ctx = kldutils.WithAccessToken(context.Background(), headers.AccessToken)
+	accessToken := headers.AccessToken
+	headers.AccessToken = ""
+	authCtx, err := kldutils.WithAccessToken(context.Background(), accessToken)
+	if err != nil {
+		log.Errorf("Not authorized: %s - Message=%+v", err, ctx.requestCommon)
+		err = fmt.Errorf("Not authorized")
+		return
+	}
+	ctx.ctx = authCtx
 	if headers.ID == "" {
 		headers.ID = kldutils.UUIDv4()
 	}

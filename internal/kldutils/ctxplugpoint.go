@@ -14,7 +14,10 @@
 
 package kldutils
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 type kldContextKey int
 
@@ -22,6 +25,30 @@ const (
 	kldContextKeySystemAuth kldContextKey = iota
 	kldContextKeyAccessToken
 )
+
+// TestSecurityModule designed for unit testing - does not implement security
+type TestSecurityModule struct{}
+
+// VerifyToken checks if a token matches a fixed string
+func (sm *TestSecurityModule) VerifyToken(tok string) (interface{}, error) {
+	if tok == "testat" {
+		return "verified", nil
+	}
+	return nil, fmt.Errorf("badness")
+}
+
+// SecurityModule is a embeddable code plugpoint
+type SecurityModule interface {
+	// VerifyToken verfies a token and returns a context object to store that will be returned to enforcement points
+	VerifyToken(string) (interface{}, error)
+}
+
+var securityModule SecurityModule
+
+// RegisterSecurityModule is the plug point to register a security module
+func RegisterSecurityModule(sm SecurityModule) {
+	securityModule = sm
+}
 
 // NewSystemContext creates a system background context
 func NewSystemContext() context.Context {
@@ -35,15 +62,18 @@ func IsSystemContext(ctx context.Context) bool {
 }
 
 // WithAccessToken adds an access token to a base context
-func WithAccessToken(ctx context.Context, token string) context.Context {
-	return context.WithValue(ctx, kldContextKeyAccessToken, token)
+func WithAccessToken(ctx context.Context, token string) (context.Context, error) {
+	if securityModule != nil {
+		ctxValue, err := securityModule.VerifyToken(token)
+		if err != nil {
+			return nil, err
+		}
+		return context.WithValue(ctx, kldContextKeyAccessToken, ctxValue), nil
+	}
+	return ctx, nil
 }
 
 // GetAccessToken extracts a previously stored access token from a context
-func GetAccessToken(ctx context.Context) string {
-	v, ok := ctx.Value(kldContextKeyAccessToken).(string)
-	if ok {
-		return v
-	}
-	return ""
+func GetAccessToken(ctx context.Context) interface{} {
+	return ctx.Value(kldContextKeyAccessToken)
 }

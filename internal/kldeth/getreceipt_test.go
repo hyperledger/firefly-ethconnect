@@ -15,6 +15,7 @@
 package kldeth
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -35,7 +36,7 @@ func TestGetTXReceiptMined(t *testing.T) {
 	blockNumber.ToInt().SetInt64(10)
 	tx.Receipt.BlockNumber = &blockNumber
 
-	isMined, err := tx.GetTXReceipt(&r)
+	isMined, err := tx.GetTXReceipt(context.Background(), &r)
 
 	assert.Equal(nil, err)
 	assert.Equal("eth_getTransactionReceipt", r.capturedMethod)
@@ -53,7 +54,7 @@ func TestGetTXReceiptNotMined(t *testing.T) {
 	var blockNumber hexutil.Big
 	tx.Receipt.BlockNumber = &blockNumber
 
-	isMined, err := tx.GetTXReceipt(&r)
+	isMined, err := tx.GetTXReceipt(context.Background(), &r)
 
 	assert.Equal(nil, err)
 	assert.Equal("eth_getTransactionReceipt", r.capturedMethod)
@@ -73,7 +74,7 @@ func TestGetTXReceiptFail(t *testing.T) {
 	var blockNumber hexutil.Big
 	tx.Receipt.BlockNumber = &blockNumber
 
-	isMined, err := tx.GetTXReceipt(&r)
+	isMined, err := tx.GetTXReceipt(context.Background(), &r)
 
 	assert.EqualError(err, "eth_getTransactionReceipt returned: pop")
 	assert.Equal("eth_getTransactionReceipt", r.capturedMethod)
@@ -95,7 +96,7 @@ func TestGetTXReceiptOrionTX(t *testing.T) {
 	blockNumber.ToInt().SetInt64(10)
 	tx.Receipt.BlockNumber = &blockNumber
 
-	isMined, err := tx.GetTXReceipt(&r)
+	isMined, err := tx.GetTXReceipt(context.Background(), &r)
 
 	assert.Equal(nil, err)
 	assert.Equal("eth_getTransactionReceipt", r.capturedMethod)
@@ -120,7 +121,7 @@ func TestGetTXReceiptOrionTXFail(t *testing.T) {
 	blockNumber.ToInt().SetInt64(10)
 	tx.Receipt.BlockNumber = &blockNumber
 
-	isMined, err := tx.GetTXReceipt(&r)
+	isMined, err := tx.GetTXReceipt(context.Background(), &r)
 
 	assert.EqualError(err, "priv_getTransactionReceipt returned: pop")
 	assert.Equal("eth_getTransactionReceipt", r.capturedMethod)

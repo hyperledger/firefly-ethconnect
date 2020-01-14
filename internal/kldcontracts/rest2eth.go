@@ -15,6 +15,7 @@
 package kldcontracts
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,14 +40,14 @@ import (
 // REST2EthAsyncDispatcher is passed in to process messages over a streaming system with
 // a receipt store. Only used for POST methods, when kld-sync is not set to true
 type REST2EthAsyncDispatcher interface {
-	DispatchMsgAsync(msg map[string]interface{}, ack bool) (*kldmessages.AsyncSentMsg, error)
+	DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack bool) (*kldmessages.AsyncSentMsg, error)
 }
 
 // rest2EthSyncDispatcher abstracts the processing of the transactions and queries
 // synchronously. We perform those within this package.
 type rest2EthSyncDispatcher interface {
-	DispatchSendTransactionSync(msg *kldmessages.SendTransaction, replyProcessor rest2EthReplyProcessor)
-	DispatchDeployContractSync(msg *kldmessages.DeployContract, replyProcessor rest2EthReplyProcessor)
+	DispatchSendTransactionSync(ctx context.Context, msg *kldmessages.SendTransaction, replyProcessor rest2EthReplyProcessor)
+	DispatchDeployContractSync(ctx context.Context, msg *kldmessages.DeployContract, replyProcessor rest2EthReplyProcessor)
 }
 
 // rest2EthReplyProcessor interface
@@ -386,7 +387,7 @@ func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, ad
 		address := common.HexToAddress("0x" + addrStr)
 		addr = &address
 	}
-	sub, err := r.subMgr.AddSubscription(addr, abiEvent, streamID, fromBlock)
+	sub, err := r.subMgr.AddSubscription(req.Context(), addr, abiEvent, streamID, fromBlock)
 	if err != nil {
 		r.restErrReply(res, req, err, 400)
 		return
@@ -436,7 +437,7 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 	}
 	deployMsg.RegisterAs = getKLDParam("register", req, false)
 	if deployMsg.RegisterAs != "" {
-		if err := r.gw.checkNameAvailable(deployMsg.RegisterAs, isRemote(deployMsg.Headers)); err != nil {
+		if err := r.gw.checkNameAvailable(deployMsg.RegisterAs, isRemote(deployMsg.Headers.CommonHeaders)); err != nil {
 			r.restErrReply(res, req, err, 409)
 			return
 		}
@@ -449,7 +450,7 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 			done:   false,
 			waiter: sync.NewCond(&sync.Mutex{}),
 		}
-		r.syncDispatcher.DispatchDeployContractSync(deployMsg, responder)
+		r.syncDispatcher.DispatchDeployContractSync(req.Context(), deployMsg, responder)
 		responder.waiter.L.Lock()
 		for !responder.done {
 			responder.waiter.Wait()
@@ -462,7 +463,7 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 		msgBytes, _ := json.Marshal(deployMsg)
 		var mapMsg map[string]interface{}
 		json.Unmarshal(msgBytes, &mapMsg)
-		if asyncResponse, err := r.asyncDispatcher.DispatchMsgAsync(mapMsg, ack); err != nil {
+		if asyncResponse, err := r.asyncDispatcher.DispatchMsgAsync(req.Context(), mapMsg, ack); err != nil {
 			r.restErrReply(res, req, err, 500)
 		} else {
 			r.restAsyncReply(res, req, asyncResponse)
@@ -495,7 +496,7 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 			done:   false,
 			waiter: sync.NewCond(&sync.Mutex{}),
 		}
-		r.syncDispatcher.DispatchSendTransactionSync(msg, responder)
+		r.syncDispatcher.DispatchSendTransactionSync(req.Context(), msg, responder)
 		responder.waiter.L.Lock()
 		for !responder.done {
 			responder.waiter.Wait()
@@ -508,7 +509,7 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 		msgBytes, _ := json.Marshal(msg)
 		var mapMsg map[string]interface{}
 		json.Unmarshal(msgBytes, &mapMsg)
-		if asyncResponse, err := r.asyncDispatcher.DispatchMsgAsync(mapMsg, ack); err != nil {
+		if asyncResponse, err := r.asyncDispatcher.DispatchMsgAsync(req.Context(), mapMsg, ack); err != nil {
 			r.restErrReply(res, req, err, 500)
 		} else {
 			r.restAsyncReply(res, req, asyncResponse)
@@ -518,7 +519,7 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 }
 
 func (r *rest2eth) callContract(res http.ResponseWriter, req *http.Request, from, addr string, value json.Number, abiMethod *abi.Method, msgParams []interface{}) {
-	resBody, err := kldeth.CallMethod(r.rpc, from, addr, value, abiMethod, msgParams)
+	resBody, err := kldeth.CallMethod(req.Context(), r.rpc, from, addr, value, abiMethod, msgParams)
 	if err != nil {
 		r.restErrReply(res, req, err, 500)
 		return

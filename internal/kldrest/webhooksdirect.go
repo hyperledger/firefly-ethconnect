@@ -15,6 +15,7 @@
 package kldrest
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -56,12 +57,17 @@ func newWebhooksDirect(conf *WebhooksDirectConf, processor kldtx.TxnProcessor, r
 }
 
 type msgContext struct {
+	ctx          context.Context
 	w            *webhooksDirect
 	timeReceived time.Time
 	key          string
 	msgID        string
 	msg          map[string]interface{}
 	headers      *kldmessages.CommonHeaders
+}
+
+func (t *msgContext) Context() context.Context {
+	return t.ctx
 }
 
 func (t *msgContext) Headers() *kldmessages.CommonHeaders {
@@ -108,7 +114,7 @@ func (t *msgContext) String() string {
 	return fmt.Sprintf("MsgContext[%s/%s]", t.headers.MsgType, t.msgID)
 }
 
-func (w *webhooksDirect) sendWebhookMsg(key, msgID string, msg map[string]interface{}, ack bool) (string, int, error) {
+func (w *webhooksDirect) sendWebhookMsg(ctx context.Context, key, msgID string, msg map[string]interface{}, ack bool) (string, int, error) {
 	w.inFlightMutex.Lock()
 
 	numInFlight := len(w.inFlight)
@@ -130,7 +136,8 @@ func (w *webhooksDirect) sendWebhookMsg(key, msgID string, msg map[string]interf
 		log.Errorf("Unable to unmarshal headers from map payload: %+v: %s", msg, err)
 		return "", 400, fmt.Errorf("Failed to process headers in message")
 	}
-	ctx := &msgContext{
+	msgContext := &msgContext{
+		ctx:          ctx,
 		w:            w,
 		timeReceived: time.Now().UTC(),
 		key:          key,
@@ -138,10 +145,10 @@ func (w *webhooksDirect) sendWebhookMsg(key, msgID string, msg map[string]interf
 		msg:          msg,
 		headers:      &headers,
 	}
-	w.inFlight[msgID] = ctx
+	w.inFlight[msgID] = msgContext
 	w.inFlightMutex.Unlock()
 
-	w.processor.OnMessage(ctx)
+	w.processor.OnMessage(msgContext)
 	return "", 200, nil
 }
 

@@ -48,13 +48,13 @@ type mockREST2EthDispatcher struct {
 	deployContractSyncError    error
 }
 
-func (m *mockREST2EthDispatcher) DispatchMsgAsync(msg map[string]interface{}, ack bool) (*kldmessages.AsyncSentMsg, error) {
+func (m *mockREST2EthDispatcher) DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack bool) (*kldmessages.AsyncSentMsg, error) {
 	m.asyncDispatchMsg = msg
 	m.asyncDispatchAck = ack
 	return m.asyncDispatchReply, m.asyncDispatchError
 }
 
-func (m *mockREST2EthDispatcher) DispatchSendTransactionSync(msg *kldmessages.SendTransaction, replyProcessor rest2EthReplyProcessor) {
+func (m *mockREST2EthDispatcher) DispatchSendTransactionSync(ctx context.Context, msg *kldmessages.SendTransaction, replyProcessor rest2EthReplyProcessor) {
 	m.sendTransactionMsg = msg
 	if m.sendTransactionSyncError != nil {
 		replyProcessor.ReplyWithError(m.sendTransactionSyncError)
@@ -63,7 +63,7 @@ func (m *mockREST2EthDispatcher) DispatchSendTransactionSync(msg *kldmessages.Se
 	}
 }
 
-func (m *mockREST2EthDispatcher) DispatchDeployContractSync(msg *kldmessages.DeployContract, replyProcessor rest2EthReplyProcessor) {
+func (m *mockREST2EthDispatcher) DispatchDeployContractSync(ctx context.Context, msg *kldmessages.DeployContract, replyProcessor rest2EthReplyProcessor) {
 	m.deployContractMsg = msg
 	if m.deployContractSyncError != nil {
 		replyProcessor.ReplyWithError(m.deployContractSyncError)
@@ -129,23 +129,31 @@ type mockSubMgr struct {
 }
 
 func (m *mockSubMgr) Init() error { return m.err }
-func (m *mockSubMgr) AddStream(spec *kldevents.StreamInfo) (*kldevents.StreamInfo, error) {
+func (m *mockSubMgr) AddStream(ctx context.Context, spec *kldevents.StreamInfo) (*kldevents.StreamInfo, error) {
 	return spec, m.err
 }
-func (m *mockSubMgr) Streams() []*kldevents.StreamInfo                    { return m.streams }
-func (m *mockSubMgr) StreamByID(id string) (*kldevents.StreamInfo, error) { return m.stream, m.err }
-func (m *mockSubMgr) SuspendStream(id string) error                       { m.suspended = true; return m.err }
-func (m *mockSubMgr) ResumeStream(id string) error                        { m.resumed = true; return m.err }
-func (m *mockSubMgr) DeleteStream(id string) error                        { return m.err }
-func (m *mockSubMgr) AddSubscription(addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock string) (*kldevents.SubscriptionInfo, error) {
+func (m *mockSubMgr) Streams(ctx context.Context) []*kldevents.StreamInfo { return m.streams }
+func (m *mockSubMgr) StreamByID(ctx context.Context, id string) (*kldevents.StreamInfo, error) {
+	return m.stream, m.err
+}
+func (m *mockSubMgr) SuspendStream(ctx context.Context, id string) error {
+	m.suspended = true
+	return m.err
+}
+func (m *mockSubMgr) ResumeStream(ctx context.Context, id string) error {
+	m.resumed = true
+	return m.err
+}
+func (m *mockSubMgr) DeleteStream(ctx context.Context, id string) error { return m.err }
+func (m *mockSubMgr) AddSubscription(ctx context.Context, addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock string) (*kldevents.SubscriptionInfo, error) {
 	return m.sub, m.err
 }
-func (m *mockSubMgr) Subscriptions() []*kldevents.SubscriptionInfo { return m.subs }
-func (m *mockSubMgr) SubscriptionByID(id string) (*kldevents.SubscriptionInfo, error) {
+func (m *mockSubMgr) Subscriptions(ctx context.Context) []*kldevents.SubscriptionInfo { return m.subs }
+func (m *mockSubMgr) SubscriptionByID(ctx context.Context, id string) (*kldevents.SubscriptionInfo, error) {
 	return m.sub, m.err
 }
-func (m *mockSubMgr) DeleteSubscription(id string) error { return m.err }
-func (m *mockSubMgr) Close()                             {}
+func (m *mockSubMgr) DeleteSubscription(ctx context.Context, id string) error { return m.err }
+func (m *mockSubMgr) Close()                                                  {}
 
 func newTestDeployMsg(addr string) *deployContractWithAddress {
 	compiled, _ := kldeth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")

@@ -77,7 +77,7 @@ func TestNewContractDeployTxnSimpleStorage(t *testing.T) {
 	assert.Nil(err)
 	rpc := testRPCClient{}
 
-	tx.Send(&rpc)
+	tx.Send(context.Background(), &rpc)
 
 	assert.Equal("eth_sendTransaction", rpc.capturedMethod)
 	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
@@ -107,7 +107,7 @@ func TestNewContractDeployTxnSimpleStorageCalcGas(t *testing.T) {
 	assert.Nil(err)
 	rpc := testRPCClient{}
 
-	tx.Send(&rpc)
+	tx.Send(context.Background(), &rpc)
 
 	assert.Equal("eth_estimateGas", rpc.capturedMethod)
 	assert.Equal("eth_sendTransaction", rpc.capturedMethod2)
@@ -140,7 +140,7 @@ func TestNewContractDeployTxnSimpleStoragePrivate(t *testing.T) {
 	assert.Nil(err)
 	rpc := testRPCClient{}
 
-	tx.Send(&rpc)
+	tx.Send(context.Background(), &rpc)
 
 	assert.Equal("eth_estimateGas", rpc.capturedMethod)
 	assert.Equal("eth_sendTransaction", rpc.capturedMethod2)
@@ -171,7 +171,7 @@ func TestNewContractDeployTxnSimpleStoragePrivateOrion(t *testing.T) {
 	tx.PrivacyGroupID = "P8SxRUussJKqZu4+nUkMJpscQeWOR3HqbAXLakatsk8="
 	rpc := testRPCClient{}
 
-	tx.Send(&rpc)
+	tx.Send(context.Background(), &rpc)
 
 	assert.Equal("eth_estimateGas", rpc.capturedMethod)
 	assert.Equal("eea_sendTransaction", rpc.capturedMethod2)
@@ -202,7 +202,7 @@ func TestNewContractDeployTxnSimpleStoragePrivateOrionMissingPrivateFrom(t *test
 	tx.PrivacyGroupID = "s6a3mQ8I+rI2ZgHqHZlJaELiJs10HxlZNIwNd669FH4="
 	rpc := testRPCClient{}
 
-	err = tx.Send(&rpc)
+	err = tx.Send(context.Background(), &rpc)
 	assert.EqualError(err, "private-from is required when submitting private transactions via Orion")
 }
 func TestNewContractDeployTxnSimpleStorageCalcGasFailAndCallSucceeds(t *testing.T) {
@@ -220,7 +220,7 @@ func TestNewContractDeployTxnSimpleStorageCalcGasFailAndCallSucceeds(t *testing.
 	rpc := testRPCClient{}
 
 	rpc.mockError = fmt.Errorf("pop")
-	err = tx.Send(&rpc)
+	err = tx.Send(context.Background(), &rpc)
 	assert.EqualError(err, "Failed to calculate gas for transaction: pop")
 }
 
@@ -240,7 +240,7 @@ func TestNewContractDeployTxnSimpleStorageCalcGasFailAndCallFailsAsExpected(t *t
 
 	rpc.mockError = fmt.Errorf("estimate gas fails")
 	rpc.mockError2 = fmt.Errorf("call fails")
-	err = tx.Send(&rpc)
+	err = tx.Send(context.Background(), &rpc)
 	assert.EqualError(err, "Call failed: call fails")
 }
 
@@ -278,7 +278,7 @@ func TestNewContractDeployPrecompiledSimpleStorage(t *testing.T) {
 	assert.Nil(err)
 	rpc := testRPCClient{}
 
-	tx.Send(&rpc)
+	tx.Send(context.Background(), &rpc)
 
 	assert.Equal("eth_sendTransaction", rpc.capturedMethod)
 	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
@@ -625,7 +625,7 @@ func TestSendTxnABIParam(t *testing.T) {
 
 	rpc := testRPCClient{}
 
-	tx.Send(&rpc)
+	tx.Send(context.Background(), &rpc)
 	assert.Equal("eth_sendTransaction", rpc.capturedMethod)
 	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
 	var jsonSent map[string]interface{}
@@ -678,7 +678,7 @@ func TestSendTxnInlineParam(t *testing.T) {
 
 	rpc := testRPCClient{}
 
-	tx.Send(&rpc)
+	tx.Send(context.Background(), &rpc)
 	assert.Equal("eth_sendTransaction", rpc.capturedMethod)
 	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
 	var jsonSent map[string]interface{}
@@ -753,7 +753,7 @@ func TestCallMethod(t *testing.T) {
 		},
 	}
 
-	res, err := CallMethod(rpc,
+	res, err := CallMethod(context.Background(), rpc,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
 		json.Number("12345"), method, params)
@@ -786,7 +786,7 @@ func TestCallMethodFail(t *testing.T) {
 		mockError: fmt.Errorf("pop"),
 	}
 
-	_, err := CallMethod(rpc,
+	_, err := CallMethod(context.Background(), rpc,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
 		json.Number("12345"), method, params)
@@ -810,7 +810,7 @@ func TestCallMethodRevert(t *testing.T) {
 		},
 	}
 
-	_, err := CallMethod(rpc,
+	_, err := CallMethod(context.Background(), rpc,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
 		json.Number("12345"), method, params)
@@ -834,7 +834,7 @@ func TestCallMethodRevertBadStrLen(t *testing.T) {
 		},
 	}
 
-	_, err := CallMethod(rpc,
+	_, err := CallMethod(context.Background(), rpc,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
 		json.Number("12345"), method, params)
@@ -859,7 +859,7 @@ func TestCallMethodRevertBadBytes(t *testing.T) {
 		},
 	}
 
-	_, err := CallMethod(rpc,
+	_, err := CallMethod(context.Background(), rpc,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
 		json.Number("12345"), method, params)
@@ -875,7 +875,7 @@ func TestCallMethodBadArgs(t *testing.T) {
 		mockError: fmt.Errorf("pop"),
 	}
 
-	_, err := CallMethod(rpc, "badness", "", json.Number(""), &abi.Method{}, []interface{}{})
+	_, err := CallMethod(context.Background(), rpc, "badness", "", json.Number(""), &abi.Method{}, []interface{}{})
 
 	assert.EqualError(err, "Supplied value for 'from' is not a valid hex address")
 }
@@ -920,7 +920,7 @@ func TestSendTxnNodeAssignNonce(t *testing.T) {
 	rpc := testRPCClient{}
 
 	tx.NodeAssignNonce = true
-	tx.Send(&rpc)
+	tx.Send(context.Background(), &rpc)
 	assert.Equal("eth_sendTransaction", rpc.capturedMethod)
 	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
 	var jsonSent map[string]interface{}
@@ -955,7 +955,7 @@ func TestSendTxnRPFError(t *testing.T) {
 		mockError: fmt.Errorf("pop"),
 	}
 
-	err = tx.Send(&rpc)
+	err = tx.Send(context.Background(), &rpc)
 	assert.EqualError(err, "pop")
 }
 

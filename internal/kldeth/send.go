@@ -33,15 +33,15 @@ const (
 
 // calculateGas uses eth_estimateGas to estimate the gas required, providing a buffer
 // of 20% for variation as the chain changes between estimation and submission.
-func (tx *Txn) calculateGas(rpc RPCClient, txArgs *sendTxArgs, gas *hexutil.Uint64) (err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *sendTxArgs, gas *hexutil.Uint64) (err error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	if err := rpc.CallContext(ctx, &gas, "eth_estimateGas", txArgs); err != nil {
 		// Now we attempt a call of the transaction, because that will return us a useful error in the case, of a revert.
 		estError := fmt.Errorf("Failed to calculate gas for transaction: %s", err)
 		log.Errorf(estError.Error())
-		if _, err := tx.Call(rpc); err != nil {
+		if _, err := tx.Call(ctx, rpc); err != nil {
 			return err
 		}
 		// If the call succeeds, after estimate completed - we still need to fail with the estimate error
@@ -52,7 +52,7 @@ func (tx *Txn) calculateGas(rpc RPCClient, txArgs *sendTxArgs, gas *hexutil.Uint
 }
 
 // Call synchronously calls the method, without mining a transaction, and returns the result as RLP encoded bytes or nil
-func (tx *Txn) Call(rpc RPCClient) (res []byte, err error) {
+func (tx *Txn) Call(ctx context.Context, rpc RPCClient) (res []byte, err error) {
 	data := hexutil.Bytes(tx.EthTX.Data())
 	txArgs := &sendTxArgs{
 		From:     tx.From.Hex(),
@@ -65,7 +65,7 @@ func (tx *Txn) Call(rpc RPCClient) (res []byte, err error) {
 		txArgs.To = to.Hex()
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	var hexString string
@@ -100,7 +100,7 @@ func (tx *Txn) Call(rpc RPCClient) (res []byte, err error) {
 }
 
 // Send sends an individual transaction, choosing external or internal signing
-func (tx *Txn) Send(rpc RPCClient) (err error) {
+func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
 	start := time.Now().UTC()
 
 	gas := hexutil.Uint64(tx.EthTX.Gas())
@@ -116,7 +116,7 @@ func (tx *Txn) Send(rpc RPCClient) (err error) {
 		txArgs.To = to.Hex()
 	}
 	if uint64(gas) == uint64(0) {
-		if err = tx.calculateGas(rpc, txArgs, &gas); err != nil {
+		if err = tx.calculateGas(ctx, rpc, txArgs, &gas); err != nil {
 			return
 		}
 	}

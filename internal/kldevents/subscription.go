@@ -117,7 +117,7 @@ func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *Subscr
 	return s, nil
 }
 
-func (s *subscription) setInitialBlockHeight() (*big.Int, error) {
+func (s *subscription) setInitialBlockHeight(ctx context.Context) (*big.Int, error) {
 	if s.info.FromBlock != "" && s.info.FromBlock != FromBlockLatest {
 		var i big.Int
 		if _, ok := i.SetString(s.info.FromBlock, 10); !ok {
@@ -125,7 +125,7 @@ func (s *subscription) setInitialBlockHeight() (*big.Int, error) {
 		}
 		return &i, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	blockHeight := kldbind.HexBigInt{}
 	err := s.rpc.CallContext(ctx, &blockHeight, "eth_blockNumber")
@@ -143,12 +143,12 @@ func (s *subscription) setCheckpointBlockHeight(i *big.Int) {
 	log.Infof("%s: checkpoint restored block height for event stream: %s", s.logName, i.String())
 }
 
-func (s *subscription) restartFilter(since *big.Int) error {
+func (s *subscription) restartFilter(ctx context.Context, since *big.Int) error {
 	f := &ethFilter{}
 	f.persistedFilter = s.info.Filter
 	f.FromBlock.ToInt().Set(since)
 	f.ToBlock = "latest"
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	err := s.rpc.CallContext(ctx, &s.filterID, "eth_newFilter", f)
 	if err != nil {
@@ -160,8 +160,8 @@ func (s *subscription) restartFilter(since *big.Int) error {
 	return err
 }
 
-func (s *subscription) processNewEvents() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (s *subscription) processNewEvents(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	var logs []*logEntry
 	rpcMethod := "eth_getFilterLogs"
@@ -187,9 +187,9 @@ func (s *subscription) processNewEvents() error {
 	return nil
 }
 
-func (s *subscription) unsubscribe() error {
+func (s *subscription) unsubscribe(ctx context.Context) error {
 	var retval string
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	s.filterStale = true
 	err := s.rpc.CallContext(ctx, &retval, "eth_uninstallFilter", s.filterID)

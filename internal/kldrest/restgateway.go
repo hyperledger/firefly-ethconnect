@@ -184,8 +184,8 @@ func (g *RESTGateway) statusHandler(res http.ResponseWriter, req *http.Request, 
 }
 
 // DispatchMsgAsync is the rest2eth interface method for async dispatching of messages (via our webhook logic)
-func (g *RESTGateway) DispatchMsgAsync(msg map[string]interface{}, ack bool) (*kldmessages.AsyncSentMsg, error) {
-	reply, _, err := g.webhooks.processMsg(msg, ack)
+func (g *RESTGateway) DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack bool) (*kldmessages.AsyncSentMsg, error) {
+	reply, _, err := g.webhooks.processMsg(ctx, msg, ack)
 	return reply, err
 }
 

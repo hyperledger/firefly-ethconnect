@@ -15,6 +15,7 @@
 package kldrest
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -28,7 +29,7 @@ import (
 )
 
 type webhooksHandler interface {
-	sendWebhookMsg(key, msgID string, msg map[string]interface{}, ack bool) (msgAck string, statusCode int, err error)
+	sendWebhookMsg(ctx context.Context, key, msgID string, msg map[string]interface{}, ack bool) (msgAck string, statusCode int, err error)
 	run() error
 	isInitialized() bool
 }
@@ -93,7 +94,7 @@ func (w *webhooks) webhookHandler(res http.ResponseWriter, req *http.Request, ac
 		return
 	}
 
-	reply, statusCode, err := w.processMsg(msg, ack)
+	reply, statusCode, err := w.processMsg(req.Context(), msg, ack)
 	if err != nil {
 		w.hookErrReply(res, req, err, statusCode)
 		return
@@ -101,7 +102,7 @@ func (w *webhooks) webhookHandler(res http.ResponseWriter, req *http.Request, ac
 	w.msgSentReply(res, req, reply)
 }
 
-func (w *webhooks) processMsg(msg map[string]interface{}, ack bool) (*kldmessages.AsyncSentMsg, int, error) {
+func (w *webhooks) processMsg(ctx context.Context, msg map[string]interface{}, ack bool) (*kldmessages.AsyncSentMsg, int, error) {
 	// Check we understand the type, and can get the key.
 	// The rest of the validation is performed by the bridge listening to Kafka
 	headers, exists := msg["headers"]
@@ -128,6 +129,7 @@ func (w *webhooks) processMsg(msg map[string]interface{}, ack bool) (*kldmessage
 	// We always generate the ID. It cannot be set by the user
 	msgID := kldutils.UUIDv4()
 	headers.(map[string]interface{})["id"] = msgID
+	headers.(map[string]interface{})["accessToken"] = kldutils.GetAccessToken(ctx)
 
 	if w.smartContractGW != nil && msgType == kldmessages.MsgTypeDeployContract {
 		var err error
@@ -138,7 +140,7 @@ func (w *webhooks) processMsg(msg map[string]interface{}, ack bool) (*kldmessage
 
 	// Pass to the handler
 	log.Infof("Webhook accepted message. MsgID: %s Type: %s", msgID, msgType)
-	msgAck, status, err := w.handler.sendWebhookMsg(key, msgID, msg, ack)
+	msgAck, status, err := w.handler.sendWebhookMsg(ctx, key, msgID, msg, ack)
 	if err != nil {
 		return nil, status, err
 	}

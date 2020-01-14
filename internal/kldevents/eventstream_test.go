@@ -15,6 +15,7 @@
 package kldevents
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -97,7 +98,8 @@ func newTestStreamForBatching(spec *StreamInfo, status ...int) (*subscriptionMGR
 	sm := newTestSubscriptionManager()
 	sm.config().WebhooksAllowPrivateIPs = true
 	sm.config().EventPollingIntervalSec = 0
-	stream, _ := sm.AddStream(spec)
+	ctx := context.Background()
+	stream, _ := sm.AddStream(ctx, spec)
 	return sm, sm.streams[stream.ID], svr, eventStream
 }
 
@@ -402,7 +404,8 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 		},
 	}
 	addr := kldbind.HexToAddress("0x167f57a13a9c35ff92f0649d2be0e52b4f8ac3ca")
-	s, _ := sm.AddSubscription(&addr, event, stream.spec.ID, "")
+	ctx := context.Background()
+	s, _ := sm.AddSubscription(ctx, &addr, event, stream.spec.ID, "")
 	return s
 }
 
@@ -445,9 +448,10 @@ func TestProcessEventsEnd2End(t *testing.T) {
 	}()
 	wg.Wait()
 
-	err := sm.DeleteSubscription(s.ID)
+	ctx := context.Background()
+	err := sm.DeleteSubscription(ctx, s.ID)
 	assert.NoError(err)
-	err = sm.DeleteStream(stream.spec.ID)
+	err = sm.DeleteStream(ctx, stream.spec.ID)
 	assert.NoError(err)
 	sm.Close()
 }

@@ -15,6 +15,7 @@
 package kldkafka
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -103,6 +104,7 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 
 type msgContext struct {
 	timeReceived   time.Time
+	ctx            context.Context
 	producer       KafkaProducer
 	requestCommon  kldmessages.RequestCommon
 	reqOffset      string
@@ -152,6 +154,7 @@ func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage, producer Kafka
 		return
 	}
 	headers := &ctx.requestCommon.Headers
+	ctx.ctx = kldutils.WithAccessToken(context.Background(), headers.AccessToken)
 	if headers.ID == "" {
 		headers.ID = kldutils.UUIDv4()
 	}
@@ -220,8 +223,12 @@ func (k *KafkaBridge) setInFlightComplete(ctx *msgContext, consumer KafkaConsume
 	return
 }
 
+func (c *msgContext) Context() context.Context {
+	return c.ctx
+}
+
 func (c *msgContext) Headers() *kldmessages.CommonHeaders {
-	return &c.requestCommon.Headers
+	return &c.requestCommon.Headers.CommonHeaders
 }
 
 func (c *msgContext) Unmarshal(msg interface{}) (err error) {

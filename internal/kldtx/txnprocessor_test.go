@@ -109,6 +109,10 @@ func (r *testRPC) CallContext(ctx context.Context, result interface{}, method st
 	panic(fmt.Errorf("method unknown to test: %s", method))
 }
 
+func (c *testTxnContext) Context() context.Context {
+	return context.Background()
+}
+
 func (c *testTxnContext) String() string {
 	return "<testmessage>"
 }
@@ -121,7 +125,7 @@ func (c *testTxnContext) Headers() *kldmessages.CommonHeaders {
 		panic(fmt.Errorf("Unable to unmarshal test message: %s", c.jsonMsg))
 	}
 	log.Infof("Test message headers: %+v", commonMsg.Headers)
-	return &commonMsg.Headers
+	return &commonMsg.Headers.CommonHeaders
 }
 
 func (c *testTxnContext) Unmarshal(msg interface{}) error {

@@ -168,10 +168,12 @@ func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string) (*de
 		DeployContract: kldmessages.DeployContract{
 			TransactionCommon: kldmessages.TransactionCommon{
 				RequestCommon: kldmessages.RequestCommon{
-					Headers: kldmessages.CommonHeaders{
-						ID: idString,
-						Context: map[string]interface{}{
-							remoteRegistryContextKey: true,
+					Headers: kldmessages.RequestHeaders{
+						CommonHeaders: kldmessages.CommonHeaders{
+							ID: idString,
+							Context: map[string]interface{}{
+								remoteRegistryContextKey: true,
+							},
 						},
 					},
 				},

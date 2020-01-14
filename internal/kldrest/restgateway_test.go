@@ -15,6 +15,7 @@
 package kldrest
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -70,6 +71,7 @@ func TestStartStatusStopNoKafkaWebhooks(t *testing.T) {
 	var printYAML = false
 	g := NewRESTGateway(&printYAML)
 	g.conf.HTTP.Port = lastPort
+	g.conf.HTTP.LocalAddr = "127.0.0.1"
 	g.conf.RPC.URL = u.String()
 	g.conf.OpenAPI.StoragePath = "/tmp/t"
 	lastPort++
@@ -107,6 +109,7 @@ func TestStartWithKafkaWebhooks(t *testing.T) {
 	var printYAML = false
 	g := NewRESTGateway(&printYAML)
 	g.conf.HTTP.Port = lastPort
+	g.conf.HTTP.LocalAddr = "127.0.0.1"
 	g.conf.Kafka.Brokers = []string{""}
 	lastPort++
 	var err error
@@ -127,6 +130,7 @@ func TestStartWithBadTLS(t *testing.T) {
 	var printYAML = false
 	g := NewRESTGateway(&printYAML)
 	g.conf.HTTP.Port = lastPort
+	g.conf.HTTP.LocalAddr = "127.0.0.1"
 	g.conf.HTTP.TLS.Enabled = true
 	g.conf.HTTP.TLS.ClientKeyFile = "incomplete config"
 	lastPort++
@@ -165,6 +169,7 @@ func TestStartWithBadRPCUrl(t *testing.T) {
 	var printYAML = false
 	g := NewRESTGateway(&printYAML)
 	g.conf.HTTP.Port = lastPort
+	g.conf.HTTP.LocalAddr = "127.0.0.1"
 	g.conf.OpenAPI.StoragePath = "/tmp/t"
 	lastPort++
 	var err error
@@ -260,6 +265,6 @@ func TestDispatchMsgAsyncPassesThroughToWebhooks(t *testing.T) {
 	g.webhooks = newWebhooks(fakeHandler, nil)
 
 	var fakeMsg map[string]interface{}
-	_, err := g.DispatchMsgAsync(fakeMsg, true)
+	_, err := g.DispatchMsgAsync(context.Background(), fakeMsg, true)
 	assert.EqualError(err, "Invalid message - missing 'headers' (or not an object)")
 }

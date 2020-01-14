@@ -26,6 +26,7 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldtx"
+	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -213,6 +214,7 @@ func TestSingleMessageWithReply(t *testing.T) {
 
 	// Send a minimal test message
 	msg1 := kldmessages.RequestCommon{}
+	msg1.Headers.AccessToken = "testat"
 	msg1.Headers.MsgType = "TestSingleMessageWithReply"
 	msg1Ctx := map[string]interface{}{
 		"some": "data",
@@ -231,6 +233,7 @@ func TestSingleMessageWithReply(t *testing.T) {
 
 	// Get the message via the processor
 	msgContext1 := <-processor.messages
+	assert.Equal("testat", kldutils.GetAccessToken(msgContext1.Context()))
 	assert.NotEmpty(msgContext1.Headers().ID) // Generated one as not supplied
 	assert.Equal(msg1.Headers.MsgType, msgContext1.Headers().MsgType)
 	assert.Equal("data", msgContext1.Headers().Context["some"])

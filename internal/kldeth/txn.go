@@ -15,6 +15,7 @@
 package kldeth
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -114,13 +115,13 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract) (tx *Txn, err error) 
 }
 
 // CallMethod performs eth_call to return data from the chain
-func CallMethod(rpc RPCClient, from, addr string, value json.Number, methodABI *abi.Method, msgParams []interface{}) (map[string]interface{}, error) {
+func CallMethod(ctx context.Context, rpc RPCClient, from, addr string, value json.Number, methodABI *abi.Method, msgParams []interface{}) (map[string]interface{}, error) {
 	log.Debugf("Calling method: %+v %+v", methodABI, msgParams)
 	tx, err := buildTX(from, addr, "", value, "", "", methodABI, msgParams)
 	if err != nil {
 		return nil, err
 	}
-	retBytes, err := tx.Call(rpc)
+	retBytes, err := tx.Call(ctx, rpc)
 	if err != nil {
 		return nil, err
 	}

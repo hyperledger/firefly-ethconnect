@@ -23,10 +23,10 @@ import (
 )
 
 // GetTXReceipt gets the receipt for the transaction
-func (tx *Txn) GetTXReceipt(rpc RPCClient) (bool, error) {
+func (tx *Txn) GetTXReceipt(ctx context.Context, rpc RPCClient) (bool, error) {
 	start := time.Now().UTC()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	if err := rpc.CallContext(ctx, &tx.Receipt, "eth_getTransactionReceipt", tx.Hash); err != nil {

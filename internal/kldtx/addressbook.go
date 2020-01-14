@@ -34,7 +34,7 @@ const (
 // AddressBook looks up RPC URLs based on a remote registry, and optionally
 // resolves hostnames to IP addresses using a hosts file
 type AddressBook interface {
-	lookup(addr string) (kldeth.RPCClient, error)
+	lookup(ctx context.Context, addr string) (kldeth.RPCClient, error)
 }
 
 // AddressBookConf configuration
@@ -79,8 +79,8 @@ type addressBook struct {
 }
 
 // testRPC uses a simple net_version JSON/RPC call to test the health of a cached connection
-func (ab *addressBook) testRPC(rpc kldeth.RPCClient) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func (ab *addressBook) testRPC(ctx context.Context, rpc kldeth.RPCClient) bool {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	var netID string
@@ -119,7 +119,7 @@ func (ab *addressBook) resolveHost(endpoint string) (*url.URL, error) {
 
 // mapEndpoint takes an RPC connect endpoint (prior to host resolution) and maps
 // it to a cached RPC connection. Or creates a new connection and caches it.
-func (ab *addressBook) mapEndpoint(endpoint string) (kldeth.RPCClient, error) {
+func (ab *addressBook) mapEndpoint(ctx context.Context, endpoint string) (kldeth.RPCClient, error) {
 
 	// Simple locking on our cache for now (covers long-lived async test+connect operations)
 	ab.mtx.Lock()
@@ -128,7 +128,7 @@ func (ab *addressBook) mapEndpoint(endpoint string) (kldeth.RPCClient, error) {
 	// Hopefully we already have a client in our map, and it's healthy
 	rpc, ok := ab.hostToRPC[endpoint]
 	if ok {
-		if ab.testRPC(rpc) {
+		if ab.testRPC(ctx, rpc) {
 			log.Infof("Using cached RPC connection for signing")
 			return rpc, nil
 		}
@@ -154,7 +154,7 @@ func (ab *addressBook) mapEndpoint(endpoint string) (kldeth.RPCClient, error) {
 
 // lookup the RPC URL to use for a given from address, performing hostname resolution
 // based on a custom hosts file (if configured)
-func (ab *addressBook) lookup(fromAddr string) (kldeth.RPCClient, error) {
+func (ab *addressBook) lookup(ctx context.Context, fromAddr string) (kldeth.RPCClient, error) {
 	// First check if we already know the base (non host translated) endpoint
 	// to use for this address
 	log.Infof("Resolving signing address: %s", fromAddr)
@@ -180,5 +180,5 @@ func (ab *addressBook) lookup(fromAddr string) (kldeth.RPCClient, error) {
 		}
 	}
 
-	return ab.mapEndpoint(endpoint)
+	return ab.mapEndpoint(ctx, endpoint)
 }

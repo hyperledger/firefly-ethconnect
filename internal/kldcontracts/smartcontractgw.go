@@ -371,7 +371,7 @@ func (g *smartContractGW) PreDeploy(msg *kldmessages.DeployContract) (err error)
 			return err
 		}
 	}
-	if !isRemote(msg.Headers) {
+	if !isRemote(msg.Headers.CommonHeaders) {
 		_, err = g.storeDeployableABI(msg, compiled)
 	}
 	return err
@@ -625,7 +625,7 @@ func (g *smartContractGW) createStream(res http.ResponseWriter, req *http.Reques
 		return
 	}
 
-	newSpec, err := g.sm.AddStream(&spec)
+	newSpec, err := g.sm.AddStream(req.Context(), &spec)
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 400)
 		return
@@ -651,13 +651,13 @@ func (g *smartContractGW) listStreamsOrSubs(res http.ResponseWriter, req *http.R
 
 	var results []kldmessages.TimeSortable
 	if strings.HasPrefix(req.URL.Path, kldevents.SubPathPrefix) {
-		subs := g.sm.Subscriptions()
+		subs := g.sm.Subscriptions(req.Context())
 		results = make([]kldmessages.TimeSortable, len(subs))
 		for i := range subs {
 			results[i] = subs[i]
 		}
 	} else {
-		streams := g.sm.Streams()
+		streams := g.sm.Streams(req.Context())
 		results = make([]kldmessages.TimeSortable, len(streams))
 		for i := range streams {
 			results[i] = streams[i]
@@ -690,9 +690,9 @@ func (g *smartContractGW) getStreamOrSub(res http.ResponseWriter, req *http.Requ
 	var retval interface{}
 	var err error
 	if strings.HasPrefix(req.URL.Path, kldevents.SubPathPrefix) {
-		retval, err = g.sm.SubscriptionByID(params.ByName("id"))
+		retval, err = g.sm.SubscriptionByID(req.Context(), params.ByName("id"))
 	} else {
-		retval, err = g.sm.StreamByID(params.ByName("id"))
+		retval, err = g.sm.StreamByID(req.Context(), params.ByName("id"))
 	}
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 404)
@@ -719,9 +719,9 @@ func (g *smartContractGW) deleteStreamOrSub(res http.ResponseWriter, req *http.R
 
 	var err error
 	if strings.HasPrefix(req.URL.Path, kldevents.SubPathPrefix) {
-		err = g.sm.DeleteSubscription(params.ByName("id"))
+		err = g.sm.DeleteSubscription(req.Context(), params.ByName("id"))
 	} else {
-		err = g.sm.DeleteStream(params.ByName("id"))
+		err = g.sm.DeleteStream(req.Context(), params.ByName("id"))
 	}
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 500)
@@ -745,9 +745,9 @@ func (g *smartContractGW) suspendOrResumeStream(res http.ResponseWriter, req *ht
 
 	var err error
 	if strings.HasSuffix(req.URL.Path, "resume") {
-		err = g.sm.ResumeStream(params.ByName("id"))
+		err = g.sm.ResumeStream(req.Context(), params.ByName("id"))
 	} else {
-		err = g.sm.SuspendStream(params.ByName("id"))
+		err = g.sm.SuspendStream(req.Context(), params.ByName("id"))
 	}
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 500)

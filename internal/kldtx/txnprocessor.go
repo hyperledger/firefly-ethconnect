@@ -168,7 +168,7 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessage
 		} else if msg.PrivacyGroupID != "" {
 			inflight.privacyGroupID = msg.PrivacyGroupID
 		} else if len(msg.PrivateFor) > 0 {
-			if inflight.privacyGroupID, err = kldeth.GetOrionPrivacyGroup(p.rpc, &from, msg.PrivateFrom, msg.PrivateFor); err != nil {
+			if inflight.privacyGroupID, err = kldeth.GetOrionPrivacyGroup(txnContext.Context(), p.rpc, &from, msg.PrivateFrom, msg.PrivateFor); err != nil {
 				return
 			}
 		}
@@ -209,7 +209,7 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessage
 		// group ID and nonce (the public transaction will be submitted by the pantheon node)
 		// Note: We do not have highestNonce calculation for in-flight private transactions,
 		//       so attempting to submit more than one per block currently will FAIL
-		inflight.nonce, err = kldeth.GetOrionTXCount(p.rpc, &from, inflight.privacyGroupID)
+		inflight.nonce, err = kldeth.GetOrionTXCount(txnContext.Context(), p.rpc, &from, inflight.privacyGroupID)
 	} else if highestNonce > 0 {
 		// If we found a nonce in-flight in memory, return one higher.
 		inflight.nonce = highestNonce + 1
@@ -245,7 +245,7 @@ func (p *txnProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 	var elapsed time.Duration
 	for !isMined && !timedOut {
 
-		if isMined, err = iTX.tx.GetTXReceipt(p.rpc); err != nil {
+		if isMined, err = iTX.tx.GetTXReceipt(iTX.txnContext.Context(), p.rpc); err != nil {
 			// We wait even on connectivity errors, as we've submitted the transaction and
 			// we want to provide a receipt if connectivity resumes within the timeout
 			log.Infof("Failed to get receipt for %s (retries=%d): %s", iTX, retries, err)
@@ -379,14 +379,14 @@ func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *kldme
 	// Use the correct RPC for sending transactions
 	rpc := p.rpc
 	if p.addressBook != nil {
-		rpc, err = p.addressBook.lookup(tx.From.String())
+		rpc, err = p.addressBook.lookup(txnContext.Context(), tx.From.String())
 		if err != nil {
 			txnContext.SendErrorReply(500, err)
 			return
 		}
 	}
 
-	if err = tx.Send(rpc); err != nil {
+	if err = tx.Send(txnContext.Context(), rpc); err != nil {
 		txnContext.SendErrorReply(400, err)
 		return
 	}
@@ -413,14 +413,14 @@ func (p *txnProcessor) OnSendTransactionMessage(txnContext TxnContext, msg *kldm
 	// Use the correct RPC for sending transactions
 	rpc := p.rpc
 	if p.addressBook != nil {
-		rpc, err = p.addressBook.lookup(tx.From.String())
+		rpc, err = p.addressBook.lookup(txnContext.Context(), tx.From.String())
 		if err != nil {
 			txnContext.SendErrorReply(500, err)
 			return
 		}
 	}
 
-	if err = tx.Send(rpc); err != nil {
+	if err = tx.Send(txnContext.Context(), rpc); err != nil {
 		txnContext.SendErrorReply(400, err)
 		return
 	}

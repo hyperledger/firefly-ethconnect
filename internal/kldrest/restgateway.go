@@ -31,6 +31,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/julienschmidt/httprouter"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
@@ -211,9 +212,9 @@ func (g *RESTGateway) newAccessTokenContextHandler(parent http.Handler) http.Han
 		if len(hSplit) == 2 && strings.ToLower(hSplit[0]) == "bearer" {
 			accessToken = hSplit[1]
 		}
-		authCtx, err := kldutils.WithAccessToken(req.Context(), accessToken)
+		authCtx, err := kldauth.WithAuthContext(req.Context(), accessToken)
 		if err != nil {
-			g.sendError(res, "Not authorized", 401)
+			g.sendError(res, "Unauthorized", 401)
 			return
 		}
 

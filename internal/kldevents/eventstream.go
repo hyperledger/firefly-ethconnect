@@ -30,8 +30,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
-	"github.com/kaleido-io/ethconnect/internal/kldutils"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -219,7 +219,7 @@ func (a *eventStream) isBlocked() bool {
 // new events on the subscriptions that are registered for this stream
 func (a *eventStream) eventPoller() {
 
-	ctx := kldutils.NewSystemContext()
+	ctx := kldauth.NewSystemAuthContext()
 
 	defer func() { a.pollerDone = true }()
 	var checkpoint map[string]*big.Int

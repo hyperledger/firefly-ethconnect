@@ -3,3 +3,5 @@ coverage:
     patch:
       default:
         threshold: 0.1%
+  ignore:
+  - "internal/kldauth/kldauthtest"

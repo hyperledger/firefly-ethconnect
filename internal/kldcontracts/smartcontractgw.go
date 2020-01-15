@@ -44,6 +44,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ethereum/go-ethereum/common/compiler"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldevents"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
@@ -89,6 +90,18 @@ func CobraInitContractGateway(cmd *cobra.Command, conf *SmartContractGatewayConf
 	kldevents.CobraInitSubscriptionManager(cmd, &conf.SubscriptionManagerConf)
 }
 
+func (g *smartContractGW) withEventsAuth(handler httprouter.Handle) httprouter.Handle {
+	return func(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+		err := kldauth.AuthEventStreams(req.Context())
+		if err != nil {
+			log.Errorf("Unauthorized: %s", err)
+			g.gatewayErrReply(res, req, fmt.Errorf("Unauthorized"), 401)
+			return
+		}
+		handler(res, req, params)
+	}
+}
+
 func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	g.r2e.addRoutes(router)
 	router.GET("/contracts", g.listContractsOrABIs)
@@ -101,15 +114,15 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	router.GET("/i/:instance_lookup", g.getRemoteRegistrySwaggerOrABI)
 	router.GET("/gateways/:gateway_lookup", g.getRemoteRegistrySwaggerOrABI)
 	router.GET("/g/:gateway_lookup", g.getRemoteRegistrySwaggerOrABI)
-	router.POST(kldevents.StreamPathPrefix, g.createStream)
-	router.GET(kldevents.StreamPathPrefix, g.listStreamsOrSubs)
-	router.GET(kldevents.SubPathPrefix, g.listStreamsOrSubs)
-	router.GET(kldevents.StreamPathPrefix+"/:id", g.getStreamOrSub)
-	router.GET(kldevents.SubPathPrefix+"/:id", g.getStreamOrSub)
-	router.DELETE(kldevents.StreamPathPrefix+"/:id", g.deleteStreamOrSub)
-	router.DELETE(kldevents.SubPathPrefix+"/:id", g.deleteStreamOrSub)
-	router.POST(kldevents.StreamPathPrefix+"/:id/suspend", g.suspendOrResumeStream)
-	router.POST(kldevents.StreamPathPrefix+"/:id/resume", g.suspendOrResumeStream)
+	router.POST(kldevents.StreamPathPrefix, g.withEventsAuth(g.createStream))
+	router.GET(kldevents.StreamPathPrefix, g.withEventsAuth(g.listStreamsOrSubs))
+	router.GET(kldevents.SubPathPrefix, g.withEventsAuth(g.listStreamsOrSubs))
+	router.GET(kldevents.StreamPathPrefix+"/:id", g.withEventsAuth(g.getStreamOrSub))
+	router.GET(kldevents.SubPathPrefix+"/:id", g.withEventsAuth(g.getStreamOrSub))
+	router.DELETE(kldevents.StreamPathPrefix+"/:id", g.withEventsAuth(g.deleteStreamOrSub))
+	router.DELETE(kldevents.SubPathPrefix+"/:id", g.withEventsAuth(g.deleteStreamOrSub))
+	router.POST(kldevents.StreamPathPrefix+"/:id/suspend", g.withEventsAuth(g.suspendOrResumeStream))
+	router.POST(kldevents.StreamPathPrefix+"/:id/resume", g.withEventsAuth(g.suspendOrResumeStream))
 }
 
 // NewSmartContractGateway construtor

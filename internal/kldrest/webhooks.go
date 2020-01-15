@@ -22,6 +22,7 @@ import (
 	"reflect"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldcontracts"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
@@ -129,7 +130,7 @@ func (w *webhooks) processMsg(ctx context.Context, msg map[string]interface{}, a
 	// We always generate the ID. It cannot be set by the user
 	msgID := kldutils.UUIDv4()
 	headers.(map[string]interface{})["id"] = msgID
-	headers.(map[string]interface{})["accessToken"] = kldutils.GetAccessToken(ctx)
+	headers.(map[string]interface{})["accessToken"] = kldauth.GetAccessToken(ctx)
 
 	if w.smartContractGW != nil && msgType == kldmessages.MsgTypeDeployContract {
 		var err error

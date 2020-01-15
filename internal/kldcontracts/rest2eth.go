@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/julienschmidt/httprouter"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldevents"
@@ -372,6 +373,14 @@ func (r *rest2eth) fromBodyOrForm(req *http.Request, body map[string]interface{}
 }
 
 func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, addrStr string, abiEvent *abi.Event, body map[string]interface{}) {
+
+	err := kldauth.AuthEventStreams(req.Context())
+	if err != nil {
+		log.Errorf("Unauthorized: %s", err)
+		r.restErrReply(res, req, fmt.Errorf("Unauthorized"), 401)
+		return
+	}
+
 	if r.subMgr == nil {
 		r.restErrReply(res, req, errors.New(errEventSupportMissing), 405)
 		return

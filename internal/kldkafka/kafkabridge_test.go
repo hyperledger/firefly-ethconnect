@@ -23,10 +23,11 @@ import (
 	"testing"
 
 	"github.com/Shopify/sarama"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
+	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldtx"
-	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -209,7 +210,7 @@ func setupMocks() (*KafkaBridge, *testKafkaMsgProcessor, *MockKafkaConsumer, *Mo
 
 func TestSingleMessageWithReply(t *testing.T) {
 	assert := assert.New(t)
-	kldutils.RegisterSecurityModule(&kldutils.TestSecurityModule{})
+	kldauth.RegisterSecurityModule(&kldauthtest.TestSecurityModule{})
 
 	_, processor, mockConsumer, mockProducer, wg := setupMocks()
 
@@ -234,7 +235,8 @@ func TestSingleMessageWithReply(t *testing.T) {
 
 	// Get the message via the processor
 	msgContext1 := <-processor.messages
-	assert.Equal("verified", kldutils.GetAccessToken(msgContext1.Context()))
+	assert.Equal("testat", kldauth.GetAccessToken(msgContext1.Context()))
+	assert.Equal("verified", kldauth.GetAuthContext(msgContext1.Context()))
 	assert.NotEmpty(msgContext1.Headers().ID) // Generated one as not supplied
 	assert.Equal(msg1.Headers.MsgType, msgContext1.Headers().MsgType)
 	assert.Equal("data", msgContext1.Headers().Context["some"])
@@ -283,12 +285,12 @@ func TestSingleMessageWithReply(t *testing.T) {
 	mockConsumer.Close()
 	wg.Wait()
 
-	kldutils.RegisterSecurityModule(nil)
+	kldauth.RegisterSecurityModule(nil)
 }
 
 func TestSingleMessageWithNotAuthorizedReply(t *testing.T) {
 	assert := assert.New(t)
-	kldutils.RegisterSecurityModule(&kldutils.TestSecurityModule{})
+	kldauth.RegisterSecurityModule(&kldauthtest.TestSecurityModule{})
 
 	_, _, mockConsumer, mockProducer, wg := setupMocks()
 
@@ -314,14 +316,14 @@ func TestSingleMessageWithNotAuthorizedReply(t *testing.T) {
 		assert.Fail("Could not unmarshal reply: %s", err)
 		return
 	}
-	assert.Equal("Not authorized", errorReply.ErrorMessage)
+	assert.Equal("Unauthorized", errorReply.ErrorMessage)
 
 	// Shut down
 	mockProducer.AsyncClose()
 	mockConsumer.Close()
 	wg.Wait()
 
-	kldutils.RegisterSecurityModule(nil)
+	kldauth.RegisterSecurityModule(nil)
 }
 
 func TestSingleMessageWithErrorReply(t *testing.T) {

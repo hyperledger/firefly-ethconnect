@@ -28,6 +28,8 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/kldevents"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
+	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
@@ -1057,6 +1059,31 @@ func TestSubscribeNoAddressUnknownEvent(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("Event 'subscribe' is not declared in the ABI", reply.Message)
+}
+
+func TestSubscribeUnauthorized(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	kldauth.RegisterSecurityModule(&kldauthtest.TestSecurityModule{})
+
+	dispatcher := &mockREST2EthDispatcher{}
+	_, _, router := newTestREST2Eth(dispatcher)
+	bodyBytes, _ := json.Marshal(&map[string]string{
+		"stream": "stream1",
+	})
+	req := httptest.NewRequest("POST", "/abis/ABI1/Changed/subscribe", bytes.NewReader(bodyBytes))
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+
+	assert.Equal(401, res.Result().StatusCode)
+	reply := restErrMsg{}
+	err := json.NewDecoder(res.Result().Body).Decode(&reply)
+	assert.NoError(err)
+	assert.Equal("Unauthorized", reply.Message)
+
+	kldauth.RegisterSecurityModule(nil)
 }
 
 func TestSubscribeNoAddressMissingStream(t *testing.T) {

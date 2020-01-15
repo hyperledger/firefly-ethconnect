@@ -26,7 +26,8 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/kaleido-io/ethconnect/internal/kldutils"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
+	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -63,7 +64,7 @@ func TestValidateConfInvalidOpenAPIArgs(t *testing.T) {
 func TestStartStatusStopNoKafkaWebhooksAccessToken(t *testing.T) {
 	assert := assert.New(t)
 
-	kldutils.RegisterSecurityModule(&kldutils.TestSecurityModule{})
+	kldauth.RegisterSecurityModule(&kldauthtest.TestSecurityModule{})
 	router := &httprouter.Router{}
 	fakeRPC := httptest.NewServer(router)
 	// Add username/pass to confirm we don't log
@@ -107,14 +108,14 @@ func TestStartStatusStopNoKafkaWebhooksAccessToken(t *testing.T) {
 	wg.Wait()
 	assert.EqualError(err, "http: Server closed")
 
-	kldutils.RegisterSecurityModule(nil)
+	kldauth.RegisterSecurityModule(nil)
 
 }
 
 func TestStartStatusStopNoKafkaWebhooksMissingToken(t *testing.T) {
 	assert := assert.New(t)
 
-	kldutils.RegisterSecurityModule(&kldutils.TestSecurityModule{})
+	kldauth.RegisterSecurityModule(&kldauthtest.TestSecurityModule{})
 
 	router := &httprouter.Router{}
 	fakeRPC := httptest.NewServer(router)
@@ -153,13 +154,13 @@ func TestStartStatusStopNoKafkaWebhooksMissingToken(t *testing.T) {
 	assert.Equal(401, resp.StatusCode)
 	var errResp errMsg
 	err = json.NewDecoder(resp.Body).Decode(&errResp)
-	assert.Equal("Not authorized", errResp.Message)
+	assert.Equal("Unauthorized", errResp.Message)
 
 	g.srv.Close()
 	wg.Wait()
 	assert.EqualError(err, "http: Server closed")
 
-	kldutils.RegisterSecurityModule(nil)
+	kldauth.RegisterSecurityModule(nil)
 
 }
 

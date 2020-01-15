@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldtx"
@@ -156,10 +157,10 @@ func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage, producer Kafka
 	headers := &ctx.requestCommon.Headers
 	accessToken := headers.AccessToken
 	headers.AccessToken = ""
-	authCtx, err := kldutils.WithAccessToken(context.Background(), accessToken)
+	authCtx, err := kldauth.WithAuthContext(context.Background(), accessToken)
 	if err != nil {
-		log.Errorf("Not authorized: %s - Message=%+v", err, ctx.requestCommon)
-		err = fmt.Errorf("Not authorized")
+		log.Errorf("Unauthorized: %s - Message=%+v", err, ctx.requestCommon)
+		err = fmt.Errorf("Unauthorized")
 		return
 	}
 	ctx.ctx = authCtx

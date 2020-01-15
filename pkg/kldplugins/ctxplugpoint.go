@@ -17,14 +17,18 @@ package kldplugins
 // EventOperation enumerates operation types on events
 type EventOperation int
 
-// SecurityModule is a embeddable code plugpoint
+// SecurityModule is a code plug-point that can be implemented using a go plugin module.
+//  Build your plugin with a "SecurityModule" export that implements this interface,
+//  and configure the dynamic load path of your module in the configuration.
 type SecurityModule interface {
-	// VerifyToken verfies a token and returns a context object to store that will be returned to enforcement points
+
+	// VerifyToken - Authentication plugpoint. Verfies a token and returns a context object to store that will be returned to authorization points
 	VerifyToken(string) (interface{}, error)
-	// AuthRPC authorize an RPC call
+
+	// AuthRPC - Authorization plugpoint for a synchronous RPC call
 	AuthRPC(authCtx interface{}, method string, args ...interface{}) error
-	// AuthRPCSubscribe authorize a subscribe RPC call
+	// AuthRPCSubscribe - Authorization plugpoint for subscribe RPC call
 	AuthRPCSubscribe(authCtx interface{}, namespace string, channel interface{}, args ...interface{}) error
-	// AuthEventStreams is currently a single permission controlling the whole event management system
+	// AuthEventStreams - Authorization plugpoint for event management system (single permission currently - evolution likely as requirements evolve)
 	AuthEventStreams(authCtx interface{}) error
 }

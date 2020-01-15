@@ -37,12 +37,12 @@ func newMemoryReceipts(conf *ReceiptStoreConf) *memoryReceipts {
 	return r
 }
 
-func (m *memoryReceipts) GetReceipts(skip, limit int, ids []string) (*[]map[string]interface{}, error) {
+func (m *memoryReceipts) GetReceipts(skip, limit int, ids []string, since, from, to string) (*[]map[string]interface{}, error) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
-	if len(ids) > 0 {
-		return nil, fmt.Errorf("Memory receipts do not support id filtering")
+	if len(ids) > 0 || since != "" || from != "" || to != "" {
+		return nil, fmt.Errorf("Memory receipts do not support filtering")
 	}
 
 	results := make([]map[string]interface{}, 0, limit)

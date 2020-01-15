@@ -55,8 +55,8 @@ func TestMemReceiptsNoIDFilterImpl(t *testing.T) {
 	}
 	r := newMemoryReceipts(conf)
 
-	_, err := r.GetReceipts(0, 0, []string{"test"})
-	assert.EqualError(err, "Memory receipts do not support id filtering")
+	_, err := r.GetReceipts(0, 0, []string{"test"}, "t", "t", "t")
+	assert.EqualError(err, "Memory receipts do not support filtering")
 
 	return
 }

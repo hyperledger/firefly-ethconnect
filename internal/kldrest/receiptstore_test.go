@@ -32,7 +32,7 @@ import (
 
 type mockReceiptErrs struct{ err error }
 
-func (m *mockReceiptErrs) GetReceipts(skip, limit int, ids []string) (*[]map[string]interface{}, error) {
+func (m *mockReceiptErrs) GetReceipts(skip, limit int, ids []string, since, from, to string) (*[]map[string]interface{}, error) {
 	return nil, m.err
 }
 

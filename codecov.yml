@@ -4,4 +4,6 @@ coverage:
       default:
         threshold: 0.1%
   ignore:
-  - "internal/kldauth/kldauthtest"
+  - "internal/kldkafka/mock_sarama" # Generated mock
+  - "internal/kldauth/kldauthtest" # Mock
+  - "cmd/plugins.go" # Not testable with UTs

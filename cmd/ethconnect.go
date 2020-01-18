@@ -39,6 +39,7 @@ type ServerConfig struct {
 	KafkaBridges map[string]*kldkafka.KafkaBridgeConf `json:"kafka"`
 	Webhooks     map[string]*kldrest.RESTGatewayConf  `json:"webhooks"`
 	RESTGateways map[string]*kldrest.RESTGatewayConf  `json:"rest"`
+	Plugins      PluginConfig                         `json:"plugins"`
 }
 
 func initLogging(debugLevel int) {
@@ -127,6 +128,10 @@ func readServerConfig() (serverConfig *ServerConfig, err error) {
 		err = fmt.Errorf("Failed to process YAML config from %s: %s", serverCmdConfig.Filename, err)
 		return
 	}
+
+	// Load any plugins
+	loadPlugins(&serverConfig.Plugins)
+
 	return
 }
 

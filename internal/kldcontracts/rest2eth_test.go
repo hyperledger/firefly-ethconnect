@@ -261,6 +261,38 @@ func TestDeployContractAsyncSuccess(t *testing.T) {
 	assert.Equal("0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C", dispatcher.asyncDispatchMsg["privateFor"].([]interface{})[1])
 }
 
+func TestDeployContractAsyncHDWallet(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	bodyMap["i"] = 12345
+	bodyMap["s"] = "testing"
+	from := "HD-u01234abcd"
+	dispatcher := &mockREST2EthDispatcher{
+		asyncDispatchReply: &kldmessages.AsyncSentMsg{
+			Sent:    true,
+			Request: "request1",
+		},
+	}
+	_, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	body, _ := json.Marshal(&bodyMap)
+	req := httptest.NewRequest("POST", "/abis/abi1", bytes.NewReader(body))
+	req.Header.Add("x-kaleido-from", from)
+	router.ServeHTTP(res, req)
+
+	assert.Equal(202, res.Result().StatusCode)
+	reply := kldmessages.AsyncSentMsg{}
+	err := json.NewDecoder(res.Result().Body).Decode(&reply)
+	assert.NoError(err)
+	assert.Equal(true, reply.Sent)
+	assert.Equal("request1", reply.Request)
+
+	assert.Equal(true, dispatcher.asyncDispatchAck)
+	assert.Equal(strings.ToLower(from), dispatcher.asyncDispatchMsg["from"])
+}
+
 func TestDeployContractAsyncDuplicate(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()

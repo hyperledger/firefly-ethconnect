@@ -4,10 +4,13 @@ BINARY_UNIX=$(BINARY_NAME)-tux
 BINARY_MAC=$(BINARY_NAME)-mac
 BINARY_WIN=$(BINARY_NAME)-win
 
+.DELETE_ON_ERROR:
+GOFILES := $(shell find . -name '*.go' -print)
+
 all: deps build test
 build: 
 		$(VGO) build -ldflags "-X main.buildDate=`date -u +\"%Y-%m-%dT%H:%M:%SZ\"` -X main.buildVersion=$(BUILD_VERSION)" -tags=prod -o $(BINARY_NAME) -v
-coverage.txt:
+coverage.txt: $(GOFILES)
 		$(VGO) test  ./... -cover -coverprofile=coverage.txt -covermode=atomic
 test: coverage.txt
 clean: 

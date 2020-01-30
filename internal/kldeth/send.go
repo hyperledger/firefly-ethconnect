@@ -185,7 +185,7 @@ func (tx *Txn) sendUnsignedTxn(ctx context.Context, rpc RPCClient, txArgs *SendT
 	var callParam0 interface{} = txArgs
 	if tx.Signer != nil {
 		if isPrivate {
-			return "", fmt.Errorf("Signing with from address '%s' is not currently supported with private transactions", txArgs.From)
+			return "", fmt.Errorf("Signing with %s is not currently supported with private transactions", tx.Signer.Type())
 		}
 		// Sign the transaction and get the bytes, which we pass to eth_sendRawTransaction
 		jsonRPCMethod = "eth_sendRawTransaction"

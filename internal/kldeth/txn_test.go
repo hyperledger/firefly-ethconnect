@@ -963,6 +963,65 @@ func TestSendWithTXSignerOK(t *testing.T) {
 	assert.Equal("0x746573746279746573", rpc.capturedArgs[0])
 }
 
+func TestSendWithTXSignerFail(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{}
+
+	signer := &mockTXSigner{
+		signed:  []byte("testbytes"),
+		from:    "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+		signErr: fmt.Errorf("pop"),
+	}
+
+	msg.MethodName = "testFunc"
+	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
+	msg.From = "hd-u0abcd1234-u0bcde9876-12345"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	tx, err := NewSendTxn(&msg, signer)
+	assert.Nil(err)
+	msgBytes, _ := json.Marshal(&msg)
+	log.Infof(string(msgBytes))
+
+	rpc := testRPCClient{}
+
+	err = tx.Send(context.Background(), &rpc)
+	assert.EqualError(err, "pop")
+}
+
+func TestSendWithTXSignerFailPrivate(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{}
+
+	signer := &mockTXSigner{
+		signed:  []byte("testbytes"),
+		from:    "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+		signErr: fmt.Errorf("pop"),
+	}
+
+	msg.MethodName = "testFunc"
+	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
+	msg.From = "hd-u0abcd1234-u0bcde9876-12345"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	msg.PrivateFor = []string{"anything"}
+	tx, err := NewSendTxn(&msg, signer)
+	assert.Nil(err)
+	msgBytes, _ := json.Marshal(&msg)
+	log.Infof(string(msgBytes))
+
+	rpc := testRPCClient{}
+
+	err = tx.Send(context.Background(), &rpc)
+	assert.EqualError(err, "Signing with mock signer is not currently supported with private transactions")
+}
+
 func TestNewContractWithTXSignerOK(t *testing.T) {
 	assert := assert.New(t)
 

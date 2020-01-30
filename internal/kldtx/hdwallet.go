@@ -145,6 +145,10 @@ func (hd *hdWallet) SignerFor(request *HDWalletRequest) (kldeth.TXSigner, error)
 
 }
 
+func (s *hdwalletSigner) Type() string {
+	return "HD Wallet"
+}
+
 func (s *hdwalletSigner) Address() string {
 	return s.address.String()
 }

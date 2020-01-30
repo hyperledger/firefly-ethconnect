@@ -11,6 +11,10 @@ type mockTXSigner struct {
 	signErr    error
 }
 
+func (s *mockTXSigner) Type() string {
+	return "mock signer"
+}
+
 func (s *mockTXSigner) Address() string {
 	return s.from
 }

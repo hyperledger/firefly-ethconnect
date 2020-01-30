@@ -20,7 +20,6 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
-	"time"
 
 	"gopkg.in/yaml.v2"
 
@@ -30,6 +29,7 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
 
 // ServerConfig is the parent YAML structure that configures ethconnect
@@ -43,10 +43,11 @@ type ServerConfig struct {
 }
 
 func initLogging(debugLevel int) {
-	log.SetFormatter(&log.TextFormatter{
-		FullTimestamp:   true,
-		TimestampFormat: time.RFC3339,
+	log.SetFormatter(&prefixed.TextFormatter{
+		TimestampFormat: "2006-01-02T15:04:05.000Z07:00",
 		DisableSorting:  true,
+		ForceFormatting: true,
+		FullTimestamp:   true,
 	})
 	switch debugLevel {
 	case 0:

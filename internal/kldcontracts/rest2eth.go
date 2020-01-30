@@ -34,6 +34,7 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldevents"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+	"github.com/kaleido-io/ethconnect/internal/kldtx"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
 )
@@ -85,7 +86,6 @@ type rest2EthSyncResponder struct {
 }
 
 var addrCheck = regexp.MustCompile("^(0x)?[0-9a-z]{40}$")
-var hdWalletCheck = regexp.MustCompile("(?i)^HD-([0-9a-z]+)(-\\d+)?$")
 
 func (i *rest2EthSyncResponder) ReplyWithError(err error) {
 	i.r.restErrReply(i.res, i.req, err, 500)
@@ -306,7 +306,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 	if fromNo0xPrefix != "" {
 		if addrCheck.MatchString(fromNo0xPrefix) {
 			c.from = "0x" + fromNo0xPrefix
-		} else if hdWalletCheck.MatchString(fromNo0xPrefix) {
+		} else if kldtx.IsHDWalletRequest(fromNo0xPrefix) != nil {
 			c.from = fromNo0xPrefix
 		} else {
 			log.Errorf("Invalid from address: '%s'", kldFrom)
@@ -536,7 +536,7 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 }
 
 func (r *rest2eth) callContract(res http.ResponseWriter, req *http.Request, from, addr string, value json.Number, abiMethod *abi.Method, msgParams []interface{}) {
-	resBody, err := kldeth.CallMethod(req.Context(), r.rpc, from, addr, value, abiMethod, msgParams)
+	resBody, err := kldeth.CallMethod(req.Context(), r.rpc, nil, from, addr, value, abiMethod, msgParams)
 	if err != nil {
 		r.restErrReply(res, req, err, 500)
 		return

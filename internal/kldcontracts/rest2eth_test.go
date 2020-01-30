@@ -269,7 +269,7 @@ func TestDeployContractAsyncHDWallet(t *testing.T) {
 	bodyMap := make(map[string]interface{})
 	bodyMap["i"] = 12345
 	bodyMap["s"] = "testing"
-	from := "HD-u01234abcd"
+	from := "HD-u01234abcd-u01234abcd-12345"
 	dispatcher := &mockREST2EthDispatcher{
 		asyncDispatchReply: &kldmessages.AsyncSentMsg{
 			Sent:    true,

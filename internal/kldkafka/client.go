@@ -208,5 +208,8 @@ func (h *saramaKafkaConsumerGroupHandler) Errors() <-chan error {
 }
 
 func (h *saramaKafkaConsumerGroupHandler) MarkOffset(msg *sarama.ConsumerMessage, metadata string) {
-	h.session.MarkMessage(msg, metadata)
+	session := h.session
+	if session != nil {
+		session.MarkMessage(msg, metadata)
+	}
 }

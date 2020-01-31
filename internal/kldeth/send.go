@@ -132,7 +132,7 @@ func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	tx.Hash, err = tx.sendUnsignedTxn(ctx, rpc, txArgs)
+	tx.Hash, err = tx.submitTXtoNode(ctx, rpc, txArgs)
 
 	callTime := time.Now().UTC().Sub(start)
 	if err != nil {
@@ -160,8 +160,10 @@ type SendTXArgs struct {
 	Restriction    string   `json:"restriction,omitempty"`
 }
 
-// sendUnsignedTxn sends a transaction for internal signing by the node
-func (tx *Txn) sendUnsignedTxn(ctx context.Context, rpc RPCClient, txArgs *SendTXArgs) (string, error) {
+// submitTXtoNode sends a transaction
+// - If no signer interface: For internal signing by the node
+// - If a signer interface is present: Pre-signed by this process
+func (tx *Txn) submitTXtoNode(ctx context.Context, rpc RPCClient, txArgs *SendTXArgs) (string, error) {
 	var nonce *hexutil.Uint64
 	if !tx.NodeAssignNonce {
 		hexNonce := hexutil.Uint64(tx.EthTX.Nonce())

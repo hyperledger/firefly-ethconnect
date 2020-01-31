@@ -44,6 +44,7 @@ type eventData struct {
 	TransactionHash  string                 `json:"transactionHash"`
 	Data             map[string]interface{} `json:"data"`
 	SubID            string                 `json:"subId"`
+	Signature        string                 `json:"signature"`
 	// Used for callback handling
 	batchComplete func(*eventData)
 }
@@ -104,6 +105,7 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry) (err er
 		BlockNumber:      entry.BlockNumber.ToInt().String(),
 		TransactionIndex: entry.TransactionIndex.String(),
 		TransactionHash:  entry.TransactionHash.String(),
+		Signature:        lp.event.Sig(),
 		Data:             make(map[string]interface{}),
 		SubID:            lp.subID,
 		batchComplete:    lp.batchComplete,

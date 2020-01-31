@@ -44,6 +44,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ethereum/go-ethereum/common/compiler"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldevents"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
@@ -89,6 +90,18 @@ func CobraInitContractGateway(cmd *cobra.Command, conf *SmartContractGatewayConf
 	kldevents.CobraInitSubscriptionManager(cmd, &conf.SubscriptionManagerConf)
 }
 
+func (g *smartContractGW) withEventsAuth(handler httprouter.Handle) httprouter.Handle {
+	return func(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+		err := kldauth.AuthEventStreams(req.Context())
+		if err != nil {
+			log.Errorf("Unauthorized: %s", err)
+			g.gatewayErrReply(res, req, fmt.Errorf("Unauthorized"), 401)
+			return
+		}
+		handler(res, req, params)
+	}
+}
+
 func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	g.r2e.addRoutes(router)
 	router.GET("/contracts", g.listContractsOrABIs)
@@ -101,15 +114,15 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	router.GET("/i/:instance_lookup", g.getRemoteRegistrySwaggerOrABI)
 	router.GET("/gateways/:gateway_lookup", g.getRemoteRegistrySwaggerOrABI)
 	router.GET("/g/:gateway_lookup", g.getRemoteRegistrySwaggerOrABI)
-	router.POST(kldevents.StreamPathPrefix, g.createStream)
-	router.GET(kldevents.StreamPathPrefix, g.listStreamsOrSubs)
-	router.GET(kldevents.SubPathPrefix, g.listStreamsOrSubs)
-	router.GET(kldevents.StreamPathPrefix+"/:id", g.getStreamOrSub)
-	router.GET(kldevents.SubPathPrefix+"/:id", g.getStreamOrSub)
-	router.DELETE(kldevents.StreamPathPrefix+"/:id", g.deleteStreamOrSub)
-	router.DELETE(kldevents.SubPathPrefix+"/:id", g.deleteStreamOrSub)
-	router.POST(kldevents.StreamPathPrefix+"/:id/suspend", g.suspendOrResumeStream)
-	router.POST(kldevents.StreamPathPrefix+"/:id/resume", g.suspendOrResumeStream)
+	router.POST(kldevents.StreamPathPrefix, g.withEventsAuth(g.createStream))
+	router.GET(kldevents.StreamPathPrefix, g.withEventsAuth(g.listStreamsOrSubs))
+	router.GET(kldevents.SubPathPrefix, g.withEventsAuth(g.listStreamsOrSubs))
+	router.GET(kldevents.StreamPathPrefix+"/:id", g.withEventsAuth(g.getStreamOrSub))
+	router.GET(kldevents.SubPathPrefix+"/:id", g.withEventsAuth(g.getStreamOrSub))
+	router.DELETE(kldevents.StreamPathPrefix+"/:id", g.withEventsAuth(g.deleteStreamOrSub))
+	router.DELETE(kldevents.SubPathPrefix+"/:id", g.withEventsAuth(g.deleteStreamOrSub))
+	router.POST(kldevents.StreamPathPrefix+"/:id/suspend", g.withEventsAuth(g.suspendOrResumeStream))
+	router.POST(kldevents.StreamPathPrefix+"/:id/resume", g.withEventsAuth(g.suspendOrResumeStream))
 }
 
 // NewSmartContractGateway construtor
@@ -371,7 +384,7 @@ func (g *smartContractGW) PreDeploy(msg *kldmessages.DeployContract) (err error)
 			return err
 		}
 	}
-	if !isRemote(msg.Headers) {
+	if !isRemote(msg.Headers.CommonHeaders) {
 		_, err = g.storeDeployableABI(msg, compiled)
 	}
 	return err
@@ -625,7 +638,7 @@ func (g *smartContractGW) createStream(res http.ResponseWriter, req *http.Reques
 		return
 	}
 
-	newSpec, err := g.sm.AddStream(&spec)
+	newSpec, err := g.sm.AddStream(req.Context(), &spec)
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 400)
 		return
@@ -651,13 +664,13 @@ func (g *smartContractGW) listStreamsOrSubs(res http.ResponseWriter, req *http.R
 
 	var results []kldmessages.TimeSortable
 	if strings.HasPrefix(req.URL.Path, kldevents.SubPathPrefix) {
-		subs := g.sm.Subscriptions()
+		subs := g.sm.Subscriptions(req.Context())
 		results = make([]kldmessages.TimeSortable, len(subs))
 		for i := range subs {
 			results[i] = subs[i]
 		}
 	} else {
-		streams := g.sm.Streams()
+		streams := g.sm.Streams(req.Context())
 		results = make([]kldmessages.TimeSortable, len(streams))
 		for i := range streams {
 			results[i] = streams[i]
@@ -690,9 +703,9 @@ func (g *smartContractGW) getStreamOrSub(res http.ResponseWriter, req *http.Requ
 	var retval interface{}
 	var err error
 	if strings.HasPrefix(req.URL.Path, kldevents.SubPathPrefix) {
-		retval, err = g.sm.SubscriptionByID(params.ByName("id"))
+		retval, err = g.sm.SubscriptionByID(req.Context(), params.ByName("id"))
 	} else {
-		retval, err = g.sm.StreamByID(params.ByName("id"))
+		retval, err = g.sm.StreamByID(req.Context(), params.ByName("id"))
 	}
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 404)
@@ -719,9 +732,9 @@ func (g *smartContractGW) deleteStreamOrSub(res http.ResponseWriter, req *http.R
 
 	var err error
 	if strings.HasPrefix(req.URL.Path, kldevents.SubPathPrefix) {
-		err = g.sm.DeleteSubscription(params.ByName("id"))
+		err = g.sm.DeleteSubscription(req.Context(), params.ByName("id"))
 	} else {
-		err = g.sm.DeleteStream(params.ByName("id"))
+		err = g.sm.DeleteStream(req.Context(), params.ByName("id"))
 	}
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 500)
@@ -745,9 +758,9 @@ func (g *smartContractGW) suspendOrResumeStream(res http.ResponseWriter, req *ht
 
 	var err error
 	if strings.HasSuffix(req.URL.Path, "resume") {
-		err = g.sm.ResumeStream(params.ByName("id"))
+		err = g.sm.ResumeStream(req.Context(), params.ByName("id"))
 	} else {
-		err = g.sm.SuspendStream(params.ByName("id"))
+		err = g.sm.SuspendStream(req.Context(), params.ByName("id"))
 	}
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 500)

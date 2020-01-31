@@ -14,10 +14,16 @@
 
 package kldtx
 
-import "github.com/kaleido-io/ethconnect/internal/kldmessages"
+import (
+	"context"
+
+	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+)
 
 // TxnContext is passed for each message that arrives at the bridge
 type TxnContext interface {
+	// Return the Go context
+	Context() context.Context
 	// Get the headers of the message
 	Headers() *kldmessages.CommonHeaders
 	// Unmarshal the supplied message into a give type

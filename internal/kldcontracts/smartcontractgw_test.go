@@ -21,11 +21,15 @@ import (
 	"fmt"
 	"io/ioutil"
 	"mime/multipart"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path"
 	"testing"
 	"time"
+
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
+	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-openapi/spec"
@@ -1836,4 +1840,35 @@ func TestCheckNameAvailableRRFail(t *testing.T) {
 
 	err := s.checkNameAvailable("lobster", true)
 	assert.EqualError(err, "pop")
+}
+
+func TestWithEventsAuthRequiresAuth(t *testing.T) {
+	assert := assert.New(t)
+
+	kldauth.RegisterSecurityModule(&kldauthtest.TestSecurityModule{})
+
+	scgw, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			BaseURL: "http://localhost/api/v1",
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
+		nil, nil, nil,
+	)
+
+	router := &httprouter.Router{}
+
+	router.GET("/", scgw.(*smartContractGW).withEventsAuth(
+		func(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+			res.WriteHeader(200)
+		}))
+
+	req := httptest.NewRequest("GET", "/", bytes.NewReader([]byte{}))
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+
+	assert.Equal(res.Code, 401)
+
+	kldauth.RegisterSecurityModule(nil)
 }

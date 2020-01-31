@@ -15,6 +15,7 @@
 package kldevents
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -45,16 +46,16 @@ const (
 // SubscriptionManager provides REST APIs for managing events
 type SubscriptionManager interface {
 	Init() error
-	AddStream(spec *StreamInfo) (*StreamInfo, error)
-	Streams() []*StreamInfo
-	StreamByID(id string) (*StreamInfo, error)
-	SuspendStream(id string) error
-	ResumeStream(id string) error
-	DeleteStream(id string) error
-	AddSubscription(addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock string) (*SubscriptionInfo, error)
-	Subscriptions() []*SubscriptionInfo
-	SubscriptionByID(id string) (*SubscriptionInfo, error)
-	DeleteSubscription(id string) error
+	AddStream(ctx context.Context, spec *StreamInfo) (*StreamInfo, error)
+	Streams(ctx context.Context) []*StreamInfo
+	StreamByID(ctx context.Context, id string) (*StreamInfo, error)
+	SuspendStream(ctx context.Context, id string) error
+	ResumeStream(ctx context.Context, id string) error
+	DeleteStream(ctx context.Context, id string) error
+	AddSubscription(ctx context.Context, addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock string) (*SubscriptionInfo, error)
+	Subscriptions(ctx context.Context) []*SubscriptionInfo
+	SubscriptionByID(ctx context.Context, id string) (*SubscriptionInfo, error)
+	DeleteSubscription(ctx context.Context, id string) error
 	Close()
 }
 
@@ -106,7 +107,7 @@ func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc kldeth.RPCClient)
 }
 
 // SubscriptionByID used externally to get serializable details
-func (s *subscriptionMGR) SubscriptionByID(id string) (*SubscriptionInfo, error) {
+func (s *subscriptionMGR) SubscriptionByID(ctx context.Context, id string) (*SubscriptionInfo, error) {
 	sub, err := s.subscriptionByID(id)
 	if err != nil {
 		return nil, err
@@ -115,7 +116,7 @@ func (s *subscriptionMGR) SubscriptionByID(id string) (*SubscriptionInfo, error)
 }
 
 // Subscriptions used externally to get list subscriptions
-func (s *subscriptionMGR) Subscriptions() []*SubscriptionInfo {
+func (s *subscriptionMGR) Subscriptions(ctx context.Context) []*SubscriptionInfo {
 	l := make([]*SubscriptionInfo, 0, len(s.subscriptions))
 	for _, sub := range s.subscriptions {
 		l = append(l, sub.info)
@@ -124,7 +125,7 @@ func (s *subscriptionMGR) Subscriptions() []*SubscriptionInfo {
 }
 
 // AddSubscription adds a new subscription
-func (s *subscriptionMGR) AddSubscription(addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock string) (*SubscriptionInfo, error) {
+func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock string) (*SubscriptionInfo, error) {
 	i := &SubscriptionInfo{
 		TimeSorted: kldmessages.TimeSorted{
 			CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
@@ -158,17 +159,17 @@ func (s *subscriptionMGR) config() *SubscriptionManagerConf {
 }
 
 // DeleteSubscription deletes a streamm
-func (s *subscriptionMGR) DeleteSubscription(id string) error {
+func (s *subscriptionMGR) DeleteSubscription(ctx context.Context, id string) error {
 	sub, err := s.subscriptionByID(id)
 	if err != nil {
 		return err
 	}
-	return s.deleteSubscription(sub)
+	return s.deleteSubscription(ctx, sub)
 }
 
-func (s *subscriptionMGR) deleteSubscription(sub *subscription) error {
+func (s *subscriptionMGR) deleteSubscription(ctx context.Context, sub *subscription) error {
 	delete(s.subscriptions, sub.info.ID)
-	sub.unsubscribe()
+	sub.unsubscribe(ctx)
 	if err := s.db.Delete(sub.info.ID); err != nil {
 		return err
 	}
@@ -184,7 +185,7 @@ func (s *subscriptionMGR) storeSubscription(info *SubscriptionInfo) (*Subscripti
 }
 
 // StreamByID used externally to get serializable details
-func (s *subscriptionMGR) StreamByID(id string) (*StreamInfo, error) {
+func (s *subscriptionMGR) StreamByID(ctx context.Context, id string) (*StreamInfo, error) {
 	stream, err := s.streamByID(id)
 	if err != nil {
 		return nil, err
@@ -193,7 +194,7 @@ func (s *subscriptionMGR) StreamByID(id string) (*StreamInfo, error) {
 }
 
 // Streams used externally to get list streams
-func (s *subscriptionMGR) Streams() []*StreamInfo {
+func (s *subscriptionMGR) Streams(ctx context.Context) []*StreamInfo {
 	l := make([]*StreamInfo, 0, len(s.subscriptions))
 	for _, stream := range s.streams {
 		l = append(l, stream.spec)
@@ -202,7 +203,7 @@ func (s *subscriptionMGR) Streams() []*StreamInfo {
 }
 
 // AddStream adds a new stream
-func (s *subscriptionMGR) AddStream(spec *StreamInfo) (*StreamInfo, error) {
+func (s *subscriptionMGR) AddStream(ctx context.Context, spec *StreamInfo) (*StreamInfo, error) {
 	spec.ID = streamIDPrefix + kldutils.UUIDv4()
 	spec.CreatedISO8601 = time.Now().UTC().Format(time.RFC3339)
 	spec.Path = StreamPathPrefix + "/" + spec.ID
@@ -223,7 +224,7 @@ func (s *subscriptionMGR) storeStream(spec *StreamInfo) (*StreamInfo, error) {
 }
 
 // DeleteStream deletes a streamm
-func (s *subscriptionMGR) DeleteStream(id string) error {
+func (s *subscriptionMGR) DeleteStream(ctx context.Context, id string) error {
 	stream, err := s.streamByID(id)
 	if err != nil {
 		return err
@@ -231,7 +232,7 @@ func (s *subscriptionMGR) DeleteStream(id string) error {
 	// We have to clean up all the associated subs
 	for _, sub := range s.subscriptions {
 		if sub.info.Stream == stream.spec.ID {
-			s.deleteSubscription(sub)
+			s.deleteSubscription(ctx, sub)
 		}
 	}
 	delete(s.streams, stream.spec.ID)
@@ -254,7 +255,7 @@ func (s *subscriptionMGR) subscriptionsForStream(id string) []*subscription {
 }
 
 // SuspendStream suspends a streamm from firing
-func (s *subscriptionMGR) SuspendStream(id string) error {
+func (s *subscriptionMGR) SuspendStream(ctx context.Context, id string) error {
 	stream, err := s.streamByID(id)
 	if err != nil {
 		return err
@@ -266,7 +267,7 @@ func (s *subscriptionMGR) SuspendStream(id string) error {
 }
 
 // ResumeStream restarts a suspended stream
-func (s *subscriptionMGR) ResumeStream(id string) error {
+func (s *subscriptionMGR) ResumeStream(ctx context.Context, id string) error {
 	stream, err := s.streamByID(id)
 	if err != nil {
 		return err

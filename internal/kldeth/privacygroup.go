@@ -28,8 +28,8 @@ type OrionPrivacyGroup struct {
 }
 
 // GetOrionPrivacyGroup resolves privateFrom/privateFor into a privacyGroupID
-func GetOrionPrivacyGroup(rpc RPCClient, addr *common.Address, privateFrom string, privateFor []string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func GetOrionPrivacyGroup(ctx context.Context, rpc RPCClient, addr *common.Address, privateFrom string, privateFor []string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	allMembers := []string{privateFrom}

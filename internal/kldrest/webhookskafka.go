@@ -15,6 +15,7 @@
 package kldrest
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -128,7 +129,7 @@ func (w *webhooksKafka) ProducerSuccessLoop(consumer kldkafka.KafkaConsumer, pro
 	wg.Done()
 }
 
-func (w *webhooksKafka) sendWebhookMsg(key, msgID string, msg map[string]interface{}, ack bool) (string, int, error) {
+func (w *webhooksKafka) sendWebhookMsg(ctx context.Context, key, msgID string, msg map[string]interface{}, ack bool) (string, int, error) {
 
 	// Reseialize back to JSON with the headers
 	payloadToForward, err := json.Marshal(&msg)

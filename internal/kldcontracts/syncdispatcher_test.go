@@ -15,6 +15,7 @@
 package kldcontracts
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -77,7 +78,7 @@ func TestDispatchSendTransactionSync(t *testing.T) {
 	sendTx := &kldmessages.SendTransaction{}
 	sendTx.Headers.ID = "request1"
 	r := &mockReplyProcessor{}
-	d.DispatchSendTransactionSync(sendTx, r)
+	d.DispatchSendTransactionSync(context.Background(), sendTx, r)
 
 	assert.NoError(processor.unmarshalErr)
 	assert.NotNil(r.receipt)
@@ -94,7 +95,7 @@ func TestDispatchDeployContractSync(t *testing.T) {
 	deployTx := &kldmessages.DeployContract{}
 	deployTx.Headers.ID = "request1"
 	r := &mockReplyProcessor{}
-	d.DispatchDeployContractSync(deployTx, r)
+	d.DispatchDeployContractSync(context.Background(), deployTx, r)
 
 	assert.NoError(processor.unmarshalErr)
 	assert.NotNil(r.receipt)
@@ -112,7 +113,7 @@ func TestDispatchSendTransactionBadUnmarshal(t *testing.T) {
 	sendTx := &kldmessages.SendTransaction{}
 	sendTx.Headers.ID = "request1"
 	r := &mockReplyProcessor{}
-	d.DispatchSendTransactionSync(sendTx, r)
+	d.DispatchSendTransactionSync(context.Background(), sendTx, r)
 
 	assert.EqualError(processor.unmarshalErr, "Unexpected condition (message types do not match when processing)")
 }
@@ -129,7 +130,7 @@ func TestDispatchSendTransactionError(t *testing.T) {
 	sendTx := &kldmessages.SendTransaction{}
 	sendTx.Headers.ID = "request1"
 	r := &mockReplyProcessor{}
-	d.DispatchSendTransactionSync(sendTx, r)
+	d.DispatchSendTransactionSync(context.Background(), sendTx, r)
 
 	assert.EqualError(r.err, "TX hash1: pop")
 }

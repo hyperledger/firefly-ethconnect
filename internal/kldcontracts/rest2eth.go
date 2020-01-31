@@ -15,6 +15,7 @@
 package kldcontracts
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,10 +29,12 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/julienschmidt/httprouter"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldevents"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+	"github.com/kaleido-io/ethconnect/internal/kldtx"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
 )
@@ -39,14 +42,14 @@ import (
 // REST2EthAsyncDispatcher is passed in to process messages over a streaming system with
 // a receipt store. Only used for POST methods, when kld-sync is not set to true
 type REST2EthAsyncDispatcher interface {
-	DispatchMsgAsync(msg map[string]interface{}, ack bool) (*kldmessages.AsyncSentMsg, error)
+	DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack bool) (*kldmessages.AsyncSentMsg, error)
 }
 
 // rest2EthSyncDispatcher abstracts the processing of the transactions and queries
 // synchronously. We perform those within this package.
 type rest2EthSyncDispatcher interface {
-	DispatchSendTransactionSync(msg *kldmessages.SendTransaction, replyProcessor rest2EthReplyProcessor)
-	DispatchDeployContractSync(msg *kldmessages.DeployContract, replyProcessor rest2EthReplyProcessor)
+	DispatchSendTransactionSync(ctx context.Context, msg *kldmessages.SendTransaction, replyProcessor rest2EthReplyProcessor)
+	DispatchDeployContractSync(ctx context.Context, msg *kldmessages.DeployContract, replyProcessor rest2EthReplyProcessor)
 }
 
 // rest2EthReplyProcessor interface
@@ -58,7 +61,6 @@ type rest2EthReplyProcessor interface {
 // rest2eth provides the HTTP <-> kldmessages translation and dispatches for processing
 type rest2eth struct {
 	gw              smartContractGatewayInt
-	addrCheck       *regexp.Regexp
 	rpc             kldeth.RPCClient
 	asyncDispatcher REST2EthAsyncDispatcher
 	syncDispatcher  rest2EthSyncDispatcher
@@ -82,6 +84,8 @@ type rest2EthSyncResponder struct {
 	done   bool
 	waiter *sync.Cond
 }
+
+var addrCheck = regexp.MustCompile("^(0x)?[0-9a-z]{40}$")
 
 func (i *rest2EthSyncResponder) ReplyWithError(err error) {
 	i.r.restErrReply(i.res, i.req, err, 500)
@@ -113,10 +117,8 @@ func (i *rest2EthSyncResponder) ReplyWithReceipt(receipt kldmessages.ReplyWithHe
 }
 
 func newREST2eth(gw smartContractGatewayInt, rpc kldeth.RPCClient, subMgr kldevents.SubscriptionManager, rr RemoteRegistry, asyncDispatcher REST2EthAsyncDispatcher, syncDispatcher rest2EthSyncDispatcher) *rest2eth {
-	addrCheck, _ := regexp.Compile("^(0x)?[0-9a-z]{40}$")
 	return &rest2eth{
 		gw:              gw,
-		addrCheck:       addrCheck,
 		syncDispatcher:  syncDispatcher,
 		asyncDispatcher: asyncDispatcher,
 		rpc:             rpc,
@@ -173,7 +175,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 	// Check if we have a valid address in :address (verified later if required)
 	addrParam := params.ByName("address")
 	c.addr = strings.ToLower(strings.TrimPrefix(addrParam, "0x"))
-	validAddress := r.addrCheck.MatchString(c.addr)
+	validAddress := addrCheck.MatchString(c.addr)
 
 	// There are multiple ways we resolve the path into an ABI
 	// 1. we lookup it up remotely in a REST attached contract registry (the newer option)
@@ -291,19 +293,27 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 
 	// If we have an address, it must be valid
 	if c.addr != "" && !validAddress {
-		log.Errorf("Invalid to addres: '%s' (original input = '%s')", c.addr, params.ByName("address"))
+		log.Errorf("Invalid to addres: '%s'", params.ByName("address"))
 		err = fmt.Errorf("To Address must be a 40 character hex string (0x prefix is optional)")
 		r.restErrReply(res, req, err, 404)
 		return
 	}
+	c.addr = "0x" + c.addr
 
 	// If we have a from, it needs to be a valid address
-	c.from = strings.ToLower(strings.TrimPrefix(getKLDParam("from", req, false), "0x"))
-	if c.from != "" && !r.addrCheck.MatchString(c.from) {
-		log.Errorf("Invalid from address: '%s' (original input = '%s')", c.from, req.FormValue("from"))
-		err = fmt.Errorf("From Address must be a 40 character hex string (0x prefix is optional)")
-		r.restErrReply(res, req, err, 404)
-		return
+	kldFrom := getKLDParam("from", req, false)
+	fromNo0xPrefix := strings.ToLower(strings.TrimPrefix(getKLDParam("from", req, false), "0x"))
+	if fromNo0xPrefix != "" {
+		if addrCheck.MatchString(fromNo0xPrefix) {
+			c.from = "0x" + fromNo0xPrefix
+		} else if kldtx.IsHDWalletRequest(fromNo0xPrefix) != nil {
+			c.from = fromNo0xPrefix
+		} else {
+			log.Errorf("Invalid from address: '%s'", kldFrom)
+			err = fmt.Errorf("From Address must be a 40 character hex string (0x prefix is optional)")
+			r.restErrReply(res, req, err, 404)
+			return
+		}
 	}
 	c.value = json.Number(getKLDParam("ethvalue", req, false))
 
@@ -371,6 +381,14 @@ func (r *rest2eth) fromBodyOrForm(req *http.Request, body map[string]interface{}
 }
 
 func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, addrStr string, abiEvent *abi.Event, body map[string]interface{}) {
+
+	err := kldauth.AuthEventStreams(req.Context())
+	if err != nil {
+		log.Errorf("Unauthorized: %s", err)
+		r.restErrReply(res, req, fmt.Errorf("Unauthorized"), 401)
+		return
+	}
+
 	if r.subMgr == nil {
 		r.restErrReply(res, req, errors.New(errEventSupportMissing), 405)
 		return
@@ -383,10 +401,10 @@ func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, ad
 	fromBlock := r.fromBodyOrForm(req, body, "fromBlock")
 	var addr *common.Address
 	if addrStr != "" {
-		address := common.HexToAddress("0x" + addrStr)
+		address := common.HexToAddress(addrStr)
 		addr = &address
 	}
-	sub, err := r.subMgr.AddSubscription(addr, abiEvent, streamID, fromBlock)
+	sub, err := r.subMgr.AddSubscription(req.Context(), addr, abiEvent, streamID, fromBlock)
 	if err != nil {
 		r.restErrReply(res, req, err, 400)
 		return
@@ -425,7 +443,7 @@ func (r *rest2eth) addPrivateTx(msg *kldmessages.TransactionCommon, req *http.Re
 func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, from string, value json.Number, abiMethod *abi.Method, deployMsg *kldmessages.DeployContract, msgParams []interface{}) {
 
 	deployMsg.Headers.MsgType = kldmessages.MsgTypeDeployContract
-	deployMsg.From = "0x" + from
+	deployMsg.From = from
 	deployMsg.Gas = json.Number(getKLDParam("gas", req, false))
 	deployMsg.GasPrice = json.Number(getKLDParam("gasprice", req, false))
 	deployMsg.Value = value
@@ -436,7 +454,7 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 	}
 	deployMsg.RegisterAs = getKLDParam("register", req, false)
 	if deployMsg.RegisterAs != "" {
-		if err := r.gw.checkNameAvailable(deployMsg.RegisterAs, isRemote(deployMsg.Headers)); err != nil {
+		if err := r.gw.checkNameAvailable(deployMsg.RegisterAs, isRemote(deployMsg.Headers.CommonHeaders)); err != nil {
 			r.restErrReply(res, req, err, 409)
 			return
 		}
@@ -449,7 +467,7 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 			done:   false,
 			waiter: sync.NewCond(&sync.Mutex{}),
 		}
-		r.syncDispatcher.DispatchDeployContractSync(deployMsg, responder)
+		r.syncDispatcher.DispatchDeployContractSync(req.Context(), deployMsg, responder)
 		responder.waiter.L.Lock()
 		for !responder.done {
 			responder.waiter.Wait()
@@ -462,7 +480,7 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 		msgBytes, _ := json.Marshal(deployMsg)
 		var mapMsg map[string]interface{}
 		json.Unmarshal(msgBytes, &mapMsg)
-		if asyncResponse, err := r.asyncDispatcher.DispatchMsgAsync(mapMsg, ack); err != nil {
+		if asyncResponse, err := r.asyncDispatcher.DispatchMsgAsync(req.Context(), mapMsg, ack); err != nil {
 			r.restErrReply(res, req, err, 500)
 		} else {
 			r.restAsyncReply(res, req, asyncResponse)
@@ -476,8 +494,8 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 	msg := &kldmessages.SendTransaction{}
 	msg.Headers.MsgType = kldmessages.MsgTypeSendTransaction
 	msg.MethodName = abiMethod.Name
-	msg.To = "0x" + addr
-	msg.From = "0x" + from
+	msg.To = addr
+	msg.From = from
 	msg.Gas = json.Number(getKLDParam("gas", req, false))
 	msg.GasPrice = json.Number(getKLDParam("gasprice", req, false))
 	msg.Value = value
@@ -495,7 +513,7 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 			done:   false,
 			waiter: sync.NewCond(&sync.Mutex{}),
 		}
-		r.syncDispatcher.DispatchSendTransactionSync(msg, responder)
+		r.syncDispatcher.DispatchSendTransactionSync(req.Context(), msg, responder)
 		responder.waiter.L.Lock()
 		for !responder.done {
 			responder.waiter.Wait()
@@ -508,7 +526,7 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 		msgBytes, _ := json.Marshal(msg)
 		var mapMsg map[string]interface{}
 		json.Unmarshal(msgBytes, &mapMsg)
-		if asyncResponse, err := r.asyncDispatcher.DispatchMsgAsync(mapMsg, ack); err != nil {
+		if asyncResponse, err := r.asyncDispatcher.DispatchMsgAsync(req.Context(), mapMsg, ack); err != nil {
 			r.restErrReply(res, req, err, 500)
 		} else {
 			r.restAsyncReply(res, req, asyncResponse)
@@ -518,7 +536,7 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 }
 
 func (r *rest2eth) callContract(res http.ResponseWriter, req *http.Request, from, addr string, value json.Number, abiMethod *abi.Method, msgParams []interface{}) {
-	resBody, err := kldeth.CallMethod(r.rpc, from, addr, value, abiMethod, msgParams)
+	resBody, err := kldeth.CallMethod(req.Context(), r.rpc, nil, from, addr, value, abiMethod, msgParams)
 	if err != nil {
 		r.restErrReply(res, req, err, 500)
 		return

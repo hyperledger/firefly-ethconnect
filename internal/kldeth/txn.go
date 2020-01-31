@@ -15,6 +15,7 @@
 package kldeth
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -46,6 +47,7 @@ type Txn struct {
 	PrivateFrom      string
 	PrivateFor       []string
 	PrivacyGroupID   string
+	Signer           TXSigner
 }
 
 // TxnReceipt is the receipt obtained over JSON/RPC from the ethereum client
@@ -64,9 +66,9 @@ type TxnReceipt struct {
 
 // NewContractDeployTxn builds a new ethereum transaction from the supplied
 // SendTranasction message
-func NewContractDeployTxn(msg *kldmessages.DeployContract) (tx *Txn, err error) {
+func NewContractDeployTxn(msg *kldmessages.DeployContract, signer TXSigner) (tx *Txn, err error) {
 
-	tx = &Txn{}
+	tx = &Txn{Signer: signer}
 
 	var compiled *CompiledSolidity
 
@@ -101,8 +103,13 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract) (tx *Txn, err error) 
 	// Join the EVM bytecode with the packed call
 	data := append(compiled.Compiled, packedCall...)
 
+	from := msg.From
+	if tx.Signer != nil {
+		from = tx.Signer.Address()
+	}
+
 	// Generate the ethereum transaction
-	if err = tx.genEthTransaction(msg.From, "", msg.Nonce, msg.Value, msg.Gas, msg.GasPrice, data); err != nil {
+	if err = tx.genEthTransaction(from, "", msg.Nonce, msg.Value, msg.Gas, msg.GasPrice, data); err != nil {
 		return
 	}
 
@@ -114,13 +121,13 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract) (tx *Txn, err error) 
 }
 
 // CallMethod performs eth_call to return data from the chain
-func CallMethod(rpc RPCClient, from, addr string, value json.Number, methodABI *abi.Method, msgParams []interface{}) (map[string]interface{}, error) {
+func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr string, value json.Number, methodABI *abi.Method, msgParams []interface{}) (map[string]interface{}, error) {
 	log.Debugf("Calling method: %+v %+v", methodABI, msgParams)
-	tx, err := buildTX(from, addr, "", value, "", "", methodABI, msgParams)
+	tx, err := buildTX(signer, from, addr, "", value, "", "", methodABI, msgParams)
 	if err != nil {
 		return nil, err
 	}
-	retBytes, err := tx.Call(rpc)
+	retBytes, err := tx.Call(ctx, rpc)
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +257,7 @@ func mapOutput(argName, argType string, t *abi.Type, rawValue interface{}) (inte
 
 // NewSendTxn builds a new ethereum transactio`n from the supplied
 // SendTranasction message
-func NewSendTxn(msg *kldmessages.SendTransaction) (tx *Txn, err error) {
+func NewSendTxn(msg *kldmessages.SendTransaction, signer TXSigner) (tx *Txn, err error) {
 
 	var methodABI *abi.Method
 	if msg.Method == nil || msg.Method.Name == "" {
@@ -270,7 +277,7 @@ func NewSendTxn(msg *kldmessages.SendTransaction) (tx *Txn, err error) {
 		}
 	}
 
-	if tx, err = buildTX(msg.From, msg.To, msg.Nonce, msg.Value, msg.Gas, msg.GasPrice, methodABI, msg.Parameters); err != nil {
+	if tx, err = buildTX(signer, msg.From, msg.To, msg.Nonce, msg.Value, msg.Gas, msg.GasPrice, methodABI, msg.Parameters); err != nil {
 		return
 	}
 
@@ -280,8 +287,8 @@ func NewSendTxn(msg *kldmessages.SendTransaction) (tx *Txn, err error) {
 	return
 }
 
-func buildTX(msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json.Number, methodABI *abi.Method, params []interface{}) (tx *Txn, err error) {
-	tx = &Txn{}
+func buildTX(signer TXSigner, msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json.Number, methodABI *abi.Method, params []interface{}) (tx *Txn, err error) {
+	tx = &Txn{Signer: signer}
 
 	// Build correctly typed args for the ethereum call
 	typedArgs, err := tx.generateTypedArgs(params, methodABI)
@@ -300,8 +307,13 @@ func buildTX(msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json
 	log.Infof("Method Name=%s ID=%x PackedArgs=%x", methodABI.RawName, methodID, packedArgs)
 	packedCall := append(methodID, packedArgs...)
 
+	from := msgFrom
+	if tx.Signer != nil {
+		from = signer.Address()
+	}
+
 	// Generate the ethereum transaction
-	err = tx.genEthTransaction(msgFrom, msgTo, msgNonce, msgValue, msgGas, msgGasPrice, packedCall)
+	err = tx.genEthTransaction(from, msgTo, msgNonce, msgValue, msgGas, msgGasPrice, packedCall)
 	return
 }
 
@@ -313,7 +325,7 @@ func genMethodABI(jsonABI *kldmessages.ABIMethod) (method *abi.Method, err error
 		jsonInput := jsonABI.Inputs[i]
 		var arg abi.Argument
 		arg.Name = jsonInput.Name
-		if arg.Type, err = abi.NewType(jsonInput.Type, []abi.ArgumentMarshaling{}); err != nil {
+		if arg.Type, err = abi.NewType(jsonInput.Type, "", []abi.ArgumentMarshaling{}); err != nil {
 			err = fmt.Errorf("ABI input %d: Unable to map %s to etherueum type: %s", i, jsonInput.Name, err)
 			return
 		}
@@ -323,7 +335,7 @@ func genMethodABI(jsonABI *kldmessages.ABIMethod) (method *abi.Method, err error
 		jsonOutput := jsonABI.Outputs[i]
 		var arg abi.Argument
 		arg.Name = jsonOutput.Name
-		if arg.Type, err = abi.NewType(jsonOutput.Type, []abi.ArgumentMarshaling{}); err != nil {
+		if arg.Type, err = abi.NewType(jsonOutput.Type, "", []abi.ArgumentMarshaling{}); err != nil {
 			err = fmt.Errorf("ABI output %d: Unable to map %s to etherueum type: %s", i, jsonOutput.Name, err)
 			return
 		}
@@ -628,7 +640,7 @@ func (tx *Txn) flattenParams(origParams []interface{}, method *abi.Method) (para
 			params[i] = value
 			// Set the type
 			var ethType abi.Type
-			if ethType, err = abi.NewType(typeStr.(string), []abi.ArgumentMarshaling{}); err != nil {
+			if ethType, err = abi.NewType(typeStr.(string), "", []abi.ArgumentMarshaling{}); err != nil {
 				err = fmt.Errorf("Param %d: Unable to map %s to etherueum type: %s", i, typeStr, err)
 				return
 			}

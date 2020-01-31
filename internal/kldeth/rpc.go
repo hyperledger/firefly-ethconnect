@@ -21,6 +21,7 @@ import (
 	"os"
 
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -91,10 +92,18 @@ func (sw *subWrapper) Unsubscribe() {
 }
 
 func (w *rpcWrapper) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
+	if err := kldauth.AuthRPC(ctx, method, args); err != nil {
+		log.Errorf("JSON/RPC %s - not authorized: %s", method, err)
+		return fmt.Errorf("Unauthorized")
+	}
 	return w.rpc.CallContext(ctx, result, method, args...)
 }
 
 func (w *rpcWrapper) Subscribe(ctx context.Context, namespace string, channel interface{}, args ...interface{}) (RPCClientSubscription, error) {
+	if err := kldauth.AuthRPCSubscribe(ctx, namespace, channel, args); err != nil {
+		log.Errorf("JSON/RPC Subscribe - not authorized: %s", err)
+		return nil, fmt.Errorf("Unauthorized")
+	}
 	tSub, err := w.rpc.Subscribe(ctx, namespace, channel, args...)
 	return &subWrapper{s: tSub}, err
 }

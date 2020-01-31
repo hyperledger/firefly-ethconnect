@@ -23,6 +23,8 @@ import (
 	"testing"
 
 	"github.com/Shopify/sarama"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
+	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldtx"
@@ -208,11 +210,13 @@ func setupMocks() (*KafkaBridge, *testKafkaMsgProcessor, *MockKafkaConsumer, *Mo
 
 func TestSingleMessageWithReply(t *testing.T) {
 	assert := assert.New(t)
+	kldauth.RegisterSecurityModule(&kldauthtest.TestSecurityModule{})
 
 	_, processor, mockConsumer, mockProducer, wg := setupMocks()
 
 	// Send a minimal test message
 	msg1 := kldmessages.RequestCommon{}
+	msg1.Headers.AccessToken = "testat"
 	msg1.Headers.MsgType = "TestSingleMessageWithReply"
 	msg1Ctx := map[string]interface{}{
 		"some": "data",
@@ -231,6 +235,8 @@ func TestSingleMessageWithReply(t *testing.T) {
 
 	// Get the message via the processor
 	msgContext1 := <-processor.messages
+	assert.Equal("testat", kldauth.GetAccessToken(msgContext1.Context()))
+	assert.Equal("verified", kldauth.GetAuthContext(msgContext1.Context()))
 	assert.NotEmpty(msgContext1.Headers().ID) // Generated one as not supplied
 	assert.Equal(msg1.Headers.MsgType, msgContext1.Headers().MsgType)
 	assert.Equal("data", msgContext1.Headers().Context["some"])
@@ -238,6 +244,14 @@ func TestSingleMessageWithReply(t *testing.T) {
 	var msgUnmarshaled kldmessages.RequestCommon
 	msgContext1.Unmarshal(&msgUnmarshaled)
 	assert.Equal(msg1.Headers.MsgType, msgUnmarshaled.Headers.MsgType)
+
+	// Send a duplicate
+	mockConsumer.MockMessages <- &sarama.ConsumerMessage{
+		Topic:     "in-topic",
+		Partition: 5,
+		Offset:    500,
+		Value:     msg1bytes,
+	}
 
 	// Send the reply in a go routine
 	go func() {
@@ -270,6 +284,46 @@ func TestSingleMessageWithReply(t *testing.T) {
 	mockProducer.AsyncClose()
 	mockConsumer.Close()
 	wg.Wait()
+
+	kldauth.RegisterSecurityModule(nil)
+}
+
+func TestSingleMessageWithNotAuthorizedReply(t *testing.T) {
+	assert := assert.New(t)
+	kldauth.RegisterSecurityModule(&kldauthtest.TestSecurityModule{})
+
+	_, _, mockConsumer, mockProducer, wg := setupMocks()
+
+	// Send a minimal test message
+	msg1 := kldmessages.RequestCommon{}
+	msg1.Headers.MsgType = "TestSingleMessageWithErrorReply"
+	msg1.Headers.Account = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg1bytes, err := json.Marshal(&msg1)
+	log.Infof("Sent message: %s", string(msg1bytes))
+	mockConsumer.MockMessages <- &sarama.ConsumerMessage{Value: msg1bytes}
+
+	// Check the reply is sent correctly to Kafka
+	replyKafkaMsg := <-mockProducer.MockInput
+	mockProducer.MockSuccesses <- replyKafkaMsg
+	replyBytes, err := replyKafkaMsg.Value.Encode()
+	if err != nil {
+		assert.Fail("Could not get bytes from reply: %s", err)
+		return
+	}
+	var errorReply kldmessages.ErrorReply
+	err = json.Unmarshal(replyBytes, &errorReply)
+	if err != nil {
+		assert.Fail("Could not unmarshal reply: %s", err)
+		return
+	}
+	assert.Equal("Unauthorized", errorReply.ErrorMessage)
+
+	// Shut down
+	mockProducer.AsyncClose()
+	mockConsumer.Close()
+	wg.Wait()
+
+	kldauth.RegisterSecurityModule(nil)
 }
 
 func TestSingleMessageWithErrorReply(t *testing.T) {

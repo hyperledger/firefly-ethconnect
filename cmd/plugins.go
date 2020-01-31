@@ -25,7 +25,7 @@ import (
 
 // PluginConfig is the JSON configuration for loading plugins
 type PluginConfig struct {
-	SecurityModulePlugin string `json:"secuirtyModule"`
+	SecurityModulePlugin string `json:"securityModule"`
 }
 
 func loadPlugins(conf *PluginConfig) error {

@@ -32,7 +32,7 @@ import (
 
 type mockReceiptErrs struct{ err error }
 
-func (m *mockReceiptErrs) GetReceipts(skip, limit int, ids []string) (*[]map[string]interface{}, error) {
+func (m *mockReceiptErrs) GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to string) (*[]map[string]interface{}, error) {
 	return nil, m.err
 }
 
@@ -411,6 +411,57 @@ func TestGetRepliesCustomSkipLimit(t *testing.T) {
 	for i := 0; i < 15; i++ {
 		assert.Equal(fmt.Sprintf("reply%d", 15-i-1), respArr[i]["_id"])
 	}
+}
+
+func TestGetRepliesCustomFiltersISO(t *testing.T) {
+	assert := assert.New(t)
+	_, p, ts := newReceiptsTestServer()
+	defer ts.Close()
+
+	for i := 0; i < 20; i++ {
+		fakeReply := make(map[string]interface{})
+		fakeReply["_id"] = fmt.Sprintf("reply%d", i)
+		p.AddReceipt(&fakeReply)
+	}
+
+	status, resObj, httpErr := testGETObject(ts, "/replies?from=abc&to=bcd&since=2019-01-01T00:00:00Z")
+	assert.NoError(httpErr)
+	assert.Equal(500, status)
+	assert.Equal("Error querying replies: Memory receipts do not support filtering", resObj["error"])
+}
+
+func TestGetRepliesCustomFiltersTS(t *testing.T) {
+	assert := assert.New(t)
+	_, p, ts := newReceiptsTestServer()
+	defer ts.Close()
+
+	for i := 0; i < 20; i++ {
+		fakeReply := make(map[string]interface{})
+		fakeReply["_id"] = fmt.Sprintf("reply%d", i)
+		p.AddReceipt(&fakeReply)
+	}
+
+	status, resObj, httpErr := testGETObject(ts, "/replies?from=abc&to=bcd&since=1580435959")
+	assert.NoError(httpErr)
+	assert.Equal(500, status)
+	assert.Equal("Error querying replies: Memory receipts do not support filtering", resObj["error"])
+}
+
+func TestGetRepliesBadSinceTS(t *testing.T) {
+	assert := assert.New(t)
+	_, p, ts := newReceiptsTestServer()
+	defer ts.Close()
+
+	for i := 0; i < 20; i++ {
+		fakeReply := make(map[string]interface{})
+		fakeReply["_id"] = fmt.Sprintf("reply%d", i)
+		p.AddReceipt(&fakeReply)
+	}
+
+	status, resObj, httpErr := testGETObject(ts, "/replies?from=abc&to=bcd&since=badness")
+	assert.NoError(httpErr)
+	assert.Equal(400, status)
+	assert.Equal("since cannot be parsed as RFC3339 or millisecond timestamp", resObj["error"])
 }
 
 func TestGetRepliesInvalidLimit(t *testing.T) {

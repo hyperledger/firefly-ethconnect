@@ -38,7 +38,7 @@ var uuidCharsVerifier, _ = regexp.Compile("^[0-9a-zA-Z-]+$")
 
 // ReceiptStorePersistence interface implemented by persistence layers
 type ReceiptStorePersistence interface {
-	GetReceipts(skip, limit int, ids []string) (*[]map[string]interface{}, error)
+	GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to string) (*[]map[string]interface{}, error)
 	GetReceipt(requestID string) (*map[string]interface{}, error)
 	AddReceipt(receipt *map[string]interface{}) error
 }
@@ -193,8 +193,25 @@ func (r *receiptStore) getReplies(res http.ResponseWriter, req *http.Request, pa
 		}
 	}
 
+	// Verify since - if specified
+	var sinceEpochMS int64
+	since := req.FormValue("since")
+	if since != "" {
+		if isoTime, err := time.Parse(time.RFC3339Nano, since); err == nil {
+			sinceEpochMS = isoTime.UnixNano() / int64(time.Millisecond)
+		} else {
+			if sinceEpochMS, err = strconv.ParseInt(since, 10, 64); err != nil {
+				log.Errorf("since '%s' cannot be parsed as RFC3339 or millisecond timestamp: %s", since, err)
+				sendRESTError(res, req, fmt.Errorf("since cannot be parsed as RFC3339 or millisecond timestamp"), 400)
+			}
+		}
+	}
+
+	from := req.FormValue("from")
+	to := req.FormValue("to")
+
 	// Call the persistence tier - which must return an empty array when no results (not an error)
-	results, err := r.persistence.GetReceipts(skip, limit, ids)
+	results, err := r.persistence.GetReceipts(skip, limit, ids, sinceEpochMS, from, to)
 	if err != nil {
 		log.Errorf("Error querying replies: %s", err)
 		sendRESTError(res, req, fmt.Errorf("Error querying replies: %s", err), 500)

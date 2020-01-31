@@ -20,7 +20,6 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
-	"time"
 
 	"gopkg.in/yaml.v2"
 
@@ -30,6 +29,7 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 )
 
 // ServerConfig is the parent YAML structure that configures ethconnect
@@ -39,13 +39,15 @@ type ServerConfig struct {
 	KafkaBridges map[string]*kldkafka.KafkaBridgeConf `json:"kafka"`
 	Webhooks     map[string]*kldrest.RESTGatewayConf  `json:"webhooks"`
 	RESTGateways map[string]*kldrest.RESTGatewayConf  `json:"rest"`
+	Plugins      PluginConfig                         `json:"plugins"`
 }
 
 func initLogging(debugLevel int) {
-	log.SetFormatter(&log.TextFormatter{
-		FullTimestamp:   true,
-		TimestampFormat: time.RFC3339,
+	log.SetFormatter(&prefixed.TextFormatter{
+		TimestampFormat: "2006-01-02T15:04:05.000Z07:00",
 		DisableSorting:  true,
+		ForceFormatting: true,
+		FullTimestamp:   true,
 	})
 	switch debugLevel {
 	case 0:
@@ -127,6 +129,10 @@ func readServerConfig() (serverConfig *ServerConfig, err error) {
 		err = fmt.Errorf("Failed to process YAML config from %s: %s", serverCmdConfig.Filename, err)
 		return
 	}
+
+	// Load any plugins
+	loadPlugins(&serverConfig.Plugins)
+
 	return
 }
 

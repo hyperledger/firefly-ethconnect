@@ -15,6 +15,7 @@
 package kldevents
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"testing"
@@ -154,7 +155,7 @@ func TestProcessEventsStaleFilter(t *testing.T) {
 	s := &subscription{
 		rpc: kldeth.NewMockRPCClientForSync(fmt.Errorf("filter not found"), nil),
 	}
-	err := s.processNewEvents()
+	err := s.processNewEvents(context.Background())
 	assert.EqualError(err, "filter not found")
 	assert.True(s.filterStale)
 }
@@ -170,7 +171,7 @@ func TestProcessEventsCannotProcess(t *testing.T) {
 		}),
 		lp: newLogProcessor("", &kldbind.ABIEvent{}, newTestStream()),
 	}
-	err := s.processNewEvents()
+	err := s.processNewEvents(context.Background())
 	// We swallow the error in this case - as we simply couldn't read the event
 	assert.NoError(err)
 }
@@ -181,7 +182,7 @@ func TestInitialFilterFail(t *testing.T) {
 		info: &SubscriptionInfo{},
 		rpc:  kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
 	}
-	_, err := s.setInitialBlockHeight()
+	_, err := s.setInitialBlockHeight(context.Background())
 	assert.EqualError(err, "eth_blockNumber: pop")
 }
 
@@ -193,7 +194,7 @@ func TestInitialFilterBadInitialBlock(t *testing.T) {
 		},
 		rpc: kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
 	}
-	_, err := s.setInitialBlockHeight()
+	_, err := s.setInitialBlockHeight(context.Background())
 	assert.EqualError(err, "Failed to parse FromBlock as BigInt: !integer")
 }
 
@@ -204,7 +205,7 @@ func TestInitialFilterCustomInitialBlock(t *testing.T) {
 			FromBlock: "12345",
 		},
 	}
-	res, err := s.setInitialBlockHeight()
+	res, err := s.setInitialBlockHeight(context.Background())
 	assert.NoError(err)
 	assert.Equal("12345", res.Text(10))
 }
@@ -215,7 +216,7 @@ func TestRestartFilterFail(t *testing.T) {
 		info: &SubscriptionInfo{},
 		rpc:  kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
 	}
-	err := s.restartFilter(big.NewInt(0))
+	err := s.restartFilter(context.Background(), big.NewInt(0))
 	assert.EqualError(err, "eth_newFilter: pop")
 }
 
@@ -226,7 +227,7 @@ func TestUnsubscribe(t *testing.T) {
 			*(res.(*string)) = "true"
 		}),
 	}
-	err := s.unsubscribe()
+	err := s.unsubscribe(context.Background())
 	assert.NoError(err)
 	assert.True(s.filterStale)
 }
@@ -234,7 +235,7 @@ func TestUnsubscribe(t *testing.T) {
 func TestUnsubscribeFail(t *testing.T) {
 	assert := assert.New(t)
 	s := &subscription{rpc: kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil)}
-	err := s.unsubscribe()
+	err := s.unsubscribe(context.Background())
 	assert.EqualError(err, "pop")
 	assert.True(s.filterStale)
 }

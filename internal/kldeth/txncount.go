@@ -27,10 +27,10 @@ import (
 
 // GetOrionTXCount uses the special Pantheon/Orion interface to check the
 // next nonce for the privacy group associated with the privateFrom/privateFor combination
-func GetOrionTXCount(rpc RPCClient, addr *common.Address, privacyGroup string) (int64, error) {
+func GetOrionTXCount(ctx context.Context, rpc RPCClient, addr *common.Address, privacyGroup string) (int64, error) {
 	start := time.Now().UTC()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	var txnCount hexutil.Uint64

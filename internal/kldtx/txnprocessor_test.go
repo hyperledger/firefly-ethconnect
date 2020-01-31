@@ -16,6 +16,7 @@ package kldtx
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -27,6 +28,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	ecrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/julienschmidt/httprouter"
 	"github.com/spf13/cobra"
 
@@ -73,6 +75,14 @@ var goodDeployTxnJSON = "{" +
 	"  \"gas\":\"123\"" +
 	"}"
 
+var goodHDWalletDeployTxnJSON = "{" +
+	"  \"headers\":{\"type\": \"DeployContract\"}," +
+	"  \"solidity\":\"pragma solidity >=0.4.22 <0.6.0; contract t {constructor() public {}}\"," +
+	"  \"from\":\"hd-testinst-testwallet-1234\"," +
+	"  \"nonce\":\"123\"," +
+	"  \"gas\":\"123\"" +
+	"}"
+
 var goodSendTxnJSON = "{" +
 	"  \"headers\":{\"type\": \"SendTransaction\"}," +
 	"  \"from\":\"" + testFromAddr + "\"," +
@@ -96,6 +106,9 @@ func (r *testRPC) CallContext(ctx context.Context, result interface{}, method st
 	if method == "eth_sendTransaction" {
 		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethSendTransactionResult))
 		return r.ethSendTransactionErr
+	} else if method == "eth_sendRawTransaction" {
+		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethSendTransactionResult))
+		return r.ethSendTransactionErr
 	} else if method == "eth_getTransactionCount" || method == "priv_getTransactionCount" {
 		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethGetTransactionCountResult))
 		return r.ethGetTransactionCountErr
@@ -107,6 +120,10 @@ func (r *testRPC) CallContext(ctx context.Context, result interface{}, method st
 		return r.ethGetTransactionReceiptErr
 	}
 	panic(fmt.Errorf("method unknown to test: %s", method))
+}
+
+func (c *testTxnContext) Context() context.Context {
+	return context.Background()
 }
 
 func (c *testTxnContext) String() string {
@@ -121,7 +138,7 @@ func (c *testTxnContext) Headers() *kldmessages.CommonHeaders {
 		panic(fmt.Errorf("Unable to unmarshal test message: %s", c.jsonMsg))
 	}
 	log.Infof("Test message headers: %+v", commonMsg.Headers)
-	return &commonMsg.Headers
+	return &commonMsg.Headers.CommonHeaders
 }
 
 func (c *testTxnContext) Unmarshal(msg interface{}) error {
@@ -272,6 +289,62 @@ func TestOnDeployContractMessageGoodTxnMined(t *testing.T) {
 
 	assert.Equal("eth_sendTransaction", testRPC.calls[0])
 	assert.Equal("eth_getTransactionReceipt", testRPC.calls[1])
+
+	replyMsg := testTxnContext.replies[0]
+	assert.Equal("TransactionSuccess", replyMsg.ReplyHeaders().MsgType)
+	replyMsgBytes, _ := json.Marshal(&replyMsg)
+	var replyMsgMap map[string]interface{}
+	json.Unmarshal(replyMsgBytes, &replyMsgMap)
+
+	assert.Equal("0x6e710868fd2d0ac1f141ba3f0cd569e38ce1999d8f39518ee7633d2b9a7122af", replyMsgMap["blockHash"])
+	assert.Equal("12345", replyMsgMap["blockNumber"])
+	assert.Equal("0x28a62cb478a3c3d4daad84f1148ea16cd1a66f37", replyMsgMap["contractAddress"])
+	assert.Equal("23456", replyMsgMap["cumulativeGasUsed"])
+	assert.Equal("0xba25be62a5c55d4ad1d5520268806a8730a4de5e", replyMsgMap["from"])
+	assert.Equal("345678", replyMsgMap["gasUsed"])
+	assert.Equal("123", replyMsgMap["nonce"])
+	assert.Equal("1", replyMsgMap["status"])
+	assert.Equal("0xd7fac2bce408ed7c6ded07a32038b1f79c2b27d3", replyMsgMap["to"])
+	assert.Equal("456789", replyMsgMap["transactionIndex"])
+}
+
+func TestOnDeployContractMessageGoodTxnMinedHDWallet(t *testing.T) {
+	assert := assert.New(t)
+
+	key, _ := ecrypto.GenerateKey()
+	addr := ecrypto.PubkeyToAddress(key.PublicKey)
+	svr := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+		res.WriteHeader(200)
+		res.Write([]byte(`
+    {
+      "address": "` + addr.String() + `",
+      "privateKey": "` + hex.EncodeToString(ecrypto.FromECDSA(key)) + `"
+    }`))
+	}))
+	defer svr.Close()
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+		HDWalletConf: HDWalletConf{
+			URLTemplate: svr.URL,
+		},
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodHDWalletDeployTxnJSON
+
+	testRPC := goodMessageRPC()
+	txnProcessor.Init(testRPC)                          // configured in seconds for real world
+	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
+
+	txnProcessor.OnMessage(testTxnContext)
+	txnWG := &txnProcessor.inflightTxns[strings.ToLower(addr.String())][0].wg
+
+	txnWG.Wait()
+	assert.Equal(0, len(testTxnContext.errorReplies))
+
+	assert.Equal("eth_sendRawTransaction", testRPC.calls[0])
+	assert.Equal("eth_getTransactionReceipt", testRPC.calls[1])
+	assert.Regexp("^0x[0-9a-z]+$", testRPC.params[0][0].(string))
 
 	replyMsg := testTxnContext.replies[0]
 	assert.Equal("TransactionSuccess", replyMsg.ReplyHeaders().MsgType)
@@ -781,4 +854,65 @@ func TestOnSendTransactionAddressBook(t *testing.T) {
 	txnProcessor.OnMessage(testTxnContext)
 
 	assert.EqualError(testTxnContext.errorReplies[0].err, "500 Internal Server Error ")
+}
+
+func TestOnDeployContractMessageFailAddressLookup(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+		AddressBookConf: AddressBookConf{
+			AddressbookURLPrefix: "   ",
+		},
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodDeployTxnJSON
+
+	testRPC := goodMessageRPC()
+	txnProcessor.Init(testRPC)                          // configured in seconds for real world
+	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
+
+	txnProcessor.OnMessage(testTxnContext)
+
+	assert.EqualError(testTxnContext.errorReplies[0].err, "Error querying Addressbook")
+
+}
+
+func TestOnDeployContractMessageFailHDWalletMissing(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodHDWalletDeployTxnJSON
+
+	testRPC := goodMessageRPC()
+	txnProcessor.Init(testRPC)                          // configured in seconds for real world
+	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
+
+	txnProcessor.OnMessage(testTxnContext)
+
+	assert.EqualError(testTxnContext.errorReplies[0].err, "No HD Wallet Configuration")
+
+}
+
+func TestOnDeployContractMessageFailHDWalletFail(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+		HDWalletConf:  HDWalletConf{URLTemplate: "   "},
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodHDWalletDeployTxnJSON
+
+	testRPC := goodMessageRPC()
+	txnProcessor.Init(testRPC)                          // configured in seconds for real world
+	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
+
+	txnProcessor.OnMessage(testTxnContext)
+
+	assert.EqualError(testTxnContext.errorReplies[0].err, "HDWallet signing failed")
+
 }

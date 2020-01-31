@@ -72,7 +72,13 @@ type CommonHeaders struct {
 
 // RequestCommon is a common interface to all requests
 type RequestCommon struct {
-	Headers CommonHeaders `json:"headers"`
+	Headers RequestHeaders `json:"headers"`
+}
+
+// RequestHeaders are common to all replies
+type RequestHeaders struct {
+	CommonHeaders
+	AccessToken string `json:"token,omitEmpty"`
 }
 
 // ReplyHeaders are common to all replies

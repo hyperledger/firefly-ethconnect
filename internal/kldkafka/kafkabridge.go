@@ -15,6 +15,7 @@
 package kldkafka
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -22,6 +23,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldtx"
@@ -103,6 +105,7 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 
 type msgContext struct {
 	timeReceived   time.Time
+	ctx            context.Context
 	producer       KafkaProducer
 	requestCommon  kldmessages.RequestCommon
 	reqOffset      string
@@ -152,6 +155,15 @@ func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage, producer Kafka
 		return
 	}
 	headers := &ctx.requestCommon.Headers
+	accessToken := headers.AccessToken
+	headers.AccessToken = ""
+	authCtx, err := kldauth.WithAuthContext(context.Background(), accessToken)
+	if err != nil {
+		log.Errorf("Unauthorized: %s - Message=%+v", err, ctx.requestCommon)
+		err = fmt.Errorf("Unauthorized")
+		return
+	}
+	ctx.ctx = authCtx
 	if headers.ID == "" {
 		headers.ID = kldutils.UUIDv4()
 	}
@@ -220,8 +232,12 @@ func (k *KafkaBridge) setInFlightComplete(ctx *msgContext, consumer KafkaConsume
 	return
 }
 
+func (c *msgContext) Context() context.Context {
+	return c.ctx
+}
+
 func (c *msgContext) Headers() *kldmessages.CommonHeaders {
-	return &c.requestCommon.Headers
+	return &c.requestCommon.Headers.CommonHeaders
 }
 
 func (c *msgContext) Unmarshal(msg interface{}) (err error) {

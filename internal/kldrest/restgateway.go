@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -30,6 +31,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/julienschmidt/httprouter"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
@@ -175,6 +177,10 @@ type statusMsg struct {
 	OK bool `json:"ok"`
 }
 
+type errMsg struct {
+	Message string `json:"error"`
+}
+
 func (g *RESTGateway) statusHandler(res http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	reply, _ := json.Marshal(&statusMsg{OK: true})
 	res.Header().Set("Content-Type", "application/json")
@@ -183,10 +189,37 @@ func (g *RESTGateway) statusHandler(res http.ResponseWriter, req *http.Request, 
 	return
 }
 
+func (g *RESTGateway) sendError(res http.ResponseWriter, msg string, code int) {
+	reply, _ := json.Marshal(&errMsg{Message: msg})
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(code)
+	res.Write(reply)
+	return
+}
+
 // DispatchMsgAsync is the rest2eth interface method for async dispatching of messages (via our webhook logic)
-func (g *RESTGateway) DispatchMsgAsync(msg map[string]interface{}, ack bool) (*kldmessages.AsyncSentMsg, error) {
-	reply, _, err := g.webhooks.processMsg(msg, ack)
+func (g *RESTGateway) DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack bool) (*kldmessages.AsyncSentMsg, error) {
+	reply, _, err := g.webhooks.processMsg(ctx, msg, ack)
 	return reply, err
+}
+
+func (g *RESTGateway) newAccessTokenContextHandler(parent http.Handler) http.Handler {
+	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+
+		// Extract an access token from bearer token (only - no support for query params)
+		accessToken := ""
+		hSplit := strings.SplitN(req.Header.Get("Authorization"), " ", 2)
+		if len(hSplit) == 2 && strings.ToLower(hSplit[0]) == "bearer" {
+			accessToken = hSplit[1]
+		}
+		authCtx, err := kldauth.WithAuthContext(req.Context(), accessToken)
+		if err != nil {
+			g.sendError(res, "Unauthorized", 401)
+			return
+		}
+
+		parent.ServeHTTP(res, req.WithContext(authCtx))
+	})
 }
 
 // Start kicks off the HTTP listener and router
@@ -254,7 +287,7 @@ func (g *RESTGateway) Start() (err error) {
 	g.srv = &http.Server{
 		Addr:           fmt.Sprintf("%s:%d", g.conf.HTTP.LocalAddr, g.conf.HTTP.Port),
 		TLSConfig:      tlsConfig,
-		Handler:        router,
+		Handler:        g.newAccessTokenContextHandler(router),
 		MaxHeaderBytes: MaxHeaderSize,
 	}
 

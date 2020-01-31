@@ -24,6 +24,8 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/spf13/cobra"
 
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
+	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -125,4 +127,18 @@ func TestCallContextWrapper(t *testing.T) {
 	assert.Equal("mock result", strRetval)
 	assert.Equal("rpcmethod1", mockRPC.MethodCapture)
 	assert.Equal([]interface{}{"arg1", "arg2"}, mockRPC.ArgsCapture)
+}
+
+func TestCallContextWrapperAuth(t *testing.T) {
+	assert := assert.New(t)
+
+	kldauth.RegisterSecurityModule(&kldauthtest.TestSecurityModule{})
+
+	w := &rpcWrapper{rpc: &mockEthClient{}}
+	_, err := w.Subscribe(context.Background(), "", nil)
+	assert.EqualError(err, "Unauthorized")
+	err = w.CallContext(context.Background(), nil, "")
+	assert.EqualError(err, "Unauthorized")
+
+	kldauth.RegisterSecurityModule(nil)
 }

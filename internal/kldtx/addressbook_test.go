@@ -15,6 +15,7 @@
 package kldtx
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -81,24 +82,25 @@ func TestLookupWithCaching(t *testing.T) {
 	ab := a.(*addressBook)
 
 	log.SetLevel(log.DebugLevel)
-	rpc, err := ab.lookup("0xdb0997dccd71607bd6ee378723a12ef8478e4ed6")
+	ctx := context.Background()
+	rpc, err := ab.lookup(ctx, "0xdb0997dccd71607bd6ee378723a12ef8478e4ed6")
 
 	assert.NoError(err)
 	assert.NotNil(rpc)
 
-	rpcCachedSameHost, err := ab.lookup("0x125b194949a37d7ea6e2bac5bd21097d37a36974")
+	rpcCachedSameHost, err := ab.lookup(ctx, "0x125b194949a37d7ea6e2bac5bd21097d37a36974")
 
 	assert.NoError(err)
 	assert.Equal(rpc, rpcCachedSameHost)
 
-	rpcCachedSameAddr, err := ab.lookup("0x125b194949a37d7ea6e2bac5bd21097d37a36974")
+	rpcCachedSameAddr, err := ab.lookup(ctx, "0x125b194949a37d7ea6e2bac5bd21097d37a36974")
 
 	assert.NoError(err)
 	assert.Equal(rpc, rpcCachedSameAddr)
 
 	failRPC = true
 
-	rpcNewAfterFailure, err := ab.lookup("0x125b194949a37d7ea6e2bac5bd21097d37a36974")
+	rpcNewAfterFailure, err := ab.lookup(ctx, "0x125b194949a37d7ea6e2bac5bd21097d37a36974")
 
 	assert.NoError(err)
 	assert.NotEqual(rpc, rpcNewAfterFailure)
@@ -126,7 +128,8 @@ func TestLookupBadURL(t *testing.T) {
 	}, &kldeth.RPCConf{})
 	ab := a.(*addressBook)
 
-	_, err := ab.lookup("0xdb0997dccd71607bd6ee378723a12ef8478e4ed6")
+	ctx := context.Background()
+	_, err := ab.lookup(ctx, "0xdb0997dccd71607bd6ee378723a12ef8478e4ed6")
 
 	assert.EqualError(err, "Invalid URL obtained for address")
 }
@@ -156,7 +159,8 @@ func TestLookupFallbackAddress(t *testing.T) {
 	ab := a.(*addressBook)
 
 	log.SetLevel(log.DebugLevel)
-	rpc, err := ab.lookup("0xdb0997dccd71607bd6ee378723a12ef8478e4ed6")
+	ctx := context.Background()
+	rpc, err := ab.lookup(ctx, "0xdb0997dccd71607bd6ee378723a12ef8478e4ed6")
 
 	assert.NoError(err)
 	assert.NotNil(rpc)
@@ -184,7 +188,8 @@ func TestLookupNoFallbackAddress(t *testing.T) {
 	ab := a.(*addressBook)
 
 	log.SetLevel(log.DebugLevel)
-	_, err := ab.lookup("0xdb0997dccd71607bd6ee378723a12ef8478e4ed6")
+	ctx := context.Background()
+	_, err := ab.lookup(ctx, "0xdb0997dccd71607bd6ee378723a12ef8478e4ed6")
 
 	assert.EqualError(err, "Unknown address")
 
@@ -212,7 +217,8 @@ func TestLookupBadResponse(t *testing.T) {
 	ab := a.(*addressBook)
 
 	log.SetLevel(log.DebugLevel)
-	_, err := ab.lookup("0xdb0997dccd71607bd6ee378723a12ef8478e4ed6")
+	ctx := context.Background()
+	_, err := ab.lookup(ctx, "0xdb0997dccd71607bd6ee378723a12ef8478e4ed6")
 
 	assert.EqualError(err, "'rpcEndpointProp' missing in Addressbook response")
 
@@ -239,7 +245,7 @@ func TestLookupFailureResponse(t *testing.T) {
 	ab := a.(*addressBook)
 
 	log.SetLevel(log.DebugLevel)
-	_, err := ab.lookup("0xdb0997dccd71607bd6ee378723a12ef8478e4ed6")
+	_, err := ab.lookup(context.Background(), "0xdb0997dccd71607bd6ee378723a12ef8478e4ed6")
 
 	assert.EqualError(err, "Could not process Addressbook [500] response")
 

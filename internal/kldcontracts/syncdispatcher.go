@@ -15,6 +15,7 @@
 package kldcontracts
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"time"
@@ -36,6 +37,7 @@ func newSyncDispatcher(processor kldtx.TxnProcessor) rest2EthSyncDispatcher {
 }
 
 type syncTxInflight struct {
+	ctx            context.Context
 	d              *syncDispatcher
 	replyProcessor rest2EthReplyProcessor
 	timeReceived   time.Time
@@ -43,11 +45,15 @@ type syncTxInflight struct {
 	deployMsg      *kldmessages.DeployContract
 }
 
+func (t *syncTxInflight) Context() context.Context {
+	return t.ctx
+}
+
 func (t *syncTxInflight) Headers() *kldmessages.CommonHeaders {
 	if t.deployMsg != nil {
-		return &t.deployMsg.Headers
+		return &t.deployMsg.Headers.CommonHeaders
 	}
-	return &t.sendMsg.Headers
+	return &t.sendMsg.Headers.CommonHeaders
 }
 
 func (t *syncTxInflight) Unmarshal(msg interface{}) error {
@@ -90,20 +96,22 @@ func (t *syncTxInflight) String() string {
 	return fmt.Sprintf("MsgContext[%s/%s]", headers.MsgType, headers.ID)
 }
 
-func (d *syncDispatcher) DispatchSendTransactionSync(msg *kldmessages.SendTransaction, replyProcessor rest2EthReplyProcessor) {
-	ctx := &syncTxInflight{
+func (d *syncDispatcher) DispatchSendTransactionSync(ctx context.Context, msg *kldmessages.SendTransaction, replyProcessor rest2EthReplyProcessor) {
+	syncCtx := &syncTxInflight{
 		replyProcessor: replyProcessor,
 		timeReceived:   time.Now().UTC(),
 		sendMsg:        msg,
+		ctx:            ctx,
 	}
-	d.processor.OnMessage(ctx)
+	d.processor.OnMessage(syncCtx)
 }
 
-func (d *syncDispatcher) DispatchDeployContractSync(msg *kldmessages.DeployContract, replyProcessor rest2EthReplyProcessor) {
-	ctx := &syncTxInflight{
+func (d *syncDispatcher) DispatchDeployContractSync(ctx context.Context, msg *kldmessages.DeployContract, replyProcessor rest2EthReplyProcessor) {
+	syncCtx := &syncTxInflight{
 		replyProcessor: replyProcessor,
 		timeReceived:   time.Now().UTC(),
 		deployMsg:      msg,
+		ctx:            ctx,
 	}
-	d.processor.OnMessage(ctx)
+	d.processor.OnMessage(syncCtx)
 }

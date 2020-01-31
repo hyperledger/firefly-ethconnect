@@ -16,6 +16,7 @@ package kldrest
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -66,8 +67,10 @@ func newTestMsg() kldmessages.SendTransaction {
 	return kldmessages.SendTransaction{
 		TransactionCommon: kldmessages.TransactionCommon{
 			RequestCommon: kldmessages.RequestCommon{
-				Headers: kldmessages.CommonHeaders{
-					MsgType: kldmessages.MsgTypeSendTransaction,
+				Headers: kldmessages.RequestHeaders{
+					CommonHeaders: kldmessages.CommonHeaders{
+						MsgType: kldmessages.MsgTypeSendTransaction,
+					},
 				},
 			},
 			From:       "0xd912641Eb51a311A1C6BD32c1ED200C2a5abD7FE",
@@ -155,7 +158,7 @@ func TestWebhooksDirectSendWebhooksMsgBadHeaders(t *testing.T) {
 	wd, _, _ := newTestWebhooksDirect(1)
 	msgMap := make(map[string]interface{})
 	msgMap["headers"] = false
-	_, statusCode, err := wd.sendWebhookMsg("", "", msgMap, false)
+	_, statusCode, err := wd.sendWebhookMsg(context.Background(), "", "", msgMap, false)
 	assert.Equal(400, statusCode)
 	assert.EqualError(err, "Failed to process headers in message")
 }

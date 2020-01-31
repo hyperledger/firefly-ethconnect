@@ -113,46 +113,47 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	sm.db, _ = kldkvstore.NewLDBKeyValueStore(path.Join(dir, "db"))
 	defer sm.db.Close()
 
-	assert.Equal([]*SubscriptionInfo{}, sm.Subscriptions())
-	assert.Equal([]*StreamInfo{}, sm.Streams())
+	ctx := context.Background()
+	assert.Equal([]*SubscriptionInfo{}, sm.Subscriptions(ctx))
+	assert.Equal([]*StreamInfo{}, sm.Streams(ctx))
 
-	stream, err := sm.AddStream(&StreamInfo{
+	stream, err := sm.AddStream(ctx, &StreamInfo{
 		Type:    "webhook",
 		Webhook: &webhookAction{URL: "http://test.invalid"},
 	})
 	assert.NoError(err)
 
-	sub, err := sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "ping"}, stream.ID, "")
+	sub, err := sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "ping"}, stream.ID, "")
 	assert.NoError(err)
 	assert.Equal(stream.ID, sub.Stream)
 
-	assert.Equal([]*SubscriptionInfo{sub}, sm.Subscriptions())
-	assert.Equal([]*StreamInfo{stream}, sm.Streams())
+	assert.Equal([]*SubscriptionInfo{sub}, sm.Subscriptions(ctx))
+	assert.Equal([]*StreamInfo{stream}, sm.Streams(ctx))
 
-	retSub, _ := sm.SubscriptionByID(sub.ID)
+	retSub, _ := sm.SubscriptionByID(ctx, sub.ID)
 	assert.Equal(sub, retSub)
-	retStream, _ := sm.StreamByID(stream.ID)
+	retStream, _ := sm.StreamByID(ctx, stream.ID)
 	assert.Equal(stream, retStream)
 
-	assert.Nil(sm.SubscriptionByID(stream.ID))
-	assert.Nil(sm.StreamByID(sub.ID))
+	assert.Nil(sm.SubscriptionByID(ctx, stream.ID))
+	assert.Nil(sm.StreamByID(ctx, sub.ID))
 
-	err = sm.SuspendStream(stream.ID)
+	err = sm.SuspendStream(ctx, stream.ID)
 	assert.NoError(err)
 
-	err = sm.SuspendStream(stream.ID)
+	err = sm.SuspendStream(ctx, stream.ID)
 	assert.NoError(err)
 
 	for {
 		// Incase the suspend takes a little time
-		if err = sm.ResumeStream(stream.ID); err == nil {
+		if err = sm.ResumeStream(ctx, stream.ID); err == nil {
 			break
 		} else {
 			time.Sleep(1 * time.Millisecond)
 		}
 	}
 
-	err = sm.ResumeStream(stream.ID)
+	err = sm.ResumeStream(ctx, stream.ID)
 	assert.EqualError(err, "Event processor is already active. Suspending:false")
 
 	// Reload
@@ -169,10 +170,10 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	assert.Equal(1, len(sm.streams))
 	assert.Equal(1, len(sm.subscriptions))
 
-	err = sm.DeleteSubscription(sub.ID)
+	err = sm.DeleteSubscription(ctx, sub.ID)
 	assert.NoError(err)
 
-	err = sm.DeleteStream(stream.ID)
+	err = sm.DeleteStream(ctx, stream.ID)
 	assert.NoError(err)
 
 	sm.Close()
@@ -187,18 +188,19 @@ func TestActionChildCleanup(t *testing.T) {
 	sm.db, _ = kldkvstore.NewLDBKeyValueStore(path.Join(dir, "db"))
 	defer sm.db.Close()
 
-	stream, err := sm.AddStream(&StreamInfo{
+	ctx := context.Background()
+	stream, err := sm.AddStream(ctx, &StreamInfo{
 		Type:    "webhook",
 		Webhook: &webhookAction{URL: "http://test.invalid"},
 	})
 	assert.NoError(err)
 
-	_, err = sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "ping"}, stream.ID, "12345")
-	err = sm.DeleteStream(stream.ID)
+	_, err = sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "ping"}, stream.ID, "12345")
+	err = sm.DeleteStream(ctx, stream.ID)
 	assert.NoError(err)
 
-	assert.Equal([]*SubscriptionInfo{}, sm.Subscriptions())
-	assert.Equal([]*StreamInfo{}, sm.Streams())
+	assert.Equal([]*SubscriptionInfo{}, sm.Subscriptions(ctx))
+	assert.Equal([]*StreamInfo{}, sm.Streams(ctx))
 
 	sm.Close()
 }
@@ -211,33 +213,34 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	sm.db = kldkvstore.NewMockKV(fmt.Errorf("pop"))
 	defer sm.db.Close()
 
-	_, err := sm.AddStream(&StreamInfo{Type: "random"})
+	ctx := context.Background()
+	_, err := sm.AddStream(ctx, &StreamInfo{Type: "random"})
 	assert.EqualError(err, "Unknown action type 'random'")
-	_, err = sm.AddStream(&StreamInfo{
+	_, err = sm.AddStream(ctx, &StreamInfo{
 		Type:    "webhook",
 		Webhook: &webhookAction{URL: "http://test.invalid"},
 	})
 	assert.EqualError(err, "Failed to store stream: pop")
 	sm.streams["teststream"] = newTestStream()
-	err = sm.DeleteStream("nope")
+	err = sm.DeleteStream(ctx, "nope")
 	assert.EqualError(err, "Stream with ID 'nope' not found")
-	err = sm.SuspendStream("nope")
+	err = sm.SuspendStream(ctx, "nope")
 	assert.EqualError(err, "Stream with ID 'nope' not found")
-	err = sm.ResumeStream("nope")
+	err = sm.ResumeStream(ctx, "nope")
 	assert.EqualError(err, "Stream with ID 'nope' not found")
-	err = sm.DeleteStream("teststream")
+	err = sm.DeleteStream(ctx, "teststream")
 	assert.EqualError(err, "pop")
 
-	_, err = sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "any"}, "nope", "")
+	_, err = sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "any"}, "nope", "")
 	assert.EqualError(err, "Stream with ID 'nope' not found")
-	_, err = sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "any"}, "teststream", "")
+	_, err = sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "any"}, "teststream", "")
 	assert.EqualError(err, "Failed to store stream: pop")
-	_, err = sm.AddSubscription(nil, &kldbind.ABIEvent{Name: "any"}, "teststream", "!bad integer")
+	_, err = sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "any"}, "teststream", "!bad integer")
 	assert.EqualError(err, "FromBlock cannot be parsed as a BigInt")
 	sm.subscriptions["testsub"] = &subscription{info: &SubscriptionInfo{}, rpc: sm.rpc}
-	err = sm.DeleteSubscription("nope")
+	err = sm.DeleteSubscription(ctx, "nope")
 	assert.EqualError(err, "Subscription with ID 'nope' not found")
-	err = sm.DeleteSubscription("testsub")
+	err = sm.DeleteSubscription(ctx, "testsub")
 	assert.EqualError(err, "pop")
 }
 

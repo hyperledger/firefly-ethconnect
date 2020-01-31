@@ -30,6 +30,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 
 	log "github.com/sirupsen/logrus"
@@ -217,6 +218,9 @@ func (a *eventStream) isBlocked() bool {
 // eventPoller checks every few seconds against the ethereum node for any
 // new events on the subscriptions that are registered for this stream
 func (a *eventStream) eventPoller() {
+
+	ctx := kldauth.NewSystemAuthContext()
+
 	defer func() { a.pollerDone = true }()
 	var checkpoint map[string]*big.Int
 	for !a.suspendOrStop() {
@@ -234,16 +238,16 @@ func (a *eventStream) eventPoller() {
 				if sub.filterStale {
 					blockHeight, exists := checkpoint[sub.info.ID]
 					if !exists || blockHeight.Cmp(big.NewInt(0)) <= 0 {
-						blockHeight, err = sub.setInitialBlockHeight()
+						blockHeight, err = sub.setInitialBlockHeight(ctx)
 					} else {
 						sub.setCheckpointBlockHeight(blockHeight)
 					}
 					if err == nil {
-						err = sub.restartFilter(blockHeight)
+						err = sub.restartFilter(ctx, blockHeight)
 					}
 				}
 				if err == nil {
-					err = sub.processNewEvents()
+					err = sub.processNewEvents(ctx)
 				}
 				if err != nil {
 					log.Errorf("%s: subscription error: %s", a.spec.ID, err)

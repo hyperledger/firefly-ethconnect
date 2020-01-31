@@ -15,6 +15,7 @@
 package kldeth
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"testing"
@@ -44,7 +45,7 @@ func TestGetOrionPrivacyGroupExists(t *testing.T) {
 	}
 
 	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
-	privacyGroupID, err := GetOrionPrivacyGroup(&r, &addr,
+	privacyGroupID, err := GetOrionPrivacyGroup(context.Background(), &r, &addr,
 		"jO6dpqnMhmnrCHqUumyK09+18diF7quq/rROGs2HFWI=",
 		[]string{"2QiZG7rYPzRvRsioEn6oYUff1DOvPA22EZr0+/o3RUg="})
 
@@ -61,7 +62,7 @@ func TestGetOrionPrivacyGroupDoesNotExist(t *testing.T) {
 	r := testRPCClient{}
 
 	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
-	_, err := GetOrionPrivacyGroup(&r, &addr,
+	_, err := GetOrionPrivacyGroup(context.Background(), &r, &addr,
 		"jO6dpqnMhmnrCHqUumyK09+18diF7quq/rROGs2HFWI=",
 		[]string{"2QiZG7rYPzRvRsioEn6oYUff1DOvPA22EZr0+/o3RUg="})
 
@@ -79,7 +80,7 @@ func TestGetOrionPrivacyGroupErrFind(t *testing.T) {
 	}
 
 	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
-	_, err := GetOrionPrivacyGroup(&r, &addr,
+	_, err := GetOrionPrivacyGroup(context.Background(), &r, &addr,
 		"jO6dpqnMhmnrCHqUumyK09+18diF7quq/rROGs2HFWI=",
 		[]string{"2QiZG7rYPzRvRsioEn6oYUff1DOvPA22EZr0+/o3RUg="})
 
@@ -95,7 +96,7 @@ func TestGetOrionPrivacyGroupErrCreate(t *testing.T) {
 	}
 
 	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
-	_, err := GetOrionPrivacyGroup(&r, &addr,
+	_, err := GetOrionPrivacyGroup(context.Background(), &r, &addr,
 		"jO6dpqnMhmnrCHqUumyK09+18diF7quq/rROGs2HFWI=",
 		[]string{"2QiZG7rYPzRvRsioEn6oYUff1DOvPA22EZr0+/o3RUg="})
 

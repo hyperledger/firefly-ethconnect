@@ -16,6 +16,7 @@ package kldrest
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -48,7 +49,7 @@ func (m *mockContractGW) Shutdown() {}
 
 type mockHandler struct{}
 
-func (*mockHandler) sendWebhookMsg(key, msgID string, msg map[string]interface{}, ack bool) (msgAck string, statusCode int, err error) {
+func (*mockHandler) sendWebhookMsg(ctx context.Context, key, msgID string, msg map[string]interface{}, ack bool) (msgAck string, statusCode int, err error) {
 	return "", 200, nil
 }
 
@@ -76,8 +77,10 @@ func TestWebhookHandlerContractGWSuccess(t *testing.T) {
 	deployMsg := kldmessages.DeployContract{
 		TransactionCommon: kldmessages.TransactionCommon{
 			RequestCommon: kldmessages.RequestCommon{
-				Headers: kldmessages.CommonHeaders{
-					MsgType: kldmessages.MsgTypeDeployContract,
+				Headers: kldmessages.RequestHeaders{
+					CommonHeaders: kldmessages.CommonHeaders{
+						MsgType: kldmessages.MsgTypeDeployContract,
+					},
 				},
 			},
 		},
@@ -99,8 +102,10 @@ func TestWebhookHandlerContractGWFail(t *testing.T) {
 	deployMsg := kldmessages.DeployContract{
 		TransactionCommon: kldmessages.TransactionCommon{
 			RequestCommon: kldmessages.RequestCommon{
-				Headers: kldmessages.CommonHeaders{
-					MsgType: kldmessages.MsgTypeDeployContract,
+				Headers: kldmessages.RequestHeaders{
+					CommonHeaders: kldmessages.CommonHeaders{
+						MsgType: kldmessages.MsgTypeDeployContract,
+					},
 				},
 			},
 		},

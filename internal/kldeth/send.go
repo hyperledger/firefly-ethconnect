@@ -24,6 +24,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -33,7 +34,7 @@ const (
 
 // calculateGas uses eth_estimateGas to estimate the gas required, providing a buffer
 // of 20% for variation as the chain changes between estimation and submission.
-func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *sendTxArgs, gas *hexutil.Uint64) (err error) {
+func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXArgs, gas *hexutil.Uint64) (err error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -54,7 +55,7 @@ func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *sendTxAr
 // Call synchronously calls the method, without mining a transaction, and returns the result as RLP encoded bytes or nil
 func (tx *Txn) Call(ctx context.Context, rpc RPCClient) (res []byte, err error) {
 	data := hexutil.Bytes(tx.EthTX.Data())
-	txArgs := &sendTxArgs{
+	txArgs := &SendTXArgs{
 		From:     tx.From.Hex(),
 		GasPrice: hexutil.Big(*tx.EthTX.GasPrice()),
 		Value:    hexutil.Big(*tx.EthTX.Value()),
@@ -105,7 +106,7 @@ func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
 
 	gas := hexutil.Uint64(tx.EthTX.Gas())
 	data := hexutil.Bytes(tx.EthTX.Data())
-	txArgs := &sendTxArgs{
+	txArgs := &SendTXArgs{
 		From:     tx.From.Hex(),
 		GasPrice: hexutil.Big(*tx.EthTX.GasPrice()),
 		Value:    hexutil.Big(*tx.EthTX.Value()),
@@ -119,17 +120,20 @@ func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
 		if err = tx.calculateGas(ctx, rpc, txArgs, &gas); err != nil {
 			return
 		}
+		// Re-encode the EthTX (for external HD Wallet signing)
+		if to != nil {
+			tx.EthTX = types.NewTransaction(tx.EthTX.Nonce(), *tx.EthTX.To(), tx.EthTX.Value(), uint64(gas), tx.EthTX.GasPrice(), tx.EthTX.Data())
+		} else {
+			tx.EthTX = types.NewContractCreation(tx.EthTX.Nonce(), tx.EthTX.Value(), uint64(gas), tx.EthTX.GasPrice(), tx.EthTX.Data())
+		}
 	}
 	txArgs.Gas = &gas
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// if tx.From == "" {
-	// 	tx.Hash, err = w.signAndSendTxn(ctx, tx, txArgs)
-	// } else {
-	tx.Hash, err = tx.sendUnsignedTxn(ctx, rpc, txArgs)
-	// }
+	tx.Hash, err = tx.submitTXtoNode(ctx, rpc, txArgs)
+
 	callTime := time.Now().UTC().Sub(start)
 	if err != nil {
 		log.Warnf("TX:%s Failed to send: %s [%.2fs]", tx.Hash, err, callTime.Seconds())
@@ -139,7 +143,9 @@ func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
 	return err
 }
 
-type sendTxArgs struct {
+// SendTXArgs is the JSON arguments that can be passed to an eth_sendTransaction call,
+// and also the interface passed to the signer in the case of pre-signing
+type SendTXArgs struct {
 	Nonce    *hexutil.Uint64 `json:"nonce,omitempty"`
 	From     string          `json:"from"`
 	To       string          `json:"to,omitempty"`
@@ -154,14 +160,17 @@ type sendTxArgs struct {
 	Restriction    string   `json:"restriction,omitempty"`
 }
 
-// sendUnsignedTxn sends a transaction for internal signing by the node
-func (tx *Txn) sendUnsignedTxn(ctx context.Context, rpc RPCClient, txArgs *sendTxArgs) (string, error) {
+// submitTXtoNode sends a transaction
+// - If no signer interface: For internal signing by the node
+// - If a signer interface is present: Pre-signed by this process
+func (tx *Txn) submitTXtoNode(ctx context.Context, rpc RPCClient, txArgs *SendTXArgs) (string, error) {
 	var nonce *hexutil.Uint64
 	if !tx.NodeAssignNonce {
 		hexNonce := hexutil.Uint64(tx.EthTX.Nonce())
 		nonce = &hexNonce
 	}
 	txArgs.Nonce = nonce
+	isPrivate := false
 	jsonRPCMethod := "eth_sendTransaction"
 	if tx.PrivacyGroupID != "" {
 		// This means we have an Orion style private TX.
@@ -174,12 +183,29 @@ func (tx *Txn) sendUnsignedTxn(ctx context.Context, rpc RPCClient, txArgs *sendT
 		if txArgs.PrivateFrom == "" {
 			return "", fmt.Errorf("private-from is required when submitting private transactions via Orion")
 		}
+		isPrivate = true
 	} else if len(tx.PrivateFor) > 0 {
 		// Note that PrivateFrom is optional for Quorum/Tessera transactions
 		txArgs.PrivateFrom = tx.PrivateFrom
 		txArgs.PrivateFor = tx.PrivateFor
+		isPrivate = true
 	}
+
+	var callParam0 interface{} = txArgs
+	if tx.Signer != nil {
+		if isPrivate {
+			return "", fmt.Errorf("Signing with %s is not currently supported with private transactions", tx.Signer.Type())
+		}
+		// Sign the transaction and get the bytes, which we pass to eth_sendRawTransaction
+		jsonRPCMethod = "eth_sendRawTransaction"
+		signed, err := tx.Signer.Sign(tx.EthTX)
+		if err != nil {
+			return "", err
+		}
+		callParam0 = common.ToHex(signed)
+	}
+
 	var txHash string
-	err := rpc.CallContext(ctx, &txHash, jsonRPCMethod, txArgs)
+	err := rpc.CallContext(ctx, &txHash, jsonRPCMethod, callParam0)
 	return txHash, err
 }

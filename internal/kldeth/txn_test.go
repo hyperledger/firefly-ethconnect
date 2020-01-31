@@ -73,7 +73,7 @@ func TestNewContractDeployTxnSimpleStorage(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	tx, err := NewContractDeployTxn(&msg)
+	tx, err := NewContractDeployTxn(&msg, nil)
 	assert.Nil(err)
 	rpc := testRPCClient{}
 
@@ -103,7 +103,7 @@ func TestNewContractDeployTxnSimpleStorageCalcGas(t *testing.T) {
 	msg.Nonce = "123"
 	msg.Value = "0"
 	msg.GasPrice = "789"
-	tx, err := NewContractDeployTxn(&msg)
+	tx, err := NewContractDeployTxn(&msg, nil)
 	assert.Nil(err)
 	rpc := testRPCClient{}
 
@@ -136,7 +136,7 @@ func TestNewContractDeployTxnSimpleStoragePrivate(t *testing.T) {
 	msg.GasPrice = "0"
 	msg.PrivateFrom = "oD76ZRgu6py/WKrsXbtF9++Mf1mxVxzqficE1Uiw6S8="
 	msg.PrivateFor = []string{"s6a3mQ8I+rI2ZgHqHZlJaELiJs10HxlZNIwNd669FH4="}
-	tx, err := NewContractDeployTxn(&msg)
+	tx, err := NewContractDeployTxn(&msg, nil)
 	assert.Nil(err)
 	rpc := testRPCClient{}
 
@@ -166,7 +166,7 @@ func TestNewContractDeployTxnSimpleStoragePrivateOrion(t *testing.T) {
 	msg.Value = "678"
 	msg.GasPrice = "0"
 	msg.PrivateFrom = "oD76ZRgu6py/WKrsXbtF9++Mf1mxVxzqficE1Uiw6S8="
-	tx, err := NewContractDeployTxn(&msg)
+	tx, err := NewContractDeployTxn(&msg, nil)
 	assert.Nil(err)
 	tx.PrivacyGroupID = "P8SxRUussJKqZu4+nUkMJpscQeWOR3HqbAXLakatsk8="
 	rpc := testRPCClient{}
@@ -196,7 +196,7 @@ func TestNewContractDeployTxnSimpleStoragePrivateOrionMissingPrivateFrom(t *test
 	msg.Nonce = "123"
 	msg.Value = "678"
 	msg.GasPrice = "0"
-	tx, err := NewContractDeployTxn(&msg)
+	tx, err := NewContractDeployTxn(&msg, nil)
 	assert.Nil(err)
 	tx.OrionPrivateAPIS = true
 	tx.PrivacyGroupID = "s6a3mQ8I+rI2ZgHqHZlJaELiJs10HxlZNIwNd669FH4="
@@ -215,7 +215,7 @@ func TestNewContractDeployTxnSimpleStorageCalcGasFailAndCallSucceeds(t *testing.
 	msg.Nonce = "123"
 	msg.Value = "0"
 	msg.GasPrice = "789"
-	tx, err := NewContractDeployTxn(&msg)
+	tx, err := NewContractDeployTxn(&msg, nil)
 	assert.Nil(err)
 	rpc := testRPCClient{}
 
@@ -234,7 +234,7 @@ func TestNewContractDeployTxnSimpleStorageCalcGasFailAndCallFailsAsExpected(t *t
 	msg.Nonce = "123"
 	msg.Value = "0"
 	msg.GasPrice = "789"
-	tx, err := NewContractDeployTxn(&msg)
+	tx, err := NewContractDeployTxn(&msg, nil)
 	assert.Nil(err)
 	rpc := testRPCClient{}
 
@@ -254,7 +254,7 @@ func TestNewContractDeployMissingCompiledOrSolidity(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewContractDeployTxn(&msg)
+	_, err := NewContractDeployTxn(&msg, nil)
 	assert.EqualError(err, "Missing Compiled Code + ABI, or Solidity")
 }
 
@@ -274,7 +274,7 @@ func TestNewContractDeployPrecompiledSimpleStorage(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	tx, err := NewContractDeployTxn(&msg)
+	tx, err := NewContractDeployTxn(&msg, nil)
 	assert.Nil(err)
 	rpc := testRPCClient{}
 
@@ -305,7 +305,7 @@ func TestNewContractDeployTxnBadNonce(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewContractDeployTxn(&msg)
+	_, err := NewContractDeployTxn(&msg, nil)
 	assert.Regexp("Converting supplied 'nonce' to integer", err.Error())
 }
 
@@ -320,7 +320,7 @@ func TestNewContractDeployBadValue(t *testing.T) {
 	msg.Value = "zzz"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewContractDeployTxn(&msg)
+	_, err := NewContractDeployTxn(&msg, nil)
 	assert.Regexp("Converting supplied 'value' to big integer", err.Error())
 }
 
@@ -335,7 +335,7 @@ func TestNewContractDeployBadGas(t *testing.T) {
 	msg.Value = "111"
 	msg.Gas = "abc"
 	msg.GasPrice = "789"
-	_, err := NewContractDeployTxn(&msg)
+	_, err := NewContractDeployTxn(&msg, nil)
 	assert.Regexp("Converting supplied 'gas' to integer", err.Error())
 }
 
@@ -350,7 +350,7 @@ func TestNewContractDeployBadGasPrice(t *testing.T) {
 	msg.Value = "111"
 	msg.Gas = "456"
 	msg.GasPrice = "abc"
-	_, err := NewContractDeployTxn(&msg)
+	_, err := NewContractDeployTxn(&msg, nil)
 	assert.Regexp("Converting supplied 'gasPrice' to big integer", err.Error())
 }
 
@@ -359,7 +359,7 @@ func TestNewContractDeployTxnBadContract(t *testing.T) {
 
 	var msg kldmessages.DeployContract
 	msg.Solidity = "badness"
-	_, err := NewContractDeployTxn(&msg)
+	_, err := NewContractDeployTxn(&msg, nil)
 	assert.Regexp("Solidity compilation failed", err.Error())
 }
 
@@ -374,7 +374,7 @@ func TestNewContractDeployStringForNumber(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewContractDeployTxn(&msg)
+	_, err := NewContractDeployTxn(&msg, nil)
 	assert.Nil(err)
 }
 
@@ -384,7 +384,7 @@ func TestNewContractDeployTxnBadContractName(t *testing.T) {
 	var msg kldmessages.DeployContract
 	msg.Solidity = simpleStorage
 	msg.ContractName = "wrongun"
-	_, err := NewContractDeployTxn(&msg)
+	_, err := NewContractDeployTxn(&msg, nil)
 	assert.Regexp("Contract '<stdin>:wrongun' not found in Solidity source", err.Error())
 }
 func TestNewContractDeploySpecificContractName(t *testing.T) {
@@ -399,7 +399,7 @@ func TestNewContractDeploySpecificContractName(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewContractDeployTxn(&msg)
+	_, err := NewContractDeployTxn(&msg, nil)
 	assert.Nil(err)
 }
 
@@ -408,7 +408,7 @@ func TestNewContractDeployMissingNameMultipleContracts(t *testing.T) {
 
 	var msg kldmessages.DeployContract
 	msg.Solidity = twoContracts
-	_, err := NewContractDeployTxn(&msg)
+	_, err := NewContractDeployTxn(&msg, nil)
 	assert.Regexp("More than one contract in Solidity file", err.Error())
 }
 
@@ -418,7 +418,7 @@ func TestNewContractDeployBadNumber(t *testing.T) {
 	var msg kldmessages.DeployContract
 	msg.Solidity = simpleStorage
 	msg.Parameters = []interface{}{"ABCD"}
-	_, err := NewContractDeployTxn(&msg)
+	_, err := NewContractDeployTxn(&msg, nil)
 	assert.Regexp("Could not be converted to a number", err.Error())
 }
 
@@ -428,7 +428,7 @@ func TestNewContractDeployBadTypeForNumber(t *testing.T) {
 	var msg kldmessages.DeployContract
 	msg.Solidity = simpleStorage
 	msg.Parameters = []interface{}{false}
-	_, err := NewContractDeployTxn(&msg)
+	_, err := NewContractDeployTxn(&msg, nil)
 	assert.Regexp("Must supply a number or a string", err.Error())
 }
 
@@ -438,7 +438,7 @@ func TestNewContractDeployMissingParam(t *testing.T) {
 	var msg kldmessages.DeployContract
 	msg.Solidity = simpleStorage
 	msg.Parameters = []interface{}{}
-	_, err := NewContractDeployTxn(&msg)
+	_, err := NewContractDeployTxn(&msg, nil)
 	assert.Regexp("Requires 1 args \\(supplied=0\\)", err.Error())
 }
 
@@ -453,7 +453,7 @@ func testComplexParam(t *testing.T, solidityType string, val interface{}, expect
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewContractDeployTxn(&msg)
+	_, err := NewContractDeployTxn(&msg, nil)
 
 	if expectedErr == "" {
 		assert.Nil(err)
@@ -618,7 +618,7 @@ func TestSendTxnABIParam(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	tx, err := NewSendTxn(&msg)
+	tx, err := NewSendTxn(&msg, nil)
 	assert.Nil(err)
 	msgBytes, _ := json.Marshal(&msg)
 	log.Infof(string(msgBytes))
@@ -671,7 +671,7 @@ func TestSendTxnInlineParam(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	tx, err := NewSendTxn(&msg)
+	tx, err := NewSendTxn(&msg, nil)
 	assert.Nil(err)
 	msgBytes, _ := json.Marshal(&msg)
 	log.Infof(string(msgBytes))
@@ -709,7 +709,7 @@ func TestSendTxnNilParam(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewSendTxn(&msg)
+	_, err := NewSendTxn(&msg, nil)
 	assert.EqualError(err, "Method 'testFunc' param 0: Cannot supply a null value")
 
 }
@@ -753,7 +753,7 @@ func TestCallMethod(t *testing.T) {
 		},
 	}
 
-	res, err := CallMethod(context.Background(), rpc,
+	res, err := CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
 		json.Number("12345"), method, params)
@@ -786,7 +786,7 @@ func TestCallMethodFail(t *testing.T) {
 		mockError: fmt.Errorf("pop"),
 	}
 
-	_, err := CallMethod(context.Background(), rpc,
+	_, err := CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
 		json.Number("12345"), method, params)
@@ -810,7 +810,7 @@ func TestCallMethodRevert(t *testing.T) {
 		},
 	}
 
-	_, err := CallMethod(context.Background(), rpc,
+	_, err := CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
 		json.Number("12345"), method, params)
@@ -834,7 +834,7 @@ func TestCallMethodRevertBadStrLen(t *testing.T) {
 		},
 	}
 
-	_, err := CallMethod(context.Background(), rpc,
+	_, err := CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
 		json.Number("12345"), method, params)
@@ -859,7 +859,7 @@ func TestCallMethodRevertBadBytes(t *testing.T) {
 		},
 	}
 
-	_, err := CallMethod(context.Background(), rpc,
+	_, err := CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
 		json.Number("12345"), method, params)
@@ -875,7 +875,7 @@ func TestCallMethodBadArgs(t *testing.T) {
 		mockError: fmt.Errorf("pop"),
 	}
 
-	_, err := CallMethod(context.Background(), rpc, "badness", "", json.Number(""), &abi.Method{}, []interface{}{})
+	_, err := CallMethod(context.Background(), rpc, nil, "badness", "", json.Number(""), &abi.Method{}, []interface{}{})
 
 	assert.EqualError(err, "Supplied value for 'from' is not a valid hex address")
 }
@@ -912,7 +912,7 @@ func TestSendTxnNodeAssignNonce(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	tx, err := NewSendTxn(&msg)
+	tx, err := NewSendTxn(&msg, nil)
 	assert.Nil(err)
 	msgBytes, _ := json.Marshal(&msg)
 	log.Infof(string(msgBytes))
@@ -933,6 +933,153 @@ func TestSendTxnNodeAssignNonce(t *testing.T) {
 	assert.Regexp("0xe5537abb000000000000000000000000000000000000000000000000000000000000007b000000000000000000000000000000000000000000000000000000000000007b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000aa983ad2a0e0ed8ac639277f37be42f2a5d2618c00000000000000000000000000000000000000000000000000000000000000036162630000000000000000000000000000000000000000000000000000000000", jsonSent["data"])
 }
 
+func TestSendWithTXSignerContractOK(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{}
+
+	signer := &mockTXSigner{
+		signed: []byte("testbytes"),
+		from:   "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+	}
+
+	msg.MethodName = "testFunc"
+	msg.From = "hd-u0abcd1234-u0bcde9876-12345"
+	msg.Value = "0"
+	msg.GasPrice = "789"
+	tx, err := NewSendTxn(&msg, signer)
+	assert.Nil(err)
+	msgBytes, _ := json.Marshal(&msg)
+	log.Infof(string(msgBytes))
+
+	rpc := testRPCClient{}
+
+	tx.Send(context.Background(), &rpc)
+	assert.Equal("eth_estimateGas", rpc.capturedMethod)
+	assert.Equal("eth_sendRawTransaction", rpc.capturedMethod2)
+	assert.Equal("0x746573746279746573", rpc.capturedArgs2[0])
+}
+
+func TestSendWithTXSignerOK(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{}
+
+	signer := &mockTXSigner{
+		signed: []byte("testbytes"),
+		from:   "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+	}
+
+	msg.MethodName = "testFunc"
+	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
+	msg.From = "hd-u0abcd1234-u0bcde9876-12345"
+	msg.Value = "0"
+	msg.GasPrice = "789"
+	tx, err := NewSendTxn(&msg, signer)
+	assert.Nil(err)
+	msgBytes, _ := json.Marshal(&msg)
+	log.Infof(string(msgBytes))
+
+	rpc := testRPCClient{}
+
+	tx.Send(context.Background(), &rpc)
+	assert.Equal("0x2b8c0ECc76d0759a8F50b2E14A6881367D805832", signer.capturedTX.To().String())
+	assert.Equal("eth_estimateGas", rpc.capturedMethod)
+	assert.Equal("eth_sendRawTransaction", rpc.capturedMethod2)
+	assert.Equal("0x746573746279746573", rpc.capturedArgs2[0])
+}
+
+func TestSendWithTXSignerFail(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{}
+
+	signer := &mockTXSigner{
+		signed:  []byte("testbytes"),
+		from:    "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+		signErr: fmt.Errorf("pop"),
+	}
+
+	msg.MethodName = "testFunc"
+	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
+	msg.From = "hd-u0abcd1234-u0bcde9876-12345"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	tx, err := NewSendTxn(&msg, signer)
+	assert.Nil(err)
+	msgBytes, _ := json.Marshal(&msg)
+	log.Infof(string(msgBytes))
+
+	rpc := testRPCClient{}
+
+	err = tx.Send(context.Background(), &rpc)
+	assert.EqualError(err, "pop")
+}
+
+func TestSendWithTXSignerFailPrivate(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{}
+
+	signer := &mockTXSigner{
+		signed:  []byte("testbytes"),
+		from:    "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+		signErr: fmt.Errorf("pop"),
+	}
+
+	msg.MethodName = "testFunc"
+	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
+	msg.From = "hd-u0abcd1234-u0bcde9876-12345"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	msg.PrivateFor = []string{"anything"}
+	tx, err := NewSendTxn(&msg, signer)
+	assert.Nil(err)
+	msgBytes, _ := json.Marshal(&msg)
+	log.Infof(string(msgBytes))
+
+	rpc := testRPCClient{}
+
+	err = tx.Send(context.Background(), &rpc)
+	assert.EqualError(err, "Signing with mock signer is not currently supported with private transactions")
+}
+
+func TestNewContractWithTXSignerOK(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.DeployContract
+	msg.Parameters = []interface{}{}
+
+	signer := &mockTXSigner{
+		signed: []byte("testbytes"),
+		from:   "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+	}
+
+	msg.From = "hd-u0abcd1234-u0bcde9876-12345"
+	msg.Value = "0"
+	msg.Gas = "456"
+	msg.GasPrice = "789"
+	msg.Solidity = simpleStorage
+	msg.Parameters = []interface{}{"12345"}
+	tx, err := NewContractDeployTxn(&msg, signer)
+	assert.Nil(err)
+	msgBytes, _ := json.Marshal(&msg)
+	log.Infof(string(msgBytes))
+
+	rpc := testRPCClient{}
+
+	tx.Send(context.Background(), &rpc)
+	assert.Equal("789", signer.capturedTX.GasPrice().String())
+	assert.Equal("eth_sendRawTransaction", rpc.capturedMethod)
+	assert.Equal("0x746573746279746573", rpc.capturedArgs[0])
+}
+
 func TestSendTxnRPFError(t *testing.T) {
 	assert := assert.New(t)
 
@@ -946,7 +1093,7 @@ func TestSendTxnRPFError(t *testing.T) {
 	msg.Gas = "456"
 	msg.GasPrice = "789"
 	msg.Nonce = "12345"
-	tx, err := NewSendTxn(&msg)
+	tx, err := NewSendTxn(&msg, nil)
 	assert.Nil(err)
 	msgBytes, _ := json.Marshal(&msg)
 	log.Infof(string(msgBytes))
@@ -979,7 +1126,7 @@ func TestSendTxnInlineBadParamType(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewSendTxn(&msg)
+	_, err := NewSendTxn(&msg, nil)
 	assert.Regexp("Param 0: Unable to map badness to etherueum type", err.Error())
 }
 
@@ -1002,7 +1149,7 @@ func TestSendTxnInlineMissingParamType(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewSendTxn(&msg)
+	_, err := NewSendTxn(&msg, nil)
 	assert.Regexp("Param 0: supplied as an object must have 'type' and 'value' fields", err.Error())
 }
 
@@ -1025,7 +1172,7 @@ func TestSendTxnInlineMissingParamValue(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewSendTxn(&msg)
+	_, err := NewSendTxn(&msg, nil)
 	assert.Regexp("Param 0: supplied as an object must have 'type' and 'value' fields", err.Error())
 }
 
@@ -1049,7 +1196,7 @@ func TestSendTxnInlineBadTypeType(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewSendTxn(&msg)
+	_, err := NewSendTxn(&msg, nil)
 	assert.Regexp("Param 0: supplied as an object must be string", err.Error())
 }
 func TestSendTxnBadInputType(t *testing.T) {
@@ -1071,7 +1218,7 @@ func TestSendTxnBadInputType(t *testing.T) {
 			},
 		},
 	}
-	_, err := NewSendTxn(&msg)
+	_, err := NewSendTxn(&msg, nil)
 	assert.Regexp("ABI input 0: Unable to map param1 to etherueum type: unsupported arg type:", err.Error())
 }
 
@@ -1087,7 +1234,7 @@ func TestSendTxnMissingMethod(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewSendTxn(&msg)
+	_, err := NewSendTxn(&msg, nil)
 	assert.Regexp("Method missing", err.Error())
 }
 func TestSendTxnBadFrom(t *testing.T) {
@@ -1116,7 +1263,7 @@ func TestSendTxnBadFrom(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewSendTxn(&msg)
+	_, err := NewSendTxn(&msg, nil)
 	assert.Regexp("Supplied value for 'from' is not a valid hex address", err.Error())
 }
 
@@ -1146,7 +1293,7 @@ func TestSendTxnBadTo(t *testing.T) {
 	msg.Value = "0"
 	msg.Gas = "456"
 	msg.GasPrice = "789"
-	_, err := NewSendTxn(&msg)
+	_, err := NewSendTxn(&msg, nil)
 	assert.Regexp("Supplied value for 'to' is not a valid hex address", err.Error())
 }
 
@@ -1169,7 +1316,7 @@ func TestSendTxnBadOutputType(t *testing.T) {
 			},
 		},
 	}
-	_, err := NewSendTxn(&msg)
+	_, err := NewSendTxn(&msg, nil)
 	assert.Regexp("ABI output 0: Unable to map ret1 to etherueum type: unsupported arg type:", err.Error())
 }
 
@@ -1193,7 +1340,7 @@ func TestSendBadParams(t *testing.T) {
 			},
 		},
 	}
-	_, err := NewSendTxn(&msg)
+	_, err := NewSendTxn(&msg, nil)
 	assert.Regexp("param 0: Could not be converted to a number", err.Error())
 }
 
@@ -1217,7 +1364,7 @@ func TestSendTxnPackError(t *testing.T) {
 			},
 		},
 	}
-	_, err := NewSendTxn(&msg)
+	_, err := NewSendTxn(&msg, nil)
 	assert.Regexp("cannot use \\[0\\]uint8 as type \\[1\\]uint8 as argument", err.Error())
 }
 

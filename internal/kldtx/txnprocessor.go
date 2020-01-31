@@ -47,6 +47,8 @@ type inflightTxn struct {
 	tx              *kldeth.Txn
 	wg              sync.WaitGroup
 	registerAs      string // passed from request to reply
+	rpc             kldeth.RPCClient
+	signer          kldeth.TXSigner
 }
 
 func (i *inflightTxn) nonceNumber() json.Number {
@@ -68,6 +70,7 @@ type TxnProcessorConf struct {
 	OrionPrivateAPIS   bool            `json:"orionPrivateAPIs"`
 	HexValuesInReceipt bool            `json:"hexValuesInReceipt"`
 	AddressBookConf    AddressBookConf `json:"addressBook"`
+	HDWalletConf       HDWalletConf    `json:"hdWallet"`
 }
 
 type txnProcessor struct {
@@ -77,7 +80,9 @@ type txnProcessor struct {
 	inflightTxnDelayer TxnDelayTracker
 	rpc                kldeth.RPCClient
 	addressBook        AddressBook
+	hdwallet           HDWallet
 	conf               *TxnProcessorConf
+	rpcConf            *kldeth.RPCConf
 }
 
 // NewTxnProcessor constructor for message procss
@@ -87,9 +92,7 @@ func NewTxnProcessor(conf *TxnProcessorConf, rpcConf *kldeth.RPCConf) TxnProcess
 		inflightTxns:       make(map[string][]*inflightTxn),
 		inflightTxnDelayer: NewTxnDelayTracker(),
 		conf:               conf,
-	}
-	if conf.AddressBookConf.AddressbookURLPrefix != "" {
-		p.addressBook = NewAddressBook(&conf.AddressBookConf, rpcConf)
+		rpcConf:            rpcConf,
 	}
 	return p
 }
@@ -97,6 +100,12 @@ func NewTxnProcessor(conf *TxnProcessorConf, rpcConf *kldeth.RPCConf) TxnProcess
 func (p *txnProcessor) Init(rpc kldeth.RPCClient) {
 	p.rpc = rpc
 	p.maxTXWaitTime = time.Duration(p.conf.MaxTXWaitTime) * time.Second
+	if p.conf.AddressBookConf.AddressbookURLPrefix != "" {
+		p.addressBook = NewAddressBook(&p.conf.AddressBookConf, p.rpcConf)
+	}
+	if p.conf.HDWalletConf.URLTemplate != "" {
+		p.hdwallet = newHDWallet(&p.conf.HDWalletConf)
+	}
 }
 
 // CobraInitTxnProcessor sets the standard command-line parameters for the txnprocessor
@@ -151,6 +160,22 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessage
 
 	inflight = &inflightTxn{
 		txnContext: txnContext,
+	}
+
+	// Use the correct RPC for sending transactions
+	inflight.rpc = p.rpc
+	if hdWalletRequest := IsHDWalletRequest(msg.From); hdWalletRequest != nil {
+		if p.hdwallet == nil {
+			return nil, fmt.Errorf("No HD Wallet Configuration")
+		}
+		if inflight.signer, err = p.hdwallet.SignerFor(hdWalletRequest); err != nil {
+			return
+		}
+		msg.From = inflight.signer.Address()
+	} else if p.addressBook != nil {
+		if inflight.rpc, err = p.addressBook.lookup(txnContext.Context(), msg.From); err != nil {
+			return
+		}
 	}
 
 	// Validate the from address, and normalize to lower case with 0x prefix
@@ -213,7 +238,8 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessage
 	} else if highestNonce > 0 {
 		// If we found a nonce in-flight in memory, return one higher.
 		inflight.nonce = highestNonce + 1
-	} else if !p.conf.PredictNonces {
+	} else if inflight.signer == nil && !p.conf.PredictNonces {
+		// We've been asked to defer to the node for signing, and are not performing HD Wallet signing
 		inflight.nodeAssignNonce = true
 	} else {
 		// Alternatively (will be required when we support externally signed tranactions)
@@ -225,6 +251,7 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessage
 		// overwriting a transcation)
 		inflight.nonce, err = kldeth.GetTransactionCount(p.rpc, &from, "pending")
 	}
+
 	return
 }
 
@@ -360,14 +387,14 @@ func (p *txnProcessor) addInflight(inflight *inflightTxn, tx *kldeth.Txn) {
 func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *kldmessages.DeployContract) {
 
 	inflightWrapper, err := p.newInflightWrapper(txnContext, &msg.TransactionCommon)
-	inflightWrapper.registerAs = msg.RegisterAs
 	if err != nil {
 		txnContext.SendErrorReply(400, err)
 		return
 	}
+	inflightWrapper.registerAs = msg.RegisterAs
 	msg.Nonce = inflightWrapper.nonceNumber()
 
-	tx, err := kldeth.NewContractDeployTxn(msg)
+	tx, err := kldeth.NewContractDeployTxn(msg, inflightWrapper.signer)
 	if err != nil {
 		txnContext.SendErrorReply(400, err)
 		return
@@ -376,17 +403,7 @@ func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *kldme
 	tx.PrivacyGroupID = inflightWrapper.privacyGroupID
 	tx.NodeAssignNonce = inflightWrapper.nodeAssignNonce
 
-	// Use the correct RPC for sending transactions
-	rpc := p.rpc
-	if p.addressBook != nil {
-		rpc, err = p.addressBook.lookup(txnContext.Context(), tx.From.String())
-		if err != nil {
-			txnContext.SendErrorReply(500, err)
-			return
-		}
-	}
-
-	if err = tx.Send(txnContext.Context(), rpc); err != nil {
+	if err := tx.Send(txnContext.Context(), inflightWrapper.rpc); err != nil {
 		txnContext.SendErrorReply(400, err)
 		return
 	}
@@ -403,24 +420,14 @@ func (p *txnProcessor) OnSendTransactionMessage(txnContext TxnContext, msg *kldm
 	}
 	msg.Nonce = inflightWrapper.nonceNumber()
 
-	tx, err := kldeth.NewSendTxn(msg)
+	tx, err := kldeth.NewSendTxn(msg, inflightWrapper.signer)
 	if err != nil {
 		txnContext.SendErrorReply(400, err)
 		return
 	}
 	tx.NodeAssignNonce = inflightWrapper.nodeAssignNonce
 
-	// Use the correct RPC for sending transactions
-	rpc := p.rpc
-	if p.addressBook != nil {
-		rpc, err = p.addressBook.lookup(txnContext.Context(), tx.From.String())
-		if err != nil {
-			txnContext.SendErrorReply(500, err)
-			return
-		}
-	}
-
-	if err = tx.Send(txnContext.Context(), rpc); err != nil {
+	if err = tx.Send(txnContext.Context(), inflightWrapper.rpc); err != nil {
 		txnContext.SendErrorReply(400, err)
 		return
 	}

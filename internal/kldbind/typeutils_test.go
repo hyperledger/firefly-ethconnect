@@ -47,7 +47,7 @@ func TestABITypeFor(t *testing.T) {
 func TestABIMarshalUnMarshal(t *testing.T) {
 	assert := assert.New(t)
 
-	tUint256, _ := abi.NewType("uint256", []abi.ArgumentMarshaling{})
+	tUint256, _ := abi.NewType("uint256", "", []abi.ArgumentMarshaling{})
 	a1 := ABI{
 		ABI: abi.ABI{
 			Constructor: abi.Method{

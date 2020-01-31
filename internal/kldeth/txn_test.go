@@ -933,6 +933,34 @@ func TestSendTxnNodeAssignNonce(t *testing.T) {
 	assert.Regexp("0xe5537abb000000000000000000000000000000000000000000000000000000000000007b000000000000000000000000000000000000000000000000000000000000007b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000aa983ad2a0e0ed8ac639277f37be42f2a5d2618c00000000000000000000000000000000000000000000000000000000000000036162630000000000000000000000000000000000000000000000000000000000", jsonSent["data"])
 }
 
+func TestSendWithTXSignerContractOK(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.SendTransaction
+	msg.Parameters = []interface{}{}
+
+	signer := &mockTXSigner{
+		signed: []byte("testbytes"),
+		from:   "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+	}
+
+	msg.MethodName = "testFunc"
+	msg.From = "hd-u0abcd1234-u0bcde9876-12345"
+	msg.Value = "0"
+	msg.GasPrice = "789"
+	tx, err := NewSendTxn(&msg, signer)
+	assert.Nil(err)
+	msgBytes, _ := json.Marshal(&msg)
+	log.Infof(string(msgBytes))
+
+	rpc := testRPCClient{}
+
+	tx.Send(context.Background(), &rpc)
+	assert.Equal("eth_estimateGas", rpc.capturedMethod)
+	assert.Equal("eth_sendRawTransaction", rpc.capturedMethod2)
+	assert.Equal("0x746573746279746573", rpc.capturedArgs2[0])
+}
+
 func TestSendWithTXSignerOK(t *testing.T) {
 	assert := assert.New(t)
 
@@ -948,7 +976,6 @@ func TestSendWithTXSignerOK(t *testing.T) {
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
 	msg.From = "hd-u0abcd1234-u0bcde9876-12345"
 	msg.Value = "0"
-	msg.Gas = "456"
 	msg.GasPrice = "789"
 	tx, err := NewSendTxn(&msg, signer)
 	assert.Nil(err)
@@ -959,8 +986,9 @@ func TestSendWithTXSignerOK(t *testing.T) {
 
 	tx.Send(context.Background(), &rpc)
 	assert.Equal("0x2b8c0ECc76d0759a8F50b2E14A6881367D805832", signer.capturedTX.To().String())
-	assert.Equal("eth_sendRawTransaction", rpc.capturedMethod)
-	assert.Equal("0x746573746279746573", rpc.capturedArgs[0])
+	assert.Equal("eth_estimateGas", rpc.capturedMethod)
+	assert.Equal("eth_sendRawTransaction", rpc.capturedMethod2)
+	assert.Equal("0x746573746279746573", rpc.capturedArgs2[0])
 }
 
 func TestSendWithTXSignerFail(t *testing.T) {

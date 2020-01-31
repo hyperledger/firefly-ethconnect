@@ -24,6 +24,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -118,6 +119,12 @@ func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
 	if uint64(gas) == uint64(0) {
 		if err = tx.calculateGas(ctx, rpc, txArgs, &gas); err != nil {
 			return
+		}
+		// Re-encode the EthTX (for external HD Wallet signing)
+		if to != nil {
+			tx.EthTX = types.NewTransaction(tx.EthTX.Nonce(), *tx.EthTX.To(), tx.EthTX.Value(), uint64(gas), tx.EthTX.GasPrice(), tx.EthTX.Data())
+		} else {
+			tx.EthTX = types.NewContractCreation(tx.EthTX.Nonce(), tx.EthTX.Value(), uint64(gas), tx.EthTX.GasPrice(), tx.EthTX.Data())
 		}
 	}
 	txArgs.Gas = &gas

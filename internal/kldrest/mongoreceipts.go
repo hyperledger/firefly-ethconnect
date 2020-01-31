@@ -16,7 +16,6 @@ package kldrest
 
 import (
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/globalsign/mgo"
@@ -84,25 +83,16 @@ func (m *mongoReceipts) AddReceipt(receipt *map[string]interface{}) error {
 }
 
 // GetReceipts Returns recent receipts with skip & limit
-func (m *mongoReceipts) GetReceipts(skip, limit int, ids []string, since, from, to string) (*[]map[string]interface{}, error) {
+func (m *mongoReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to string) (*[]map[string]interface{}, error) {
 	filter := bson.M{}
 	if len(ids) > 0 {
 		filter["_id"] = bson.M{
 			"$in": ids,
 		}
 	}
-	if since != "" {
-		var intTime int64
-		if isoTime, err := time.Parse(time.RFC3339Nano, since); err == nil {
-			intTime = isoTime.UnixNano() / int64(time.Millisecond)
-		} else {
-			if intTime, err = strconv.ParseInt(since, 10, 64); err != nil {
-				log.Errorf("since '%s' cannot be parsed as RFC3339 or millisecond timestamp: %s", since, err)
-				return nil, fmt.Errorf("since cannot be parsed as RFC3339 or millisecond timestamp")
-			}
-		}
+	if sinceEpochMS > 0 {
 		filter["receivedAt"] = bson.M{
-			"$gt": intTime,
+			"$gt": sinceEpochMS,
 		}
 	}
 	if from != "" {

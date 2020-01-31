@@ -241,7 +241,7 @@ func TestMongoReceiptsGetReceiptsOK(t *testing.T) {
 	}
 
 	r.connect()
-	results, err := r.GetReceipts(5, 2, nil, "", "", "")
+	results, err := r.GetReceipts(5, 2, nil, 0, "", "")
 	assert.NoError(err)
 	assert.Equal(5, mgoMock.collection.mockQuery.skip)
 	assert.Equal(2, mgoMock.collection.mockQuery.limit)
@@ -272,7 +272,7 @@ func TestMongoReceiptsFilter(t *testing.T) {
 
 	r.connect()
 	now := time.Now()
-	results, err := r.GetReceipts(0, 0, []string{"key1", "key2"}, now.Format(time.RFC3339Nano), "addr1", "addr2")
+	results, err := r.GetReceipts(0, 0, []string{"key1", "key2"}, now.UnixNano()/int64(time.Millisecond), "addr1", "addr2")
 	assert.NoError(err)
 	queryBSON := mgoMock.collection.captureQuery.(bson.M)
 	assert.Equal([]string{"key1", "key2"}, queryBSON["_id"].(bson.M)["$in"])
@@ -283,21 +283,6 @@ func TestMongoReceiptsFilter(t *testing.T) {
 	assert.Equal(0, mgoMock.collection.mockQuery.limit)
 	assert.Equal("value1", (*results)[0]["key1"])
 	assert.Equal("value2", (*results)[1]["key2"])
-	return
-}
-
-func TestMongoReceiptsFilterBadTime(t *testing.T) {
-	assert := assert.New(t)
-
-	mgoMock := &mockMongo{}
-	r := &mongoReceipts{
-		conf: &MongoDBReceiptStoreConf{},
-		mgo:  mgoMock,
-	}
-
-	r.connect()
-	_, err := r.GetReceipts(0, 0, []string{"key1", "key2"}, "badint", "addr1", "addr2")
-	assert.EqualError(err, "since cannot be parsed as RFC3339 or millisecond timestamp")
 	return
 }
 
@@ -313,7 +298,7 @@ func TestMongoReceiptsGetReceiptsNotFound(t *testing.T) {
 	mgoMock.collection.mockQuery.allErr = mgo.ErrNotFound
 
 	r.connect()
-	results, err := r.GetReceipts(5, 2, nil, "", "", "")
+	results, err := r.GetReceipts(5, 2, nil, 0, "", "")
 	assert.NoError(err)
 	assert.Len(*results, 0)
 	return
@@ -331,7 +316,7 @@ func TestMongoReceiptsGetReceiptsError(t *testing.T) {
 	mgoMock.collection.mockQuery.allErr = fmt.Errorf("pop")
 
 	r.connect()
-	_, err := r.GetReceipts(5, 2, nil, "", "", "")
+	_, err := r.GetReceipts(5, 2, nil, 0, "", "")
 	assert.EqualError(err, "pop")
 	return
 }

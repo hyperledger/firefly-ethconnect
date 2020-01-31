@@ -241,7 +241,7 @@ func TestMongoReceiptsGetReceiptsOK(t *testing.T) {
 	}
 
 	r.connect()
-	results, err := r.GetReceipts(5, 2, nil)
+	results, err := r.GetReceipts(5, 2, nil, 0, "", "")
 	assert.NoError(err)
 	assert.Equal(5, mgoMock.collection.mockQuery.skip)
 	assert.Equal(2, mgoMock.collection.mockQuery.limit)
@@ -271,10 +271,14 @@ func TestMongoReceiptsFilter(t *testing.T) {
 	}
 
 	r.connect()
-	results, err := r.GetReceipts(0, 0, []string{"key1", "key2"})
+	now := time.Now()
+	results, err := r.GetReceipts(0, 0, []string{"key1", "key2"}, now.UnixNano()/int64(time.Millisecond), "addr1", "addr2")
 	assert.NoError(err)
 	queryBSON := mgoMock.collection.captureQuery.(bson.M)
 	assert.Equal([]string{"key1", "key2"}, queryBSON["_id"].(bson.M)["$in"])
+	assert.Equal(now.UnixNano()/int64(time.Millisecond), queryBSON["receivedAt"].(bson.M)["$gt"])
+	assert.Equal("addr1", queryBSON["from"])
+	assert.Equal("addr2", queryBSON["to"])
 	assert.Equal(0, mgoMock.collection.mockQuery.skip)
 	assert.Equal(0, mgoMock.collection.mockQuery.limit)
 	assert.Equal("value1", (*results)[0]["key1"])
@@ -294,7 +298,7 @@ func TestMongoReceiptsGetReceiptsNotFound(t *testing.T) {
 	mgoMock.collection.mockQuery.allErr = mgo.ErrNotFound
 
 	r.connect()
-	results, err := r.GetReceipts(5, 2, nil)
+	results, err := r.GetReceipts(5, 2, nil, 0, "", "")
 	assert.NoError(err)
 	assert.Len(*results, 0)
 	return
@@ -312,7 +316,7 @@ func TestMongoReceiptsGetReceiptsError(t *testing.T) {
 	mgoMock.collection.mockQuery.allErr = fmt.Errorf("pop")
 
 	r.connect()
-	_, err := r.GetReceipts(5, 2, nil)
+	_, err := r.GetReceipts(5, 2, nil, 0, "", "")
 	assert.EqualError(err, "pop")
 	return
 }

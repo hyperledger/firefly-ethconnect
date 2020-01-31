@@ -82,6 +82,7 @@ type txnProcessor struct {
 	addressBook        AddressBook
 	hdwallet           HDWallet
 	conf               *TxnProcessorConf
+	rpcConf            *kldeth.RPCConf
 }
 
 // NewTxnProcessor constructor for message procss
@@ -91,12 +92,7 @@ func NewTxnProcessor(conf *TxnProcessorConf, rpcConf *kldeth.RPCConf) TxnProcess
 		inflightTxns:       make(map[string][]*inflightTxn),
 		inflightTxnDelayer: NewTxnDelayTracker(),
 		conf:               conf,
-	}
-	if conf.AddressBookConf.AddressbookURLPrefix != "" {
-		p.addressBook = NewAddressBook(&conf.AddressBookConf, rpcConf)
-	}
-	if conf.HDWalletConf.URLTemplate != "" {
-		p.hdwallet = newHDWallet(&conf.HDWalletConf)
+		rpcConf:            rpcConf,
 	}
 	return p
 }
@@ -104,6 +100,12 @@ func NewTxnProcessor(conf *TxnProcessorConf, rpcConf *kldeth.RPCConf) TxnProcess
 func (p *txnProcessor) Init(rpc kldeth.RPCClient) {
 	p.rpc = rpc
 	p.maxTXWaitTime = time.Duration(p.conf.MaxTXWaitTime) * time.Second
+	if p.conf.AddressBookConf.AddressbookURLPrefix != "" {
+		p.addressBook = NewAddressBook(&p.conf.AddressBookConf, p.rpcConf)
+	}
+	if p.conf.HDWalletConf.URLTemplate != "" {
+		p.hdwallet = newHDWallet(&p.conf.HDWalletConf)
+	}
 }
 
 // CobraInitTxnProcessor sets the standard command-line parameters for the txnprocessor

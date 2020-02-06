@@ -55,7 +55,7 @@ func loadSecurityModulePlugin(conf *PluginConfig) error {
 
 	sm, ok := smSymbol.(kldplugins.SecurityModule)
 	if !ok {
-		return fmt.Errorf("Failed to cast symbol from '%s' to 'kldplugins.SecurityModule'", modulePath)
+		return fmt.Errorf("Failed to cast symbol from '%s' to 'kldplugins.SecurityModule': %v", modulePath, sm)
 	}
 
 	kldauth.RegisterSecurityModule(sm)

@@ -129,7 +129,7 @@ func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
 	}
 	txArgs.Gas = &gas
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	tx.Hash, err = tx.submitTXtoNode(ctx, rpc, txArgs)

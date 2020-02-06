@@ -131,7 +131,7 @@ func readServerConfig() (serverConfig *ServerConfig, err error) {
 	}
 
 	// Load any plugins
-	loadPlugins(&serverConfig.Plugins)
+	err = loadPlugins(&serverConfig.Plugins)
 
 	return
 }

@@ -53,6 +53,6 @@ func loadSecurityModulePlugin(conf *PluginConfig) error {
 		return fmt.Errorf("Failed to load 'SecurityModule' symbol from '%s': %s", modulePath, err)
 	}
 
-	kldauth.RegisterSecurityModule(smSymbol.(kldplugins.SecurityModule))
+	kldauth.RegisterSecurityModule(*smSymbol.(*kldplugins.SecurityModule))
 	return nil
 }

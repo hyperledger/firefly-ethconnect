@@ -30,7 +30,7 @@ type PluginConfig struct {
 
 func loadPlugins(conf *PluginConfig) error {
 	if err := loadSecurityModulePlugin(conf); err != nil {
-		return err
+		panic(err)
 	}
 	return nil
 }

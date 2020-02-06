@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/kaleido-io/ethconnect/pkg/kldplugins"
+	"github.com/sirupsen/logrus"
 )
 
 type kldContextKey int
@@ -33,6 +34,7 @@ var securityModule kldplugins.SecurityModule
 
 // RegisterSecurityModule is the plug point to register a security module
 func RegisterSecurityModule(sm kldplugins.SecurityModule) {
+	logrus.Infof("Registered security module: %v", securityModule)
 	securityModule = sm
 }
 
@@ -50,6 +52,7 @@ func IsSystemContext(ctx context.Context) bool {
 // WithAuthContext adds an access token to a base context
 func WithAuthContext(ctx context.Context, token string) (context.Context, error) {
 	if securityModule != nil {
+		logrus.Debugf("Invoking security module")
 		ctxValue, err := securityModule.VerifyToken(token)
 		if err != nil {
 			return nil, err
@@ -57,6 +60,8 @@ func WithAuthContext(ctx context.Context, token string) (context.Context, error)
 		ctx = context.WithValue(ctx, kldContextKeyAccessToken, token)
 		ctx = context.WithValue(ctx, kldContextKeyAuthContext, ctxValue)
 		return ctx, nil
+	} else {
+		logrus.Debugf("No security module installed")
 	}
 	return ctx, nil
 }

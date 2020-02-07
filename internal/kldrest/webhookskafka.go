@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"github.com/Shopify/sarama"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	log "github.com/sirupsen/logrus"
 )
@@ -130,6 +131,11 @@ func (w *webhooksKafka) ProducerSuccessLoop(consumer kldkafka.KafkaConsumer, pro
 }
 
 func (w *webhooksKafka) sendWebhookMsg(ctx context.Context, key, msgID string, msg map[string]interface{}, ack bool) (string, int, error) {
+
+	headers, ok := msg["headers"].(map[string]interface{})
+	if ok {
+		headers["token"] = kldauth.GetAccessToken(ctx)
+	}
 
 	// Reseialize back to JSON with the headers
 	payloadToForward, err := json.Marshal(&msg)

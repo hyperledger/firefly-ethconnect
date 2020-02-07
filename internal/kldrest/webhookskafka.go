@@ -134,7 +134,7 @@ func (w *webhooksKafka) sendWebhookMsg(ctx context.Context, key, msgID string, m
 
 	headers, ok := msg["headers"].(map[string]interface{})
 	if ok {
-		headers["accessToken"] = kldauth.GetAccessToken(ctx)
+		headers["token"] = kldauth.GetAccessToken(ctx)
 	}
 
 	// Reseialize back to JSON with the headers

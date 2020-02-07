@@ -67,6 +67,10 @@ func (p *mockReplyProcessor) ReplyWithReceipt(receipt kldmessages.ReplyWithHeade
 	p.receipt = receipt
 }
 
+func (p *mockReplyProcessor) ReplyWithReceiptAndError(receipt kldmessages.ReplyWithHeaders, err error) {
+	p.receipt = receipt
+}
+
 func TestDispatchSendTransactionSync(t *testing.T) {
 	assert := assert.New(t)
 

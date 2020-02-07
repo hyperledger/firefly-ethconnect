@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/kaleido-io/ethconnect/internal/kldevents"
 
 	"github.com/julienschmidt/httprouter"
@@ -83,6 +84,7 @@ type mockABILoader struct {
 	resolveContractErr     error
 	nameAvailableError     error
 	capturedAddr           string
+	postDeployError        error
 }
 
 func (m *mockABILoader) loadDeployMsgForInstance(addrHexNo0x string) (*kldmessages.DeployContract, *contractInfo, error) {
@@ -102,10 +104,12 @@ func (m *mockABILoader) checkNameAvailable(name string, isRemote bool) error {
 	return m.nameAvailableError
 }
 
-func (m *mockABILoader) PreDeploy(msg *kldmessages.DeployContract) error      { return nil }
-func (m *mockABILoader) PostDeploy(msg *kldmessages.TransactionReceipt) error { return nil }
-func (m *mockABILoader) AddRoutes(router *httprouter.Router)                  { return }
-func (m *mockABILoader) Shutdown()                                            { return }
+func (m *mockABILoader) PreDeploy(msg *kldmessages.DeployContract) error { return nil }
+func (m *mockABILoader) PostDeploy(msg *kldmessages.TransactionReceipt) error {
+	return m.postDeployError
+}
+func (m *mockABILoader) AddRoutes(router *httprouter.Router) { return }
+func (m *mockABILoader) Shutdown()                           { return }
 
 type mockRPC struct {
 	capturedMethod string
@@ -179,6 +183,15 @@ func newTestREST2Eth(dispatcher *mockREST2EthDispatcher) (*rest2eth, *mockRPC, *
 	return r, mockRPC, router
 }
 
+func newTestREST2EthCustomAbiLoader(dispatcher *mockREST2EthDispatcher, abiLoader *mockABILoader) (*rest2eth, *mockRPC, *httprouter.Router) {
+	mockRPC := &mockRPC{}
+	r := newREST2eth(abiLoader, mockRPC, nil, nil, dispatcher, dispatcher)
+	router := &httprouter.Router{}
+	r.addRoutes(router)
+
+	return r, mockRPC, router
+}
+
 func newTestREST2EthAndMsg(dispatcher *mockREST2EthDispatcher, from, to string, bodyMap map[string]interface{}) (*rest2eth, *mockRPC, *httprouter.Router, *httptest.ResponseRecorder, *http.Request) {
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/set", bytes.NewReader(body))
@@ -186,6 +199,22 @@ func newTestREST2EthAndMsg(dispatcher *mockREST2EthDispatcher, from, to string, 
 	res := httptest.NewRecorder()
 
 	r, mockRPC, router := newTestREST2Eth(dispatcher)
+
+	return r, mockRPC, router, res, req
+}
+
+func newTestREST2EthAndMsgPostDeployError(dispatcher *mockREST2EthDispatcher, from, to string, bodyMap map[string]interface{}) (*rest2eth, *mockRPC, *httprouter.Router, *httptest.ResponseRecorder, *http.Request) {
+	deployMsg := newTestDeployMsg("")
+	abiLoader := &mockABILoader{
+		deployMsg:       &deployMsg.DeployContract,
+		postDeployError: fmt.Errorf("pop"),
+	}
+	body, _ := json.Marshal(&bodyMap)
+	req := httptest.NewRequest("POST", "/contracts/"+to+"/set", bytes.NewReader(body))
+	req.Header.Add("x-kaleido-from", from)
+	res := httptest.NewRecorder()
+
+	r, mockRPC, router := newTestREST2EthCustomAbiLoader(dispatcher, abiLoader)
 
 	return r, mockRPC, router, res, req
 }
@@ -391,6 +420,44 @@ func TestSendTransactionSyncFailure(t *testing.T) {
 	assert.Equal(500, res.Result().StatusCode)
 	assert.Equal(from, dispatcher.sendTransactionMsg.From)
 	assert.Equal(to, dispatcher.sendTransactionMsg.To)
+}
+
+func TestSendTransactionSyncPostDeployErr(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	bodyMap["i"] = 12345
+	bodyMap["s"] = "testing"
+	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
+	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
+	contractAddr := common.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	receipt := &kldmessages.TransactionReceipt{
+		ReplyCommon: kldmessages.ReplyCommon{
+			Headers: kldmessages.ReplyHeaders{
+				CommonHeaders: kldmessages.CommonHeaders{
+					MsgType: kldmessages.MsgTypeTransactionSuccess,
+				},
+			},
+		},
+		ContractAddress: &contractAddr,
+	}
+	dispatcher := &mockREST2EthDispatcher{
+		sendTransactionSyncReceipt: receipt,
+	}
+	_, _, router, res, _ := newTestREST2EthAndMsgPostDeployError(dispatcher, from, to, bodyMap)
+	body, _ := json.Marshal(&bodyMap)
+	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?kld-sync&kld-ethvalue=1234", bytes.NewReader(body))
+	req.Header.Add("x-kaleido-from", from)
+	router.ServeHTTP(res, req)
+
+	assert.Equal(json.Number("1234"), dispatcher.sendTransactionMsg.Value)
+
+	assert.Equal(500, res.Result().StatusCode)
+	assert.Equal(from, dispatcher.sendTransactionMsg.From)
+	assert.Equal(to, dispatcher.sendTransactionMsg.To)
+	assert.Equal(contractAddr, *dispatcher.sendTransactionSyncReceipt.ContractAddress)
 }
 
 func TestSendTransactionSyncViaABISuccess(t *testing.T) {

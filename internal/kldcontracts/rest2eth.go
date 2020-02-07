@@ -56,6 +56,7 @@ type rest2EthSyncDispatcher interface {
 type rest2EthReplyProcessor interface {
 	ReplyWithError(err error)
 	ReplyWithReceipt(receipt kldmessages.ReplyWithHeaders)
+	ReplyWithReceiptAndError(receipt kldmessages.ReplyWithHeaders, err error)
 }
 
 // rest2eth provides the HTTP <-> kldmessages translation and dispatches for processing
@@ -76,6 +77,11 @@ type restAsyncMsg struct {
 	OK string `json:"ok"`
 }
 
+type restReceiptAndError struct {
+	Message string `json:"error"`
+	kldmessages.ReplyWithHeaders
+}
+
 // rest2EthInflight is instantiated for each async reply in flight
 type rest2EthSyncResponder struct {
 	r      *rest2eth
@@ -94,11 +100,26 @@ func (i *rest2EthSyncResponder) ReplyWithError(err error) {
 	return
 }
 
+func (i *rest2EthSyncResponder) ReplyWithReceiptAndError(receipt kldmessages.ReplyWithHeaders, err error) {
+	status := 500
+	reply, _ := json.MarshalIndent(&restReceiptAndError{err.Error(), receipt}, "", "  ")
+	log.Infof("<-- %s %s [%d]", i.req.Method, i.req.URL, status)
+	log.Debugf("<-- %s", reply)
+	i.res.Header().Set("Content-Type", "application/json")
+	i.res.WriteHeader(status)
+	i.res.Write(reply)
+	i.done = true
+	i.waiter.Broadcast()
+	return
+}
+
 func (i *rest2EthSyncResponder) ReplyWithReceipt(receipt kldmessages.ReplyWithHeaders) {
 	txReceiptMsg := receipt.IsReceipt()
 	if txReceiptMsg != nil && txReceiptMsg.ContractAddress != nil {
 		if err := i.r.gw.PostDeploy(txReceiptMsg); err != nil {
 			log.Warnf("Failed to perform post-deploy processing: %s", err)
+			i.ReplyWithReceiptAndError(receipt, err)
+			return
 		}
 	}
 	status := 200

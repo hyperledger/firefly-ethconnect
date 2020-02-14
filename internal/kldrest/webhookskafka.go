@@ -23,6 +23,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
+	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -132,11 +133,6 @@ func (w *webhooksKafka) ProducerSuccessLoop(consumer kldkafka.KafkaConsumer, pro
 
 func (w *webhooksKafka) sendWebhookMsg(ctx context.Context, key, msgID string, msg map[string]interface{}, ack bool) (string, int, error) {
 
-	headers, ok := msg["headers"].(map[string]interface{})
-	if ok {
-		headers["token"] = kldauth.GetAccessToken(ctx)
-	}
-
 	// Reseialize back to JSON with the headers
 	payloadToForward, err := json.Marshal(&msg)
 	if err != nil {
@@ -152,6 +148,15 @@ func (w *webhooksKafka) sendWebhookMsg(ctx context.Context, key, msgID string, m
 		Key:      sarama.StringEncoder(key),
 		Value:    sarama.ByteEncoder(payloadToForward),
 		Metadata: msgID,
+	}
+	accessToken := kldauth.GetAccessToken(ctx)
+	if accessToken != "" {
+		sentMsg.Headers = []sarama.RecordHeader{
+			sarama.RecordHeader{
+				Key:   []byte(kldmessages.RecordHeaderAccessToken),
+				Value: []byte(accessToken),
+			},
+		}
 	}
 	w.kafka.Producer().Input() <- sentMsg
 

@@ -242,13 +242,12 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessage
 		// We've been asked to defer to the node for signing, and are not performing HD Wallet signing
 		inflight.nodeAssignNonce = true
 	} else {
-		// Alternatively (will be required when we support externally signed tranactions)
-		// we can do a dirty read from the node of the highest comitted
+		// Alternatively we do a dirty read from the node of the highest comitted
 		// transaction. This will be ok as long as we're the only JSON/RPC writing to
 		// this address. But if we're competing with other transactions
 		// we need to accept the possibility of 'replacement transaction underpriced'
 		// (or if gas price is being varied by the submitter the potential of
-		// overwriting a transcation)
+		// overwriting a transaction)
 		inflight.nonce, err = kldeth.GetTransactionCount(txnContext.Context(), p.rpc, &from, "pending")
 	}
 

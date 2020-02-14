@@ -111,3 +111,39 @@ func TestAuthEventStreams(t *testing.T) {
 	RegisterSecurityModule(nil)
 
 }
+
+func TestAuthListAsyncReplies(t *testing.T) {
+	assert := assert.New(t)
+
+	assert.NoError(AuthListAsyncReplies(context.Background()))
+
+	RegisterSecurityModule(&kldauthtest.TestSecurityModule{})
+
+	assert.EqualError(AuthListAsyncReplies(context.Background()), "No auth context")
+
+	assert.NoError(AuthListAsyncReplies(NewSystemAuthContext()))
+
+	ctx, _ := WithAuthContext(context.Background(), "testat")
+	assert.NoError(AuthListAsyncReplies(ctx))
+
+	RegisterSecurityModule(nil)
+
+}
+
+func TestAuthReadAsyncReplyByUUID(t *testing.T) {
+	assert := assert.New(t)
+
+	assert.NoError(AuthReadAsyncReplyByUUID(context.Background()))
+
+	RegisterSecurityModule(&kldauthtest.TestSecurityModule{})
+
+	assert.EqualError(AuthReadAsyncReplyByUUID(context.Background()), "No auth context")
+
+	assert.NoError(AuthReadAsyncReplyByUUID(NewSystemAuthContext()))
+
+	ctx, _ := WithAuthContext(context.Background(), "testat")
+	assert.NoError(AuthReadAsyncReplyByUUID(ctx))
+
+	RegisterSecurityModule(nil)
+
+}

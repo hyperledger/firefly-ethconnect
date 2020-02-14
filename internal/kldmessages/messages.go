@@ -35,6 +35,8 @@ const (
 	MsgTypeTransactionSuccess = "TransactionSuccess"
 	// MsgTypeTransactionFailure - a transaction receipt where status is 0
 	MsgTypeTransactionFailure = "TransactionFailure"
+	// RecordHeaderAccessToken - record header name for passing JWT token over messaging
+	RecordHeaderAccessToken = "kld-accesstoken"
 )
 
 // ABIMethod is the web3 form for an individual function
@@ -78,7 +80,6 @@ type RequestCommon struct {
 // RequestHeaders are common to all replies
 type RequestHeaders struct {
 	CommonHeaders
-	AccessToken string `json:"token,omitEmpty"`
 }
 
 // ReplyHeaders are common to all replies

@@ -249,7 +249,7 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessage
 		// we need to accept the possibility of 'replacement transaction underpriced'
 		// (or if gas price is being varied by the submitter the potential of
 		// overwriting a transcation)
-		inflight.nonce, err = kldeth.GetTransactionCount(p.rpc, &from, "pending")
+		inflight.nonce, err = kldeth.GetTransactionCount(txnContext.Context(), p.rpc, &from, "pending")
 	}
 
 	return

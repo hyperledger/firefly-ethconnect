@@ -26,6 +26,8 @@ import (
 	"net/http/httptest"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
+	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 )
@@ -495,4 +497,34 @@ func TestGetRepliesExcessiveLimit(t *testing.T) {
 	assert.NoError(httpErr)
 	assert.Equal(400, status)
 	assert.Equal("Maximum limit is 50", respJSON["error"])
+}
+
+func TestGetRepliesUnauthorized(t *testing.T) {
+	kldauth.RegisterSecurityModule(&kldauthtest.TestSecurityModule{})
+
+	assert := assert.New(t)
+	_, _, ts := newReceiptsTestServer()
+	defer ts.Close()
+
+	status, respJSON, httpErr := testGETObject(ts, "/replies?limit=1000")
+	assert.NoError(httpErr)
+	assert.Equal(401, status)
+	assert.Equal("Unauthorized", respJSON["error"])
+
+	kldauth.RegisterSecurityModule(nil)
+}
+
+func TestGetReplyUnauthorized(t *testing.T) {
+	kldauth.RegisterSecurityModule(&kldauthtest.TestSecurityModule{})
+
+	assert := assert.New(t)
+	_, _, ts := newReceiptsTestServer()
+	defer ts.Close()
+
+	status, respJSON, httpErr := testGETObject(ts, "/reply/12345")
+	assert.NoError(httpErr)
+	assert.Equal(401, status)
+	assert.Equal("Unauthorized", respJSON["error"])
+
+	kldauth.RegisterSecurityModule(nil)
 }

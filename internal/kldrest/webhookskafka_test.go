@@ -16,18 +16,23 @@ package kldrest
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/julienschmidt/httprouter"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
+	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
@@ -105,7 +110,12 @@ func newTestWebhooks() (*webhooks, *webhooksKafka, *testKafkaCommon, *httptest.S
 	w := newWebhooks(wk, nil)
 	router := &httprouter.Router{}
 	w.addRoutes(router)
-	ts := httptest.NewServer(router)
+	ts := httptest.NewUnstartedServer(router)
+	ts.Config.BaseContext = func(l net.Listener) context.Context {
+		ctx, _ := kldauth.WithAuthContext(context.Background(), "testat")
+		return ctx
+	}
+	ts.Start()
 	return w, wk, k, ts
 }
 
@@ -179,14 +189,22 @@ func sendTestTransaction(assert *assert.Assertions, msgBytes []byte, contentType
 	go wk.ProducerSuccessLoop(k.kafkaFactory.Consumer, k.kafkaFactory.Producer, wg)
 	go wk.ProducerErrorLoop(k.kafkaFactory.Consumer, k.kafkaFactory.Producer, wg)
 
-	var url string
+	var url *url.URL
 	if ack {
-		url = fmt.Sprintf("%s/hook", ts.URL)
+		url, _ = url.Parse(fmt.Sprintf("%s/hook", ts.URL))
 	} else {
-		url = fmt.Sprintf("%s/fasthook", ts.URL)
-
+		url, _ = url.Parse(fmt.Sprintf("%s/fasthook", ts.URL))
 	}
-	resp, httpErr := http.Post(url, contentType, bytes.NewReader(msgBytes))
+	req := &http.Request{
+		URL:    url,
+		Method: http.MethodPost,
+		Header: http.Header{
+			"Content-Type": []string{contentType},
+		},
+		ContentLength: int64(len(msgBytes)),
+		Body:          ioutil.NopCloser(bytes.NewReader(msgBytes)),
+	}
+	resp, httpErr := http.DefaultClient.Do(req)
 	if httpErr != nil {
 		log.Errorf("HTTP error for %s: %+v", url, httpErr)
 	}
@@ -212,6 +230,27 @@ func TestWebhookHandlerJSONSendTransaction(t *testing.T) {
 	json.Unmarshal(replyMsgs[0], &forwardedMessage)
 	assert.Equal(kldmessages.MsgTypeSendTransaction, forwardedMessage.Headers.MsgType)
 	assert.NotEmpty(forwardedMessage.Headers.ID)
+}
+
+func TestWebhookHandlerJSONSendnWithAccessToken(t *testing.T) {
+
+	kldauth.RegisterSecurityModule(&kldauthtest.TestSecurityModule{})
+	assert := assert.New(t)
+
+	msg := kldmessages.SendTransaction{}
+	msg.Headers.MsgType = kldmessages.MsgTypeSendTransaction
+	msgBytes, _ := json.Marshal(&msg)
+	resp, replyMsgs := sendTestTransaction(assert, msgBytes, "application/json", nil, true)
+	assertSentResp(assert, resp, true)
+	assert.Equal(1, len(replyMsgs))
+
+	forwardedMessage := kldmessages.SendTransaction{}
+	json.Unmarshal(replyMsgs[0], &forwardedMessage)
+	assert.Equal(kldmessages.MsgTypeSendTransaction, forwardedMessage.Headers.MsgType)
+	assert.NotEmpty(forwardedMessage.Headers.ID)
+
+	kldauth.RegisterSecurityModule(nil)
+
 }
 
 func TestWebhookHandlerJSONSendTransactionNoAck(t *testing.T) {

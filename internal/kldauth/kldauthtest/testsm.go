@@ -59,3 +59,21 @@ func (sm *TestSecurityModule) AuthEventStreams(authCtx interface{}) error {
 	}
 	return fmt.Errorf("badness")
 }
+
+// AuthListAsyncReplies of TEST MODULE returns true if there is an auth context
+func (sm *TestSecurityModule) AuthListAsyncReplies(authCtx interface{}) error {
+	switch authCtx.(type) {
+	case string:
+		return nil
+	}
+	return fmt.Errorf("badness")
+}
+
+// AuthReadAsyncReplyByUUID of TEST MODULE returns true if there is an auth context
+func (sm *TestSecurityModule) AuthReadAsyncReplyByUUID(authCtx interface{}) error {
+	switch authCtx.(type) {
+	case string:
+		return nil
+	}
+	return fmt.Errorf("badness")
+}

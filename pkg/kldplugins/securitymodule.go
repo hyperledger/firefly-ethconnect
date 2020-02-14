@@ -31,4 +31,8 @@ type SecurityModule interface {
 	AuthRPCSubscribe(authCtx interface{}, namespace string, channel interface{}, args ...interface{}) error
 	// AuthEventStreams - Authorization plugpoint for event management system (single permission currently - evolution likely as requirements evolve)
 	AuthEventStreams(authCtx interface{}) error
+	// AuthListAsyncReplies - Authorization plugpoint for listing replies in the reply store (containing receipts and/or errors)
+	AuthListAsyncReplies(authCtx interface{}) error
+	// AuthReadAsyncReplyByUUID - Authorization plugpoint for getting an individual reply by UUID (containing an individual receipt/error)
+	AuthReadAsyncReplyByUUID(authCtx interface{}) error
 }

@@ -216,7 +216,6 @@ func TestSingleMessageWithReply(t *testing.T) {
 
 	// Send a minimal test message
 	msg1 := kldmessages.RequestCommon{}
-	msg1.Headers.AccessToken = "testat"
 	msg1.Headers.MsgType = "TestSingleMessageWithReply"
 	msg1Ctx := map[string]interface{}{
 		"some": "data",
@@ -231,6 +230,12 @@ func TestSingleMessageWithReply(t *testing.T) {
 		Partition: 5,
 		Offset:    500,
 		Value:     msg1bytes,
+		Headers: []*sarama.RecordHeader{
+			&sarama.RecordHeader{
+				Key:   []byte(kldmessages.RecordHeaderAccessToken),
+				Value: []byte("testat"),
+			},
+		},
 	}
 
 	// Get the message via the processor

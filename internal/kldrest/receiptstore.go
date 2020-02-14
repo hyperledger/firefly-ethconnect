@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldcontracts"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
@@ -141,6 +142,12 @@ func (r *receiptStore) marshalAndReply(res http.ResponseWriter, req *http.Reques
 func (r *receiptStore) getReplies(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
 
+	err := kldauth.AuthListAsyncReplies(req.Context())
+	if err != nil {
+		sendRESTError(res, req, fmt.Errorf("Unauthorized"), 401)
+		return
+	}
+
 	res.Header().Set("Content-Type", "application/json")
 	if r.persistence == nil {
 		sendRESTError(res, req, fmt.Errorf("Receipt store not enabled"), 405)
@@ -225,6 +232,12 @@ func (r *receiptStore) getReplies(res http.ResponseWriter, req *http.Request, pa
 // getReply handles a HTTP request for an individual reply
 func (r *receiptStore) getReply(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
+
+	err := kldauth.AuthReadAsyncReplyByUUID(req.Context())
+	if err != nil {
+		sendRESTError(res, req, fmt.Errorf("Unauthorized"), 401)
+		return
+	}
 
 	requestID := params.ByName("id")
 	// Call the persistence tier - which must return an empty array when no results (not an error)

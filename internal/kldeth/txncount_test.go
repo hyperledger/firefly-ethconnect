@@ -31,7 +31,7 @@ func TestGetTransactionCount(t *testing.T) {
 	r := testRPCClient{}
 
 	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
-	_, err := GetTransactionCount(&r, &addr, "latest")
+	_, err := GetTransactionCount(context.Background(), &r, &addr, "latest")
 
 	assert.Equal(nil, err)
 	assert.Equal("eth_getTransactionCount", r.capturedMethod)
@@ -46,7 +46,7 @@ func TestGetTransactionCountErr(t *testing.T) {
 	}
 
 	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
-	_, err := GetTransactionCount(&r, &addr, "latest")
+	_, err := GetTransactionCount(context.Background(), &r, &addr, "latest")
 
 	assert.EqualError(err, "eth_getTransactionCount returned: pop")
 }

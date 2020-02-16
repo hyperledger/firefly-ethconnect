@@ -44,10 +44,10 @@ func GetOrionTXCount(ctx context.Context, rpc RPCClient, addr *common.Address, p
 }
 
 // GetTransactionCount gets the transaction count for an address
-func GetTransactionCount(rpc RPCClient, addr *common.Address, blockNumber string) (int64, error) {
+func GetTransactionCount(ctx context.Context, rpc RPCClient, addr *common.Address, blockNumber string) (int64, error) {
 	start := time.Now().UTC()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	var txnCount hexutil.Uint64

@@ -188,7 +188,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	assert.Equal("0123456789abcdef0123456789abcdef01234567", body[0].Address)
 
 	// Check we can get it back over REST
-	req = httptest.NewRequest("GET", "/contracts/0123456789abcdef0123456789abcdef01234567", bytes.NewReader([]byte{}))
+	req = httptest.NewRequest("GET", "/contracts/0x0123456789abcdef0123456789abcdef01234567", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(200, res.Result().StatusCode)
@@ -203,6 +203,15 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	router.ServeHTTP(res, req)
 	assert.Equal(200, res.Result().StatusCode)
 	var swagger spec.Swagger
+	err = json.NewDecoder(res.Body).Decode(&swagger)
+	assert.NoError(err)
+	assert.Equal("SimpleEvents", swagger.Info.Title)
+
+	// Check we can get the full contract swagger back over REST with contract addr that includes 0x prefix
+	req = httptest.NewRequest("GET", "/contracts/0x0123456789abcdef0123456789abcdef01234567?swagger", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(200, res.Result().StatusCode)
 	err = json.NewDecoder(res.Body).Decode(&swagger)
 	assert.NoError(err)
 	assert.Equal("SimpleEvents", swagger.Info.Title)

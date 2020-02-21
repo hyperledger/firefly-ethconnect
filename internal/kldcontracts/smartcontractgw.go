@@ -341,7 +341,8 @@ func (g *smartContractGW) resolveContractAddr(registeredName string) (string, er
 	return info.Address, nil
 }
 
-func (g *smartContractGW) loadDeployMsgForInstance(addrHexNo0x string) (*kldmessages.DeployContract, *contractInfo, error) {
+func (g *smartContractGW) loadDeployMsgForInstance(addrHex string) (*kldmessages.DeployContract, *contractInfo, error) {
+	addrHexNo0x := strings.TrimPrefix(strings.ToLower(addrHex), "0x")
 	info, exists := g.contractIndex[addrHexNo0x]
 	if !exists {
 		return nil, nil, fmt.Errorf("No contract instance registered with address %s", addrHexNo0x)

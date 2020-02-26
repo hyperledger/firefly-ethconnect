@@ -178,8 +178,8 @@ func (s *subscription) processNewEvents(ctx context.Context) error {
 		// Only log if we received at least one event
 		log.Debugf("%s: received %d events (%s)", s.logName, len(logs), rpcMethod)
 	}
-	for _, logEntry := range logs {
-		if err := s.lp.processLogEntry(s.logName, logEntry); err != nil {
+	for idx, logEntry := range logs {
+		if err := s.lp.processLogEntry(s.logName, logEntry, idx); err != nil {
 			log.Errorf("Failed to processs event: %s", err)
 		}
 	}

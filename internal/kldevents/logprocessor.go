@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -45,6 +46,7 @@ type eventData struct {
 	Data             map[string]interface{} `json:"data"`
 	SubID            string                 `json:"subId"`
 	Signature        string                 `json:"signature"`
+	LogIndex         string                 `json:"logIndex"`
 	// Used for callback handling
 	batchComplete func(*eventData)
 }
@@ -90,7 +92,7 @@ func (lp *logProcessor) initBlockHWM(intVal *big.Int) {
 	lp.hwnSync.Unlock()
 }
 
-func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry) (err error) {
+func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int) (err error) {
 
 	var data []byte
 	if strings.HasPrefix(entry.Data, "0x") {
@@ -108,6 +110,7 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry) (err er
 		Signature:        lp.event.Sig(),
 		Data:             make(map[string]interface{}),
 		SubID:            lp.subID,
+		LogIndex:         strconv.Itoa(idx),
 		batchComplete:    lp.batchComplete,
 	}
 	topicIdx := 0

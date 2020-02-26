@@ -71,7 +71,7 @@ func TestProcessLogEntryNillAndTooFewFields(t *testing.T) {
 	}
 	err := lp.processLogEntry("ut", &logEntry{
 		Topics: []*kldbind.Hash{nil},
-	})
+	}, 2)
 
 	assert.EqualError(err, "ut: Ran out of topics for indexed fields at field 1 of event ( indexed one,  indexed two)")
 }
@@ -96,7 +96,7 @@ func TestProcessLogBadRLPData(t *testing.T) {
 	}
 	err := lp.processLogEntry(t.Name(), &logEntry{
 		Data: "0x00",
-	})
+	}, 0)
 
 	assert.Regexp("Failed to parse RLP data from event", err.Error())
 }

@@ -92,7 +92,7 @@ func (sw *subWrapper) Unsubscribe() {
 }
 
 func (w *rpcWrapper) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
-	if err := kldauth.AuthRPC(ctx, method, args); err != nil {
+	if err := kldauth.AuthRPC(ctx, method, args...); err != nil {
 		log.Errorf("JSON/RPC %s - not authorized: %s", method, err)
 		return fmt.Errorf("Unauthorized")
 	}
@@ -100,7 +100,7 @@ func (w *rpcWrapper) CallContext(ctx context.Context, result interface{}, method
 }
 
 func (w *rpcWrapper) Subscribe(ctx context.Context, namespace string, channel interface{}, args ...interface{}) (RPCClientSubscription, error) {
-	if err := kldauth.AuthRPCSubscribe(ctx, namespace, channel, args); err != nil {
+	if err := kldauth.AuthRPCSubscribe(ctx, namespace, channel, args...); err != nil {
 		log.Errorf("JSON/RPC Subscribe - not authorized: %s", err)
 		return nil, fmt.Errorf("Unauthorized")
 	}

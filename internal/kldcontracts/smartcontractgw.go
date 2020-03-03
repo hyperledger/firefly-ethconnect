@@ -1187,7 +1187,7 @@ func (g *smartContractGW) writeHTMLForUI(prefix, id, from string, isGateway, fac
 <html>
 <head>
   <meta charset="utf-8"> <!-- Important: rapi-doc uses utf8 charecters -->
-  <script src="https://unpkg.com/rapidoc/dist/rapidoc-min.js"></script>
+  <script src="https://unpkg.com/rapidoc@7.1.0/dist/rapidoc-min.js"></script>
 </head>
 <body>
   <rapi-doc 

@@ -96,7 +96,10 @@ func (w *rpcWrapper) CallContext(ctx context.Context, result interface{}, method
 		log.Errorf("JSON/RPC %s - not authorized: %s", method, err)
 		return fmt.Errorf("Unauthorized")
 	}
-	return w.rpc.CallContext(ctx, result, method, args...)
+	log.Tracef("RPC [%s] --> %+v", method, args)
+	err := w.rpc.CallContext(ctx, result, method, args...)
+	log.Tracef("RPC [%s] <-- %+v", method, result)
+	return err
 }
 
 func (w *rpcWrapper) Subscribe(ctx context.Context, namespace string, channel interface{}, args ...interface{}) (RPCClientSubscription, error) {

@@ -55,6 +55,14 @@ func TestExecuteSetDebug(t *testing.T) {
 	Execute()
 	assert.Equal(log.DebugLevel, log.GetLevel(), "Debug level set")
 
+	rootCmd.SetArgs([]string{"testExecuteSetDebug", "-d", "3"})
+	Execute()
+	assert.Equal(log.TraceLevel, log.GetLevel(), "Trace level set")
+
+	rootCmd.SetArgs([]string{"testExecuteSetDebug", "-d", "99"})
+	Execute()
+	assert.Equal(log.DebugLevel, log.GetLevel(), "Debug level set")
+
 }
 
 func TestExecuteFail(t *testing.T) {

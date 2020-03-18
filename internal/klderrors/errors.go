@@ -315,7 +315,7 @@ const (
 	// TransactionSendPrivateTXWithExternalSigner we don't allow private transactions to be combined with a HD Wallet or other external signer currently
 	TransactionSendPrivateTXWithExternalSigner = "Signing with %s is not currently supported with private transactions"
 	// TransactionSendPrivateForAndPrivactyGroup mixed both params
-	TransactionSendPrivateForAndPrivactyGroup = "privacyGroupId and privateFor are mutually exclusive"
+	TransactionSendPrivateForAndPrivacyGroup = "privacyGroupId and privateFor are mutually exclusive"
 	// TransactionSendNonceFailWithPrivacyGroup when we successfully lookup the privacy group, but cannot get the nonce
 	TransactionSendNonceFailWithPrivacyGroup = "priv_getTransactionCount for privacy group '%s' returned: %s"
 	// TransactionSendMissingMethod a request to send a transaction was received (webhook/Kafka) that was missing method details (unexpected when using REST APIs that validate this)

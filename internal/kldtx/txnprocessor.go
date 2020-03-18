@@ -167,7 +167,7 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessage
 	inflight.rpc = p.rpc
 	if hdWalletRequest := IsHDWalletRequest(msg.From); hdWalletRequest != nil {
 		if p.hdwallet == nil {
-			return nil, klderrors.Errorf(klderrors.HDWalletSigningNoConfog)
+			return nil, klderrors.Errorf(klderrors.HDWalletSigningNoConfig)
 		}
 		if inflight.signer, err = p.hdwallet.SignerFor(hdWalletRequest); err != nil {
 			return
@@ -189,7 +189,7 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessage
 	// Need to resolve privateFrom/privateFor to a privacyGroupID for Orion
 	if p.conf.OrionPrivateAPIS {
 		if msg.PrivacyGroupID != "" && len(msg.PrivateFor) > 0 {
-			err = klderrors.Errorf(klderrors.TransactionSendPrivateForAndPrivactyGroup)
+			err = klderrors.Errorf(klderrors.TransactionSendPrivateForAndPrivacyGroup)
 			return
 		} else if msg.PrivacyGroupID != "" {
 			inflight.privacyGroupID = msg.PrivacyGroupID

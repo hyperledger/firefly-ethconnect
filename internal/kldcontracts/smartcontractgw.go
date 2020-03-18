@@ -1037,7 +1037,7 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 
 	compiled, err := kldeth.ProcessCompiled(preCompiled, req.FormValue("contract"), false)
 	if err != nil {
-		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractPostcompileFailed, err), 400)
+		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractPostCompileFailed, err), 400)
 		return
 	}
 

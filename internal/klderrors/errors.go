@@ -34,9 +34,9 @@ const (
 
 	// ConfigFileReadFailed failed to read the server config file
 	ConfigFileReadFailed = "Failed to read %s: %s"
-	// CompilerVerionNotFound the runtime context of ethconnect has not been configured with a compiler for the requested version
+	// CompilerVersionNotFound the runtime context of ethconnect has not been configured with a compiler for the requested version
 	CompilerVersionNotFound = "Could not find a configured compiler for requested Solidity major version %s.%s"
-	// CompilerVerionBadRequest the user requested a bad semver
+	// CompilerVersionBadRequest the user requested a bad semver
 	CompilerVersionBadRequest = "Invalid Solidity version requested for compiler. Ensure the string starts with two dot separated numbers, such as 0.5"
 	// CompilerFailedSolc compilation failure output from solc
 	CompilerFailedSolc = "Solidity compilation failed: solc: %v\n%s"
@@ -132,7 +132,7 @@ const (
 	HDWalletSigningFailed = "HDWallet signing failed"
 	// HDWalletSigningBadData we got a response, but not with the correct fields
 	HDWalletSigningBadData = "Unexpected response from HDWallet"
-	// HDWalletSigningNoConfog we had a request for HD Wallet signing, but we don't have the required config
+	// HDWalletSigningNoConfig we had a request for HD Wallet signing, but we don't have the required config
 	HDWalletSigningNoConfig = "No HD Wallet Configuration"
 
 	// HelperStrToAddressRequiredField re-usable error for missing fields
@@ -240,7 +240,7 @@ const (
 	RESTGatewayCompileContractInvalidFormData = "Could not parse supplied multi-part form data: %s"
 	// RESTGatewayCompileContractCompileFailed failed to perform compile
 	RESTGatewayCompileContractCompileFailed = "Failed to compile solidity: %s"
-	// RESTGatewayCompileContractPostcompileFailed failed to process output of compilation
+	// RESTGatewayCompileContractPostCompileFailed failed to process output of compilation
 	RESTGatewayCompileContractPostCompileFailed = "Failed to process solidity: %s"
 	// RESTGatewayCompileContractExtractedReadFailed failed to read extracted contents of uploaded data
 	RESTGatewayCompileContractExtractedReadFailed = "Failed to read extracted multi-part form data"
@@ -314,7 +314,7 @@ const (
 	TransactionSendMissingPrivateFromOrion = "private-from is required when submitting private transactions via Orion"
 	// TransactionSendPrivateTXWithExternalSigner we don't allow private transactions to be combined with a HD Wallet or other external signer currently
 	TransactionSendPrivateTXWithExternalSigner = "Signing with %s is not currently supported with private transactions"
-	// TransactionSendPrivateForAndPrivactyGroup mixed both params
+	// TransactionSendPrivateForAndPrivacyGroup mixed both params
 	TransactionSendPrivateForAndPrivacyGroup = "privacyGroupId and privateFor are mutually exclusive"
 	// TransactionSendNonceFailWithPrivacyGroup when we successfully lookup the privacy group, but cannot get the nonce
 	TransactionSendNonceFailWithPrivacyGroup = "priv_getTransactionCount for privacy group '%s' returned: %s"

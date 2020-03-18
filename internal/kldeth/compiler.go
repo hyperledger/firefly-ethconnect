@@ -66,10 +66,10 @@ func getSolcExecutable(requestedVersion string) (string, error) {
 		if envVar := os.Getenv(envVarName); envVar != "" {
 			solc = envVar
 		} else {
-			return "", klderrors.Errorf(klderrors.CompilerVerionNotFound, v[1], v[2])
+			return "", klderrors.Errorf(klderrors.CompilerVersionNotFound, v[1], v[2])
 		}
 	} else if requestedVersion != "" {
-		return "", klderrors.Errorf(klderrors.CompilerVerionBadRequest)
+		return "", klderrors.Errorf(klderrors.CompilerVersionBadRequest)
 	}
 	log.Debugf("Solidity compiler solc binary: %s", solc)
 	return solc, nil

@@ -241,7 +241,7 @@ const (
 	// RESTGatewayCompileContractCompileFailed failed to perform compile
 	RESTGatewayCompileContractCompileFailed = "Failed to compile solidity: %s"
 	// RESTGatewayCompileContractPostcompileFailed failed to process output of compilation
-	RESTGatewayCompileContractPostcompileFailed = "Failed to process solidity: %s"
+	RESTGatewayCompileContractPostCompileFailed = "Failed to process solidity: %s"
 	// RESTGatewayCompileContractExtractedReadFailed failed to read extracted contents of uploaded data
 	RESTGatewayCompileContractExtractedReadFailed = "Failed to read extracted multi-part form data"
 	// RESTGatewayCompileContractNoSOL failed to find any solidity files in uploaded data

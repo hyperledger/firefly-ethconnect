@@ -200,10 +200,8 @@ const (
 	RemoteRegistryLookupGatewayNotFound = "Gateway not found"
 	// RemoteRegistryLookupInstanceNotFound did not find the requested ID in the remote registry for a contract instance
 	RemoteRegistryLookupInstanceNotFound = "Instance not found"
-	// RemoteRegistryLookupDecodeABIFailed couldn't parse the ABI in the response
-	RemoteRegistryLookupDecodeABIFailed = "Error processing contract registry response"
-	// RemoteRegistryLookupDecodeBytecodeFailed couldn't parse the ABI in the response
-	RemoteRegistryLookupDecodeBytecodeFailed = "Error processing contract registry response"
+	// RemoteRegistryLookupGenericProcessingFailed we don't return the full original error over the REST API after logging
+	RemoteRegistryLookupGenericProcessingFailed = "Error processing contract registry response"
 
 	// RESTGatewayGatewayNotFound the gateway REST API interface (the 'factory' / ABI generic interface) was not found
 	RESTGatewayGatewayNotFound = "Gateway not found"

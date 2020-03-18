@@ -148,7 +148,7 @@ func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string) (*de
 	err = json.Unmarshal([]byte(abiString), &abi)
 	if err != nil {
 		log.Errorf("GET %s <-- !Failed to decode ABI: %s\n%s", queryURL, err, abiString)
-		return nil, klderrors.Errorf(klderrors.RemoteRegistryLookupDecodeABIFailed)
+		return nil, klderrors.Errorf(klderrors.RemoteRegistryLookupGenericProcessingFailed)
 	}
 	devdoc, err := rr.hr.GetResponseString(jsonRes, rr.conf.PropNames.Devdoc, true)
 	if err != nil {
@@ -161,7 +161,7 @@ func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string) (*de
 	var bytecode []byte
 	if bytecode, err = hex.DecodeString(strings.TrimPrefix(bytecodeStr, "0x")); err != nil {
 		log.Errorf("GET %s <-- !Failed to parse bytecode: %s\n%s", queryURL, err, bytecodeStr)
-		return nil, klderrors.Errorf(klderrors.RemoteRegistryLookupDecodeBytecodeFailed)
+		return nil, klderrors.Errorf(klderrors.RemoteRegistryLookupGenericProcessingFailed)
 	}
 	addr, _ := rr.hr.GetResponseString(jsonRes, rr.conf.PropNames.Address, false)
 	msg = &deployContractWithAddress{

@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldtx"
@@ -121,7 +122,7 @@ func (w *webhooksDirect) sendWebhookMsg(ctx context.Context, key, msgID string, 
 	if numInFlight >= w.conf.MaxInFlight {
 		w.inFlightMutex.Unlock()
 		log.Errorf("Failed to dispatch mesage from '%s': %d/%d already in-flight", key, numInFlight, w.conf.MaxInFlight)
-		return "", 429, fmt.Errorf("Too many in-flight transactions")
+		return "", 429, klderrors.Errorf(klderrors.WebhooksDirectTooManyInflight)
 	}
 
 	var headers kldmessages.CommonHeaders
@@ -134,7 +135,7 @@ func (w *webhooksDirect) sendWebhookMsg(ctx context.Context, key, msgID string, 
 	if err != nil {
 		w.inFlightMutex.Unlock()
 		log.Errorf("Unable to unmarshal headers from map payload: %+v: %s", msg, err)
-		return "", 400, fmt.Errorf("Failed to process headers in message")
+		return "", 400, klderrors.Errorf(klderrors.WebhooksDirectBadHeaders)
 	}
 	msgContext := &msgContext{
 		ctx:          ctx,
@@ -154,7 +155,7 @@ func (w *webhooksDirect) sendWebhookMsg(ctx context.Context, key, msgID string, 
 
 func validateWebhooksDirectConf(conf *WebhooksDirectConf) error {
 	if conf.RPC.URL == "" {
-		return fmt.Errorf("No JSON/RPC URL set for ethereum node")
+		return klderrors.Errorf(klderrors.ConfigWebhooksDirectRPC)
 	}
 	if conf.MaxTXWaitTime < 10 {
 		if conf.MaxTXWaitTime > 0 {

@@ -17,11 +17,11 @@ package kldutils
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -57,7 +57,7 @@ func (hr *HTTPRequester) DoRequest(method, url string, bodyMap map[string]interf
 	if bodyMap != nil {
 		bodyBytes, ehr := json.Marshal(bodyMap)
 		if ehr != nil {
-			return nil, fmt.Errorf("Failed to serialize request payload: %s", ehr)
+			return nil, klderrors.Errorf(klderrors.HTTPRequesterSerializeFailed, ehr)
 		}
 		body = bytes.NewReader(bodyBytes)
 	}
@@ -70,7 +70,7 @@ func (hr *HTTPRequester) DoRequest(method, url string, bodyMap map[string]interf
 	res, ehr := hr.client.Do(req)
 	if ehr != nil {
 		log.Errorf("%s %s <-- !Failed: %s", method, url, ehr)
-		return nil, fmt.Errorf("Error querying %s", hr.name)
+		return nil, klderrors.Errorf(klderrors.HTTPRequesterNonStatusError, hr.name)
 	}
 	log.Infof("%s %s <-- [%d]", method, url, res.StatusCode)
 	if res.StatusCode == 404 {
@@ -83,14 +83,14 @@ func (hr *HTTPRequester) DoRequest(method, url string, bodyMap map[string]interf
 		resBody, ehr := ioutil.ReadAll(res.Body)
 		if ehr = json.Unmarshal(resBody, &jsonBody); ehr != nil {
 			log.Errorf("%s %s <-- [%d] !Failed to read body: %s", method, url, res.StatusCode, ehr)
-			return nil, fmt.Errorf("Could not process %s [%d] response", hr.name, res.StatusCode)
+			return nil, klderrors.Errorf(klderrors.HTTPRequesterStatusErrorNoData, hr.name, res.StatusCode)
 		}
 		if res.StatusCode < 200 || res.StatusCode >= 300 {
 			log.Errorf("%s %s <-- [%d]: %+v", method, url, res.StatusCode, jsonBody)
 			if ehrMsg, ok := jsonBody["errorMessage"]; ok {
-				return nil, fmt.Errorf("%s returned [%d]: %s", hr.name, res.StatusCode, ehrMsg)
+				return nil, klderrors.Errorf(klderrors.HTTPRequesterStatusErrorWithData, hr.name, res.StatusCode, ehrMsg)
 			}
-			return nil, fmt.Errorf("Error querying %s", hr.name)
+			return nil, klderrors.Errorf(klderrors.HTTPRequesterStatusError, hr.name)
 		}
 	}
 	return jsonBody, nil
@@ -100,7 +100,7 @@ func (hr *HTTPRequester) DoRequest(method, url string, bodyMap map[string]interf
 func (hr *HTTPRequester) GetResponseString(m map[string]interface{}, p string, emptyOK bool) (string, error) {
 	genericVal, exists := m[p]
 	if !exists {
-		return "", fmt.Errorf("'%s' missing in %s response", p, hr.name)
+		return "", klderrors.Errorf(klderrors.HTTPRequesterResponseMissingField, p, hr.name)
 	}
 	var stringVal string
 	switch genericVal.(type) {
@@ -109,10 +109,10 @@ func (hr *HTTPRequester) GetResponseString(m map[string]interface{}, p string, e
 	case nil:
 		stringVal = ""
 	default:
-		return "", fmt.Errorf("'%s' not a string in %s response", p, hr.name)
+		return "", klderrors.Errorf(klderrors.HTTPRequesterResponseNonStringField, p, hr.name)
 	}
 	if !emptyOK && stringVal == "" {
-		return "", fmt.Errorf("'%s' empty (or null) in %s response", p, hr.name)
+		return "", klderrors.Errorf(klderrors.HTTPRequesterResponseNullField, p, hr.name)
 	}
 	return stringVal, nil
 }

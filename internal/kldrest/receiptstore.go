@@ -16,7 +16,6 @@ package kldrest
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -26,6 +25,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldcontracts"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
@@ -128,7 +128,7 @@ func (r *receiptStore) marshalAndReply(res http.ResponseWriter, req *http.Reques
 	resBytes, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
 		log.Errorf("Error serializing receipts: %s", err)
-		sendRESTError(res, req, fmt.Errorf("Error serializing response"), 500)
+		sendRESTError(res, req, klderrors.Errorf(klderrors.ReceiptStoreSerializeResponse), 500)
 		return
 	}
 	status := 200
@@ -144,13 +144,13 @@ func (r *receiptStore) getReplies(res http.ResponseWriter, req *http.Request, pa
 
 	err := kldauth.AuthListAsyncReplies(req.Context())
 	if err != nil {
-		sendRESTError(res, req, fmt.Errorf("Unauthorized"), 401)
+		sendRESTError(res, req, klderrors.Errorf(klderrors.Unauthorized), 401)
 		return
 	}
 
 	res.Header().Set("Content-Type", "application/json")
 	if r.persistence == nil {
-		sendRESTError(res, req, fmt.Errorf("Receipt store not enabled"), 405)
+		sendRESTError(res, req, klderrors.Errorf(klderrors.ReceiptStoreDisabled), 405)
 		return
 	}
 
@@ -163,7 +163,7 @@ func (r *receiptStore) getReplies(res http.ResponseWriter, req *http.Request, pa
 		for idx, id := range ids {
 			if !uuidCharsVerifier.MatchString(id) {
 				log.Errorf("Invalid id '%s' %d", id, idx)
-				sendRESTError(res, req, fmt.Errorf("Invalid 'id' query parameter"), 400)
+				sendRESTError(res, req, klderrors.Errorf(klderrors.ReceiptStoreInvalidRequestID), 400)
 				return
 			}
 		}
@@ -175,14 +175,14 @@ func (r *receiptStore) getReplies(res http.ResponseWriter, req *http.Request, pa
 		if customLimit, err := strconv.ParseInt(limitStr, 10, 32); err == nil {
 			if int(customLimit) > r.conf.QueryLimit {
 				log.Errorf("Invalid limit value: %s", err)
-				sendRESTError(res, req, fmt.Errorf("Maximum limit is %d", r.conf.QueryLimit), 400)
+				sendRESTError(res, req, klderrors.Errorf(klderrors.ReceiptStoreInvalidRequestMaxLimit, r.conf.QueryLimit), 400)
 				return
 			} else if customLimit > 0 {
 				limit = int(customLimit)
 			}
 		} else {
 			log.Errorf("Invalid limit value: %s", err)
-			sendRESTError(res, req, fmt.Errorf("Invalid 'limit' query parameter"), 400)
+			sendRESTError(res, req, klderrors.Errorf(klderrors.ReceiptStoreInvalidRequestBadLimit), 400)
 			return
 		}
 	}
@@ -195,7 +195,7 @@ func (r *receiptStore) getReplies(res http.ResponseWriter, req *http.Request, pa
 			skip = int(skipI64)
 		} else {
 			log.Errorf("Invalid skip value: %s", err)
-			sendRESTError(res, req, fmt.Errorf("Invalid 'skip' query parameter"), 400)
+			sendRESTError(res, req, klderrors.Errorf(klderrors.ReceiptStoreInvalidRequestBadSkip), 400)
 			return
 		}
 	}
@@ -209,7 +209,7 @@ func (r *receiptStore) getReplies(res http.ResponseWriter, req *http.Request, pa
 		} else {
 			if sinceEpochMS, err = strconv.ParseInt(since, 10, 64); err != nil {
 				log.Errorf("since '%s' cannot be parsed as RFC3339 or millisecond timestamp: %s", since, err)
-				sendRESTError(res, req, fmt.Errorf("since cannot be parsed as RFC3339 or millisecond timestamp"), 400)
+				sendRESTError(res, req, klderrors.Errorf(klderrors.ReceiptStoreInvalidRequestBadSince), 400)
 			}
 		}
 	}
@@ -221,7 +221,7 @@ func (r *receiptStore) getReplies(res http.ResponseWriter, req *http.Request, pa
 	results, err := r.persistence.GetReceipts(skip, limit, ids, sinceEpochMS, from, to)
 	if err != nil {
 		log.Errorf("Error querying replies: %s", err)
-		sendRESTError(res, req, fmt.Errorf("Error querying replies: %s", err), 500)
+		sendRESTError(res, req, klderrors.Errorf(klderrors.ReceiptStoreFailedQuery, err), 500)
 		return
 	}
 	log.Debugf("Replies query: skip=%d limit=%d replies=%d", skip, limit, len(*results))
@@ -235,7 +235,7 @@ func (r *receiptStore) getReply(res http.ResponseWriter, req *http.Request, para
 
 	err := kldauth.AuthReadAsyncReplyByUUID(req.Context())
 	if err != nil {
-		sendRESTError(res, req, fmt.Errorf("Unauthorized"), 401)
+		sendRESTError(res, req, klderrors.Errorf(klderrors.Unauthorized), 401)
 		return
 	}
 
@@ -244,10 +244,10 @@ func (r *receiptStore) getReply(res http.ResponseWriter, req *http.Request, para
 	result, err := r.persistence.GetReceipt(requestID)
 	if err != nil {
 		log.Errorf("Error querying reply: %s", err)
-		sendRESTError(res, req, fmt.Errorf("Error querying reply: %s", err), 500)
+		sendRESTError(res, req, klderrors.Errorf(klderrors.ReceiptStoreFailedQuerySingle, err), 500)
 		return
 	} else if result == nil {
-		sendRESTError(res, req, fmt.Errorf("Receipt not available"), 404)
+		sendRESTError(res, req, klderrors.Errorf(klderrors.ReceiptStoreFailedNotFound), 404)
 		log.Infof("Reply not found")
 		return
 	}

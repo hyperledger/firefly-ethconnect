@@ -17,12 +17,12 @@ package kldrest
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"reflect"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/kaleido-io/ethconnect/internal/kldcontracts"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
@@ -107,23 +107,23 @@ func (w *webhooks) processMsg(ctx context.Context, msg map[string]interface{}, a
 	// The rest of the validation is performed by the bridge listening to Kafka
 	headers, exists := msg["headers"]
 	if !exists || reflect.TypeOf(headers).Kind() != reflect.Map {
-		return nil, 400, fmt.Errorf("Invalid message - missing 'headers' (or not an object)")
+		return nil, 400, klderrors.Errorf(klderrors.WebhooksInvalidMsgHeaders)
 	}
 	msgType, exists := headers.(map[string]interface{})["type"]
 	if !exists || reflect.TypeOf(msgType).Kind() != reflect.String {
-		return nil, 400, fmt.Errorf("Invalid message - missing 'headers.type' (or not a string)")
+		return nil, 400, klderrors.Errorf(klderrors.WebhooksInvalidMsgTypeMissing)
 	}
 	var key string
 	switch msgType {
 	case kldmessages.MsgTypeDeployContract, kldmessages.MsgTypeSendTransaction:
 		from, exists := msg["from"]
 		if !exists || reflect.TypeOf(from).Kind() != reflect.String {
-			return nil, 400, fmt.Errorf("Invalid message - missing 'from' (or not a string)")
+			return nil, 400, klderrors.Errorf(klderrors.WebhooksInvalidMsgFromMissing)
 		}
 		key = from.(string)
 		break
 	default:
-		return nil, 400, fmt.Errorf("Invalid message type: %s", msgType)
+		return nil, 400, klderrors.Errorf(klderrors.WebhooksInvalidMsgType, msgType)
 	}
 
 	// We always generate the ID. It cannot be set by the user

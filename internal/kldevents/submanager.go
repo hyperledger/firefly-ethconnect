@@ -17,7 +17,6 @@ package kldevents
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"strings"
 	"time"
@@ -25,6 +24,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
@@ -141,7 +141,7 @@ func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *kldbind.Add
 	} else {
 		var bi big.Int
 		if _, ok := bi.SetString(initialBlock, 0); !ok {
-			return nil, fmt.Errorf("FromBlock cannot be parsed as a BigInt")
+			return nil, klderrors.Errorf(klderrors.EventStreamsSubscribeBadBlock)
 		}
 		i.FromBlock = bi.Text(10)
 	}
@@ -179,7 +179,7 @@ func (s *subscriptionMGR) deleteSubscription(ctx context.Context, sub *subscript
 func (s *subscriptionMGR) storeSubscription(info *SubscriptionInfo) (*SubscriptionInfo, error) {
 	infoBytes, _ := json.MarshalIndent(info, "", "  ")
 	if err := s.db.Put(info.ID, infoBytes); err != nil {
-		return nil, fmt.Errorf("Failed to store stream: %s", err)
+		return nil, klderrors.Errorf(klderrors.EventStreamsSubscribeStoreFailed, err)
 	}
 	return info, nil
 }
@@ -218,7 +218,7 @@ func (s *subscriptionMGR) AddStream(ctx context.Context, spec *StreamInfo) (*Str
 func (s *subscriptionMGR) storeStream(spec *StreamInfo) (*StreamInfo, error) {
 	infoBytes, _ := json.MarshalIndent(spec, "", "  ")
 	if err := s.db.Put(spec.ID, infoBytes); err != nil {
-		return nil, fmt.Errorf("Failed to store stream: %s", err)
+		return nil, klderrors.Errorf(klderrors.EventStreamsCreateStreamStoreFailed, err)
 	}
 	return spec, nil
 }
@@ -284,7 +284,7 @@ func (s *subscriptionMGR) ResumeStream(ctx context.Context, id string) error {
 func (s *subscriptionMGR) subscriptionByID(id string) (*subscription, error) {
 	sub, exists := s.subscriptions[id]
 	if !exists {
-		return nil, fmt.Errorf("Subscription with ID '%s' not found", id)
+		return nil, klderrors.Errorf(klderrors.EventStreamsSubscriptionNotFound, id)
 	}
 	return sub, nil
 }
@@ -293,7 +293,7 @@ func (s *subscriptionMGR) subscriptionByID(id string) (*subscription, error) {
 func (s *subscriptionMGR) streamByID(id string) (*eventStream, error) {
 	stream, exists := s.streams[id]
 	if !exists {
-		return nil, fmt.Errorf("Stream with ID '%s' not found", id)
+		return nil, klderrors.Errorf(klderrors.EventStreamsStreamNotFound, id)
 	}
 	return stream, nil
 }
@@ -329,7 +329,7 @@ func (s *subscriptionMGR) deleteCheckpoint(streamID string) {
 
 func (s *subscriptionMGR) Init() (err error) {
 	if s.db, err = kldkvstore.NewLDBKeyValueStore(s.conf.EventLevelDBPath); err != nil {
-		return fmt.Errorf("Failed to open DB at %s: %s", s.conf.EventLevelDBPath, err)
+		return klderrors.Errorf(klderrors.EventStreamsDBLoad, s.conf.EventLevelDBPath, err)
 	}
 	s.recoverStreams()
 	s.recoverSubscriptions()

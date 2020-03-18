@@ -17,7 +17,6 @@ package kldeth
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"reflect"
@@ -29,6 +28,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common/compiler"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 )
 
 const (
@@ -66,10 +66,10 @@ func getSolcExecutable(requestedVersion string) (string, error) {
 		if envVar := os.Getenv(envVarName); envVar != "" {
 			solc = envVar
 		} else {
-			return "", fmt.Errorf("Could not find a configured compiler for requested Solidity major version %s.%s", v[1], v[2])
+			return "", klderrors.Errorf(klderrors.CompilerVersionNotFound, v[1], v[2])
 		}
 	} else if requestedVersion != "" {
-		return "", fmt.Errorf("Invalid Solidity version requested for compiler. Ensure the string starts with two dot separated numbers, such as 0.5")
+		return "", klderrors.Errorf(klderrors.CompilerVersionBadRequest)
 	}
 	log.Debugf("Solidity compiler solc binary: %s", solc)
 	return solc, nil
@@ -113,7 +113,7 @@ func CompileContract(soliditySource, contractName, requestedVersion, evmVersion 
 	cmd.Stderr = &stderr
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("Solidity compilation failed: solc: %v\n%s", err, stderr.String())
+		return nil, klderrors.Errorf(klderrors.CompilerFailedSolc, err, stderr.String())
 	}
 	c, err := compiler.ParseCombinedJSON(stdout.Bytes(), soliditySource, s.Version, s.Version, strings.Join(solcArgs, " "))
 	return ProcessCompiled(c, contractName, true)
@@ -129,11 +129,11 @@ func ProcessCompiled(compiled map[string]*compiler.Contract, contractName string
 			contractName = "<stdin>:" + contractName
 		}
 		if _, ok := compiled[contractName]; !ok {
-			return nil, fmt.Errorf("Contract '%s' not found in Solidity source: %s", contractName, contractNames)
+			return nil, klderrors.Errorf(klderrors.CompilerOutputMissingContract, contractName, contractNames)
 		}
 		contract = compiled[contractName]
 	} else if len(contractNames) != 1 {
-		return nil, fmt.Errorf("More than one contract in Solidity file, please set one to call: %s", contractNames)
+		return nil, klderrors.Errorf(klderrors.CompilerOutputMultipleContracts, contractNames)
 	} else {
 		contractName = contractNames[0].String()
 		contract = compiled[contractName]
@@ -154,24 +154,24 @@ func packContract(contractName string, contract *compiler.Contract) (c *Compiled
 	}
 	c.Compiled, err = hexutil.Decode(contract.Code)
 	if err != nil {
-		return nil, fmt.Errorf("Decoding bytecode: %s", err)
+		return nil, klderrors.Errorf(klderrors.CompilerBytecodeInvalid, err)
 	}
 	if len(c.Compiled) == 0 {
-		return nil, fmt.Errorf("Specified contract compiled ok, but did not result in any bytecode: %s", contractName)
+		return nil, klderrors.Errorf(klderrors.CompilerBytecodeEmpty, contractName)
 	}
 	// Pack the arguments for calling the contract
 	abiJSON, err := json.Marshal(contract.Info.AbiDefinition)
 	if err != nil {
-		return nil, fmt.Errorf("Serializing ABI: %s", err)
+		return nil, klderrors.Errorf(klderrors.CompilerABISerialize, err)
 	}
 	abi, err := abi.JSON(bytes.NewReader(abiJSON))
 	if err != nil {
-		return nil, fmt.Errorf("Parsing ABI: %s", err)
+		return nil, klderrors.Errorf(klderrors.CompilerABIReRead, err)
 	}
 	c.ABI = &abi
 	devdocBytes, err := json.Marshal(contract.Info.DeveloperDoc)
 	if err != nil {
-		return nil, fmt.Errorf("Serializing DevDoc: %s", err)
+		return nil, klderrors.Errorf(klderrors.CompilerSerializeDevDocs, err)
 	}
 	c.DevDoc = string(devdocBytes)
 	return c, nil

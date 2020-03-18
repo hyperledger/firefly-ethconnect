@@ -17,7 +17,6 @@ package kldeth
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"math/big"
 	"strings"
 	"time"
@@ -25,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -40,7 +40,7 @@ func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXAr
 
 	if err := rpc.CallContext(ctx, &gas, "eth_estimateGas", txArgs); err != nil {
 		// Now we attempt a call of the transaction, because that will return us a useful error in the case, of a revert.
-		estError := fmt.Errorf("Failed to calculate gas for transaction: %s", err)
+		estError := klderrors.Errorf(klderrors.TransactionSendGasEstimateFailed, err)
 		log.Errorf(estError.Error())
 		if _, err := tx.Call(ctx, rpc); err != nil {
 			return err
@@ -71,7 +71,7 @@ func (tx *Txn) Call(ctx context.Context, rpc RPCClient) (res []byte, err error) 
 
 	var hexString string
 	if err = rpc.CallContext(ctx, &hexString, "eth_call", txArgs, "latest"); err != nil {
-		return nil, fmt.Errorf("Call failed: %s", err)
+		return nil, klderrors.Errorf(klderrors.TransactionSendCallFailedNoRevert, err)
 	}
 	if len(hexString) == 0 || hexString == "0x" {
 		return nil, nil
@@ -91,9 +91,9 @@ func (tx *Txn) Call(ctx context.Context, rpc RPCClient) (res []byte, err error) 
 		errorStringBytes, err := hex.DecodeString(errorStringHex)
 		log.Warnf("EVM Reverted. Message='%s' Offset='%s'", errorStringBytes, dataOffsetHex.Text(10))
 		if err != nil {
-			return nil, fmt.Errorf("EVM reverted. Failed to decode error message")
+			return nil, klderrors.Errorf(klderrors.TransactionSendCallFailedRevertNoMessage)
 		}
-		return nil, fmt.Errorf("%s", errorStringBytes)
+		return nil, klderrors.Errorf(klderrors.TransactionSendCallFailedRevertMessage, errorStringBytes)
 	}
 	log.Debugf("eth_call response: %s", hexString)
 	res = common.FromHex(hexString)
@@ -181,7 +181,7 @@ func (tx *Txn) submitTXtoNode(ctx context.Context, rpc RPCClient, txArgs *SendTX
 		txArgs.Restriction = "restricted"
 		// PrivateFrom is requires for Orion transactions
 		if txArgs.PrivateFrom == "" {
-			return "", fmt.Errorf("private-from is required when submitting private transactions via Orion")
+			return "", klderrors.Errorf(klderrors.TransactionSendMissingPrivateFromOrion)
 		}
 		isPrivate = true
 	} else if len(tx.PrivateFor) > 0 {
@@ -194,7 +194,7 @@ func (tx *Txn) submitTXtoNode(ctx context.Context, rpc RPCClient, txArgs *SendTX
 	var callParam0 interface{} = txArgs
 	if tx.Signer != nil {
 		if isPrivate {
-			return "", fmt.Errorf("Signing with %s is not currently supported with private transactions", tx.Signer.Type())
+			return "", klderrors.Errorf(klderrors.TransactionSendPrivateTXWithExternalSigner, tx.Signer.Type())
 		}
 		// Sign the transaction and get the bytes, which we pass to eth_sendRawTransaction
 		jsonRPCMethod = "eth_sendRawTransaction"

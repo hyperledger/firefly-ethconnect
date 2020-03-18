@@ -20,9 +20,11 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldtx"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -65,7 +67,7 @@ func (t *syncTxInflight) Unmarshal(msg interface{}) error {
 	}
 	if reflect.TypeOf(msg) != reflect.TypeOf(retMsg) {
 		log.Errorf("Type mismatch: %s != %s", reflect.TypeOf(msg), reflect.TypeOf(retMsg))
-		return fmt.Errorf("Unexpected condition (message types do not match when processing)")
+		return klderrors.Errorf(klderrors.RESTGatewaySyncMsgTypeMismatch)
 	}
 	reflect.ValueOf(msg).Elem().Set(reflect.ValueOf(retMsg).Elem())
 	return nil
@@ -76,7 +78,7 @@ func (t *syncTxInflight) SendErrorReply(status int, err error) {
 }
 
 func (t *syncTxInflight) SendErrorReplyWithTX(status int, err error, txHash string) {
-	t.SendErrorReply(status, fmt.Errorf("TX %s: %s", txHash, err))
+	t.SendErrorReply(status, klderrors.Errorf(klderrors.RESTGatewaySyncWrapErrorWithTXDetail, txHash, err))
 }
 
 func (t *syncTxInflight) Reply(replyMessage kldmessages.ReplyWithHeaders) {

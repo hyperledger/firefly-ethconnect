@@ -1439,7 +1439,7 @@ func TestProcessRLPBytesInvalidBool(t *testing.T) {
 
 	t1, _ := kldbind.ABITypeFor("bool")
 	_, err := mapOutput("test1", "bool", &t1, "not a bool")
-	assert.EqualError(err, "Expected boolean in JSON/RPC response for test1 (bool). Received string")
+	assert.EqualError(err, "Expected boolean type in JSON/RPC response for test1 (bool). Received string")
 }
 
 func TestProcessRLPBytesInvalidString(t *testing.T) {
@@ -1447,7 +1447,7 @@ func TestProcessRLPBytesInvalidString(t *testing.T) {
 
 	t1, _ := kldbind.ABITypeFor("string")
 	_, err := mapOutput("test1", "string", &t1, 42)
-	assert.EqualError(err, "Expected string array in JSON/RPC response for test1 (string). Received int")
+	assert.EqualError(err, "Expected string array type in JSON/RPC response for test1 (string). Received int")
 }
 
 func TestProcessRLPBytesInvalidByteArray(t *testing.T) {
@@ -1455,7 +1455,7 @@ func TestProcessRLPBytesInvalidByteArray(t *testing.T) {
 
 	t1, _ := kldbind.ABITypeFor("address")
 	_, err := mapOutput("test1", "address", &t1, 42)
-	assert.EqualError(err, "Expected []byte array in JSON/RPC response for test1 (address). Received int")
+	assert.EqualError(err, "Expected []byte type in JSON/RPC response for test1 (address). Received int")
 }
 
 func TestProcessRLPBytesInvalidArray(t *testing.T) {
@@ -1463,7 +1463,7 @@ func TestProcessRLPBytesInvalidArray(t *testing.T) {
 
 	t1, _ := kldbind.ABITypeFor("int32[]")
 	_, err := mapOutput("test1", "int32[]", &t1, 42)
-	assert.EqualError(err, "Expected slice in JSON/RPC response for test1 (int32[]). Received int")
+	assert.EqualError(err, "Expected slice type in JSON/RPC response for test1 (int32[]). Received int")
 }
 
 func TestProcessRLPBytesInvalidArrayType(t *testing.T) {
@@ -1560,5 +1560,5 @@ func TestProcessOutputsBadArgs(t *testing.T) {
 	}
 
 	err := processOutputs(methodABI.Outputs, []interface{}{"arg1"}, make(map[string]interface{}))
-	assert.EqualError(err, "Expected slice in JSON/RPC response for retval1 (int32[]). Received string")
+	assert.EqualError(err, "Expected slice type in JSON/RPC response for retval1 (int32[]). Received string")
 }

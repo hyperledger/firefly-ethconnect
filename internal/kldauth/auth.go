@@ -16,8 +16,8 @@ package kldauth
 
 import (
 	"context"
-	"fmt"
 
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/pkg/kldplugins"
 )
 
@@ -80,7 +80,7 @@ func AuthRPC(ctx context.Context, method string, args ...interface{}) error {
 	if securityModule != nil && !IsSystemContext(ctx) {
 		authCtx := GetAuthContext(ctx)
 		if authCtx == nil {
-			return fmt.Errorf("No auth context")
+			return klderrors.Errorf(klderrors.SecurityModuleNoAuthContext)
 		}
 		return securityModule.AuthRPC(authCtx, method, args...)
 	}
@@ -92,7 +92,7 @@ func AuthRPCSubscribe(ctx context.Context, namespace string, channel interface{}
 	if securityModule != nil && !IsSystemContext(ctx) {
 		authCtx := GetAuthContext(ctx)
 		if authCtx == nil {
-			return fmt.Errorf("No auth context")
+			return klderrors.Errorf(klderrors.SecurityModuleNoAuthContext)
 		}
 		return securityModule.AuthRPCSubscribe(authCtx, namespace, channel, args...)
 	}
@@ -104,7 +104,7 @@ func AuthEventStreams(ctx context.Context) error {
 	if securityModule != nil && !IsSystemContext(ctx) {
 		authCtx := GetAuthContext(ctx)
 		if authCtx == nil {
-			return fmt.Errorf("No auth context")
+			return klderrors.Errorf(klderrors.SecurityModuleNoAuthContext)
 		}
 		return securityModule.AuthEventStreams(authCtx)
 	}
@@ -116,7 +116,7 @@ func AuthListAsyncReplies(ctx context.Context) error {
 	if securityModule != nil && !IsSystemContext(ctx) {
 		authCtx := GetAuthContext(ctx)
 		if authCtx == nil {
-			return fmt.Errorf("No auth context")
+			return klderrors.Errorf(klderrors.SecurityModuleNoAuthContext)
 		}
 		return securityModule.AuthListAsyncReplies(authCtx)
 	}
@@ -128,7 +128,7 @@ func AuthReadAsyncReplyByUUID(ctx context.Context) error {
 	if securityModule != nil && !IsSystemContext(ctx) {
 		authCtx := GetAuthContext(ctx)
 		if authCtx == nil {
-			return fmt.Errorf("No auth context")
+			return klderrors.Errorf(klderrors.SecurityModuleNoAuthContext)
 		}
 		return securityModule.AuthReadAsyncReplyByUUID(authCtx)
 	}

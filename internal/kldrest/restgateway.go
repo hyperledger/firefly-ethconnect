@@ -32,6 +32,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/julienschmidt/httprouter"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
@@ -102,14 +103,14 @@ func (g *RESTGateway) SetConf(conf *RESTGatewayConf) {
 // ValidateConf validates the config
 func (g *RESTGateway) ValidateConf() (err error) {
 	if !kldutils.AllOrNoneReqd(g.conf.MongoDB.URL, g.conf.MongoDB.Database, g.conf.MongoDB.Collection) {
-		err = fmt.Errorf("MongoDB URL, Database and Collection name must be specified to enable the receipt store")
+		err = klderrors.Errorf(klderrors.ConfigRESTGatewayRequiredReceiptStore)
 		return
 	}
 	if g.conf.MongoDB.QueryLimit < 1 {
 		g.conf.MongoDB.QueryLimit = 100
 	}
 	if g.conf.OpenAPI.StoragePath != "" && g.conf.RPC.URL == "" {
-		err = fmt.Errorf("RPC URL and Storage Path must be supplied to enable the Open API REST Gateway")
+		err = klderrors.Errorf(klderrors.ConfigRESTGatewayRequiredRPC)
 		return
 	}
 	return

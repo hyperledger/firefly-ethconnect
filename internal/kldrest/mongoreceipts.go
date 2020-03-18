@@ -15,11 +15,11 @@
 package kldrest
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -46,7 +46,7 @@ func (m *mongoReceipts) connect() (err error) {
 	}
 	err = m.mgo.Connect(m.conf.URL, time.Duration(m.conf.ConnectTimeoutMS)*time.Millisecond)
 	if err != nil {
-		err = fmt.Errorf("Unable to connect to MongoDB: %s", err)
+		err = klderrors.Errorf(klderrors.ReceiptStoreMongoDBConnect, err)
 		return
 	}
 	m.collection = m.mgo.GetCollection(m.conf.Database, m.conf.Collection)
@@ -65,7 +65,7 @@ func (m *mongoReceipts) connect() (err error) {
 		Sparse:     true,
 	}
 	if err = m.collection.EnsureIndex(index); err != nil {
-		err = fmt.Errorf("Unable to create index: %s", err)
+		err = klderrors.Errorf(klderrors.ReceiptStoreMongoDBIndex, err)
 		return
 	}
 

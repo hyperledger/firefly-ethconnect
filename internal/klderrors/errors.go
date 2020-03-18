@@ -133,7 +133,7 @@ const (
 	// HDWalletSigningBadData we got a response, but not with the correct fields
 	HDWalletSigningBadData = "Unexpected response from HDWallet"
 	// HDWalletSigningNoConfog we had a request for HD Wallet signing, but we don't have the required config
-	HDWalletSigningNoConfog = "No HD Wallet Configuration"
+	HDWalletSigningNoConfig = "No HD Wallet Configuration"
 
 	// HelperStrToAddressRequiredField re-usable error for missing fields
 	HelperStrToAddressRequiredField = "'%s' must be supplied"

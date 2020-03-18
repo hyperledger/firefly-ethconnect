@@ -35,7 +35,7 @@ const (
 	// ConfigFileReadFailed failed to read the server config file
 	ConfigFileReadFailed = "Failed to read %s: %s"
 	// CompilerVerionNotFound the runtime context of ethconnect has not been configured with a compiler for the requested version
-	CompilerVerionNotFound = "Could not find a configured compiler for requested Solidity major version %s.%s"
+	CompilerVersionNotFound = "Could not find a configured compiler for requested Solidity major version %s.%s"
 	// CompilerVerionBadRequest the user requested a bad semver
 	CompilerVerionBadRequest = "Invalid Solidity version requested for compiler. Ensure the string starts with two dot separated numbers, such as 0.5"
 	// CompilerFailedSolc compilation failure output from solc

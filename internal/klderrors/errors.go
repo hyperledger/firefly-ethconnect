@@ -89,12 +89,12 @@ const (
 	EventStreamsDBLoad = "Failed to open DB at %s: %s"
 	// EventStreamsNoID attempt to create an event stream/sub without an ID
 	EventStreamsNoID = "No ID"
+	// EventStreamsInvalidActionType unknown action type
+	EventStreamsInvalidActionType = "Unknown action type '%s'"
 	// EventStreamsWebhookNoURL attempt to create a Webhook event stream without a URL
 	EventStreamsWebhookNoURL = "Must specify webhook.url for action type 'webhook'"
 	// EventStreamsWebhookInvalidURL attempt to create a Webhook event stream with an invalid URL
 	EventStreamsWebhookInvalidURL = "Invalid URL in webhook action"
-	// EventStreamsWebhookInvalidActionType unknown action type
-	EventStreamsWebhookInvalidActionType = "Unknown action type '%s'"
 	// EventStreamsWebhookResumeActive resume when already resumed
 	EventStreamsWebhookResumeActive = "Event processor is already active. Suspending:%t"
 	// EventStreamsWebhookProhibitedAddress some IP ranges can be restricted

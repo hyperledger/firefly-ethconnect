@@ -125,7 +125,7 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo) (a *eventStream, e
 			spec.Webhook.RequestTimeoutSec = 30000
 		}
 	default:
-		return nil, klderrors.Errorf(klderrors.EventStreamsWebhookInvalidActionType, spec.Type)
+		return nil, klderrors.Errorf(klderrors.EventStreamsInvalidActionType, spec.Type)
 	}
 
 	if strings.ToLower(spec.ErrorHandling) == ErrorHandlingBlock {

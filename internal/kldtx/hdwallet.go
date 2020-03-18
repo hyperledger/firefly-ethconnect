@@ -17,7 +17,6 @@ package kldtx
 import (
 	"bytes"
 	"crypto/ecdsa"
-	"fmt"
 	"math/big"
 	"net/url"
 	"regexp"
@@ -27,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	ecrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
@@ -118,23 +118,23 @@ func (hd *hdWallet) SignerFor(request *HDWalletRequest) (kldeth.TXSigner, error)
 	result, err := hd.hr.DoRequest("GET", urlStr.String(), nil)
 	if err != nil {
 		log.Errorf("HDWallet request failed: %s", err)
-		return nil, fmt.Errorf("HDWallet signing failed")
+		return nil, klderrors.Errorf(klderrors.HDWalletSigningFailed)
 	}
 
 	address, err := hd.hr.GetResponseString(result, hd.conf.PropNames.Address, false)
 	if err != nil {
 		log.Errorf("Missing address in response: %s", err)
-		return nil, fmt.Errorf("Unexpected response from HDWallet")
+		return nil, klderrors.Errorf(klderrors.HDWalletSigningBadData)
 	}
 	keyStr, ok := result[hd.conf.PropNames.PrivateKey].(string)
 	if !ok {
 		log.Errorf("Missing entry in response")
-		return nil, fmt.Errorf("Unexpected response from HDWallet")
+		return nil, klderrors.Errorf(klderrors.HDWalletSigningBadData)
 	}
 	key, err := ecrypto.HexToECDSA(strings.TrimPrefix(keyStr, "0x"))
 	if err != nil {
 		log.Errorf("Bad hex value in response '%s': %s", keyStr, err)
-		return nil, fmt.Errorf("Unexpected response from HDWallet")
+		return nil, klderrors.Errorf(klderrors.HDWalletSigningBadData)
 	}
 
 	return &hdwalletSigner{

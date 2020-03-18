@@ -17,9 +17,9 @@ package kldutils
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"fmt"
 	"io/ioutil"
 
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -36,7 +36,7 @@ type TLSConfig struct {
 func CreateTLSConfiguration(tlsConfig *TLSConfig) (t *tls.Config, err error) {
 
 	if !AllOrNoneReqd(tlsConfig.ClientCertsFile, tlsConfig.ClientKeyFile) {
-		err = fmt.Errorf("Client private key and certificate must both be provided for mutual auth")
+		err = klderrors.Errorf(klderrors.ConfigTLSCertOrKey)
 		return
 	}
 

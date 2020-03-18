@@ -15,23 +15,23 @@
 package kldutils
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 )
 
 // StrToAddress is a helper to parse eth addresses with useful errors
 func StrToAddress(desc string, strAddr string) (addr common.Address, err error) {
 	if strAddr == "" {
-		err = fmt.Errorf("'%s' must be supplied", desc)
+		err = klderrors.Errorf(klderrors.HelperStrToAddressRequiredField, desc)
 		return
 	}
 	if !strings.HasPrefix(strAddr, "0x") {
 		strAddr = "0x" + strAddr
 	}
 	if !common.IsHexAddress(strAddr) {
-		err = fmt.Errorf("Supplied value for '%s' is not a valid hex address", desc)
+		err = klderrors.Errorf(klderrors.HelperStrToAddressBadAddress, desc)
 		return
 	}
 	addr = common.HexToAddress(strAddr)

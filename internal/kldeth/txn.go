@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"reflect"
 	"strconv"
@@ -28,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 
@@ -83,7 +83,7 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract, signer TXSigner) (tx 
 			return
 		}
 	} else {
-		err = fmt.Errorf("Missing Compiled Code + ABI, or Solidity")
+		err = klderrors.Errorf(klderrors.DeployTransactionMissingCode)
 		return
 	}
 
@@ -96,7 +96,7 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract, signer TXSigner) (tx 
 	// Pack the arguments
 	packedCall, err := compiled.ABI.Pack("", typedArgs...)
 	if err != nil {
-		err = fmt.Errorf("Packing arguments for constructor: %s", err)
+		err = klderrors.Errorf(klderrors.TransactionSendConstructorPackArgs, err)
 		return
 	}
 
@@ -149,7 +149,7 @@ func ProcessRLPBytes(args abi.Arguments, retBytes []byte) (map[string]interface{
 	retval := make(map[string]interface{})
 	rawRetval, err := args.UnpackValues(retBytes)
 	if err != nil {
-		addErrorToRetval(retval, retBytes, rawRetval, fmt.Errorf("Failed to unpack values: %s", err))
+		addErrorToRetval(retval, retBytes, rawRetval, klderrors.Errorf(klderrors.UnpackOutputsFailed, err))
 		return nil, err
 	}
 	if err = processOutputs(args, rawRetval, retval); err != nil {
@@ -162,7 +162,7 @@ func processOutputs(args abi.Arguments, rawRetval []interface{}, retval map[stri
 	numOutputs := len(args)
 	if numOutputs > 0 {
 		if len(rawRetval) != numOutputs {
-			return fmt.Errorf("Expected %d in JSON/RPC response. Received %d: %+v", numOutputs, len(rawRetval), rawRetval)
+			return klderrors.Errorf(klderrors.UnpackOutputsMismatchCount, numOutputs, len(rawRetval), rawRetval)
 		}
 		for idx, output := range args {
 			if err := genOutput(idx, retval, output, rawRetval[idx]); err != nil {
@@ -170,7 +170,7 @@ func processOutputs(args abi.Arguments, rawRetval []interface{}, retval map[stri
 			}
 		}
 	} else if rawRetval != nil {
-		return fmt.Errorf("Expected nil in JSON/RPC response. Received: %+v", rawRetval)
+		return klderrors.Errorf(klderrors.UnpackOutputsMismatchNil, rawRetval)
 	}
 	return nil
 }
@@ -208,24 +208,24 @@ func mapOutput(argName, argType string, t *abi.Type, rawValue interface{}) (inte
 			kind == reflect.Uint64 {
 			return strconv.FormatUint(reflect.ValueOf(rawValue).Uint(), 10), nil
 		} else {
-			return nil, fmt.Errorf("Expected number type in JSON/RPC response for %s (%s). Received %s",
+			return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchType, "number",
 				argName, argType, rawType.Kind())
 		}
 	case abi.BoolTy:
 		if rawType.Kind() != reflect.Bool {
-			return nil, fmt.Errorf("Expected boolean in JSON/RPC response for %s (%s). Received %s",
+			return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchType, "boolean",
 				argName, argType, rawType.Kind())
 		}
 		return rawValue, nil
 	case abi.StringTy:
 		if rawType.Kind() != reflect.String {
-			return nil, fmt.Errorf("Expected string array in JSON/RPC response for %s (%s). Received %s",
+			return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchType, "string array",
 				argName, argType, rawType.Kind())
 		}
 		return reflect.ValueOf(rawValue).Interface().(string), nil
 	case abi.BytesTy, abi.FixedBytesTy, abi.AddressTy:
 		if (rawType.Kind() != reflect.Array && rawType.Kind() != reflect.Slice) || rawType.Elem().Kind() != reflect.Uint8 {
-			return nil, fmt.Errorf("Expected []byte array in JSON/RPC response for %s (%s). Received %s",
+			return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchType, "[]byte",
 				argName, argType, rawType.Kind())
 		}
 		s := reflect.ValueOf(rawValue)
@@ -236,7 +236,7 @@ func mapOutput(argName, argType string, t *abi.Type, rawValue interface{}) (inte
 		return common.ToHex(arrayVal), nil
 	case abi.SliceTy, abi.ArrayTy:
 		if rawType.Kind() != reflect.Slice {
-			return nil, fmt.Errorf("Expected slice in JSON/RPC response for %s (%s). Received %s",
+			return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchType, "slice",
 				argName, argType, rawType.Kind())
 		}
 		s := reflect.ValueOf(rawValue)
@@ -250,7 +250,7 @@ func mapOutput(argName, argType string, t *abi.Type, rawValue interface{}) (inte
 		}
 		return arrayVal, nil
 	default:
-		return nil, fmt.Errorf("Unable to process type for %s (%s). Received %s",
+		return nil, klderrors.Errorf(klderrors.UnpackOutputsUnknownType,
 			argName, argType, rawType.Kind())
 	}
 }
@@ -267,7 +267,7 @@ func NewSendTxn(msg *kldmessages.SendTransaction, signer TXSigner) (tx *Txn, err
 				RawName: msg.MethodName,
 			}
 		} else {
-			err = fmt.Errorf("Method missing - must provide inline 'param' type/value pairs with a 'methodName', or an ABI in 'method'")
+			err = klderrors.Errorf(klderrors.TransactionSendMissingMethod)
 			return
 		}
 	} else {
@@ -299,7 +299,7 @@ func buildTX(signer TXSigner, msgFrom, msgTo string, msgNonce, msgValue, msgGas,
 	// Pack the arguments
 	packedArgs, err := methodABI.Inputs.Pack(typedArgs...)
 	if err != nil {
-		err = fmt.Errorf("Packing arguments for method '%s': %s", methodABI.RawName, err)
+		err = klderrors.Errorf(klderrors.TransactionSendMethodPackArgs, methodABI.RawName, err)
 		log.Errorf("Attempted to pack args %+v: %s", typedArgs, err)
 		return
 	}
@@ -326,7 +326,7 @@ func genMethodABI(jsonABI *kldmessages.ABIMethod) (method *abi.Method, err error
 		var arg abi.Argument
 		arg.Name = jsonInput.Name
 		if arg.Type, err = abi.NewType(jsonInput.Type, "", []abi.ArgumentMarshaling{}); err != nil {
-			err = fmt.Errorf("ABI input %d: Unable to map %s to etherueum type: %s", i, jsonInput.Name, err)
+			err = klderrors.Errorf(klderrors.TransactionSendInputTypeUnknown, i, jsonInput.Name, err)
 			return
 		}
 		method.Inputs = append(method.Inputs, arg)
@@ -336,7 +336,7 @@ func genMethodABI(jsonABI *kldmessages.ABIMethod) (method *abi.Method, err error
 		var arg abi.Argument
 		arg.Name = jsonOutput.Name
 		if arg.Type, err = abi.NewType(jsonOutput.Type, "", []abi.ArgumentMarshaling{}); err != nil {
-			err = fmt.Errorf("ABI output %d: Unable to map %s to etherueum type: %s", i, jsonOutput.Name, err)
+			err = klderrors.Errorf(klderrors.TransactionSendOutputTypeUnknown, i, jsonOutput.Name, err)
 			return
 		}
 		method.Outputs = append(method.Outputs, arg)
@@ -357,7 +357,7 @@ func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgG
 	if msgNonce != "" {
 		nonce, err = msgNonce.Int64()
 		if err != nil {
-			err = fmt.Errorf("Converting supplied 'nonce' to integer: %s", err)
+			err = klderrors.Errorf(klderrors.TransactionSendBadNonce, err)
 			return
 		}
 	}
@@ -365,7 +365,7 @@ func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgG
 	value := big.NewInt(0)
 	if msgValue.String() != "" {
 		if _, ok := value.SetString(msgValue.String(), 10); !ok {
-			err = fmt.Errorf("Converting supplied 'value' to big integer: %s", err)
+			err = klderrors.Errorf(klderrors.TransactionSendBadValue, err)
 			return
 		}
 	}
@@ -374,7 +374,7 @@ func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgG
 	if msgGas != "" {
 		gas, err = msgGas.Int64()
 		if err != nil {
-			err = fmt.Errorf("Converting supplied 'gas' to integer: %s", err)
+			err = klderrors.Errorf(klderrors.TransactionSendBadGas, err)
 			return
 		}
 	}
@@ -382,7 +382,7 @@ func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgG
 	gasPrice := big.NewInt(0)
 	if msgGasPrice.String() != "" {
 		if _, ok := gasPrice.SetString(msgGasPrice.String(), 10); !ok {
-			err = fmt.Errorf("Converting supplied 'gasPrice' to big integer")
+			err = klderrors.Errorf(klderrors.TransactionSendBadGasPrice)
 			return
 		}
 	}
@@ -408,13 +408,13 @@ func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgG
 func (tx *Txn) getInteger(methodName string, idx int, requiredType *abi.Type, suppliedType reflect.Type, param interface{}) (val int64, err error) {
 	if suppliedType.Kind() == reflect.String {
 		if val, err = strconv.ParseInt(param.(string), 10, 64); err != nil {
-			err = fmt.Errorf("Method '%s' param %d: Could not be converted to a number", methodName, idx)
+			err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadNumber, methodName, idx)
 			return
 		}
 	} else if suppliedType.Kind() == reflect.Float64 {
 		val = int64(param.(float64))
 	} else {
-		err = fmt.Errorf("Method '%s' param %d is a %s: Must supply a number or a string", methodName, idx, requiredType)
+		err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForNumber, methodName, idx, requiredType)
 	}
 	return
 }
@@ -422,13 +422,13 @@ func (tx *Txn) getInteger(methodName string, idx int, requiredType *abi.Type, su
 func (tx *Txn) getUnsignedInteger(methodName string, idx int, requiredType *abi.Type, suppliedType reflect.Type, param interface{}) (val uint64, err error) {
 	if suppliedType.Kind() == reflect.String {
 		if val, err = strconv.ParseUint(param.(string), 10, 64); err != nil {
-			err = fmt.Errorf("Method '%s' param %d: Could not be converted to a number", methodName, idx)
+			err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadNumber, methodName, idx)
 			return
 		}
 	} else if suppliedType.Kind() == reflect.Float64 {
 		val = uint64(param.(float64))
 	} else {
-		err = fmt.Errorf("Method '%s' param %d is a %s: Must supply a number or a string", methodName, idx, requiredType)
+		err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForNumber, methodName, idx, requiredType)
 	}
 	return
 }
@@ -437,19 +437,19 @@ func (tx *Txn) getBigInteger(methodName string, idx int, requiredType *abi.Type,
 	bigInt = big.NewInt(0)
 	if suppliedType.Kind() == reflect.String {
 		if _, ok := bigInt.SetString(param.(string), 10); !ok {
-			err = fmt.Errorf("Method '%s' param %d: Could not be converted to a number", methodName, idx)
+			err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadNumber, methodName, idx)
 		}
 	} else if suppliedType.Kind() == reflect.Float64 {
 		bigInt.SetInt64(int64(param.(float64)))
 	} else {
-		err = fmt.Errorf("Method '%s' param %d is a %s: Must supply a number or a string", methodName, idx, requiredType)
+		err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForNumber, methodName, idx, requiredType)
 	}
 	return
 }
 
 func (tx *Txn) generateTypedArrayOrSlice(methodName string, idx int, requiredType *abi.Type, suppliedType reflect.Type, param interface{}) (interface{}, error) {
 	if suppliedType.Kind() != reflect.Slice {
-		return nil, fmt.Errorf("Method '%s' param %d is a %s: Must supply an array", methodName, idx, requiredType)
+		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForArray, methodName, idx, requiredType)
 	}
 	paramV := reflect.ValueOf(param)
 	var genericSlice reflect.Value
@@ -474,7 +474,7 @@ func (tx *Txn) generateTypedArrayOrSlice(methodName string, idx int, requiredTyp
 func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, methodName string, idx int) (interface{}, error) {
 	suppliedType := reflect.TypeOf(param)
 	if suppliedType == nil {
-		return nil, fmt.Errorf("Method '%s' param %d: Cannot supply a null value", methodName, idx)
+		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadNull, methodName, idx)
 	}
 	switch requiredType.T {
 	case abi.IntTy, abi.UintTy:
@@ -519,20 +519,20 @@ func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, metho
 		} else if suppliedType.Kind() == reflect.Bool {
 			return param.(bool), nil
 		}
-		return nil, fmt.Errorf("Method '%s' param %d is a %s: Must supply a boolean or a string", methodName, idx, requiredType)
+		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForBoolean, methodName, idx, requiredType)
 	case abi.StringTy:
 		if suppliedType.Kind() == reflect.String {
 			return param.(string), nil
 		}
-		return nil, fmt.Errorf("Method '%s' param %d: Must supply a string", methodName, idx)
+		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForString, methodName, idx)
 	case abi.AddressTy:
 		if suppliedType.Kind() == reflect.String {
 			if !common.IsHexAddress(param.(string)) {
-				return nil, fmt.Errorf("Method '%s' param %d: Could not be converted to a hex address", methodName, idx)
+				return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeAddress, methodName, idx)
 			}
 			return common.HexToAddress(param.(string)), nil
 		}
-		return nil, fmt.Errorf("Method '%s' param %d is a %s: Must supply a hex address string", methodName, idx, requiredType)
+		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForAddress, methodName, idx, requiredType)
 	case abi.BytesTy, abi.FixedBytesTy:
 		var bSlice []byte
 		if suppliedType.Kind() == reflect.Slice {
@@ -545,18 +545,18 @@ func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, metho
 					valV = valV.Elem()
 				}
 				if valV.Kind() != reflect.Float64 {
-					return nil, fmt.Errorf("Method '%s' param %d is a %s: Invalid entry in number array at index %d (%s)", methodName, idx, requiredType, i, valV.Kind())
+					return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeInNumericArray, methodName, idx, requiredType, i, valV.Kind())
 				}
 				floatVal := valV.Float()
 				if floatVal > 255 || floatVal < 0 {
-					return nil, fmt.Errorf("Method '%s' param %d is a %s: Invalid number - outside of range for byte", methodName, idx, requiredType)
+					return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadByteOutsideRange, methodName, idx, requiredType)
 				}
 				bSlice[i] = byte(floatVal)
 			}
 		} else if suppliedType.Kind() == reflect.String {
 			bSlice = common.FromHex(param.(string))
 		} else {
-			return nil, fmt.Errorf("Method '%s' param %d is a %s: Must supply a hex string, or number array", methodName, idx, requiredType)
+			return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForBytes, methodName, idx, requiredType)
 		}
 		if len(bSlice) == 0 {
 			return [0]byte{}, nil
@@ -571,7 +571,7 @@ func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, metho
 	case abi.SliceTy, abi.ArrayTy:
 		return tx.generateTypedArrayOrSlice(methodName, idx, requiredType, suppliedType, param)
 	default:
-		return nil, fmt.Errorf("Type '%s' is not yet supported", requiredType)
+		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeNotSupported, requiredType)
 	}
 }
 
@@ -591,7 +591,7 @@ func (tx *Txn) generateTypedArgs(origParams []interface{}, method *abi.Method) (
 	var typedArgs []interface{}
 	for idx, inputArg := range method.Inputs {
 		if idx >= len(params) {
-			err = fmt.Errorf("Method '%s': Requires %d args (supplied=%d)", methodName, len(method.Inputs), len(params))
+			err = klderrors.Errorf(klderrors.TransactionSendInputCountMismatch, methodName, len(method.Inputs), len(params))
 			return nil, err
 		}
 		param := params[idx]
@@ -630,18 +630,18 @@ func (tx *Txn) flattenParams(origParams []interface{}, method *abi.Method) (para
 				typeStr, exists = mapParam["type"]
 			}
 			if !exists {
-				err = fmt.Errorf("Param %d: supplied as an object must have 'type' and 'value' fields", i)
+				err = klderrors.Errorf(klderrors.TransactionSendInputStructureWrong, i)
 				return
 			}
 			if reflect.TypeOf(typeStr).Kind() != reflect.String {
-				err = fmt.Errorf("Param %d: supplied as an object must be string", i)
+				err = klderrors.Errorf(klderrors.TransactionSendInputInLineTypeArrayNotString, i)
 				return
 			}
 			params[i] = value
 			// Set the type
 			var ethType abi.Type
 			if ethType, err = abi.NewType(typeStr.(string), "", []abi.ArgumentMarshaling{}); err != nil {
-				err = fmt.Errorf("Param %d: Unable to map %s to etherueum type: %s", i, typeStr, err)
+				err = klderrors.Errorf(klderrors.TransactionSendInputInLineTypeUnknown, i, typeStr, err)
 				return
 			}
 			for len(method.Inputs) <= i {

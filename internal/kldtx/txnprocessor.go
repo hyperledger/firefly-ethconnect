@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/spf13/cobra"
 
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
@@ -142,7 +143,7 @@ func (p *txnProcessor) OnMessage(txnContext TxnContext) {
 		p.OnSendTransactionMessage(txnContext, &sendTransactionMsg)
 		break
 	default:
-		unmarshalErr = fmt.Errorf("Unknown message type '%s'", headers.MsgType)
+		unmarshalErr = klderrors.Errorf(klderrors.TransactionSendMsgTypeUnknown, headers.MsgType)
 	}
 	// We must always send a reply
 	if unmarshalErr != nil {
@@ -166,7 +167,7 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessage
 	inflight.rpc = p.rpc
 	if hdWalletRequest := IsHDWalletRequest(msg.From); hdWalletRequest != nil {
 		if p.hdwallet == nil {
-			return nil, fmt.Errorf("No HD Wallet Configuration")
+			return nil, klderrors.Errorf(klderrors.HDWalletSigningNoConfog)
 		}
 		if inflight.signer, err = p.hdwallet.SignerFor(hdWalletRequest); err != nil {
 			return
@@ -188,7 +189,7 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessage
 	// Need to resolve privateFrom/privateFor to a privacyGroupID for Orion
 	if p.conf.OrionPrivateAPIS {
 		if msg.PrivacyGroupID != "" && len(msg.PrivateFor) > 0 {
-			err = fmt.Errorf("privacyGroupId and privateFor are mutually exclusive")
+			err = klderrors.Errorf(klderrors.TransactionSendPrivateForAndPrivactyGroup)
 			return
 		} else if msg.PrivacyGroupID != "" {
 			inflight.privacyGroupID = msg.PrivacyGroupID
@@ -205,7 +206,7 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessage
 	suppliedNonce := msg.Nonce
 	if suppliedNonce != "" {
 		if inflight.nonce, err = suppliedNonce.Int64(); err != nil {
-			err = fmt.Errorf("Converting supplied 'nonce' to integer: %s", err)
+			err = klderrors.Errorf(klderrors.TransactionSendBadNonce, err)
 		}
 		return
 	}
@@ -294,9 +295,9 @@ func (p *txnProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 
 	if timedOut {
 		if err != nil {
-			iTX.txnContext.SendErrorReplyWithTX(500, fmt.Errorf("Error obtaining transaction receipt (%d retries): %s", retries, err), iTX.tx.Hash)
+			iTX.txnContext.SendErrorReplyWithTX(500, klderrors.Errorf(klderrors.TransactionSendReceiptCheckError, retries, err), iTX.tx.Hash)
 		} else {
-			iTX.txnContext.SendErrorReplyWithTX(408, fmt.Errorf("Timed out waiting for transaction receipt"), iTX.tx.Hash)
+			iTX.txnContext.SendErrorReplyWithTX(408, klderrors.Errorf(klderrors.TransactionSendReceiptCheckTimeout), iTX.tx.Hash)
 		}
 	} else {
 		// Update the stats

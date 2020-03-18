@@ -20,7 +20,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"math/big"
 	"net"
@@ -31,6 +30,7 @@ import (
 	"time"
 
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 
 	log "github.com/sirupsen/logrus"
@@ -97,7 +97,7 @@ type eventStream struct {
 // value from the checkpoint)
 func newEventStream(sm subscriptionManager, spec *StreamInfo) (a *eventStream, err error) {
 	if spec == nil || spec.GetID() == "" {
-		return nil, fmt.Errorf("No ID")
+		return nil, klderrors.Errorf(klderrors.EventStreamsNoID)
 	}
 
 	if spec.BatchSize == 0 {
@@ -116,16 +116,16 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo) (a *eventStream, e
 	switch spec.Type {
 	case "webhook":
 		if spec.Webhook == nil || spec.Webhook.URL == "" {
-			return nil, fmt.Errorf("Must specify webhook.url for action type 'webhook'")
+			return nil, klderrors.Errorf(klderrors.EventStreamsWebhookNoURL)
 		}
 		if _, err = url.Parse(spec.Webhook.URL); err != nil {
-			return nil, fmt.Errorf("Invalid URL in webhook action")
+			return nil, klderrors.Errorf(klderrors.EventStreamsWebhookInvalidURL)
 		}
 		if spec.Webhook.RequestTimeoutSec == 0 {
 			spec.Webhook.RequestTimeoutSec = 30000
 		}
 	default:
-		return nil, fmt.Errorf("Unknown action type '%s'", spec.Type)
+		return nil, klderrors.Errorf(klderrors.EventStreamsWebhookInvalidActionType, spec.Type)
 	}
 
 	if strings.ToLower(spec.ErrorHandling) == ErrorHandlingBlock {
@@ -189,7 +189,7 @@ func (a *eventStream) resume() error {
 	a.batchCond.L.Lock()
 	defer a.batchCond.L.Unlock()
 	if !a.processorDone || !a.pollerDone {
-		return fmt.Errorf("Event processor is already active. Suspending:%t", a.spec.Suspended)
+		return klderrors.Errorf(klderrors.EventStreamsWebhookResumeActive, a.spec.Suspended)
 	}
 	a.spec.Suspended = false
 	a.processorDone = false
@@ -457,7 +457,7 @@ func (a *eventStream) attemptWebhookAction(batchNumber, attempt uint64, events [
 		return err
 	}
 	if a.isAddressUnsafe(addr) {
-		err := fmt.Errorf("Cannot send Webhook POST to address: %s", u.Hostname())
+		err := klderrors.Errorf(klderrors.EventStreamsWebhookProhibitedAddress, u.Hostname())
 		log.Errorf(err.Error())
 		return err
 	}
@@ -502,7 +502,7 @@ func (a *eventStream) attemptWebhookAction(batchNumber, attempt uint64, events [
 				log.Infof("%s: Response body: %s", a.spec.ID, string(bodyBytes))
 			}
 			if !ok {
-				err = fmt.Errorf("%s: Failed with status=%d", a.spec.ID, res.StatusCode)
+				err = klderrors.Errorf(klderrors.EventStreamsWebhookFailedHTTPStatus, a.spec.ID, res.StatusCode)
 			}
 		}
 	}

@@ -19,7 +19,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
@@ -45,6 +44,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common/compiler"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldevents"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
@@ -95,7 +95,7 @@ func (g *smartContractGW) withEventsAuth(handler httprouter.Handle) httprouter.H
 		err := kldauth.AuthEventStreams(req.Context())
 		if err != nil {
 			log.Errorf("Unauthorized: %s", err)
-			g.gatewayErrReply(res, req, fmt.Errorf("Unauthorized"), 401)
+			g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.Unauthorized), 401)
 			return
 		}
 		handler(res, req, params)
@@ -155,7 +155,7 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *kldtx.TxnP
 		gw.sm = kldevents.NewSubscriptionManager(&conf.SubscriptionManagerConf, rpc)
 		err = gw.sm.Init()
 		if err != nil {
-			return nil, fmt.Errorf("Event-stream subscription manager: %s", err)
+			return nil, klderrors.Errorf(klderrors.RESTGatewayEventManagerInitFailed, err)
 		}
 	}
 	gw.r2e = newREST2eth(gw, rpc, gw.sm, gw.rr, asyncDispatcher, syncDispatcher)
@@ -248,7 +248,7 @@ func (g *smartContractGW) PostDeploy(msg *kldmessages.TransactionReceipt) error 
 	// We use the ethereum address of the contract, without the 0x prefix, and
 	// all in lower case, as the name of the file and the path root of the Swagger operations
 	if msg.ContractAddress == nil {
-		return fmt.Errorf("%s: Missing contract address in receipt", requestID)
+		return klderrors.Errorf(klderrors.RESTGatewayPostDeployMissingAddress, requestID)
 	}
 	addrHexNo0x := strings.ToLower(msg.ContractAddress.Hex()[2:])
 
@@ -326,7 +326,7 @@ func (g *smartContractGW) storeContractInfo(info *contractInfo) error {
 	instanceBytes, _ := json.MarshalIndent(info, "", "  ")
 	log.Infof("%s: Storing contract instance JSON to '%s'", info.ABI, infoFile)
 	if err := ioutil.WriteFile(infoFile, instanceBytes, 0664); err != nil {
-		return fmt.Errorf("Failed to write ABI JSON: %s", err)
+		return klderrors.Errorf(klderrors.RESTGatewayLocalStoreContractSave, err)
 	}
 	return nil
 }
@@ -335,7 +335,7 @@ func (g *smartContractGW) resolveContractAddr(registeredName string) (string, er
 	nameUnescaped, _ := url.QueryUnescape(registeredName)
 	info, exists := g.contractRegistrations[nameUnescaped]
 	if !exists {
-		return "", fmt.Errorf("Failed to find installed contract address for '%s'", registeredName)
+		return "", klderrors.Errorf(klderrors.RESTGatewayLocalStoreContractLoad, registeredName)
 	}
 	log.Infof("%s -> 0x%s", registeredName, info.Address)
 	return info.Address, nil
@@ -345,7 +345,7 @@ func (g *smartContractGW) loadDeployMsgForInstance(addrHex string) (*kldmessages
 	addrHexNo0x := strings.TrimPrefix(strings.ToLower(addrHex), "0x")
 	info, exists := g.contractIndex[addrHexNo0x]
 	if !exists {
-		return nil, nil, fmt.Errorf("No contract instance registered with address %s", addrHexNo0x)
+		return nil, nil, klderrors.Errorf(klderrors.RESTGatewayLocalStoreContractNotFound, addrHexNo0x)
 	}
 	deployMsg, _, err := g.loadDeployMsgByID(info.(*contractInfo).ABI)
 	return deployMsg, info.(*contractInfo), err
@@ -357,16 +357,16 @@ func (g *smartContractGW) loadDeployMsgByID(id string) (*kldmessages.DeployContr
 	ts, exists := g.abiIndex[id]
 	if !exists {
 		log.Infof("ABI with ID %s not found locally", id)
-		return nil, nil, fmt.Errorf("No ABI found with ID %s", id)
+		return nil, nil, klderrors.Errorf(klderrors.RESTGatewayLocalStoreABINotFound, id)
 	}
 	deployFile := path.Join(g.conf.StoragePath, "abi_"+id+".deploy.json")
 	deployBytes, err := ioutil.ReadFile(deployFile)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Failed to load ABI with ID %s: %s", id, err)
+		return nil, nil, klderrors.Errorf(klderrors.RESTGatewayLocalStoreABILoad, id, err)
 	}
 	msg = &kldmessages.DeployContract{}
 	if err = json.Unmarshal(deployBytes, msg); err != nil {
-		return nil, nil, fmt.Errorf("Failed to parse ABI with ID %s: %s", id, err)
+		return nil, nil, klderrors.Errorf(klderrors.RESTGatewayLocalStoreABIParse, id, err)
 	}
 	info = ts.(*abiInfo)
 	return msg, info, nil
@@ -402,7 +402,7 @@ func (g *smartContractGW) storeDeployableABI(msg *kldmessages.DeployContract, co
 		msg.ContractName = compiled.ContractName
 		msg.CompilerVersion = compiled.ContractInfo.CompilerVersion
 	} else if msg.ABI == nil {
-		return nil, fmt.Errorf("Must supply ABI to install an existing ABI into the REST Gateway")
+		return nil, klderrors.Errorf(klderrors.RESTGatewayLocalStoreMissingABI)
 	}
 
 	requestID := msg.Headers.ID
@@ -440,7 +440,7 @@ func (g *smartContractGW) writeAbiInfo(requestID string, msg *kldmessages.Deploy
 	infoBytes, _ := json.MarshalIndent(msg, "", "  ")
 	log.Infof("%s: Stashing deployment details to '%s'", requestID, infoFile)
 	if err := ioutil.WriteFile(infoFile, infoBytes, 0664); err != nil {
-		return fmt.Errorf("%s: Failed to write deployment details: %s", requestID, err)
+		return klderrors.Errorf(klderrors.RESTGatewayLocalStoreContractSavePostDeploy, requestID, err)
 	}
 	return nil
 }
@@ -547,12 +547,12 @@ func (g *smartContractGW) checkNameAvailable(registerAs string, isRemote bool) e
 		if err != nil {
 			return err
 		} else if msg != nil {
-			return fmt.Errorf("Contract address %s is already registered for name '%s'", msg.Address, registerAs)
+			return klderrors.Errorf(klderrors.RESTGatewayFriendlyNameClash, msg.Address, registerAs)
 		}
 		return nil
 	}
 	if existing, exists := g.contractRegistrations[registerAs]; exists {
-		return fmt.Errorf("Contract address %s is already registered for name '%s'", existing.Address, registerAs)
+		return klderrors.Errorf(klderrors.RESTGatewayFriendlyNameClash, existing.Address, registerAs)
 	}
 	return nil
 }
@@ -635,7 +635,7 @@ func (g *smartContractGW) createStream(res http.ResponseWriter, req *http.Reques
 
 	var spec kldevents.StreamInfo
 	if err := json.NewDecoder(req.Body).Decode(&spec); err != nil {
-		g.gatewayErrReply(res, req, fmt.Errorf("Invalid event stream specification: %s", err), 400)
+		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayEventStreamInvalid, err), 400)
 		return
 	}
 
@@ -890,7 +890,7 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 			g.gatewayErrReply(res, req, err, 500)
 			return
 		} else if deployMsg == nil {
-			err = fmt.Errorf("Gateway not found")
+			err = klderrors.Errorf(klderrors.RemoteRegistryLookupGatewayNotFound)
 			g.gatewayErrReply(res, req, err, 404)
 			return
 		}
@@ -903,7 +903,7 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 			g.gatewayErrReply(res, req, err, 500)
 			return
 		} else if msg == nil {
-			err = fmt.Errorf("Instance not found")
+			err = klderrors.Errorf(klderrors.RemoteRegistryLookupInstanceNotFound)
 			g.gatewayErrReply(res, req, err, 404)
 			return
 		}
@@ -937,7 +937,7 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 	addrHexNo0x := strings.ToLower(strings.TrimPrefix(params.ByName("address"), "0x"))
 	addrCheck, _ := regexp.Compile("^[0-9a-z]{40}$")
 	if !addrCheck.MatchString(addrHexNo0x) {
-		g.gatewayErrReply(res, req, fmt.Errorf("Invalid address in path - must be a 40 character hex string with optional 0x prefix"), 404)
+		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayRegistrationSuppliedInvalidAddress), 404)
 		return
 	}
 
@@ -984,7 +984,7 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 	log.Infof("--> %s %s", req.Method, req.URL)
 
 	if err := req.ParseMultipartForm(maxFormParsingMemory); err != nil {
-		g.gatewayErrReply(res, req, fmt.Errorf("Could not parse supplied multi-part form data: %s", err), 400)
+		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractInvalidFormData, err), 400)
 		return
 	}
 
@@ -1019,7 +1019,7 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 
 	preCompiled, err := g.compileMultipartFormSolidity(tempdir, req)
 	if err != nil {
-		g.gatewayErrReply(res, req, fmt.Errorf("Failed to compile solidity: %s", err), 400)
+		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractCompileFailed, err), 400)
 		return
 	}
 
@@ -1037,7 +1037,7 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 
 	compiled, err := kldeth.ProcessCompiled(preCompiled, req.FormValue("contract"), false)
 	if err != nil {
-		g.gatewayErrReply(res, req, fmt.Errorf("Failed to compile solidity: %s", err), 400)
+		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractPostcompileFailed, err), 400)
 		return
 	}
 
@@ -1061,7 +1061,7 @@ func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Req
 	rootFiles, err := ioutil.ReadDir(dir)
 	if err != nil {
 		log.Errorf("Failed to read dir '%s': %s", dir, err)
-		return nil, fmt.Errorf("Failed to read extracted multi-part form data")
+		return nil, klderrors.Errorf(klderrors.RESTGatewayCompileContractExtractedReadFailed)
 	}
 	for _, file := range rootFiles {
 		log.Debugf("multi-part: '%s' [dir=%t]", file.Name(), file.IsDir())
@@ -1077,12 +1077,12 @@ func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Req
 	} else if len(solFiles) > 0 {
 		solcArgs = append(solcArgs, solFiles...)
 	} else {
-		return nil, fmt.Errorf("No .sol files found in root. Please set a 'source' query param or form field to the relative path of your solidity")
+		return nil, klderrors.Errorf(klderrors.RESTGatewayCompileContractNoSOL)
 	}
 
 	solcVer, err := kldeth.GetSolc(req.FormValue("compiler"))
 	if err != nil {
-		return nil, fmt.Errorf("Failed checking solc version: %s", err)
+		return nil, klderrors.Errorf(klderrors.RESTGatewayCompileContractSolcVerFail, err)
 	}
 	solOptionsString := strings.Join(append([]string{solcVer.Path}, solcArgs...), " ")
 	log.Infof("Compiling: %s", solOptionsString)
@@ -1093,12 +1093,12 @@ func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Req
 	cmd.Stdout = &stdout
 	cmd.Dir = dir
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("Failed to compile [%s]: %s", err, stderr.String())
+		return nil, klderrors.Errorf(klderrors.RESTGatewayCompileContractCompileFailDetails, err, stderr.String())
 	}
 
 	compiled, err := compiler.ParseCombinedJSON(stdout.Bytes(), "", solcVer.Version, solcVer.Version, solOptionsString)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to parse solc output: %s", err)
+		return nil, klderrors.Errorf(klderrors.RESTGatewayCompileContractSolcOutputProcessFail, err)
 	}
 
 	return compiled, nil
@@ -1107,24 +1107,24 @@ func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Req
 func (g *smartContractGW) extractMultiPartFile(dir string, file *multipart.FileHeader) error {
 	fileName := file.Filename
 	if strings.ContainsAny(fileName, "/\\") {
-		return fmt.Errorf("Filenames cannot contain slashes. Use a zip file to upload a directory structure")
+		return klderrors.Errorf(klderrors.RESTGatewayCompileContractSlashes)
 	}
 	in, err := file.Open()
 	if err != nil {
 		log.Errorf("Failed opening '%s' for reading: %s", fileName, err)
-		return fmt.Errorf("Failed to read archive")
+		return klderrors.Errorf(klderrors.RESTGatewayCompileContractUnzipRead)
 	}
 	defer in.Close()
 	outFileName := path.Join(dir, fileName)
 	out, err := os.OpenFile(outFileName, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Errorf("Failed opening '%s' for writing: %s", fileName, err)
-		return fmt.Errorf("Failed to process archive")
+		return klderrors.Errorf(klderrors.RESTGatewayCompileContractUnzipWrite)
 	}
 	written, err := io.Copy(out, in)
 	if err != nil {
 		log.Errorf("Failed writing '%s' from multi-part form: %s", fileName, err)
-		return fmt.Errorf("Failed to process archive")
+		return klderrors.Errorf(klderrors.RESTGatewayCompileContractUnzipCopy)
 	}
 	log.Debugf("multi-part: '%s' [%dKb]", fileName, written/1024)
 	return g.processIfArchive(dir, outFileName)
@@ -1138,7 +1138,7 @@ func (g *smartContractGW) processIfArchive(dir, fileName string) error {
 	}
 	err = z.(archiver.Unarchiver).Unarchive(fileName, dir)
 	if err != nil {
-		return fmt.Errorf("Error unarchiving supplied zip file: %s", err)
+		return klderrors.Errorf(klderrors.RESTGatewayCompileContractUnzip, err)
 	}
 	return nil
 }

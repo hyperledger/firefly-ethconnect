@@ -15,8 +15,7 @@
 package kldkvstore
 
 import (
-	"fmt"
-
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	log "github.com/sirupsen/logrus"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
@@ -104,7 +103,7 @@ func NewLDBKeyValueStore(ldbPath string) (kv KVStore, err error) {
 		path: ldbPath,
 	}
 	if store.db, err = leveldb.OpenFile(ldbPath, nil); err != nil {
-		return nil, fmt.Errorf("Failed to open DB at %s: %s", ldbPath, err)
+		return nil, klderrors.Errorf(klderrors.KVStoreDBLoad, ldbPath, err)
 	}
 	kv = store
 	return

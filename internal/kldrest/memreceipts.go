@@ -16,9 +16,9 @@ package kldrest
 
 import (
 	"container/list"
-	"fmt"
 	"sync"
 
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -42,7 +42,7 @@ func (m *memoryReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochMS
 	defer m.mux.Unlock()
 
 	if len(ids) > 0 || sinceEpochMS != 0 || from != "" || to != "" {
-		return nil, fmt.Errorf("Memory receipts do not support filtering")
+		return nil, klderrors.Errorf(klderrors.KVStoreMemFilteringUnsupported)
 	}
 
 	results := make([]map[string]interface{}, 0, limit)

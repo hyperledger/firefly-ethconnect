@@ -16,12 +16,12 @@ package kldevents
 
 import (
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	log "github.com/sirupsen/logrus"
 
@@ -98,7 +98,7 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 	if strings.HasPrefix(entry.Data, "0x") {
 		data, err = kldbind.HexDecode(entry.Data)
 		if err != nil {
-			return fmt.Errorf("%s: Failed to decode data: %s", subInfo, err)
+			return klderrors.Errorf(klderrors.EventStreamsLogDecode, subInfo, err)
 		}
 	}
 
@@ -125,7 +125,7 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 		var val interface{}
 		if input.Indexed {
 			if topicIdx >= len(entry.Topics) {
-				return fmt.Errorf("%s: Ran out of topics for indexed fields at field %d of %+v", subInfo, idx, lp.event)
+				return klderrors.Errorf(klderrors.EventStreamsLogDecodeInsufficientTopics, subInfo, idx, lp.event)
 			}
 			topic := entry.Topics[topicIdx]
 			topicIdx++
@@ -143,7 +143,7 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 	// Retrieve the data args from the RLP and merge the results
 	dataMap, err := kldeth.ProcessRLPBytes(dataArgs, data)
 	if err != nil {
-		return fmt.Errorf("%s: Failed to parse RLP data from event: %s", subInfo, err)
+		return klderrors.Errorf(klderrors.EventStreamsLogDecodeData, subInfo, err)
 	}
 	for k, v := range dataMap {
 		result.Data[k] = v

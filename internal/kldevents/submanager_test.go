@@ -234,7 +234,7 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	_, err = sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "any"}, "nope", "")
 	assert.EqualError(err, "Stream with ID 'nope' not found")
 	_, err = sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "any"}, "teststream", "")
-	assert.EqualError(err, "Failed to store stream: pop")
+	assert.EqualError(err, "Failed to store subscription: pop")
 	_, err = sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "any"}, "teststream", "!bad integer")
 	assert.EqualError(err, "FromBlock cannot be parsed as a BigInt")
 	sm.subscriptions["testsub"] = &subscription{info: &SubscriptionInfo{}, rpc: sm.rpc}

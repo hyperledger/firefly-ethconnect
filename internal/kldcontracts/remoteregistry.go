@@ -17,26 +17,26 @@ package kldcontracts
 import (
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/url"
 	"strings"
 
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
+
 	log "github.com/sirupsen/logrus"
 )
 
 const (
-	genericRegistryResponseErrorMsg = "Error processing contract registry response"
-	defaultIDProp                   = "id"
-	defaultNameProp                 = "name"
-	defaultABIProp                  = "abi"
-	defaultBytecodeProp             = "bytecode"
-	defaultDevdocProp               = "devdoc"
-	defaultDeployableProp           = "deployable"
-	defaultAddressProp              = "address"
+	defaultIDProp         = "id"
+	defaultNameProp       = "name"
+	defaultABIProp        = "abi"
+	defaultBytecodeProp   = "bytecode"
+	defaultDevdocProp     = "devdoc"
+	defaultDeployableProp = "deployable"
+	defaultAddressProp    = "address"
 )
 
 type deployContractWithAddress struct {
@@ -119,7 +119,7 @@ type remoteRegistry struct {
 func (rr *remoteRegistry) init() (err error) {
 	if rr.conf.CacheDB != "" {
 		if rr.db, err = kldkvstore.NewLDBKeyValueStore(rr.conf.CacheDB); err != nil {
-			return fmt.Errorf("Failed to initialize cache for remote registry: %s", err)
+			return klderrors.Errorf(klderrors.RemoteRegistryCacheInit, err)
 		}
 	}
 	return nil
@@ -148,7 +148,7 @@ func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string) (*de
 	err = json.Unmarshal([]byte(abiString), &abi)
 	if err != nil {
 		log.Errorf("GET %s <-- !Failed to decode ABI: %s\n%s", queryURL, err, abiString)
-		return nil, fmt.Errorf(genericRegistryResponseErrorMsg)
+		return nil, klderrors.Errorf(klderrors.RemoteRegistryLookupDecodeABIFailed)
 	}
 	devdoc, err := rr.hr.GetResponseString(jsonRes, rr.conf.PropNames.Devdoc, true)
 	if err != nil {
@@ -161,7 +161,7 @@ func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string) (*de
 	var bytecode []byte
 	if bytecode, err = hex.DecodeString(strings.TrimPrefix(bytecodeStr, "0x")); err != nil {
 		log.Errorf("GET %s <-- !Failed to parse bytecode: %s\n%s", queryURL, err, bytecodeStr)
-		return nil, fmt.Errorf(genericRegistryResponseErrorMsg)
+		return nil, klderrors.Errorf(klderrors.RemoteRegistryLookupDecodeBytecodeFailed)
 	}
 	addr, _ := rr.hr.GetResponseString(jsonRes, rr.conf.PropNames.Address, false)
 	msg = &deployContractWithAddress{
@@ -237,7 +237,7 @@ func (rr *remoteRegistry) loadFactoryForInstance(lookupStr string) (*deployContr
 
 func (rr *remoteRegistry) registerInstance(lookupStr, address string) error {
 	if rr.conf.InstanceURLPrefix == "" {
-		return fmt.Errorf("No remote registry is configured")
+		return klderrors.Errorf(klderrors.RemoteRegistryNotConfigured)
 	}
 	safeLookupStr := url.QueryEscape(lookupStr)
 	requestURL := strings.TrimSuffix(rr.conf.InstanceURLPrefix, "/")
@@ -247,7 +247,7 @@ func (rr *remoteRegistry) registerInstance(lookupStr, address string) error {
 	log.Debugf("Registering contract: %+v", bodyMap)
 	_, err := rr.hr.DoRequest("POST", requestURL, bodyMap)
 	if err != nil {
-		return fmt.Errorf("Failed to register instance in remote registry: %s", err)
+		return klderrors.Errorf(klderrors.RemoteRegistryRegistrationFailed, err)
 	}
 	return nil
 }

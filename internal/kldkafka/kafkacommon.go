@@ -16,7 +16,6 @@ package kldkafka
 
 import (
 	"crypto/tls"
-	"fmt"
 	"os"
 	"os/signal"
 	"strconv"
@@ -27,6 +26,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -97,16 +97,16 @@ func (k *kafkaCommon) ValidateConf() error {
 // KafkaValidateConf validates supplied configuration
 func KafkaValidateConf(kconf *KafkaCommonConf) (err error) {
 	if kconf.TopicOut == "" {
-		return fmt.Errorf("No output topic specified for bridge to send events to")
+		return klderrors.Errorf(klderrors.ConfigKafkaMissingOutputTopic)
 	}
 	if kconf.TopicIn == "" {
-		return fmt.Errorf("No input topic specified for bridge to listen to")
+		return klderrors.Errorf(klderrors.ConfigKafkaMissingInputTopic)
 	}
 	if kconf.ConsumerGroup == "" {
-		return fmt.Errorf("No consumer group specified")
+		return klderrors.Errorf(klderrors.ConfigKafkaMissingConsumerGroup)
 	}
 	if !kldutils.AllOrNoneReqd(kconf.SASL.Username, kconf.SASL.Password) {
-		err = fmt.Errorf("Username and Password must both be provided for SASL")
+		err = klderrors.Errorf(klderrors.ConfigKafkaMissingBadSASL)
 		return
 	}
 	return
@@ -161,7 +161,7 @@ func (k *kafkaCommon) connect() (err error) {
 
 	log.Debugf("Kafka Bootstrap brokers: %s", k.conf.Brokers)
 	if len(k.conf.Brokers) == 0 || k.conf.Brokers[0] == "" {
-		err = fmt.Errorf("No Kafka brokers configured")
+		err = klderrors.Errorf(klderrors.ConfigKafkaMissingBrokers)
 		return
 	}
 

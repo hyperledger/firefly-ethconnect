@@ -183,7 +183,7 @@ func TestInitialFilterFail(t *testing.T) {
 		rpc:  kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
 	}
 	_, err := s.setInitialBlockHeight(context.Background())
-	assert.EqualError(err, "eth_blockNumber: pop")
+	assert.EqualError(err, "eth_blockNumber returned: pop")
 }
 
 func TestInitialFilterBadInitialBlock(t *testing.T) {
@@ -195,7 +195,7 @@ func TestInitialFilterBadInitialBlock(t *testing.T) {
 		rpc: kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
 	}
 	_, err := s.setInitialBlockHeight(context.Background())
-	assert.EqualError(err, "Failed to parse FromBlock as BigInt: !integer")
+	assert.EqualError(err, "FromBlock cannot be parsed as a BigInt")
 }
 
 func TestInitialFilterCustomInitialBlock(t *testing.T) {
@@ -217,7 +217,7 @@ func TestRestartFilterFail(t *testing.T) {
 		rpc:  kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
 	}
 	err := s.restartFilter(context.Background(), big.NewInt(0))
-	assert.EqualError(err, "eth_newFilter: pop")
+	assert.EqualError(err, "eth_newFilter returned: pop")
 }
 
 func TestUnsubscribe(t *testing.T) {

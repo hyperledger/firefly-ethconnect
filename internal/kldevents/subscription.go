@@ -16,12 +16,12 @@ package kldevents
 
 import (
 	"context"
-	"fmt"
 	"math/big"
 	"strings"
 	"time"
 
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
@@ -85,7 +85,7 @@ func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind
 	event := &i.Event.E
 	i.Name = addrStr + ":" + event.Sig()
 	if event == nil || event.Name == "" {
-		return nil, fmt.Errorf("Solidity event name must be specified")
+		return nil, klderrors.Errorf(klderrors.EventStreamsSubscribeNoEvent)
 	}
 	// For now we only support filtering on the event type
 	f.Topics = [][]kldbind.Hash{[]kldbind.Hash{event.ID()}}
@@ -100,7 +100,7 @@ func (info *SubscriptionInfo) GetID() string {
 
 func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *SubscriptionInfo) (*subscription, error) {
 	if i.GetID() == "" {
-		return nil, fmt.Errorf("No ID")
+		return nil, klderrors.Errorf(klderrors.EventStreamsNoID)
 	}
 	stream, err := sm.streamByID(i.Stream)
 	if err != nil {
@@ -121,7 +121,7 @@ func (s *subscription) setInitialBlockHeight(ctx context.Context) (*big.Int, err
 	if s.info.FromBlock != "" && s.info.FromBlock != FromBlockLatest {
 		var i big.Int
 		if _, ok := i.SetString(s.info.FromBlock, 10); !ok {
-			return nil, fmt.Errorf("Failed to parse FromBlock as BigInt: %s", s.info.FromBlock)
+			return nil, klderrors.Errorf(klderrors.EventStreamsSubscribeBadBlock)
 		}
 		return &i, nil
 	}
@@ -130,7 +130,7 @@ func (s *subscription) setInitialBlockHeight(ctx context.Context) (*big.Int, err
 	blockHeight := kldbind.HexBigInt{}
 	err := s.rpc.CallContext(ctx, &blockHeight, "eth_blockNumber")
 	if err != nil {
-		return nil, fmt.Errorf("eth_blockNumber: %s", err)
+		return nil, klderrors.Errorf(klderrors.RPCCallReturnedError, "eth_blockNumber", err)
 	}
 	i := blockHeight.ToInt()
 	s.lp.initBlockHWM(i)
@@ -152,7 +152,7 @@ func (s *subscription) restartFilter(ctx context.Context, since *big.Int) error 
 	defer cancel()
 	err := s.rpc.CallContext(ctx, &s.filterID, "eth_newFilter", f)
 	if err != nil {
-		return fmt.Errorf("eth_newFilter: %s", err)
+		return klderrors.Errorf(klderrors.RPCCallReturnedError, "eth_newFilter", err)
 	}
 	s.filteredOnce = false
 	s.filterStale = false

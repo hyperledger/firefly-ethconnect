@@ -24,6 +24,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/icza/dyno"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldrest"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
@@ -97,7 +98,7 @@ func initServer() (serverCmd *cobra.Command) {
 		},
 		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
 			if serverCmdConfig.Filename == "" {
-				err = fmt.Errorf("No YAML configuration filename specified")
+				err = klderrors.Errorf(klderrors.ConfigNoYAML)
 				return
 			}
 			return
@@ -115,14 +116,14 @@ func initServer() (serverCmd *cobra.Command) {
 func readServerConfig() (serverConfig *ServerConfig, err error) {
 	confBytes, err := ioutil.ReadFile(serverCmdConfig.Filename)
 	if err != nil {
-		err = fmt.Errorf("Failed to read %s: %s", serverCmdConfig.Filename, err)
+		err = klderrors.Errorf(klderrors.ConfigFileReadFailed, serverCmdConfig.Filename, err)
 		return
 	}
 	if strings.ToLower(serverCmdConfig.Type) == "yaml" {
 		// Convert to JSON first
 		yamlGenericPayload := make(map[interface{}]interface{})
 		if err = yaml.Unmarshal(confBytes, &yamlGenericPayload); err != nil {
-			err = fmt.Errorf("Unable to parse %s as YAML: %s", serverCmdConfig.Filename, err)
+			err = klderrors.Errorf(klderrors.ConfigYAMLParseFile, serverCmdConfig.Filename, err)
 			return
 		}
 		genericPayload := dyno.ConvertMapI2MapS(yamlGenericPayload).(map[string]interface{})
@@ -132,7 +133,7 @@ func readServerConfig() (serverConfig *ServerConfig, err error) {
 	serverConfig = &ServerConfig{}
 	err = json.Unmarshal(confBytes, serverConfig)
 	if err != nil {
-		err = fmt.Errorf("Failed to process YAML config from %s: %s", serverCmdConfig.Filename, err)
+		err = klderrors.Errorf(klderrors.ConfigYAMLPostParseFile, serverCmdConfig.Filename, err)
 		return
 	}
 

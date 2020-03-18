@@ -24,6 +24,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldtx"
@@ -64,7 +65,7 @@ func (k *KafkaBridge) SetConf(conf *KafkaBridgeConf) {
 // ValidateConf validates the configuration
 func (k *KafkaBridge) ValidateConf() (err error) {
 	if k.conf.RPC.URL == "" {
-		return fmt.Errorf("No JSON/RPC URL set for ethereum node")
+		return klderrors.Errorf(klderrors.ConfigNoRPC)
 	}
 	if k.conf.MaxTXWaitTime < 10 {
 		if k.conf.MaxTXWaitTime > 0 {
@@ -164,7 +165,7 @@ func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage, producer Kafka
 	authCtx, err := kldauth.WithAuthContext(context.Background(), accessToken)
 	if err != nil {
 		log.Errorf("Unauthorized: %s - Message=%+v", err, ctx.requestCommon)
-		err = fmt.Errorf("Unauthorized")
+		err = klderrors.Errorf(klderrors.Unauthorized)
 		return
 	}
 	ctx.ctx = authCtx
@@ -385,7 +386,7 @@ func (k *KafkaBridge) ProducerSuccessLoop(consumer KafkaConsumer, producer Kafka
 			k.inFlightCond.Broadcast()
 		} else {
 			// This should never happen. Represents a logic bug that must be diagnosed.
-			err := fmt.Errorf("Received confirmation for message not in in-flight map: %s", reqOffset)
+			err := klderrors.Errorf(klderrors.KakfaProducerConfirmMsgUnknown, reqOffset)
 			panic(err)
 		}
 		k.inFlightCond.L.Unlock()

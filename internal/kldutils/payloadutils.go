@@ -16,12 +16,12 @@ package kldutils
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
 
 	"github.com/icza/dyno"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -35,11 +35,11 @@ const (
 func YAMLorJSONPayload(req *http.Request) (map[string]interface{}, error) {
 
 	if req.ContentLength > MaxPayloadSize {
-		return nil, fmt.Errorf("Message exceeds maximum allowable size")
+		return nil, klderrors.Errorf(klderrors.HelperYAMLorJSONPayloadTooLarge)
 	}
 	originalPayload, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		return nil, fmt.Errorf("Unable to read input data: %s", err)
+		return nil, klderrors.Errorf(klderrors.HelperYAMLorJSONPayloadReadFailed, err)
 	}
 
 	// We support both YAML and JSON input.
@@ -68,7 +68,7 @@ func YAMLorJSONPayload(req *http.Request) (map[string]interface{}, error) {
 		yamlGenericPayload := make(map[interface{}]interface{})
 		err := yaml.Unmarshal(originalPayload, &yamlGenericPayload)
 		if err != nil {
-			return nil, fmt.Errorf("Unable to parse as YAML or JSON: %s", err)
+			return nil, klderrors.Errorf(klderrors.HelperYAMLorJSONPayloadParseFailed, err)
 		}
 		msg = dyno.ConvertMapI2MapS(yamlGenericPayload).(map[string]interface{})
 	}

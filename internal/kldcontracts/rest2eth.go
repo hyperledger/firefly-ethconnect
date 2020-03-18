@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -31,11 +30,13 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldevents"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldtx"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -212,7 +213,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 			r.restErrReply(res, req, err, 500)
 			return
 		} else if c.deployMsg == nil {
-			err = fmt.Errorf("Gateway not found")
+			err = klderrors.Errorf(klderrors.RESTGatewayGatewayNotFound)
 			r.restErrReply(res, req, err, 404)
 			return
 		}
@@ -223,7 +224,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 			r.restErrReply(res, req, err, 500)
 			return
 		} else if msg == nil {
-			err = fmt.Errorf("Instance not found")
+			err = klderrors.Errorf(klderrors.RESTGatewayInstanceNotFound)
 			r.restErrReply(res, req, err, 404)
 			return
 		}
@@ -303,11 +304,11 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 	// If we didn't find the method or event, report to the user
 	if c.abiMethod == nil && c.abiEvent == nil {
 		if methodParamLC == "subscribe" {
-			err = fmt.Errorf("Event '%s' is not declared in the ABI", methodParam)
+			err = klderrors.Errorf(klderrors.RESTGatewayEventNotDeclared, methodParam)
 			r.restErrReply(res, req, err, 404)
 			return
 		}
-		err = fmt.Errorf("Method or Event '%s' is not declared in the ABI of contract '%s'", url.QueryEscape(methodParam), c.addr)
+		err = klderrors.Errorf(klderrors.RESTGatewayMethodNotDeclared, url.QueryEscape(methodParam), c.addr)
 		r.restErrReply(res, req, err, 404)
 		return
 	}
@@ -315,7 +316,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 	// If we have an address, it must be valid
 	if c.addr != "" && !validAddress {
 		log.Errorf("Invalid to addres: '%s'", params.ByName("address"))
-		err = fmt.Errorf("To Address must be a 40 character hex string (0x prefix is optional)")
+		err = klderrors.Errorf(klderrors.RESTGatewayInvalidToAddress)
 		r.restErrReply(res, req, err, 404)
 		return
 	}
@@ -331,7 +332,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 			c.from = fromNo0xPrefix
 		} else {
 			log.Errorf("Invalid from address: '%s'", kldFrom)
-			err = fmt.Errorf("From Address must be a 40 character hex string (0x prefix is optional)")
+			err = klderrors.Errorf(klderrors.RESTGatewayInvalidFromAddress)
 			r.restErrReply(res, req, err, 404)
 			return
 		}
@@ -359,7 +360,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 		} else if vs := queryParams[abiParam.Name]; len(vs) > 0 {
 			msgParam["value"] = vs[0]
 		} else {
-			err = fmt.Errorf("Parameter '%s' of method '%s' was not specified in body or query parameters", abiParam.Name, c.abiMethod.Name)
+			err = klderrors.Errorf(klderrors.RESTGatewayMissingParameter, abiParam.Name, c.abiMethod.Name)
 			r.restErrReply(res, req, err, 400)
 			return
 		}
@@ -380,7 +381,7 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 		r.subscribeEvent(res, req, c.addr, c.abiEvent, c.body)
 	} else if (req.Method == http.MethodPost && !c.abiMethod.Const) && strings.ToLower(getKLDParam("call", req, true)) != "true" {
 		if c.from == "" {
-			err = fmt.Errorf("Please specify a valid address in the 'kld-from' query string parameter or x-kaleido-from HTTP header")
+			err = klderrors.Errorf(klderrors.RESTGatewayMissingFromAddress)
 			r.restErrReply(res, req, err, 400)
 		} else if c.isDeploy {
 			r.deployContract(res, req, c.from, c.value, c.abiMethod, c.deployMsg, c.msgParams)
@@ -406,7 +407,7 @@ func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, ad
 	err := kldauth.AuthEventStreams(req.Context())
 	if err != nil {
 		log.Errorf("Unauthorized: %s", err)
-		r.restErrReply(res, req, fmt.Errorf("Unauthorized"), 401)
+		r.restErrReply(res, req, klderrors.Errorf(klderrors.Unauthorized), 401)
 		return
 	}
 
@@ -416,7 +417,7 @@ func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, ad
 	}
 	streamID := r.fromBodyOrForm(req, body, "stream")
 	if streamID == "" {
-		r.restErrReply(res, req, fmt.Errorf("Must supply a 'stream' parameter in the body or query"), 400)
+		r.restErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewaySubscribeMissingStreamParameter), 400)
 		return
 	}
 	fromBlock := r.fromBodyOrForm(req, body, "fromBlock")
@@ -456,7 +457,7 @@ func (r *rest2eth) addPrivateTx(msg *kldmessages.TransactionCommon, req *http.Re
 	}
 	msg.PrivacyGroupID = r.doubleURLDecode(getKLDParam("privacygroupid", req, false))
 	if len(msg.PrivateFor) > 0 && msg.PrivacyGroupID != "" {
-		return fmt.Errorf("kld-privatefor and kld-privacygroupid are mutually exclusive")
+		return klderrors.Errorf(klderrors.RESTGatewayMixedPrivateForAndGroupID)
 	}
 	return nil
 }

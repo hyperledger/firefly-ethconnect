@@ -16,12 +16,12 @@ package kldtx
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
@@ -96,14 +96,14 @@ func (ab *addressBook) resolveHost(endpoint string) (*url.URL, error) {
 	url, err := url.Parse(endpoint)
 	if err != nil {
 		log.Errorf("Invalid URL '%s': %s", endpoint, err)
-		return nil, fmt.Errorf("Invalid URL obtained for address")
+		return nil, klderrors.Errorf(klderrors.AddressBookLookupBadURL)
 	}
 
 	if ab.conf.HostsFile != "" {
 		hostsMap, err := kldutils.ParseHosts(ab.conf.HostsFile)
 		if err != nil {
 			log.Errorf("Failed to parse hosts file: %s", err)
-			return nil, fmt.Errorf("Configuration problem (hosts file)")
+			return nil, klderrors.Errorf(klderrors.AddressBookLookupBadHostsFile)
 		}
 		splitHostPort := strings.Split(url.Host, ":")
 		if mappedHost, ok := hostsMap[splitHostPort[0]]; ok && mappedHost != "" {
@@ -167,7 +167,7 @@ func (ab *addressBook) lookup(ctx context.Context, fromAddr string) (kldeth.RPCC
 		}
 		if body == nil {
 			if ab.fallbackRPCEndpoint == "" {
-				return nil, fmt.Errorf("Unknown address")
+				return nil, klderrors.Errorf(klderrors.AddressBookLookupNotFound)
 			}
 			endpoint = ab.fallbackRPCEndpoint
 		} else {

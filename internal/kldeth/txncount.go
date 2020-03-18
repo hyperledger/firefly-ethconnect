@@ -16,13 +16,13 @@ package kldeth
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 )
 
 // GetOrionTXCount uses the special Pantheon/Orion interface to check the
@@ -35,7 +35,7 @@ func GetOrionTXCount(ctx context.Context, rpc RPCClient, addr *common.Address, p
 
 	var txnCount hexutil.Uint64
 	if err := rpc.CallContext(ctx, &txnCount, "priv_getTransactionCount", addr, privacyGroup); err != nil {
-		return 0, fmt.Errorf("priv_getTransactionCount for privacy group '%s' returned: %s", privacyGroup, err)
+		return 0, klderrors.Errorf(klderrors.TransactionSendNonceFailWithPrivacyGroup, privacyGroup, err)
 	}
 	callTime := time.Now().UTC().Sub(start)
 	log.Debugf("priv_getTransactionCount(%x,%s)=%d [%.2fs]", addr, privacyGroup, txnCount, callTime.Seconds())
@@ -52,7 +52,7 @@ func GetTransactionCount(ctx context.Context, rpc RPCClient, addr *common.Addres
 
 	var txnCount hexutil.Uint64
 	if err := rpc.CallContext(ctx, &txnCount, "eth_getTransactionCount", addr, blockNumber); err != nil {
-		return 0, fmt.Errorf("eth_getTransactionCount returned: %s", err)
+		return 0, klderrors.Errorf(klderrors.RPCCallReturnedError, "eth_getTransactionCount", err)
 	}
 	callTime := time.Now().UTC().Sub(start)
 	log.Debugf("eth_getTransactionCount(%x,latest)=%d [%.2fs]", addr, txnCount, callTime.Seconds())

@@ -16,12 +16,12 @@ package kldeth
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 	"os"
 
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -48,7 +48,7 @@ func RPCConnect(conf *RPCConnOpts) (RPCClientAll, error) {
 	}
 	rpcClient, err := rpc.Dial(conf.URL)
 	if err != nil {
-		return nil, fmt.Errorf("JSON/RPC connection to %s failed: %s", u, err)
+		return nil, klderrors.Errorf(klderrors.RPCConnectFailed, u, err)
 	}
 	log.Infof("New JSON/RPC connection established")
 	log.Debugf("JSON/RPC connected to %s", u)
@@ -94,7 +94,7 @@ func (sw *subWrapper) Unsubscribe() {
 func (w *rpcWrapper) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
 	if err := kldauth.AuthRPC(ctx, method, args...); err != nil {
 		log.Errorf("JSON/RPC %s - not authorized: %s", method, err)
-		return fmt.Errorf("Unauthorized")
+		return klderrors.Errorf(klderrors.Unauthorized)
 	}
 	log.Tracef("RPC [%s] --> %+v", method, args)
 	err := w.rpc.CallContext(ctx, result, method, args...)
@@ -105,7 +105,7 @@ func (w *rpcWrapper) CallContext(ctx context.Context, result interface{}, method
 func (w *rpcWrapper) Subscribe(ctx context.Context, namespace string, channel interface{}, args ...interface{}) (RPCClientSubscription, error) {
 	if err := kldauth.AuthRPCSubscribe(ctx, namespace, channel, args...); err != nil {
 		log.Errorf("JSON/RPC Subscribe - not authorized: %s", err)
-		return nil, fmt.Errorf("Unauthorized")
+		return nil, klderrors.Errorf(klderrors.Unauthorized)
 	}
 	tSub, err := w.rpc.Subscribe(ctx, namespace, channel, args...)
 	return &subWrapper{s: tSub}, err

@@ -22,6 +22,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
@@ -96,7 +97,7 @@ func (w *webhooksKafka) ProducerErrorLoop(consumer kldkafka.KafkaConsumer, produ
 		log.Errorf("Error sending message: %s", err)
 		if err.Msg == nil || err.Msg.Metadata == nil {
 			// This should not be possible
-			panic(fmt.Errorf("Error did not contain message and metadata: %+v", err))
+			panic(klderrors.Errorf(klderrors.WebhooksKafkaUnexpectedErrFmt, err))
 		}
 		msgID := err.Msg.Metadata.(string)
 		w.sendCond.L.Lock()
@@ -117,7 +118,7 @@ func (w *webhooksKafka) ProducerSuccessLoop(consumer kldkafka.KafkaConsumer, pro
 		log.Infof("Webhooks sent message ok: %s", msg.Metadata)
 		if msg.Metadata == nil {
 			// This should not be possible
-			panic(fmt.Errorf("Sent message did not contain metadata: %+v", msg))
+			panic(klderrors.Errorf(klderrors.WebhooksKafkaDeliveryReportNoMeta, msg))
 		}
 		msgID := msg.Metadata.(string)
 		w.sendCond.L.Lock()
@@ -136,7 +137,7 @@ func (w *webhooksKafka) sendWebhookMsg(ctx context.Context, key, msgID string, m
 	// Reseialize back to JSON with the headers
 	payloadToForward, err := json.Marshal(&msg)
 	if err != nil {
-		return "", 500, fmt.Errorf("Unable to reserialize YAML payload as JSON: %s", err)
+		return "", 500, klderrors.Errorf(klderrors.WebhooksKafkaYAMLtoJSON, err)
 	}
 	if ack {
 		w.setMsgPending(msgID)
@@ -164,7 +165,7 @@ func (w *webhooksKafka) sendWebhookMsg(ctx context.Context, key, msgID string, m
 	if ack {
 		successMsg, err := w.waitForSend(msgID)
 		if err != nil {
-			return "", 502, fmt.Errorf("Failed to deliver message to Kafka: %s", err)
+			return "", 502, klderrors.Errorf(klderrors.WebhooksKafkaErr, err)
 		}
 		msgAck = fmt.Sprintf("%s:%d:%d", successMsg.Topic, successMsg.Partition, successMsg.Offset)
 	}

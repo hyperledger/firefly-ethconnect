@@ -15,10 +15,10 @@
 package cmd
 
 import (
-	"fmt"
 	"plugin"
 
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/pkg/kldplugins"
 	log "github.com/sirupsen/logrus"
 )
@@ -45,12 +45,12 @@ func loadSecurityModulePlugin(conf *PluginConfig) error {
 	log.Debugf("Loading SecurityModule plugin '%s'", modulePath)
 	smPlugin, err := plugin.Open(modulePath)
 	if err != nil {
-		return fmt.Errorf("Failed to load plugin: %s", err)
+		return klderrors.Errorf(klderrors.SecurityModulePluginLoad, err)
 	}
 
 	smSymbol, err := smPlugin.Lookup("SecurityModule")
 	if err != nil || smSymbol == nil {
-		return fmt.Errorf("Failed to load 'SecurityModule' symbol from '%s': %s", modulePath, err)
+		return klderrors.Errorf(klderrors.SecurityModulePluginSymbol, modulePath, err)
 	}
 
 	kldauth.RegisterSecurityModule(*smSymbol.(*kldplugins.SecurityModule))

@@ -16,9 +16,9 @@ package kldeth
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -30,7 +30,7 @@ func (tx *Txn) GetTXReceipt(ctx context.Context, rpc RPCClient) (bool, error) {
 	defer cancel()
 
 	if err := rpc.CallContext(ctx, &tx.Receipt, "eth_getTransactionReceipt", tx.Hash); err != nil {
-		return false, fmt.Errorf("eth_getTransactionReceipt returned: %s", err)
+		return false, klderrors.Errorf(klderrors.RPCCallReturnedError, "eth_getTransactionReceipt", err)
 	}
 	callTime := time.Now().UTC().Sub(start)
 	isMined := tx.Receipt.BlockNumber != nil && tx.Receipt.BlockNumber.ToInt().Uint64() > 0
@@ -39,7 +39,7 @@ func (tx *Txn) GetTXReceipt(ctx context.Context, rpc RPCClient) (bool, error) {
 	if tx.PrivacyGroupID != "" {
 		// priv_getTransactionReceipt expects the txHash and the public key of enclave (privateFrom)
 		if err := rpc.CallContext(ctx, &tx.Receipt, "priv_getTransactionReceipt", tx.Hash, tx.PrivateFrom); err != nil {
-			return false, fmt.Errorf("priv_getTransactionReceipt returned: %s", err)
+			return false, klderrors.Errorf(klderrors.RPCCallReturnedError, "priv_getTransactionReceipt", err)
 		}
 	}
 

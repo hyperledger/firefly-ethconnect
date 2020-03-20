@@ -320,7 +320,9 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 		r.restErrReply(res, req, err, 404)
 		return
 	}
-	c.addr = "0x" + c.addr
+	if c.addr != "" {
+		c.addr = "0x" + c.addr
+	}
 
 	// If we have a from, it needs to be a valid address
 	kldFrom := getKLDParam("from", req, false)

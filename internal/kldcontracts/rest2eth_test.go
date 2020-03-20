@@ -125,13 +125,14 @@ func (m *mockRPC) CallContext(ctx context.Context, result interface{}, method st
 }
 
 type mockSubMgr struct {
-	err       error
-	sub       *kldevents.SubscriptionInfo
-	stream    *kldevents.StreamInfo
-	subs      []*kldevents.SubscriptionInfo
-	streams   []*kldevents.StreamInfo
-	suspended bool
-	resumed   bool
+	err          error
+	sub          *kldevents.SubscriptionInfo
+	stream       *kldevents.StreamInfo
+	subs         []*kldevents.SubscriptionInfo
+	streams      []*kldevents.StreamInfo
+	suspended    bool
+	resumed      bool
+	capturedAddr *kldbind.Address
 }
 
 func (m *mockSubMgr) Init() error { return m.err }
@@ -152,6 +153,7 @@ func (m *mockSubMgr) ResumeStream(ctx context.Context, id string) error {
 }
 func (m *mockSubMgr) DeleteStream(ctx context.Context, id string) error { return m.err }
 func (m *mockSubMgr) AddSubscription(ctx context.Context, addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock string) (*kldevents.SubscriptionInfo, error) {
+	m.capturedAddr = addr
 	return m.sub, m.err
 }
 func (m *mockSubMgr) Subscriptions(ctx context.Context) []*kldevents.SubscriptionInfo { return m.subs }
@@ -1212,9 +1214,10 @@ func TestSubscribeNoAddressSuccess(t *testing.T) {
 
 	dispatcher := &mockREST2EthDispatcher{}
 	r, _, router := newTestREST2Eth(dispatcher)
-	r.subMgr = &mockSubMgr{
+	sm := &mockSubMgr{
 		sub: &kldevents.SubscriptionInfo{ID: "sub1"},
 	}
+	r.subMgr = sm
 	bodyBytes, _ := json.Marshal(&map[string]string{
 		"stream": "stream1",
 	})
@@ -1227,6 +1230,7 @@ func TestSubscribeNoAddressSuccess(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("sub1", reply.ID)
+	assert.Nil(sm.capturedAddr)
 }
 
 func TestSubscribeWithAddressSuccess(t *testing.T) {
@@ -1236,9 +1240,10 @@ func TestSubscribeWithAddressSuccess(t *testing.T) {
 
 	dispatcher := &mockREST2EthDispatcher{}
 	r, _, router := newTestREST2Eth(dispatcher)
-	r.subMgr = &mockSubMgr{
+	sm := &mockSubMgr{
 		sub: &kldevents.SubscriptionInfo{ID: "sub1"},
 	}
+	r.subMgr = sm
 	bodyBytes, _ := json.Marshal(&map[string]string{
 		"stream": "stream1",
 	})
@@ -1251,6 +1256,7 @@ func TestSubscribeWithAddressSuccess(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("sub1", reply.ID)
+	assert.Equal("0x66C5fE653e7A9EBB628a6D40f0452d1e358BaEE8", sm.capturedAddr.Hex())
 }
 
 func TestSubscribeWithAddressBadAddress(t *testing.T) {

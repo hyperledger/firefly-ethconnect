@@ -1,6 +1,7 @@
 module github.com/kaleido-io/ethconnect
 
 require (
+	github.com/Azure/go-autorest/autorest v0.9.7
 	github.com/DataDog/zstd v1.4.1 // indirect
 	github.com/Shopify/sarama v1.24.1
 	github.com/VictoriaMetrics/fastcache v1.5.7 // indirect

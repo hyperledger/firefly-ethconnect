@@ -403,6 +403,12 @@ func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *kldme
 	tx.PrivacyGroupID = inflightWrapper.privacyGroupID
 	tx.NodeAssignNonce = inflightWrapper.nodeAssignNonce
 
+	// The above must happen synchronously for each partition in Kafka - as it is where we assign the nonce.
+	// However, the send to the node can happen at high concurrency.
+	go p.sendAndAddInflight(txnContext, inflightWrapper, tx)
+}
+
+func (p *txnProcessor) sendAndAddInflight(txnContext TxnContext, inflightWrapper *inflightTxn, tx *kldeth.Txn) {
 	if err := tx.Send(txnContext.Context(), inflightWrapper.rpc); err != nil {
 		txnContext.SendErrorReply(400, err)
 		return

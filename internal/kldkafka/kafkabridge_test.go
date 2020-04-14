@@ -21,6 +21,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
@@ -457,7 +458,7 @@ func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 func TestAddInflightMessageBadMessage(t *testing.T) {
 	assert := assert.New(t)
 
-	_, _, mockConsumer, mockProducer, wg := setupMocks()
+	k, _, mockConsumer, mockProducer, wg := setupMocks()
 
 	mockConsumer.MockMessages <- &sarama.ConsumerMessage{
 		Value:     []byte("badness"),
@@ -467,6 +468,9 @@ func TestAddInflightMessageBadMessage(t *testing.T) {
 
 	// Drain the producer
 	msg := <-mockProducer.MockInput
+	for len(k.inFlight) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 	mockProducer.MockSuccesses <- msg
 
 	// Shut down
@@ -476,7 +480,6 @@ func TestAddInflightMessageBadMessage(t *testing.T) {
 
 	// Check we acknowledge all offsets
 	assert.Equal(int64(42), mockConsumer.OffsetsByPartition[64])
-
 }
 
 func TestProducerErrorLoopPanics(t *testing.T) {

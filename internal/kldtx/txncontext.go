@@ -16,6 +16,7 @@ package kldtx
 
 import (
 	"context"
+	"time"
 
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 )
@@ -26,6 +27,8 @@ type TxnContext interface {
 	Context() context.Context
 	// Get the headers of the message
 	Headers() *kldmessages.CommonHeaders
+	// Get the message's time received
+	TimeReceived() time.Time
 	// Unmarshal the supplied message into a give type
 	Unmarshal(msg interface{}) error
 	// Send an error reply

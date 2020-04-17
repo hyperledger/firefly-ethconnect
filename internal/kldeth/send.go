@@ -103,6 +103,7 @@ func (tx *Txn) Call(ctx context.Context, rpc RPCClient) (res []byte, err error) 
 // Send sends an individual transaction, choosing external or internal signing
 func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
 	start := time.Now().UTC()
+	log.Infof("TX:%s Send Start", tx.Hash)
 
 	gas := hexutil.Uint64(tx.EthTX.Gas())
 	data := hexutil.Bytes(tx.EthTX.Data())

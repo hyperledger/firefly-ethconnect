@@ -141,6 +141,10 @@ func (c *testTxnContext) Headers() *kldmessages.CommonHeaders {
 	return &commonMsg.Headers.CommonHeaders
 }
 
+func (c *testTxnContext) TimeReceived() time.Time {
+	return time.Now().UTC()
+}
+
 func (c *testTxnContext) Unmarshal(msg interface{}) error {
 	log.Infof("Unmarshaling test message: %s", c.jsonMsg)
 	return json.Unmarshal([]byte(c.jsonMsg), msg)

@@ -58,6 +58,10 @@ func (t *syncTxInflight) Headers() *kldmessages.CommonHeaders {
 	return &t.sendMsg.Headers.CommonHeaders
 }
 
+func (t *syncTxInflight) TimeReceived() time.Time {
+	return t.timeReceived
+}
+
 func (t *syncTxInflight) Unmarshal(msg interface{}) error {
 	var retMsg interface{}
 	if t.deployMsg != nil {

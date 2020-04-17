@@ -245,6 +245,10 @@ func (c *msgContext) Headers() *kldmessages.CommonHeaders {
 	return &c.requestCommon.Headers.CommonHeaders
 }
 
+func (c *msgContext) TimeReceived() time.Time {
+	return c.timeReceived
+}
+
 func (c *msgContext) Unmarshal(msg interface{}) (err error) {
 	if err = json.Unmarshal(c.saramaMsg.Value, msg); err != nil {
 		log.Errorf("Failed to parse message: %s - Message=%s", err, string(c.saramaMsg.Value))
@@ -341,6 +345,7 @@ func (k *KafkaBridge) ConsumerMessagesLoop(consumer KafkaConsumer, producer Kafk
 			// This was a dup
 		} else if err == nil {
 			// Dispatch for processing if we parsed the message successfully
+			log.Infof("Handing over to txn processor")
 			k.processor.OnMessage(msgCtx)
 		} else {
 			// Dispatch a generic 'bad data' reply

@@ -75,6 +75,10 @@ func (t *msgContext) Headers() *kldmessages.CommonHeaders {
 	return t.headers
 }
 
+func (t *msgContext) TimeReceived() time.Time {
+	return t.timeReceived
+}
+
 func (t *msgContext) Unmarshal(msg interface{}) error {
 	msgBytes, err := json.Marshal(t.msg)
 	if err != nil {

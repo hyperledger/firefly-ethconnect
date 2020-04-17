@@ -118,6 +118,12 @@ func CobraInitTxnProcessor(cmd *cobra.Command, txconf *TxnProcessorConf) {
 	return
 }
 
+func printElapsedTime(phase string, txnContext TxnContext) {
+	msgTimeReceived := txnContext.TimeReceived().UTC()
+	timeElapsed := time.Now().UTC().Sub(msgTimeReceived)
+	log.Infof("Txn: %s, elapsed time [%.2f]s", phase, timeElapsed.Seconds())
+}
+
 // OnMessage checks the type and dispatches to the correct logic
 // ** From this point on the processor MUST ensure Reply is called
 //    on txnContext eventually in all scenarios.
@@ -126,6 +132,9 @@ func (p *txnProcessor) OnMessage(txnContext TxnContext) {
 
 	var unmarshalErr error
 	headers := txnContext.Headers()
+
+	printElapsedTime("Starting message handling", txnContext)
+
 	log.Debugf("Processing %+v", headers)
 	switch headers.MsgType {
 	case kldmessages.MsgTypeDeployContract:
@@ -385,6 +394,7 @@ func (p *txnProcessor) addInflight(inflight *inflightTxn, tx *kldeth.Txn) {
 }
 
 func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *kldmessages.DeployContract) {
+	printElapsedTime("Begin deploy contract message handling", txnContext)
 
 	inflightWrapper, err := p.newInflightWrapper(txnContext, &msg.TransactionCommon)
 	if err != nil {
@@ -399,6 +409,7 @@ func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *kldme
 		txnContext.SendErrorReply(400, err)
 		return
 	}
+	printElapsedTime("Build deploy contract message", txnContext)
 	tx.OrionPrivateAPIS = p.conf.OrionPrivateAPIS
 	tx.PrivacyGroupID = inflightWrapper.privacyGroupID
 	tx.NodeAssignNonce = inflightWrapper.nodeAssignNonce

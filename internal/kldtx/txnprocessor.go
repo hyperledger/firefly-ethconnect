@@ -433,10 +433,7 @@ func (p *txnProcessor) OnSendTransactionMessage(txnContext TxnContext, msg *kldm
 	}
 	tx.NodeAssignNonce = inflightWrapper.nodeAssignNonce
 
-	if err = tx.Send(txnContext.Context(), inflightWrapper.rpc); err != nil {
-		txnContext.SendErrorReply(400, err)
-		return
-	}
-
-	p.addInflight(inflightWrapper, tx)
+	// The above must happen synchronously for each partition in Kafka - as it is where we assign the nonce.
+	// However, the send to the node can happen at high concurrency.
+	go p.sendAndAddInflight(txnContext, inflightWrapper, tx)
 }

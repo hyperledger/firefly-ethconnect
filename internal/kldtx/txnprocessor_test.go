@@ -820,7 +820,7 @@ func TestOnSendTransactionMessageOrion(t *testing.T) {
 	txnProcessor.Init(testRPC)
 
 	txnProcessor.OnMessage(testTxnContext)
-	for len(testRPC.calls) == 0 {
+	for len(testRPC.calls) < 3 {
 		time.Sleep(1 * time.Millisecond)
 	}
 
@@ -852,6 +852,9 @@ func TestOnSendTransactionMessageOrionPrivacyGroupId(t *testing.T) {
 	txnProcessor.Init(testRPC)
 
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testRPC.calls) < 2 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.Empty(testTxnContext.errorReplies)
 	assert.EqualValues([]string{"priv_getTransactionCount", "eth_sendTransaction"}, testRPC.calls)
@@ -909,6 +912,9 @@ func TestOnSendTransactionAddressBook(t *testing.T) {
 	txnProcessor.Init(testRPC)
 
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.EqualError(testTxnContext.errorReplies[0].err, "500 Internal Server Error ")
 }
@@ -930,6 +936,9 @@ func TestOnDeployContractMessageFailAddressLookup(t *testing.T) {
 	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.EqualError(testTxnContext.errorReplies[0].err, "Error querying Addressbook")
 
@@ -949,6 +958,9 @@ func TestOnDeployContractMessageFailHDWalletMissing(t *testing.T) {
 	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.EqualError(testTxnContext.errorReplies[0].err, "No HD Wallet Configuration")
 
@@ -969,6 +981,9 @@ func TestOnDeployContractMessageFailHDWalletFail(t *testing.T) {
 	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.EqualError(testTxnContext.errorReplies[0].err, "HDWallet signing failed")
 

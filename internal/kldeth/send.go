@@ -42,7 +42,7 @@ func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXAr
 		// Now we attempt a call of the transaction, because that will return us a useful error in the case, of a revert.
 		estError := klderrors.Errorf(klderrors.TransactionSendGasEstimateFailed, err)
 		log.Errorf(estError.Error())
-		if _, err := tx.Call(ctx, rpc); err != nil {
+		if _, err := tx.Call(ctx, rpc, "latest"); err != nil {
 			return err
 		}
 		// If the call succeeds, after estimate completed - we still need to fail with the estimate error
@@ -53,7 +53,7 @@ func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXAr
 }
 
 // Call synchronously calls the method, without mining a transaction, and returns the result as RLP encoded bytes or nil
-func (tx *Txn) Call(ctx context.Context, rpc RPCClient) (res []byte, err error) {
+func (tx *Txn) Call(ctx context.Context, rpc RPCClient, option string) (res []byte, err error) {
 	data := hexutil.Bytes(tx.EthTX.Data())
 	txArgs := &SendTXArgs{
 		From:     tx.From.Hex(),
@@ -70,7 +70,7 @@ func (tx *Txn) Call(ctx context.Context, rpc RPCClient) (res []byte, err error) 
 	defer cancel()
 
 	var hexString string
-	if err = rpc.CallContext(ctx, &hexString, "eth_call", txArgs, "latest"); err != nil {
+	if err = rpc.CallContext(ctx, &hexString, "eth_call", txArgs, option); err != nil {
 		return nil, klderrors.Errorf(klderrors.TransactionSendCallFailedNoRevert, err)
 	}
 	if len(hexString) == 0 || hexString == "0x" {

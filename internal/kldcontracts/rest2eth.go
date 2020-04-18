@@ -190,6 +190,7 @@ type restCmd struct {
 	deployMsg *kldmessages.DeployContract
 	body      map[string]interface{}
 	msgParams []interface{}
+	option		string
 }
 
 func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, params httprouter.Params) (c restCmd, err error) {
@@ -368,6 +369,9 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 		}
 		c.msgParams = append(c.msgParams, msgParam)
 	}
+
+	c.option = getKLDParam("option", req, false)
+
 	return
 }
 
@@ -391,7 +395,7 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 			r.sendTransaction(res, req, c.from, c.addr, c.value, c.abiMethod, c.msgParams)
 		}
 	} else {
-		r.callContract(res, req, c.from, c.addr, c.value, c.abiMethod, c.msgParams)
+		r.callContract(res, req, c.from, c.addr, c.value, c.abiMethod, c.msgParams, c.option)
 	}
 }
 
@@ -559,8 +563,8 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 	return
 }
 
-func (r *rest2eth) callContract(res http.ResponseWriter, req *http.Request, from, addr string, value json.Number, abiMethod *abi.Method, msgParams []interface{}) {
-	resBody, err := kldeth.CallMethod(req.Context(), r.rpc, nil, from, addr, value, abiMethod, msgParams)
+func (r *rest2eth) callContract(res http.ResponseWriter, req *http.Request, from, addr string, value json.Number, abiMethod *abi.Method, msgParams []interface{}, option string) {
+	resBody, err := kldeth.CallMethod(req.Context(), r.rpc, nil, from, addr, value, abiMethod, msgParams, option)
 	if err != nil {
 		r.restErrReply(res, req, err, 500)
 		return

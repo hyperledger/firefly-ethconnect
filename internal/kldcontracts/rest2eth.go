@@ -370,7 +370,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 		c.msgParams = append(c.msgParams, msgParam)
 	}
 
-	c.option = getKLDParam("option", req, false)
+	c.option = getKLDParam("opts", req, false)
 
 	return
 }

@@ -130,7 +130,7 @@ func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr 
 	}
 	callOption := "latest"
 	// only allow values are "latest", "", a number string "12345" or a hex number "0xab23"
-	// "latest" and "" (no kld-option given) are equivalent
+	// "latest" and "" (no kld-opts given) are equivalent
 	if len(options) > 0 {
 		if option := options[0]; option != "" && option != "latest" {
 	    n := new(big.Int)

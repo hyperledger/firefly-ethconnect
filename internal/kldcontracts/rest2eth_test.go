@@ -1070,7 +1070,7 @@ func TestCallReadOnlyMethodViaPOSTSuccess(t *testing.T) {
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	dispatcher := &mockREST2EthDispatcher{}
 	_, mockRPC, router, res, _ := newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
-	req := httptest.NewRequest("POST", "/contracts/"+to+"/get?kld-opts=12345", bytes.NewReader([]byte{}))
+	req := httptest.NewRequest("POST", "/contracts/"+to+"/get?kld-option=12345", bytes.NewReader([]byte{}))
 	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
 	router.ServeHTTP(res, req)
 

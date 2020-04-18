@@ -364,8 +364,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["optionParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Used when kld-call is true, to specify the block number for the eth_call request to target. Empty or 'latest' to indicate the latest mined block. A number or a hex string to indicate a historical block height - 'x-kaleido-opts' header can also be used",
-			Name:            "kld-opts",
+			Description:     "Used when kld-call is true, to specify the block number for the eth_call request to target. Empty or 'latest' to indicate the latest mined block. A number or a hex string to indicate a historical block height - 'x-kaleido-option' header can also be used",
+			Name:            "kld-option",
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: false,

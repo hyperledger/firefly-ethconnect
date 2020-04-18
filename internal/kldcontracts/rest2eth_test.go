@@ -113,12 +113,14 @@ func (m *mockABILoader) Shutdown()                           { return }
 
 type mockRPC struct {
 	capturedMethod string
+	capturedArgs   []interface{}
 	mockError      error
 	result         interface{}
 }
 
 func (m *mockRPC) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
 	m.capturedMethod = method
+	m.capturedArgs = args
 	v := reflect.ValueOf(result)
 	v.Elem().Set(reflect.ValueOf(m.result))
 	return m.mockError
@@ -1073,6 +1075,7 @@ func TestCallReadOnlyMethodViaPOSTSuccess(t *testing.T) {
 
 	assert.Equal(200, res.Result().StatusCode)
 	assert.Equal("eth_call", mockRPC.capturedMethod)
+	assert.Equal("0x3039", mockRPC.capturedArgs[1])
 	var reply map[string]interface{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)

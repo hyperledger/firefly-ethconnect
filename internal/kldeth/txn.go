@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math/big"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -132,20 +133,24 @@ func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr 
 	// only allow values are "latest", "", a number string "12345" or a hex number "0xab23"
 	// "latest" and "" (no kld-option given) are equivalent
 	if len(options) > 0 {
-		if option := options[0]; option != "" && option != "latest" {
-	    n := new(big.Int)
-	    n, ok := n.SetString(option, 10)
-	    if !ok {
-	    	n, ok = n.SetString(option, 16)
-	    	if !ok {
-	    		log.Warnf("Failed to convert call option value to big integer, %s", option)
-	    	}
-	    }
-			bits := n.BitLen()
-			if bits == 0 {
-				callOption = "0x0"
+		option := options[0]
+		if option != "" && option != "latest" {
+			isHex, _ := regexp.MatchString(`^0x[0-9a-fA-F]+$`, option)
+			if isHex || option == "earliest" || option == "pending" {
+				callOption = option
 			} else {
-				callOption = fmt.Sprintf("%#x", n)
+				n := new(big.Int)
+		    n, ok := n.SetString(option, 10)
+		    if !ok {
+		    	log.Warnf("Failed to convert option to big integer: %s", option)
+		    } else {
+					bits := n.BitLen()
+					if bits == 0 {
+						callOption = "0x0"
+					} else {
+						callOption = fmt.Sprintf("%#x", n)
+					}
+		    }
 			}
 		}
 	}

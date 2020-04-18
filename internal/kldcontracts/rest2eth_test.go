@@ -1051,6 +1051,7 @@ func TestCallMethodSuccess(t *testing.T) {
 
 	assert.Equal(200, res.Result().StatusCode)
 	assert.Equal("eth_call", mockRPC.capturedMethod)
+	assert.Equal("latest", mockRPC.capturedArgs[1])
 	var reply map[string]interface{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
@@ -1069,7 +1070,7 @@ func TestCallReadOnlyMethodViaPOSTSuccess(t *testing.T) {
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	dispatcher := &mockREST2EthDispatcher{}
 	_, mockRPC, router, res, _ := newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
-	req := httptest.NewRequest("POST", "/contracts/"+to+"/get", strings.NewReader("kld-option=12345"))
+	req := httptest.NewRequest("POST", "/contracts/"+to+"/get?kld-option=12345", bytes.NewReader([]byte{}))
 	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
 	router.ServeHTTP(res, req)
 

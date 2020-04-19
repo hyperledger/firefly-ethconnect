@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	defaultSendConcurrency = 50
+	defaultSendConcurrency = 1
 )
 
 // TxnProcessor interface is called for each message, as is responsible

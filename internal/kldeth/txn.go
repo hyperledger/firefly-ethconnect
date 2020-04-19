@@ -304,7 +304,7 @@ func buildTX(signer TXSigner, msgFrom, msgTo string, msgNonce, msgValue, msgGas,
 		return
 	}
 	methodID := methodABI.ID()
-	log.Infof("Method Name=%s ID=%x PackedArgs=%x", methodABI.RawName, methodID, packedArgs)
+	log.Debugf("Method Name=%s ID=%x PackedArgs=%x", methodABI.RawName, methodID, packedArgs)
 	packedCall := append(methodID, packedArgs...)
 
 	from := msgFrom

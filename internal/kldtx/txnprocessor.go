@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	defaultSendConcurrency = 10
+	defaultSendConcurrency = 50
 )
 
 // TxnProcessor interface is called for each message, as is responsible
@@ -442,12 +442,12 @@ func (p *txnProcessor) OnSendTransactionMessage(txnContext TxnContext, msg *kldm
 }
 
 func (p *txnProcessor) sendAndAddInflight(txnContext TxnContext, inflightWrapper *inflightTxn, tx *kldeth.Txn) {
-	if err := tx.Send(txnContext.Context(), inflightWrapper.rpc); err != nil {
-		<-p.concurrencySlots // return our slot
+	err := tx.Send(txnContext.Context(), inflightWrapper.rpc)
+	<-p.concurrencySlots // return our slot as soon as send is complete, to let an awaiting send go
+	if err != nil {
 		txnContext.SendErrorReply(400, err)
 		return
 	}
 
 	p.addInflight(inflightWrapper, tx)
-	<-p.concurrencySlots // return our slot
 }

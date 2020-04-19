@@ -123,35 +123,33 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract, signer TXSigner) (tx 
 }
 
 // CallMethod performs eth_call to return data from the chain
-func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr string, value json.Number, methodABI *abi.Method, msgParams []interface{}, options ...string) (map[string]interface{}, error) {
+func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr string, value json.Number, methodABI *abi.Method, msgParams []interface{}, blocknumber string) (map[string]interface{}, error) {
 	log.Debugf("Calling method: %+v %+v", methodABI, msgParams)
 	tx, err := buildTX(signer, from, addr, "", value, "", "", methodABI, msgParams)
 	if err != nil {
 		return nil, err
 	}
 	callOption := "latest"
-	// only allow values are "latest", "", a number string "12345" or a hex number "0xab23"
-	// "latest" and "" (no kld-option given) are equivalent
-	if len(options) > 0 {
-		option := options[0]
-		if option != "" && option != "latest" {
-			isHex, _ := regexp.MatchString(`^0x[0-9a-fA-F]+$`, option)
-			if isHex || option == "earliest" || option == "pending" {
-				callOption = option
-			} else {
-				n := new(big.Int)
-		    n, ok := n.SetString(option, 10)
-		    if !ok {
-		    	log.Warnf("Failed to convert option to big integer: %s", option)
-		    } else {
-					bits := n.BitLen()
-					if bits == 0 {
-						callOption = "0x0"
-					} else {
-						callOption = fmt.Sprintf("%#x", n)
-					}
-		    }
-			}
+	// only allowed values are "latest", "", a number string "12345" or a hex number "0xab23"
+	// "latest" and "" (no kld-blocknumber given) are equivalent
+	if blocknumber != "" && blocknumber != "latest" {
+		isHex, _ := regexp.MatchString(`^0x[0-9a-fA-F]+$`, blocknumber)
+		if isHex || blocknumber == "earliest" || blocknumber == "pending" {
+			callOption = blocknumber
+		} else {
+			n := new(big.Int)
+	    n, ok := n.SetString(blocknumber, 10)
+	    if !ok {
+	    	log.Warnf("Failed to convert blocknumber to big integer: %s", blocknumber)
+	    	// when failed to convert, use "latest"
+	    } else {
+				bits := n.BitLen()
+				if bits == 0 {
+					callOption = "0x0"
+				} else {
+					callOption = fmt.Sprintf("%#x", n)
+				}
+	    }
 		}
 	}
 

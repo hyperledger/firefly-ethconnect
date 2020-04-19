@@ -756,7 +756,7 @@ func TestCallMethod(t *testing.T) {
 	res, err := CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
-		json.Number("12345"), method, params)
+		json.Number("12345"), method, params, "")
 	assert.NoError(err)
 	assert.Equal(map[string]interface{}{
 		"retval1": "1",
@@ -789,7 +789,7 @@ func TestCallMethodFail(t *testing.T) {
 	_, err := CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
-		json.Number("12345"), method, params)
+		json.Number("12345"), method, params, "")
 
 	assert.Equal("eth_call", rpc.capturedMethod)
 	assert.EqualError(err, "Call failed: pop")
@@ -813,7 +813,7 @@ func TestCallMethodRevert(t *testing.T) {
 	_, err := CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
-		json.Number("12345"), method, params)
+		json.Number("12345"), method, params, "")
 
 	assert.Equal("eth_call", rpc.capturedMethod)
 	assert.EqualError(err, "Muppetry detected")
@@ -837,7 +837,7 @@ func TestCallMethodRevertBadStrLen(t *testing.T) {
 	_, err := CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
-		json.Number("12345"), method, params)
+		json.Number("12345"), method, params, "")
 
 	assert.Equal("eth_call", rpc.capturedMethod)
 	// Should read up to the end of the padding, and not panic
@@ -862,7 +862,7 @@ func TestCallMethodRevertBadBytes(t *testing.T) {
 	_, err := CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
-		json.Number("12345"), method, params)
+		json.Number("12345"), method, params, "")
 
 	assert.Equal("eth_call", rpc.capturedMethod)
 	assert.EqualError(err, "EVM reverted. Failed to decode error message")
@@ -875,7 +875,7 @@ func TestCallMethodBadArgs(t *testing.T) {
 		mockError: fmt.Errorf("pop"),
 	}
 
-	_, err := CallMethod(context.Background(), rpc, nil, "badness", "", json.Number(""), &abi.Method{}, []interface{}{})
+	_, err := CallMethod(context.Background(), rpc, nil, "badness", "", json.Number(""), &abi.Method{}, []interface{}{}, "")
 
 	assert.EqualError(err, "Supplied value for 'from' is not a valid hex address")
 }

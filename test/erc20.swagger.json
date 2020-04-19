@@ -61,7 +61,7 @@
             "$ref": "#/parameters/privateForParam"
           },
           {
-            "$ref": "#/parameters/optionParam"
+            "$ref": "#/parameters/blocknumberParam"
           },
           {
             "$ref": "#/parameters/privacyGroupIdParam"
@@ -452,7 +452,7 @@
             "$ref": "#/parameters/privateForParam"
           },
           {
-            "$ref": "#/parameters/optionParam"
+            "$ref": "#/parameters/blocknumberParam"
           },
           {
             "$ref": "#/parameters/privacyGroupIdParam"
@@ -594,7 +594,7 @@
             "$ref": "#/parameters/privateForParam"
           },
           {
-            "$ref": "#/parameters/optionParam"
+            "$ref": "#/parameters/blocknumberParam"
           },
           {
             "$ref": "#/parameters/privacyGroupIdParam"
@@ -729,7 +729,7 @@
             "$ref": "#/parameters/privateForParam"
           },
           {
-            "$ref": "#/parameters/optionParam"
+            "$ref": "#/parameters/blocknumberParam"
           },
           {
             "$ref": "#/parameters/privacyGroupIdParam"
@@ -871,7 +871,7 @@
             "$ref": "#/parameters/privateForParam"
           },
           {
-            "$ref": "#/parameters/optionParam"
+            "$ref": "#/parameters/blocknumberParam"
           },
           {
             "$ref": "#/parameters/privacyGroupIdParam"
@@ -1013,7 +1013,7 @@
             "$ref": "#/parameters/privateForParam"
           },
           {
-            "$ref": "#/parameters/optionParam"
+            "$ref": "#/parameters/blocknumberParam"
           },
           {
             "$ref": "#/parameters/privacyGroupIdParam"
@@ -1141,7 +1141,7 @@
             "$ref": "#/parameters/privateForParam"
           },
           {
-            "$ref": "#/parameters/optionParam"
+            "$ref": "#/parameters/blocknumberParam"
           },
           {
             "$ref": "#/parameters/privacyGroupIdParam"
@@ -1283,7 +1283,7 @@
             "$ref": "#/parameters/privateForParam"
           },
           {
-            "$ref": "#/parameters/optionParam"
+            "$ref": "#/parameters/blocknumberParam"
           },
           {
             "$ref": "#/parameters/privacyGroupIdParam"
@@ -1432,7 +1432,7 @@
             "$ref": "#/parameters/privateForParam"
           },
           {
-            "$ref": "#/parameters/optionParam"
+            "$ref": "#/parameters/blocknumberParam"
           },
           {
             "$ref": "#/parameters/privacyGroupIdParam"
@@ -1672,6 +1672,12 @@
     }
   },
   "parameters": {
+    "blocknumberParam": {
+      "type": "string",
+      "description": "Used when kld-call is true, to specify the block number for the eth_call request to target. Empty or 'latest' to indicate the latest mined block. A number or a hex string to indicate a historical block height - 'x-kaleido-blocknumber' header can also be used",
+      "name": "kld-blocknumber",
+      "in": "query"
+    },
     "callParam": {
       "type": "boolean",
       "description": "Perform a read-only call with the same parameters that would be used to invoke, and return result - 'x-kaleido-call' header can also be used",
@@ -1698,12 +1704,6 @@
       "name": "kld-gasprice",
       "in": "query",
       "allowEmptyValue": true
-    },
-    "optionParam": {
-      "type": "string",
-      "description": "Used when kld-call is true, to specify the block number for the eth_call request to target. Empty or 'latest' to indicate the latest mined block. A number or a hex string to indicate a historical block height - 'x-kaleido-option' header can also be used",
-      "name": "kld-option",
-      "in": "query"
     },
     "privacyGroupIdParam": {
       "type": "string",

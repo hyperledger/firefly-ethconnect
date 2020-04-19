@@ -362,10 +362,10 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 			Type: "string",
 		},
 	}
-	params["optionParam"] = spec.Parameter{
+	params["blocknumberParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Used when kld-call is true, to specify the block number for the eth_call request to target. Empty or 'latest' to indicate the latest mined block. A number or a hex string to indicate a historical block height - 'x-kaleido-option' header can also be used",
-			Name:            "kld-option",
+			Description:     "Used when kld-call is true, to specify the block number for the eth_call request to target. Empty or 'latest' to indicate the latest mined block. A number or a hex string to indicate a historical block height - 'x-kaleido-blocknumber' header can also be used",
+			Name:            "kld-blocknumber",
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: false,
@@ -391,7 +391,7 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 	privateForParam, _ := spec.NewRef("#/parameters/privateForParam")
 	privacyGroupIdParam, _ := spec.NewRef("#/parameters/privacyGroupIdParam")
 	registerParam, _ := spec.NewRef("#/parameters/registerParam")
-	optionParam, _ := spec.NewRef("#/parameters/optionParam")
+	blocknumberParam, _ := spec.NewRef("#/parameters/blocknumberParam")
 	op.Parameters = append(op.Parameters, spec.Parameter{
 		Refable: spec.Refable{
 			Ref: fromParam,
@@ -435,7 +435,7 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 		})
 		op.Parameters = append(op.Parameters, spec.Parameter{
 			Refable: spec.Refable{
-				Ref: optionParam,
+				Ref: blocknumberParam,
 			},
 		})
 		if c.orionPrivateAPI {

@@ -53,7 +53,7 @@ func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXAr
 }
 
 // Call synchronously calls the method, without mining a transaction, and returns the result as RLP encoded bytes or nil
-func (tx *Txn) Call(ctx context.Context, rpc RPCClient, option string) (res []byte, err error) {
+func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res []byte, err error) {
 	data := hexutil.Bytes(tx.EthTX.Data())
 	txArgs := &SendTXArgs{
 		From:     tx.From.Hex(),
@@ -70,7 +70,7 @@ func (tx *Txn) Call(ctx context.Context, rpc RPCClient, option string) (res []by
 	defer cancel()
 
 	var hexString string
-	if err = rpc.CallContext(ctx, &hexString, "eth_call", txArgs, option); err != nil {
+	if err = rpc.CallContext(ctx, &hexString, "eth_call", txArgs, blocknumber); err != nil {
 		return nil, klderrors.Errorf(klderrors.TransactionSendCallFailedNoRevert, err)
 	}
 	if len(hexString) == 0 || hexString == "0x" {

@@ -32,6 +32,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	defaultSendConcurrency = 10
+)
+
 // TxnProcessor interface is called for each message, as is responsible
 // for tracking all in-flight messages
 type TxnProcessor interface {
@@ -68,6 +72,7 @@ func (i *inflightTxn) String() string {
 type TxnProcessorConf struct {
 	PredictNonces      bool            `json:"alwaysManageNonce"`
 	MaxTXWaitTime      int             `json:"maxTXWaitTime"`
+	SendConcurrency    int             `json:"sendConcurrency"`
 	OrionPrivateAPIS   bool            `json:"orionPrivateAPIs"`
 	HexValuesInReceipt bool            `json:"hexValuesInReceipt"`
 	AddressBookConf    AddressBookConf `json:"addressBook"`
@@ -84,16 +89,21 @@ type txnProcessor struct {
 	hdwallet           HDWallet
 	conf               *TxnProcessorConf
 	rpcConf            *kldeth.RPCConf
+	concurrencySlots   chan bool
 }
 
 // NewTxnProcessor constructor for message procss
 func NewTxnProcessor(conf *TxnProcessorConf, rpcConf *kldeth.RPCConf) TxnProcessor {
+	if conf.SendConcurrency == 0 {
+		conf.SendConcurrency = defaultSendConcurrency
+	}
 	p := &txnProcessor{
 		inflightTxnsLock:   &sync.Mutex{},
 		inflightTxns:       make(map[string][]*inflightTxn),
 		inflightTxnDelayer: NewTxnDelayTracker(),
 		conf:               conf,
 		rpcConf:            rpcConf,
+		concurrencySlots:   make(chan bool, conf.SendConcurrency),
 	}
 	return p
 }
@@ -405,16 +415,8 @@ func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *kldme
 
 	// The above must happen synchronously for each partition in Kafka - as it is where we assign the nonce.
 	// However, the send to the node can happen at high concurrency.
+	p.concurrencySlots <- true
 	go p.sendAndAddInflight(txnContext, inflightWrapper, tx)
-}
-
-func (p *txnProcessor) sendAndAddInflight(txnContext TxnContext, inflightWrapper *inflightTxn, tx *kldeth.Txn) {
-	if err := tx.Send(txnContext.Context(), inflightWrapper.rpc); err != nil {
-		txnContext.SendErrorReply(400, err)
-		return
-	}
-
-	p.addInflight(inflightWrapper, tx)
 }
 
 func (p *txnProcessor) OnSendTransactionMessage(txnContext TxnContext, msg *kldmessages.SendTransaction) {
@@ -435,5 +437,17 @@ func (p *txnProcessor) OnSendTransactionMessage(txnContext TxnContext, msg *kldm
 
 	// The above must happen synchronously for each partition in Kafka - as it is where we assign the nonce.
 	// However, the send to the node can happen at high concurrency.
+	p.concurrencySlots <- true
 	go p.sendAndAddInflight(txnContext, inflightWrapper, tx)
+}
+
+func (p *txnProcessor) sendAndAddInflight(txnContext TxnContext, inflightWrapper *inflightTxn, tx *kldeth.Txn) {
+	if err := tx.Send(txnContext.Context(), inflightWrapper.rpc); err != nil {
+		<-p.concurrencySlots // return our slot
+		txnContext.SendErrorReply(400, err)
+		return
+	}
+
+	p.addInflight(inflightWrapper, tx)
+	<-p.concurrencySlots // return our slot
 }

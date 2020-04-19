@@ -186,7 +186,7 @@ func TestExecuteWithNoTLS(t *testing.T) {
 	assert.Equal(true, f.ClientConf.Producer.Return.Successes)
 	assert.Equal(true, f.ClientConf.Producer.Return.Errors)
 	assert.Equal(sarama.WaitForLocal, f.ClientConf.Producer.RequiredAcks)
-	assert.Equal(500*time.Millisecond, f.ClientConf.Producer.Flush.Frequency)
+	assert.Equal(time.Duration(0), f.ClientConf.Producer.Flush.Frequency)
 	assert.Equal(true, f.ClientConf.Consumer.Return.Errors)
 	assert.Equal(false, f.ClientConf.Net.TLS.Enable)
 	assert.Equal((*tls.Config)(nil), f.ClientConf.Net.TLS.Config)

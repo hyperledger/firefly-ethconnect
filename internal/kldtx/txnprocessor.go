@@ -75,6 +75,7 @@ func (i *inflightTxn) String() string {
 // TxnProcessorConf configuration for the message processor
 type TxnProcessorConf struct {
 	AlwaysManageNonce  bool            `json:"alwaysManageNonce"`
+	AttemptGapFill     bool            `json:"attemptGapFill"`
 	MaxTXWaitTime      int             `json:"maxTXWaitTime"`
 	SendConcurrency    int             `json:"sendConcurrency"`
 	OrionPrivateAPIS   bool            `json:"orionPrivateAPIs"`
@@ -296,8 +297,9 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 	return
 }
 
-func (p *txnProcessor) cancelInFlight(inflight *inflightTxn) {
+func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, gapPotential bool) {
 	var before, after int
+	var higherNonceInflight = int64(-1)
 	p.inflightTxnsLock.Lock()
 	if inflightForAddr, exists := p.inflightTxns[inflight.from]; exists {
 		before = len(inflightForAddr)
@@ -309,12 +311,44 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn) {
 					inflightForAddr = inflightForAddr[0:idx]
 				}
 				p.inflightTxns[inflight.from] = inflightForAddr
+				break
 			}
 		}
 		after = len(inflightForAddr)
+		// Check the transactions that are left, to see if any nonce is higher
+		if gapPotential && !inflight.nodeAssignNonce {
+			for _, alreadyInflight := range inflightForAddr {
+				if alreadyInflight.nonce > inflight.nonce && alreadyInflight.nonce > higherNonceInflight {
+					higherNonceInflight = alreadyInflight.nonce
+				}
+			}
+		}
 	}
 	p.inflightTxnsLock.Unlock()
+
 	log.Infof("In-flight %d complete. nonce=%d addr=%s before=%d after=%d", inflight.id, inflight.nonce, inflight.from, before, after)
+
+	// If we've got a gap potential, we need to submit a rescue TX
+	if higherNonceInflight > 0 {
+		log.Warnf("Potential nonce gap. Nonce %d failed to send. Nonce %d in-flight", inflight.nonce, higherNonceInflight)
+		p.submitRescueTX(inflight)
+	}
+
+}
+
+// submitRescueTX attempts to send a zero gas, no data, transfer of zero ether transaction
+// to the from address, for the purpose of filling a nonce gap and allowing subsequent transactions
+// to complete. Only
+func (p *txnProcessor) submitRescueTX(inflight *inflightTxn) {
+	if p.conf.AttemptGapFill {
+		tx, err := kldeth.NewNilTX(inflight.from, inflight.nonce, inflight.signer)
+		if err == nil {
+			err = tx.Send(inflight.txnContext.Context(), inflight.rpc)
+		}
+		if err != nil {
+			log.Warnf("Submission of rescue TX '%s' failed: %s", tx.Hash, err)
+		}
+	}
 }
 
 // waitForCompletion is the goroutine to track a transaction through
@@ -422,7 +456,9 @@ func (p *txnProcessor) waitForCompletion(inflight *inflightTxn, initialWaitDelay
 		inflight.txnContext.Reply(&reply)
 	}
 
-	p.cancelInFlight(inflight)
+	// We've submitted the transaction (even if we didn't get a receipt within our timeout)
+	// it is not a gap potential.
+	p.cancelInFlight(inflight, false)
 	inflight.wg.Done()
 }
 
@@ -449,7 +485,7 @@ func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *kldme
 
 	tx, err := kldeth.NewContractDeployTxn(msg, inflight.signer)
 	if err != nil {
-		p.cancelInFlight(inflight)
+		p.cancelInFlight(inflight, false) // No gap potential, we haven't submitted
 		txnContext.SendErrorReply(400, err)
 		return
 	}
@@ -474,7 +510,7 @@ func (p *txnProcessor) OnSendTransactionMessage(txnContext TxnContext, msg *kldm
 
 	tx, err := kldeth.NewSendTxn(msg, inflight.signer)
 	if err != nil {
-		p.cancelInFlight(inflight)
+		p.cancelInFlight(inflight, false) // No gap potential, we haven't submitted
 		txnContext.SendErrorReply(400, err)
 		return
 	}
@@ -490,7 +526,8 @@ func (p *txnProcessor) sendAndTrackMining(txnContext TxnContext, inflight *infli
 	err := tx.Send(txnContext.Context(), inflight.rpc)
 	<-p.concurrencySlots // return our slot as soon as send is complete, to let an awaiting send go
 	if err != nil {
-		p.cancelInFlight(inflight)
+		// Now we potentially have a gap - if we allocated the nonce, but failed to send
+		p.cancelInFlight(inflight, true)
 		txnContext.SendErrorReply(400, err)
 		return
 	}

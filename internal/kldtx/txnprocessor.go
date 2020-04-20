@@ -289,19 +289,24 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 }
 
 func (p *txnProcessor) cancelInFlight(inflight *inflightTxn) {
+	var before, after int
 	p.inflightTxnsLock.Lock()
 	if inflightForAddr, exists := p.inflightTxns[inflight.from]; exists {
+		before = len(inflightForAddr)
 		for idx, alreadyInflight := range inflightForAddr {
 			if alreadyInflight.nonce == inflight.nonce {
 				if len(inflightForAddr) > idx {
-					p.inflightTxns[inflight.from] = append(inflightForAddr[0:idx], inflightForAddr[idx+1:]...)
+					inflightForAddr = append(inflightForAddr[0:idx], inflightForAddr[idx+1:]...)
 				} else {
-					p.inflightTxns[inflight.from] = inflightForAddr[0:idx]
+					inflightForAddr = inflightForAddr[0:idx]
 				}
+				p.inflightTxns[inflight.from] = inflightForAddr
 			}
 		}
+		after = len(inflightForAddr)
 	}
 	p.inflightTxnsLock.Unlock()
+	log.Infof("In-flight nonce %d complete. addr=%s before=%d after=%d", inflight.nonce, inflight.from, before, after)
 }
 
 // waitForCompletion is the goroutine to track a transaction through

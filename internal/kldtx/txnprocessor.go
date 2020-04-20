@@ -211,7 +211,7 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 		}
 	}
 
-	// Hold the lock just while we're adding it to the map and dealing with nonce checking
+	// Hold the lock just while we're adding it to the map and dealing with nonce checking.
 	p.inflightTxnsLock.Lock()
 
 	// The user can supply a nonce and manage them externally, using their own
@@ -246,21 +246,11 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 		}
 	}
 
-	// Add the inflight transaction to our tracking structure
-	if !exists {
-		inflightForAddr = []*inflightTxn{}
-	}
-	before := len(inflightForAddr)
-	p.inflightTxns[inflight.from] = append(inflightForAddr, inflight)
-	inflight.initialWaitDelay = p.inflightTxnDelayer.GetInitialDelay() // Must call under lock
-
-	// Clear lock beofre logging
-	p.inflightTxnsLock.Unlock()
-
 	// We want to submit this transaction with the next nonce in the chain.
 	// If this is a node-signed transaction, then we can ask the node
 	// to simply use the next available nonce.
 	// We provide an override to force the Go code to always assign the nonce.
+	fromNode := false
 	if suppliedNonce != "" {
 		// already assigned above
 	} else if p.conf.OrionPrivateAPIS && (len(msg.PrivateFor) > 0 || msg.PrivacyGroupID != "") {
@@ -268,7 +258,11 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 		// group ID and nonce (the public transaction will be submitted by the pantheon node)
 		// Note: We do not have highestNonce calculation for in-flight private transactions,
 		//       so attempting to submit more than one per block currently will FAIL
-		inflight.nonce, err = kldeth.GetOrionTXCount(txnContext.Context(), p.rpc, &from, inflight.privacyGroupID)
+		if inflight.nonce, err = kldeth.GetOrionTXCount(txnContext.Context(), p.rpc, &from, inflight.privacyGroupID); err != nil {
+			p.inflightTxnsLock.Unlock()
+			return
+		}
+		fromNode = true
 	} else if highestNonce >= 0 {
 		// If we found a nonce in-flight in memory, return one higher.
 		inflight.nonce = highestNonce + 1
@@ -282,10 +276,25 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 		// we need to accept the possibility of 'replacement transaction underpriced'
 		// (or if gas price is being varied by the submitter the potential of
 		// overwriting a transaction)
-		inflight.nonce, err = kldeth.GetTransactionCount(txnContext.Context(), p.rpc, &from, "pending")
+		if inflight.nonce, err = kldeth.GetTransactionCount(txnContext.Context(), p.rpc, &from, "pending"); err != nil {
+			p.inflightTxnsLock.Unlock()
+			return
+		}
+		fromNode = true
 	}
 
-	log.Infof("In-flight nonce %d added. addr=%s before=%d", inflight.nonce, inflight.from, before)
+	// Add the inflight transaction to our tracking structure
+	if !exists {
+		inflightForAddr = []*inflightTxn{}
+	}
+	before := len(inflightForAddr)
+	p.inflightTxns[inflight.from] = append(inflightForAddr, inflight)
+	inflight.initialWaitDelay = p.inflightTxnDelayer.GetInitialDelay() // Must call under lock
+
+	// Clear lock beofre logging
+	p.inflightTxnsLock.Unlock()
+
+	log.Infof("In-flight nonce %d added. addr=%s before=%d (node=%t)", inflight.nonce, inflight.from, before, fromNode)
 
 	return
 }

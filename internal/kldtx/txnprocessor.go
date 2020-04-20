@@ -324,27 +324,27 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, gapPotential bool) 
 
 	log.Infof("In-flight %d complete. nonce=%d addr=%s before=%d after=%d", inflight.id, inflight.nonce, inflight.from, before, after)
 
-	// If we've got a gap potential, we need to submit a rescue TX
+	// If we've got a gap potential, we need to submit a gap-fill TX
 	if higherNonceInflight > 0 {
 		log.Warnf("Potential nonce gap. Nonce %d failed to send. Nonce %d in-flight", inflight.nonce, higherNonceInflight)
-		p.submitRescueTX(inflight)
+		p.submitGapFillTX(inflight)
 	}
 
 }
 
-// submitRescueTX attempts to send a zero gas, no data, transfer of zero ether transaction
+// submitGapFillTX attempts to send a zero gas, no data, transfer of zero ether transaction
 // to the from address, for the purpose of filling a nonce gap and allowing subsequent transactions
 // to complete. Only
-func (p *txnProcessor) submitRescueTX(inflight *inflightTxn) {
+func (p *txnProcessor) submitGapFillTX(inflight *inflightTxn) {
 	if p.conf.AttemptGapFill {
 		tx, err := kldeth.NewNilTX(inflight.from, inflight.nonce, inflight.signer)
 		if err == nil {
 			err = tx.Send(inflight.txnContext.Context(), inflight.rpc)
 		}
 		if err != nil {
-			log.Warnf("Submission of rescue TX '%s' failed: %s", tx.Hash, err)
+			log.Warnf("Submission of gap-fill TX '%s' failed: %s", tx.Hash, err)
 		} else {
-			log.Infof("Submission of rescue TX '%s' completed", tx.Hash)
+			log.Infof("Submission of gap-fill TX '%s' completed", tx.Hash)
 		}
 	}
 }

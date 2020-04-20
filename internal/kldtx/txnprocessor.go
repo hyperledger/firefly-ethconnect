@@ -347,6 +347,8 @@ func (p *txnProcessor) submitRescueTX(inflight *inflightTxn) {
 		}
 		if err != nil {
 			log.Warnf("Submission of rescue TX '%s' failed: %s", tx.Hash, err)
+		} else {
+			log.Infof("Submission of rescue TX '%s' completed", tx.Hash)
 		}
 	}
 }

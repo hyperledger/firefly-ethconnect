@@ -464,14 +464,20 @@ func TestAddInflightMessageBadMessage(t *testing.T) {
 		Value:     []byte("badness"),
 		Partition: 64,
 		Offset:    int64(42),
+		Topic:     "test",
 	}
 
 	// Drain the producer
 	msg := <-mockProducer.MockInput
-	for len(k.inFlight) == 0 {
+	for exists := false; !exists; _, exists = k.inFlight["test:64:42"] {
 		time.Sleep(1 * time.Millisecond)
 	}
+
 	mockProducer.MockSuccesses <- msg
+
+	for mockConsumer.OffsetsByPartition[64] != 42 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	// Shut down
 	mockProducer.AsyncClose()

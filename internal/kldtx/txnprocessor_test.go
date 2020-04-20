@@ -53,16 +53,19 @@ type testTxnContext struct {
 }
 
 type testRPC struct {
-	ethSendTransactionResult       string
-	ethSendTransactionErr          error
-	ethGetTransactionCountResult   hexutil.Uint64
-	ethGetTransactionCountErr      error
-	ethGetTransactionReceiptResult kldeth.TxnReceipt
-	ethGetTransactionReceiptErr    error
-	privFindPrivacyGroupResult     []kldeth.OrionPrivacyGroup
-	privFindPrivacyGroupErr        error
-	calls                          []string
-	params                         [][]interface{}
+	ethSendTransactionResult        string
+	ethSendTransactionErr           error
+	ethSendTransactionErrOnce       bool
+	ethSendTransactionCalled        bool
+	ethSendTransactionErrFirstDelay time.Duration
+	ethGetTransactionCountResult    hexutil.Uint64
+	ethGetTransactionCountErr       error
+	ethGetTransactionReceiptResult  kldeth.TxnReceipt
+	ethGetTransactionReceiptErr     error
+	privFindPrivacyGroupResult      []kldeth.OrionPrivacyGroup
+	privFindPrivacyGroupErr         error
+	calls                           []string
+	params                          [][]interface{}
 }
 
 const testFromAddr = "0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1"
@@ -105,7 +108,15 @@ func (r *testRPC) CallContext(ctx context.Context, result interface{}, method st
 	r.params = append(r.params, args)
 	if method == "eth_sendTransaction" {
 		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethSendTransactionResult))
-		return r.ethSendTransactionErr
+		if !r.ethSendTransactionCalled && r.ethSendTransactionErrFirstDelay > 0 {
+			time.Sleep(r.ethSendTransactionErrFirstDelay)
+		}
+		isFirst := !r.ethSendTransactionCalled
+		r.ethSendTransactionCalled = true
+		if !r.ethSendTransactionErrOnce || isFirst {
+			return r.ethSendTransactionErr
+		}
+		return nil
 	} else if method == "eth_sendRawTransaction" {
 		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethSendTransactionResult))
 		return r.ethSendTransactionErr
@@ -678,6 +689,63 @@ func TestOnSendTransactionMessageFailedTxn(t *testing.T) {
 
 	assert.Equal("pop", testTxnContext.errorReplies[0].err.Error())
 	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
+}
+
+func TestOnSendTransactionMessageFailedWithGapFillOK(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime:     1,
+		AlwaysManageNonce: true,
+		AttemptGapFill:    true,
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+	testRPC := goodMessageRPC()
+	testRPC.ethSendTransactionErr = fmt.Errorf("pop")
+	testRPC.ethSendTransactionErrOnce = true
+	testRPC.ethSendTransactionErrFirstDelay = 10 * time.Millisecond
+	txnProcessor.Init(testRPC)
+
+	testTxnContext1 := &testTxnContext{}
+	testTxnContext1.jsonMsg = goodSendTxnJSON
+	testTxnContext2 := &testTxnContext{}
+	testTxnContext2.jsonMsg = goodSendTxnJSON
+
+	txnProcessor.OnMessage(testTxnContext1)
+	txnProcessor.OnMessage(testTxnContext2)
+	for len(testTxnContext1.errorReplies) == 0 || len(testRPC.calls) < 5 {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	assert.EqualValues([]string{"eth_getTransactionCount", "eth_sendTransaction", "eth_sendTransaction", "eth_sendTransaction", "eth_getTransactionReceipt"}, testRPC.calls)
+}
+
+func TestOnSendTransactionMessageFailedWithGapFillFail(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime:     1,
+		AlwaysManageNonce: true,
+		AttemptGapFill:    true,
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+	testRPC := goodMessageRPC()
+	testRPC.ethSendTransactionErr = fmt.Errorf("pop")
+	testRPC.ethSendTransactionErrOnce = false
+	testRPC.ethSendTransactionErrFirstDelay = 10 * time.Millisecond
+	txnProcessor.Init(testRPC)
+
+	testTxnContext1 := &testTxnContext{}
+	testTxnContext1.jsonMsg = goodSendTxnJSON
+	testTxnContext2 := &testTxnContext{}
+	testTxnContext2.jsonMsg = goodSendTxnJSON
+
+	txnProcessor.OnMessage(testTxnContext1)
+	txnProcessor.OnMessage(testTxnContext2)
+	for len(testTxnContext1.errorReplies) == 0 || len(testRPC.calls) < 4 {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	assert.EqualValues([]string{"eth_getTransactionCount", "eth_sendTransaction", "eth_sendTransaction", "eth_sendTransaction"}, testRPC.calls)
+
 }
 
 func TestOnSendTransactionMessageFailedToGetNonce(t *testing.T) {

@@ -322,6 +322,8 @@ const (
 	TransactionSendMissingMethod = "Method missing - must provide inline 'param' type/value pairs with a 'methodName', or an ABI in 'method'"
 	// TransactionSendBadNonce a user-supplied nonce string in the JSON input cannot be processed
 	TransactionSendBadNonce = "Converting supplied 'nonce' to integer: %s"
+	// TransactionSendNonceInFlight a user-supplied nonce is already in-flight waiting for confirmation from the node
+	TransactionSendNonceInFlight = "Supplied 'nonce' is already in-flight"
 	// TransactionSendBadValue a user-supplied value (eth amount to transfer) string in the JSON input cannot be processed
 	TransactionSendBadValue = "Converting supplied 'value' to big integer: %s"
 	// TransactionSendBadGas a user-supplied gas (maximum gas to spend on the TX) string in the JSON input cannot be processed

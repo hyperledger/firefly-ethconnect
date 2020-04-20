@@ -44,16 +44,17 @@ type TxnProcessor interface {
 }
 
 type inflightTxn struct {
-	from            string // normalized to 0x prefix and lower case
-	nodeAssignNonce bool
-	nonce           int64
-	privacyGroupID  string
-	txnContext      TxnContext
-	tx              *kldeth.Txn
-	wg              sync.WaitGroup
-	registerAs      string // passed from request to reply
-	rpc             kldeth.RPCClient
-	signer          kldeth.TXSigner
+	from             string // normalized to 0x prefix and lower case
+	nodeAssignNonce  bool
+	nonce            int64
+	privacyGroupID   string
+	initialWaitDelay time.Duration
+	txnContext       TxnContext
+	tx               *kldeth.Txn
+	wg               sync.WaitGroup
+	registerAs       string // passed from request to reply
+	rpc              kldeth.RPCClient
+	signer           kldeth.TXSigner
 }
 
 func (i *inflightTxn) nonceNumber() json.Number {
@@ -70,7 +71,7 @@ func (i *inflightTxn) String() string {
 
 // TxnProcessorConf configuration for the message processor
 type TxnProcessorConf struct {
-	PredictNonces      bool            `json:"alwaysManageNonce"`
+	AlwaysManageNonce  bool            `json:"alwaysManageNonce"`
 	MaxTXWaitTime      int             `json:"maxTXWaitTime"`
 	SendConcurrency    int             `json:"sendConcurrency"`
 	OrionPrivateAPIS   bool            `json:"orionPrivateAPIs"`
@@ -123,7 +124,7 @@ func (p *txnProcessor) Init(rpc kldeth.RPCClient) {
 func CobraInitTxnProcessor(cmd *cobra.Command, txconf *TxnProcessorConf) {
 	cmd.Flags().IntVarP(&txconf.MaxTXWaitTime, "tx-timeout", "x", kldutils.DefInt("ETH_TX_TIMEOUT", 0), "Maximum wait time for an individual transaction (seconds)")
 	cmd.Flags().BoolVarP(&txconf.HexValuesInReceipt, "hex-values", "H", false, "Include hex values for large numbers in receipts (as well as numeric strings)")
-	cmd.Flags().BoolVarP(&txconf.PredictNonces, "predict-nonces", "P", false, "Predict the next nonce before sending (default=false for node-signed txns)")
+	cmd.Flags().BoolVarP(&txconf.AlwaysManageNonce, "predict-nonces", "P", false, "Predict the next nonce before sending (default=false for node-signed txns)")
 	cmd.Flags().BoolVarP(&txconf.OrionPrivateAPIS, "orion-privapi", "G", false, "Use Orion JSON/RPC API semantics for private transactions")
 	return
 }
@@ -167,7 +168,7 @@ func (p *txnProcessor) OnMessage(txnContext TxnContext) {
 // nonce for the transaction.
 // Builds a new wrapper containing this information, that can be added to
 // the inflight list if the transaction is submitted
-func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessages.TransactionCommon) (inflight *inflightTxn, err error) {
+func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessages.TransactionCommon) (inflight *inflightTxn, err error) {
 
 	inflight = &inflightTxn{
 		txnContext: txnContext,
@@ -210,31 +211,53 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessage
 		}
 	}
 
+	// Hold the lock just while we're adding it to the map and dealing with nonce checking
+	p.inflightTxnsLock.Lock()
+
 	// The user can supply a nonce and manage them externally, using their own
 	// application-side list of transactions, to prevent the possibility of
 	// duplication that exists when dynamically calculating the nonce
+	var highestNonce int64 = -1
 	suppliedNonce := msg.Nonce
 	if suppliedNonce != "" {
 		if inflight.nonce, err = suppliedNonce.Int64(); err != nil {
 			err = klderrors.Errorf(klderrors.TransactionSendBadNonce, err)
+			return
 		}
-		return
-	}
-
-	// Hold the lock just long enough to check the currently inflight txns.
-	// This function is always called on the OnMessage goroutine, but
-	// other goroutines might be trying to complete transactions so we don't
-	// hold it while we're querying the nonce
-	var highestNonce int64
-	p.inflightTxnsLock.Lock()
-	if inflightForAddr, exists := p.inflightTxns[inflight.from]; exists {
-		for _, inflight := range inflightForAddr {
-			if inflight.nonce > highestNonce {
-				highestNonce = inflight.nonce
+		// Check the currently inflight txns to ensure we don't have this one already in-flight
+		if inflightForAddr, exists := p.inflightTxns[inflight.from]; exists {
+			for _, alreadyInflight := range inflightForAddr {
+				if inflight.nonce == alreadyInflight.nonce {
+					err = klderrors.Errorf(klderrors.TransactionSendNonceInFlight, err)
+					return
+				}
+			}
+		}
+	} else {
+		// Check the currently inflight txns to see if we have a high nonce to use without
+		// needing to query the node to find the highest nonce.
+		if inflightForAddr, exists := p.inflightTxns[inflight.from]; exists {
+			for _, alreadyInflight := range inflightForAddr {
+				if alreadyInflight.nonce > highestNonce {
+					highestNonce = alreadyInflight.nonce
+				}
 			}
 		}
 	}
+
+	// Add the inflight transaction to our tracking structure
+	inflightForAddr, exists := p.inflightTxns[inflight.from]
+	if !exists {
+		inflightForAddr = []*inflightTxn{}
+	}
+	p.inflightTxns[inflight.from] = append(inflightForAddr, inflight)
+	inflight.initialWaitDelay = p.inflightTxnDelayer.GetInitialDelay() // Must call under lock
+
 	p.inflightTxnsLock.Unlock()
+
+	if suppliedNonce != "" {
+		return // no need to assign the nonce
+	}
 
 	// We want to submit this transaction with the next nonce in the chain.
 	// If this is a node-signed transaction, then we can ask the node
@@ -246,10 +269,10 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessage
 		// Note: We do not have highestNonce calculation for in-flight private transactions,
 		//       so attempting to submit more than one per block currently will FAIL
 		inflight.nonce, err = kldeth.GetOrionTXCount(txnContext.Context(), p.rpc, &from, inflight.privacyGroupID)
-	} else if highestNonce > 0 {
+	} else if highestNonce >= 0 {
 		// If we found a nonce in-flight in memory, return one higher.
 		inflight.nonce = highestNonce + 1
-	} else if inflight.signer == nil && !p.conf.PredictNonces {
+	} else if inflight.signer == nil && !p.conf.AlwaysManageNonce {
 		// We've been asked to defer to the node for signing, and are not performing HD Wallet signing
 		inflight.nodeAssignNonce = true
 	} else {
@@ -265,9 +288,25 @@ func (p *txnProcessor) newInflightWrapper(txnContext TxnContext, msg *kldmessage
 	return
 }
 
+func (p *txnProcessor) cancelInFlight(inflight *inflightTxn) {
+	p.inflightTxnsLock.Lock()
+	if inflightForAddr, exists := p.inflightTxns[inflight.from]; exists {
+		for idx, alreadyInflight := range inflightForAddr {
+			if alreadyInflight.nonce == inflight.nonce {
+				if len(inflightForAddr) > idx {
+					p.inflightTxns[inflight.from] = append(inflightForAddr[0:idx], inflightForAddr[idx+1:]...)
+				} else {
+					p.inflightTxns[inflight.from] = inflightForAddr[0:idx]
+				}
+			}
+		}
+	}
+	p.inflightTxnsLock.Unlock()
+}
+
 // waitForCompletion is the goroutine to track a transaction through
 // to completion and send the result
-func (p *txnProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time.Duration) {
+func (p *txnProcessor) waitForCompletion(inflight *inflightTxn, initialWaitDelay time.Duration) {
 
 	// The initial delay is passed in, based on updates from all the other
 	// go routines that are tracking transactions. The idea is to minimize
@@ -282,10 +321,10 @@ func (p *txnProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 	var elapsed time.Duration
 	for !isMined && !timedOut {
 
-		if isMined, err = iTX.tx.GetTXReceipt(iTX.txnContext.Context(), p.rpc); err != nil {
+		if isMined, err = inflight.tx.GetTXReceipt(inflight.txnContext.Context(), p.rpc); err != nil {
 			// We wait even on connectivity errors, as we've submitted the transaction and
 			// we want to provide a receipt if connectivity resumes within the timeout
-			log.Infof("Failed to get receipt for %s (retries=%d): %s", iTX, retries, err)
+			log.Infof("Failed to get receipt for %s (retries=%d): %s", inflight, retries, err)
 		}
 
 		elapsed = time.Now().UTC().Sub(replyWaitStart)
@@ -297,7 +336,7 @@ func (p *txnProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 			delayBeforeRetry := p.inflightTxnDelayer.GetRetryDelay(initialWaitDelay, retries+1)
 			p.inflightTxnsLock.Unlock()
 
-			log.Debugf("Recept not available after %.2fs (retries=%d): %s", elapsed.Seconds(), retries, iTX)
+			log.Debugf("Recept not available after %.2fs (retries=%d): %s", elapsed.Seconds(), retries, inflight)
 			time.Sleep(delayBeforeRetry)
 			retries++
 		}
@@ -305,9 +344,9 @@ func (p *txnProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 
 	if timedOut {
 		if err != nil {
-			iTX.txnContext.SendErrorReplyWithTX(500, klderrors.Errorf(klderrors.TransactionSendReceiptCheckError, retries, err), iTX.tx.Hash)
+			inflight.txnContext.SendErrorReplyWithTX(500, klderrors.Errorf(klderrors.TransactionSendReceiptCheckError, retries, err), inflight.tx.Hash)
 		} else {
-			iTX.txnContext.SendErrorReplyWithTX(408, klderrors.Errorf(klderrors.TransactionSendReceiptCheckTimeout), iTX.tx.Hash)
+			inflight.txnContext.SendErrorReplyWithTX(408, klderrors.Errorf(klderrors.TransactionSendReceiptCheckTimeout), inflight.tx.Hash)
 		}
 	} else {
 		// Update the stats
@@ -315,9 +354,9 @@ func (p *txnProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 		p.inflightTxnDelayer.ReportSuccess(elapsed)
 		p.inflightTxnsLock.Unlock()
 
-		receipt := iTX.tx.Receipt
+		receipt := inflight.tx.Receipt
 		isSuccess := (receipt.Status != nil && receipt.Status.ToInt().Int64() > 0)
-		log.Infof("Receipt for %s obtained after %.2fs Success=%t", iTX.tx.Hash, elapsed.Seconds(), isSuccess)
+		log.Infof("Receipt for %s obtained after %.2fs Success=%t", inflight.tx.Hash, elapsed.Seconds(), isSuccess)
 
 		// Build our reply
 		var reply kldmessages.TransactionReceipt
@@ -334,7 +373,7 @@ func (p *txnProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 			reply.BlockNumberStr = receipt.BlockNumber.ToInt().Text(10)
 		}
 		reply.ContractAddress = receipt.ContractAddress
-		reply.RegisterAs = iTX.registerAs
+		reply.RegisterAs = inflight.registerAs
 		if p.conf.HexValuesInReceipt {
 			reply.CumulativeGasUsedHex = receipt.CumulativeGasUsed
 		}
@@ -348,11 +387,11 @@ func (p *txnProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 		if receipt.GasUsed != nil {
 			reply.GasUsedStr = receipt.GasUsed.ToInt().Text(10)
 		}
-		nonceHex := hexutil.Uint64(iTX.nonce)
+		nonceHex := hexutil.Uint64(inflight.nonce)
 		if p.conf.HexValuesInReceipt {
 			reply.NonceHex = &nonceHex
 		}
-		reply.NonceStr = strconv.FormatInt(iTX.nonce, 10)
+		reply.NonceStr = strconv.FormatInt(inflight.nonce, 10)
 		if p.conf.HexValuesInReceipt {
 			reply.StatusHex = receipt.Status
 		}
@@ -367,87 +406,81 @@ func (p *txnProcessor) waitForCompletion(iTX *inflightTxn, initialWaitDelay time
 		if receipt.TransactionIndex != nil {
 			reply.TransactionIndexStr = strconv.FormatUint(uint64(*receipt.TransactionIndex), 10)
 		}
-		iTX.txnContext.Reply(&reply)
+		inflight.txnContext.Reply(&reply)
 	}
 
-	iTX.wg.Done()
+	p.cancelInFlight(inflight)
+	inflight.wg.Done()
 }
 
 // addInflight adds a transction to the inflight list, and kick off
 // a goroutine to check for its completion and send the result
-func (p *txnProcessor) addInflight(inflight *inflightTxn, tx *kldeth.Txn) {
-
-	// Add the inflight transaction to our tracking structure
-	p.inflightTxnsLock.Lock()
-	inflight.tx = tx
-	inflightForAddr, exists := p.inflightTxns[inflight.from]
-	if !exists {
-		inflightForAddr = []*inflightTxn{}
-	}
-	p.inflightTxns[inflight.from] = append(inflightForAddr, inflight)
-	initialWaitDelay := p.inflightTxnDelayer.GetInitialDelay() // Must call under lock
-	p.inflightTxnsLock.Unlock()
+func (p *txnProcessor) trackMining(inflight *inflightTxn, tx *kldeth.Txn) {
 
 	// Kick off the goroutine to track it to completion
+	inflight.tx = tx
 	inflight.wg.Add(1)
-	go p.waitForCompletion(inflight, initialWaitDelay)
+	go p.waitForCompletion(inflight, inflight.initialWaitDelay)
 
 }
 
 func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *kldmessages.DeployContract) {
 
-	inflightWrapper, err := p.newInflightWrapper(txnContext, &msg.TransactionCommon)
+	inflight, err := p.addInflightWrapper(txnContext, &msg.TransactionCommon)
 	if err != nil {
 		txnContext.SendErrorReply(400, err)
 		return
 	}
-	inflightWrapper.registerAs = msg.RegisterAs
-	msg.Nonce = inflightWrapper.nonceNumber()
+	inflight.registerAs = msg.RegisterAs
+	msg.Nonce = inflight.nonceNumber()
 
-	tx, err := kldeth.NewContractDeployTxn(msg, inflightWrapper.signer)
+	tx, err := kldeth.NewContractDeployTxn(msg, inflight.signer)
 	if err != nil {
+		p.cancelInFlight(inflight)
 		txnContext.SendErrorReply(400, err)
 		return
 	}
 	tx.OrionPrivateAPIS = p.conf.OrionPrivateAPIS
-	tx.PrivacyGroupID = inflightWrapper.privacyGroupID
-	tx.NodeAssignNonce = inflightWrapper.nodeAssignNonce
+	tx.PrivacyGroupID = inflight.privacyGroupID
+	tx.NodeAssignNonce = inflight.nodeAssignNonce
 
 	// The above must happen synchronously for each partition in Kafka - as it is where we assign the nonce.
 	// However, the send to the node can happen at high concurrency.
 	p.concurrencySlots <- true
-	go p.sendAndAddInflight(txnContext, inflightWrapper, tx)
+	go p.sendAndTrackMining(txnContext, inflight, tx)
 }
 
 func (p *txnProcessor) OnSendTransactionMessage(txnContext TxnContext, msg *kldmessages.SendTransaction) {
 
-	inflightWrapper, err := p.newInflightWrapper(txnContext, &msg.TransactionCommon)
+	inflight, err := p.addInflightWrapper(txnContext, &msg.TransactionCommon)
 	if err != nil {
 		txnContext.SendErrorReply(400, err)
 		return
 	}
-	msg.Nonce = inflightWrapper.nonceNumber()
+	msg.Nonce = inflight.nonceNumber()
 
-	tx, err := kldeth.NewSendTxn(msg, inflightWrapper.signer)
+	tx, err := kldeth.NewSendTxn(msg, inflight.signer)
 	if err != nil {
+		p.cancelInFlight(inflight)
 		txnContext.SendErrorReply(400, err)
 		return
 	}
-	tx.NodeAssignNonce = inflightWrapper.nodeAssignNonce
+	tx.NodeAssignNonce = inflight.nodeAssignNonce
 
 	// The above must happen synchronously for each partition in Kafka - as it is where we assign the nonce.
 	// However, the send to the node can happen at high concurrency.
 	p.concurrencySlots <- true
-	go p.sendAndAddInflight(txnContext, inflightWrapper, tx)
+	go p.sendAndTrackMining(txnContext, inflight, tx)
 }
 
-func (p *txnProcessor) sendAndAddInflight(txnContext TxnContext, inflightWrapper *inflightTxn, tx *kldeth.Txn) {
-	err := tx.Send(txnContext.Context(), inflightWrapper.rpc)
+func (p *txnProcessor) sendAndTrackMining(txnContext TxnContext, inflight *inflightTxn, tx *kldeth.Txn) {
+	err := tx.Send(txnContext.Context(), inflight.rpc)
 	<-p.concurrencySlots // return our slot as soon as send is complete, to let an awaiting send go
 	if err != nil {
+		p.cancelInFlight(inflight)
 		txnContext.SendErrorReply(400, err)
 		return
 	}
 
-	p.addInflight(inflightWrapper, tx)
+	p.trackMining(inflight, tx)
 }

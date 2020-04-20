@@ -525,7 +525,7 @@ func TestOnDeployContractMessageFailedToGetNonce(t *testing.T) {
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
 	}, &kldeth.RPCConf{}).(*txnProcessor)
-	txnProcessor.conf.PredictNonces = true
+	txnProcessor.conf.AlwaysManageNonce = true
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"DeployContract\"}," +
@@ -686,7 +686,7 @@ func TestOnSendTransactionMessageFailedToGetNonce(t *testing.T) {
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
 	}, &kldeth.RPCConf{}).(*txnProcessor)
-	txnProcessor.conf.PredictNonces = true
+	txnProcessor.conf.AlwaysManageNonce = true
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
@@ -870,7 +870,7 @@ func TestCobraInitTxnProcessor(t *testing.T) {
 		"-P",
 	})
 	assert.Equal(10, txconf.MaxTXWaitTime)
-	assert.Equal(true, txconf.PredictNonces)
+	assert.Equal(true, txconf.AlwaysManageNonce)
 }
 
 func TestOnSendTransactionAddressBook(t *testing.T) {

@@ -138,18 +138,18 @@ func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr 
 			callOption = blocknumber
 		} else {
 			n := new(big.Int)
-	    n, ok := n.SetString(blocknumber, 10)
-	    if !ok {
-	    	log.Warnf("Failed to convert blocknumber to big integer: %s", blocknumber)
-	    	// when failed to convert, use "latest"
-	    } else {
+			n, ok := n.SetString(blocknumber, 10)
+			if !ok {
+				log.Warnf("Failed to convert blocknumber to big integer: %s", blocknumber)
+				// when failed to convert, use "latest"
+			} else {
 				bits := n.BitLen()
 				if bits == 0 {
 					callOption = "0x0"
 				} else {
 					callOption = fmt.Sprintf("%#x", n)
 				}
-	    }
+			}
 		}
 	}
 

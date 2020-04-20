@@ -181,16 +181,16 @@ func (r *rest2eth) addRoutes(router *httprouter.Router) {
 }
 
 type restCmd struct {
-	from      string
-	addr      string
-	value     json.Number
-	abiMethod *abi.Method
-	abiEvent  *abi.Event
-	isDeploy  bool
-	deployMsg *kldmessages.DeployContract
-	body      map[string]interface{}
-	msgParams []interface{}
-	blocknumber		string
+	from        string
+	addr        string
+	value       json.Number
+	abiMethod   *abi.Method
+	abiEvent    *abi.Event
+	isDeploy    bool
+	deployMsg   *kldmessages.DeployContract
+	body        map[string]interface{}
+	msgParams   []interface{}
+	blocknumber string
 }
 
 func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, params httprouter.Params) (c restCmd, err error) {

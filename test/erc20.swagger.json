@@ -1430,6 +1430,7 @@
   },
   "definitions": {
     "Approval_event": {
+      "type": "object",
       "properties": {
         "owner": {
           "description": "address",
@@ -1449,6 +1450,7 @@
       }
     },
     "Transfer_event": {
+      "type": "object",
       "properties": {
         "from": {
           "description": "address",
@@ -1468,6 +1470,7 @@
       }
     },
     "allowance_inputs": {
+      "type": "object",
       "properties": {
         "owner": {
           "description": "address: address The address which owns the funds.",
@@ -1482,6 +1485,7 @@
       }
     },
     "allowance_outputs": {
+      "type": "object",
       "properties": {
         "output": {
           "description": "uint256",
@@ -1491,6 +1495,7 @@
       }
     },
     "approve_inputs": {
+      "type": "object",
       "properties": {
         "spender": {
           "description": "address: The address which will spend the funds.",
@@ -1505,6 +1510,7 @@
       }
     },
     "approve_outputs": {
+      "type": "object",
       "properties": {
         "output": {
           "description": "bool",
@@ -1513,6 +1519,7 @@
       }
     },
     "balanceOf_inputs": {
+      "type": "object",
       "properties": {
         "owner": {
           "description": "address: The address to query the balance of.",
@@ -1522,6 +1529,7 @@
       }
     },
     "balanceOf_outputs": {
+      "type": "object",
       "properties": {
         "output": {
           "description": "uint256",
@@ -1530,9 +1538,14 @@
         }
       }
     },
-    "constructor_inputs": {},
-    "constructor_outputs": {},
+    "constructor_inputs": {
+      "type": "object"
+    },
+    "constructor_outputs": {
+      "type": "object"
+    },
     "decreaseAllowance_inputs": {
+      "type": "object",
       "properties": {
         "spender": {
           "description": "address: The address which will spend the funds.",
@@ -1547,6 +1560,7 @@
       }
     },
     "decreaseAllowance_outputs": {
+      "type": "object",
       "properties": {
         "output": {
           "description": "bool",
@@ -1563,6 +1577,7 @@
       }
     },
     "increaseAllowance_inputs": {
+      "type": "object",
       "properties": {
         "addedValue": {
           "description": "uint256: The amount of tokens to increase the allowance by.",
@@ -1577,6 +1592,7 @@
       }
     },
     "increaseAllowance_outputs": {
+      "type": "object",
       "properties": {
         "output": {
           "description": "bool",
@@ -1584,8 +1600,11 @@
         }
       }
     },
-    "totalSupply_inputs": {},
+    "totalSupply_inputs": {
+      "type": "object"
+    },
     "totalSupply_outputs": {
+      "type": "object",
       "properties": {
         "output": {
           "description": "uint256",
@@ -1595,6 +1614,7 @@
       }
     },
     "transferFrom_inputs": {
+      "type": "object",
       "properties": {
         "from": {
           "description": "address: address The address which you want to send tokens from",
@@ -1614,6 +1634,7 @@
       }
     },
     "transferFrom_outputs": {
+      "type": "object",
       "properties": {
         "output": {
           "description": "bool",
@@ -1622,6 +1643,7 @@
       }
     },
     "transfer_inputs": {
+      "type": "object",
       "properties": {
         "to": {
           "description": "address: The address to transfer to.",
@@ -1636,6 +1658,7 @@
       }
     },
     "transfer_outputs": {
+      "type": "object",
       "properties": {
         "output": {
           "description": "bool",

@@ -635,6 +635,7 @@ func (c *ABI2Swagger) buildArgumentsDefinition(defs map[string]spec.Schema, name
 
 	s := spec.Schema{
 		SchemaProps: spec.SchemaProps{
+			Type:       []string{"object"},
 			Properties: make(map[string]spec.Schema),
 		},
 	}

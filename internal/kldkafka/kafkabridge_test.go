@@ -251,14 +251,6 @@ func TestSingleMessageWithReply(t *testing.T) {
 	msgContext1.Unmarshal(&msgUnmarshaled)
 	assert.Equal(msg1.Headers.MsgType, msgUnmarshaled.Headers.MsgType)
 
-	// Send a duplicate
-	mockConsumer.MockMessages <- &sarama.ConsumerMessage{
-		Topic:     "in-topic",
-		Partition: 5,
-		Offset:    500,
-		Value:     msg1bytes,
-	}
-
 	// Send the reply in a go routine
 	go func() {
 		reply1 := kldmessages.ReplyCommon{}
@@ -452,6 +444,39 @@ func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 
 	// Check we acknowledge all offsets
 	assert.Equal(int64(19), mockConsumer.OffsetsByPartition[0])
+
+}
+
+func TestAddInflightDuplicateMessage(t *testing.T) {
+	assert := assert.New(t)
+
+	k, _, mockConsumer, mockProducer, wg := setupMocks()
+
+	k.addInflightMsg(&sarama.ConsumerMessage{
+		Value:     []byte("first"),
+		Partition: 64,
+		Offset:    int64(42),
+		Topic:     "test",
+	}, mockProducer)
+
+	reqOffset := "test:64:42"
+
+	firstMessage, exists := k.inFlight[reqOffset]
+	assert.True(exists)
+
+	k.addInflightMsg(&sarama.ConsumerMessage{
+		Value:     []byte("duplicate offset"),
+		Partition: 64,
+		Offset:    int64(42),
+		Topic:     "test",
+	}, mockProducer)
+
+	assert.Equal(firstMessage, k.inFlight[reqOffset])
+
+	// Shut down
+	mockProducer.AsyncClose()
+	mockConsumer.Close()
+	wg.Wait()
 
 }
 

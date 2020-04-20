@@ -486,6 +486,7 @@
   },
   "definitions": {
     "echoTypes1_inputs": {
+      "type": "object",
       "properties": {
         "param1": {
           "description": "uint8: Parameter 1",
@@ -536,6 +537,7 @@
       }
     },
     "echoTypes1_outputs": {
+      "type": "object",
       "properties": {
         "retval1": {
           "description": "uint8",
@@ -586,6 +588,7 @@
       }
     },
     "echoTypes2_inputs": {
+      "type": "object",
       "properties": {
         "param1": {
           "description": "string: Parameter 1",
@@ -626,6 +629,7 @@
       }
     },
     "echoTypes2_outputs": {
+      "type": "object",
       "properties": {
         "retval1": {
           "description": "string",
@@ -674,6 +678,7 @@
       }
     },
     "undocumentedWrites_inputs": {
+      "type": "object",
       "properties": {
         "param1": {
           "description": "uint256",
@@ -707,6 +712,7 @@
       }
     },
     "undocumentedWrites_outputs": {
+      "type": "object",
       "properties": {
         "output": {
           "description": "uint256",

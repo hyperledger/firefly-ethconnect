@@ -250,6 +250,7 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 	if !exists {
 		inflightForAddr = []*inflightTxn{}
 	}
+	before := len(inflightForAddr)
 	p.inflightTxns[inflight.from] = append(inflightForAddr, inflight)
 	inflight.initialWaitDelay = p.inflightTxnDelayer.GetInitialDelay() // Must call under lock
 
@@ -284,7 +285,7 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 		inflight.nonce, err = kldeth.GetTransactionCount(txnContext.Context(), p.rpc, &from, "pending")
 	}
 
-	log.Infof("In-flight nonce %d added. addr=%s", inflight.nonce, inflight.from)
+	log.Infof("In-flight nonce %d added. addr=%s before=%d", inflight.nonce, inflight.from, before)
 
 	return
 }

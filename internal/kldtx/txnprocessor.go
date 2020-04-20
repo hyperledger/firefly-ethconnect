@@ -43,7 +43,10 @@ type TxnProcessor interface {
 	Init(kldeth.RPCClient)
 }
 
+var highestID = 1000000
+
 type inflightTxn struct {
+	id               int
 	from             string // normalized to 0x prefix and lower case
 	nodeAssignNonce  bool
 	nonce            int64
@@ -211,30 +214,21 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 		}
 	}
 
+	nodeAssignNonce := inflight.signer == nil && !p.conf.AlwaysManageNonce
+
 	// Hold the lock just while we're adding it to the map and dealing with nonce checking.
 	p.inflightTxnsLock.Lock()
 
 	// The user can supply a nonce and manage them externally, using their own
 	// application-side list of transactions, to prevent the possibility of
 	// duplication that exists when dynamically calculating the nonce
+	inflight.id = highestID
+	highestID++
 	var highestNonce int64 = -1
 	suppliedNonce := msg.Nonce
 	inflightForAddr, exists := p.inflightTxns[inflight.from]
-	if suppliedNonce != "" {
-		if inflight.nonce, err = suppliedNonce.Int64(); err != nil {
-			err = klderrors.Errorf(klderrors.TransactionSendBadNonce, err)
-			return
-		}
-		// Check the currently inflight txns to ensure we don't have this one already in-flight
-		if exists {
-			for _, alreadyInflight := range inflightForAddr {
-				if inflight.nonce == alreadyInflight.nonce {
-					err = klderrors.Errorf(klderrors.TransactionSendNonceInFlight, err)
-					return
-				}
-			}
-		}
-	} else {
+
+	if !nodeAssignNonce && suppliedNonce == "" {
 		// Check the currently inflight txns to see if we have a high nonce to use without
 		// needing to query the node to find the highest nonce.
 		if exists {
@@ -252,7 +246,10 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 	// We provide an override to force the Go code to always assign the nonce.
 	fromNode := false
 	if suppliedNonce != "" {
-		// already assigned above
+		if inflight.nonce, err = suppliedNonce.Int64(); err != nil {
+			err = klderrors.Errorf(klderrors.TransactionSendBadNonce, err)
+			return
+		}
 	} else if p.conf.OrionPrivateAPIS && (len(msg.PrivateFor) > 0 || msg.PrivacyGroupID != "") {
 		// If are using orion private transactions, then we need the private TX
 		// group ID and nonce (the public transaction will be submitted by the pantheon node)
@@ -266,7 +263,7 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 	} else if highestNonce >= 0 {
 		// If we found a nonce in-flight in memory, return one higher.
 		inflight.nonce = highestNonce + 1
-	} else if inflight.signer == nil && !p.conf.AlwaysManageNonce {
+	} else if nodeAssignNonce {
 		// We've been asked to defer to the node for signing, and are not performing HD Wallet signing
 		inflight.nodeAssignNonce = true
 	} else {
@@ -294,7 +291,7 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 	// Clear lock beofre logging
 	p.inflightTxnsLock.Unlock()
 
-	log.Infof("In-flight nonce %d added. addr=%s before=%d (node=%t)", inflight.nonce, inflight.from, before, fromNode)
+	log.Infof("In-flight %d added. nonde=%d addr=%s before=%d (node=%t)", inflight.id, inflight.nonce, inflight.from, before, fromNode)
 
 	return
 }
@@ -305,7 +302,7 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn) {
 	if inflightForAddr, exists := p.inflightTxns[inflight.from]; exists {
 		before = len(inflightForAddr)
 		for idx, alreadyInflight := range inflightForAddr {
-			if alreadyInflight.nonce == inflight.nonce {
+			if alreadyInflight.id == inflight.id {
 				if len(inflightForAddr) > idx {
 					inflightForAddr = append(inflightForAddr[0:idx], inflightForAddr[idx+1:]...)
 				} else {
@@ -317,7 +314,7 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn) {
 		after = len(inflightForAddr)
 	}
 	p.inflightTxnsLock.Unlock()
-	log.Infof("In-flight nonce %d complete. addr=%s before=%d after=%d", inflight.nonce, inflight.from, before, after)
+	log.Infof("In-flight %d complete. nonce=%d addr=%s before=%d after=%d", inflight.id, inflight.nonce, inflight.from, before, after)
 }
 
 // waitForCompletion is the goroutine to track a transaction through

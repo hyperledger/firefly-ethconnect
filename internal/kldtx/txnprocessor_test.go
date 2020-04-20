@@ -859,6 +859,44 @@ func TestOnSendTransactionMessageOrionCannotUsePrivacyGroupIdAndPrivateFor(t *te
 	assert.Regexp("privacyGroupId and privateFor are mutually exclusive", testTxnContext.errorReplies[0].err.Error())
 }
 
+func TestOnSendTransactionMessageOrionFailNonce(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime:    1,
+		OrionPrivateAPIS: true,
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] =
+		[]*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "{" +
+		"  \"headers\":{\"type\": \"SendTransaction\"}," +
+		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
+		"  \"gas\":\"123\"," +
+		"  \"method\":{\"name\":\"test\"}," +
+		"  \"privateFrom\":\"jO6dpqnMhmnrCHqUumyK09+18diF7quq/rROGs2HFWI=\"," +
+		"  \"privateFor\":[\"2QiZG7rYPzRvRsioEn6oYUff1DOvPA22EZr0+/o3RUg=\"]" +
+		"}"
+	testRPC := &testRPC{
+		ethGetTransactionCountErr: fmt.Errorf("pop"),
+		privFindPrivacyGroupResult: []kldeth.OrionPrivacyGroup{
+			kldeth.OrionPrivacyGroup{
+				PrivacyGroupID: "P8SxRUussJKqZu4+nUkMJpscQeWOR3HqbAXLakatsk8=",
+			},
+		},
+	}
+	txnProcessor.Init(testRPC)
+
+	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	assert.NotEmpty(testTxnContext.errorReplies)
+	assert.Empty(testTxnContext.replies)
+	assert.EqualValues([]string{"priv_findPrivacyGroup", "priv_getTransactionCount"}, testRPC.calls)
+}
+
 func TestOnSendTransactionMessageOrion(t *testing.T) {
 	assert := assert.New(t)
 

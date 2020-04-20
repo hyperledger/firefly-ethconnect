@@ -291,7 +291,7 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 	// Clear lock beofre logging
 	p.inflightTxnsLock.Unlock()
 
-	log.Infof("In-flight %d added. nonde=%d addr=%s before=%d (node=%t)", inflight.id, inflight.nonce, inflight.from, before, fromNode)
+	log.Infof("In-flight %d added. nonce=%d addr=%s before=%d (node=%t)", inflight.id, inflight.nonce, inflight.from, before, fromNode)
 
 	return
 }

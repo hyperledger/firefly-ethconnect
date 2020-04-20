@@ -219,13 +219,14 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 	// duplication that exists when dynamically calculating the nonce
 	var highestNonce int64 = -1
 	suppliedNonce := msg.Nonce
+	inflightForAddr, exists := p.inflightTxns[inflight.from]
 	if suppliedNonce != "" {
 		if inflight.nonce, err = suppliedNonce.Int64(); err != nil {
 			err = klderrors.Errorf(klderrors.TransactionSendBadNonce, err)
 			return
 		}
 		// Check the currently inflight txns to ensure we don't have this one already in-flight
-		if inflightForAddr, exists := p.inflightTxns[inflight.from]; exists {
+		if exists {
 			for _, alreadyInflight := range inflightForAddr {
 				if inflight.nonce == alreadyInflight.nonce {
 					err = klderrors.Errorf(klderrors.TransactionSendNonceInFlight, err)
@@ -236,7 +237,7 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 	} else {
 		// Check the currently inflight txns to see if we have a high nonce to use without
 		// needing to query the node to find the highest nonce.
-		if inflightForAddr, exists := p.inflightTxns[inflight.from]; exists {
+		if exists {
 			for _, alreadyInflight := range inflightForAddr {
 				if alreadyInflight.nonce > highestNonce {
 					highestNonce = alreadyInflight.nonce
@@ -246,24 +247,22 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 	}
 
 	// Add the inflight transaction to our tracking structure
-	inflightForAddr, exists := p.inflightTxns[inflight.from]
 	if !exists {
 		inflightForAddr = []*inflightTxn{}
 	}
 	p.inflightTxns[inflight.from] = append(inflightForAddr, inflight)
 	inflight.initialWaitDelay = p.inflightTxnDelayer.GetInitialDelay() // Must call under lock
 
+	// Clear lock beofre logging
 	p.inflightTxnsLock.Unlock()
-
-	if suppliedNonce != "" {
-		return // no need to assign the nonce
-	}
 
 	// We want to submit this transaction with the next nonce in the chain.
 	// If this is a node-signed transaction, then we can ask the node
 	// to simply use the next available nonce.
 	// We provide an override to force the Go code to always assign the nonce.
-	if p.conf.OrionPrivateAPIS && (len(msg.PrivateFor) > 0 || msg.PrivacyGroupID != "") {
+	if suppliedNonce != "" {
+		// already assigned above
+	} else if p.conf.OrionPrivateAPIS && (len(msg.PrivateFor) > 0 || msg.PrivacyGroupID != "") {
 		// If are using orion private transactions, then we need the private TX
 		// group ID and nonce (the public transaction will be submitted by the pantheon node)
 		// Note: We do not have highestNonce calculation for in-flight private transactions,
@@ -284,6 +283,8 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 		// overwriting a transaction)
 		inflight.nonce, err = kldeth.GetTransactionCount(txnContext.Context(), p.rpc, &from, "pending")
 	}
+
+	log.Infof("In-flight nonce %d added. addr=%s", inflight.nonce, inflight.from)
 
 	return
 }

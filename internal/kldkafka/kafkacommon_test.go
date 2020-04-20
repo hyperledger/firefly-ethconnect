@@ -235,6 +235,21 @@ func TestExecuteWithDefaultTLSAndClientID(t *testing.T) {
 
 }
 
+func TestMissingBroker(t *testing.T) {
+	assert := assert.New(t)
+
+	f := NewMockKafkaFactory()
+	_, err := execKafkaCommonWithArgs(assert, []string{
+		"-t", "in-topic",
+		"-T", "out-topic",
+		"-g", "test-group",
+		"-i", "clientid1",
+	}, f)
+
+	assert.EqualError(err, "No Kafka brokers configured")
+
+}
+
 func TestExecuteWithSelfSignedMutualAuth(t *testing.T) {
 	assert := assert.New(t)
 

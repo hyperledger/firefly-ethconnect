@@ -188,10 +188,8 @@ func (k *kafkaCommon) connect() (err error) {
 	clientConf.Producer.Return.Errors = true
 	clientConf.Producer.RequiredAcks = sarama.WaitForLocal
 	clientConf.Producer.Flush.Frequency = time.Duration(k.conf.ProducerFlush.Frequency) * time.Millisecond
-	if clientConf.Producer.Flush.Frequency > 0 {
-		clientConf.Producer.Flush.Messages = k.conf.ProducerFlush.Messages
-		clientConf.Producer.Flush.Bytes = k.conf.ProducerFlush.Bytes
-	}
+	clientConf.Producer.Flush.Messages = k.conf.ProducerFlush.Messages
+	clientConf.Producer.Flush.Bytes = k.conf.ProducerFlush.Bytes
 	clientConf.Metadata.Retry.Backoff = 2 * time.Second
 	clientConf.Consumer.Return.Errors = true
 	clientConf.Version = sarama.V2_0_0_0

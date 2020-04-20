@@ -305,11 +305,7 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, gapPotential bool) 
 		before = len(inflightForAddr)
 		for idx, alreadyInflight := range inflightForAddr {
 			if alreadyInflight.id == inflight.id {
-				if len(inflightForAddr) > idx {
-					inflightForAddr = append(inflightForAddr[0:idx], inflightForAddr[idx+1:]...)
-				} else {
-					inflightForAddr = inflightForAddr[0:idx]
-				}
+				inflightForAddr = append(inflightForAddr[0:idx], inflightForAddr[idx+1:]...)
 				p.inflightTxns[inflight.from] = inflightForAddr
 				break
 			}

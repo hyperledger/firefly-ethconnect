@@ -189,8 +189,8 @@ type ErrorReply struct {
 	ErrorMessage     string `json:"errorMessage,omitempty"`
 	OriginalMessage  string `json:"requestPayload,omitempty"`
 	TXHash           string `json:"transactionHash,omitempty"`
-	GapFillTxHash    string `json:"GapFillHash,omitempty"`
-	GapFillSucceeded *bool  `json:"GapFillSucceeded,omitempty"`
+	GapFillTxHash    string `json:"gapFillTxHash,omitempty"`
+	GapFillSucceeded *bool  `json:"gapFillSucceeded,omitempty"`
 }
 
 // NewErrorReply is a helper to construct an error message

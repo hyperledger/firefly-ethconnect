@@ -87,6 +87,10 @@ func (t *msgContext) SendErrorReply(status int, err error) {
 	t.SendErrorReplyWithTX(status, err, "")
 }
 
+func (t *msgContext) SendErrorReplyWithGapFill(status int, err error, gapFillTxHash string, gapFillSucceeded bool) {
+	t.SendErrorReplyWithTX(status, err, "")
+}
+
 func (t *msgContext) SendErrorReplyWithTX(status int, err error, txHash string) {
 	log.Warnf("Failed to process message %s: %s", t, err)
 	origBytes, _ := json.Marshal(t.msg)

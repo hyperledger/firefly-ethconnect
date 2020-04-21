@@ -186,9 +186,11 @@ type TransactionReceipt struct {
 // ErrorReply is
 type ErrorReply struct {
 	ReplyCommon
-	ErrorMessage    string `json:"errorMessage,omitempty"`
-	OriginalMessage string `json:"requestPayload,omitempty"`
-	TXHash          string `json:"transactionHash,omitempty"`
+	ErrorMessage     string `json:"errorMessage,omitempty"`
+	OriginalMessage  string `json:"requestPayload,omitempty"`
+	TXHash           string `json:"transactionHash,omitempty"`
+	GapFillTxHash    string `json:"GapFillHash,omitempty"`
+	GapFillSucceeded *bool  `json:"GapFillSucceeded,omitempty"`
 }
 
 // NewErrorReply is a helper to construct an error message

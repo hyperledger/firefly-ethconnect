@@ -58,6 +58,8 @@ type inflightTxn struct {
 	registerAs       string // passed from request to reply
 	rpc              kldeth.RPCClient
 	signer           kldeth.TXSigner
+	gapFillSucceeded bool
+	gapFillTxHash    string
 }
 
 func (i *inflightTxn) nonceNumber() json.Number {
@@ -339,12 +341,15 @@ func (p *txnProcessor) submitGapFillTX(inflight *inflightTxn) {
 	if p.conf.AttemptGapFill {
 		tx, err := kldeth.NewNilTX(inflight.from, inflight.nonce, inflight.signer)
 		if err == nil {
+			inflight.gapFillTxHash = tx.EthTX.Hash().String()
 			err = tx.Send(inflight.txnContext.Context(), inflight.rpc)
-		}
-		if err != nil {
-			log.Warnf("Submission of gap-fill TX '%s' failed: %s", tx.Hash, err)
-		} else {
-			log.Infof("Submission of gap-fill TX '%s' completed", tx.Hash)
+			if err != nil {
+				inflight.gapFillSucceeded = false
+				log.Warnf("Submission of gap-fill TX '%s' failed: %s", tx.Hash, err)
+			} else {
+				inflight.gapFillSucceeded = true
+				log.Infof("Submission of gap-fill TX '%s' completed", tx.Hash)
+			}
 		}
 	}
 }
@@ -451,6 +456,7 @@ func (p *txnProcessor) waitForCompletion(inflight *inflightTxn, initialWaitDelay
 		if receipt.TransactionIndex != nil {
 			reply.TransactionIndexStr = strconv.FormatUint(uint64(*receipt.TransactionIndex), 10)
 		}
+
 		inflight.txnContext.Reply(&reply)
 	}
 
@@ -534,7 +540,7 @@ func (p *txnProcessor) sendAndTrackMining(txnContext TxnContext, inflight *infli
 	if err != nil {
 		// Now we potentially have a gap - if we allocated the nonce, but failed to send
 		p.cancelInFlight(inflight, true)
-		txnContext.SendErrorReply(400, err)
+		txnContext.SendErrorReplyWithGapFill(400, err, inflight.gapFillTxHash, inflight.gapFillSucceeded)
 		return
 	}
 

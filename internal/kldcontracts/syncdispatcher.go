@@ -77,6 +77,10 @@ func (t *syncTxInflight) SendErrorReply(status int, err error) {
 	t.replyProcessor.ReplyWithError(err)
 }
 
+func (t *syncTxInflight) SendErrorReplyWithGapFill(status int, err error, gapFillTxHash string, gapFillSucceeded bool) {
+	t.replyProcessor.ReplyWithError(err) // We don't add the gapfill info in sync
+}
+
 func (t *syncTxInflight) SendErrorReplyWithTX(status int, err error, txHash string) {
 	t.SendErrorReply(status, klderrors.Errorf(klderrors.RESTGatewaySyncWrapErrorWithTXDetail, txHash, err))
 }

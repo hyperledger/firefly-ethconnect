@@ -41,9 +41,11 @@ import (
 )
 
 type errorReply struct {
-	status int
-	err    error
-	txHash string
+	status             int
+	err                error
+	txHash             string
+	gapFillTxHash      string
+	gapFillTxSucceeded bool
 }
 
 type testTxnContext struct {
@@ -57,7 +59,6 @@ type testRPC struct {
 	ethSendTransactionResult       string
 	ethSendTransactionErr          error
 	ethSendTransactionErrOnce      bool
-	ethSendTransactionCalled       bool
 	ethSendTransactionCond         *sync.Cond
 	ethSendTransactionReady        bool
 	ethSendTransactionFirstCond    *sync.Cond
@@ -113,12 +114,11 @@ func (r *testRPC) CallContext(ctx context.Context, result interface{}, method st
 	r.params = append(r.params, args)
 	if method == "eth_sendTransaction" || method == "eea_sendTransaction" {
 		r.condLock.Lock()
-		isFirst := !r.ethSendTransactionCalled
-		r.ethSendTransactionCalled = true
+		sendTX := args[0].(*kldeth.SendTXArgs)
+		isFirst := (sendTX.Nonce != nil && uint64(*sendTX.Nonce) == 0 && len(*sendTX.Data) > 0)
 		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethSendTransactionResult))
 		if isFirst && r.ethSendTransactionFirstCond != nil {
 			for !r.ethSendTransactionFirstReady {
-				fmt.Printf("Waiting for first...\n")
 				r.ethSendTransactionFirstCond.Wait()
 			}
 		} else if r.ethSendTransactionCond != nil {
@@ -173,6 +173,16 @@ func (c *testTxnContext) Unmarshal(msg interface{}) error {
 
 func (c *testTxnContext) SendErrorReply(status int, err error) {
 	c.SendErrorReplyWithTX(status, err, "")
+}
+
+func (c *testTxnContext) SendErrorReplyWithGapFill(status int, err error, gapFillTxHash string, gapFillSucceeded bool) {
+	log.Infof("Sending error reply. Status=%d Err=%s GapTX? '%s' GapOK? %t", status, err, gapFillTxHash, gapFillSucceeded)
+	c.errorReplies = append(c.errorReplies, &errorReply{
+		status:             status,
+		err:                err,
+		gapFillTxHash:      gapFillTxHash,
+		gapFillTxSucceeded: gapFillSucceeded,
+	})
 }
 
 func (c *testTxnContext) SendErrorReplyWithTX(status int, err error, txHash string) {
@@ -759,6 +769,9 @@ func TestOnSendTransactionMessageFailedWithGapFillOK(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
+	assert.NotEmpty(testTxnContext1.errorReplies[0].gapFillTxHash)
+	assert.True(testTxnContext1.errorReplies[0].gapFillTxSucceeded)
+
 	assert.EqualValues([]string{"eth_getTransactionCount", "eth_sendTransaction", "eth_sendTransaction", "eth_sendTransaction", "eth_getTransactionReceipt"}, testRPC.calls)
 }
 
@@ -815,6 +828,9 @@ func TestOnSendTransactionMessageFailedWithGapFillFail(t *testing.T) {
 	for len(testTxnContext1.errorReplies) == 0 || len(testRPC.calls) < 4 {
 		time.Sleep(1 * time.Millisecond)
 	}
+
+	assert.NotEmpty(testTxnContext1.errorReplies[0].gapFillTxHash)
+	assert.False(testTxnContext1.errorReplies[0].gapFillTxSucceeded)
 
 	assert.EqualValues([]string{"eth_getTransactionCount", "eth_sendTransaction", "eth_sendTransaction", "eth_sendTransaction"}, testRPC.calls)
 }

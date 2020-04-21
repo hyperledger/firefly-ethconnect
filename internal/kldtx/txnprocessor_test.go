@@ -745,10 +745,10 @@ func TestOnSendTransactionMessageFailedWithGapFillOK(t *testing.T) {
 	testRPC.ethSendTransactionFirstCond.L.Unlock()
 
 	// Wait for the gap-fill
-	for len(testRPC.calls) < 2 {
+	for len(testRPC.calls) < 4 {
 		time.Sleep(1 * time.Millisecond)
 	}
-	assert.EqualValues([]string{"eth_getTransactionCount", "eth_sendTransaction"}, testRPC.calls)
+	assert.EqualValues([]string{"eth_getTransactionCount", "eth_sendTransaction", "eth_sendTransaction", "eth_sendTransaction"}, testRPC.calls)
 
 	// Let number 2 go second
 	testRPC.ethSendTransactionCond.L.Lock()
@@ -803,10 +803,10 @@ func TestOnSendTransactionMessageFailedWithGapFillFail(t *testing.T) {
 	testRPC.ethSendTransactionFirstCond.L.Unlock()
 
 	// Wait for the gap-fill
-	for len(testRPC.calls) < 2 {
+	for len(testRPC.calls) < 4 {
 		time.Sleep(1 * time.Millisecond)
 	}
-	assert.EqualValues([]string{"eth_getTransactionCount", "eth_sendTransaction"}, testRPC.calls)
+	assert.EqualValues([]string{"eth_getTransactionCount", "eth_sendTransaction", "eth_sendTransaction", "eth_sendTransaction"}, testRPC.calls)
 
 	// Let number 2 go second
 	testRPC.ethSendTransactionCond.L.Lock()

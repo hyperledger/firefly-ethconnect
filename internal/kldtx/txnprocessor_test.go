@@ -24,6 +24,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -57,8 +58,10 @@ type testRPC struct {
 	ethSendTransactionErr          error
 	ethSendTransactionErrOnce      bool
 	ethSendTransactionCalled       bool
-	ethSendTransactionDelay        time.Duration
-	ethSendTransactionFirstDelay   time.Duration
+	ethSendTransactionCond         *sync.Cond
+	ethSendTransactionReady        bool
+	ethSendTransactionFirstCond    *sync.Cond
+	ethSendTransactionFirstReady   bool
 	ethGetTransactionCountResult   hexutil.Uint64
 	ethGetTransactionCountErr      error
 	ethGetTransactionReceiptResult kldeth.TxnReceipt
@@ -108,14 +111,23 @@ func (r *testRPC) CallContext(ctx context.Context, result interface{}, method st
 	r.calls = append(r.calls, method)
 	r.params = append(r.params, args)
 	if method == "eth_sendTransaction" || method == "eea_sendTransaction" {
-		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethSendTransactionResult))
-		if !r.ethSendTransactionCalled && r.ethSendTransactionFirstDelay > 0 {
-			time.Sleep(r.ethSendTransactionFirstDelay)
-		} else if r.ethSendTransactionDelay > 0 {
-			time.Sleep(r.ethSendTransactionFirstDelay)
-		}
 		isFirst := !r.ethSendTransactionCalled
 		r.ethSendTransactionCalled = true
+		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethSendTransactionResult))
+		if isFirst && r.ethSendTransactionFirstCond != nil {
+			r.ethSendTransactionFirstCond.L.Lock()
+			for !r.ethSendTransactionFirstReady {
+				fmt.Printf("Waiting for first...\n")
+				r.ethSendTransactionFirstCond.Wait()
+			}
+			r.ethSendTransactionFirstCond.L.Unlock()
+		} else if r.ethSendTransactionCond != nil {
+			r.ethSendTransactionCond.L.Lock()
+			for !r.ethSendTransactionReady {
+				r.ethSendTransactionCond.Wait()
+			}
+			r.ethSendTransactionCond.L.Unlock()
+		}
 		if !r.ethSendTransactionErrOnce || isFirst {
 			return r.ethSendTransactionErr
 		}
@@ -706,8 +718,9 @@ func TestOnSendTransactionMessageFailedWithGapFillOK(t *testing.T) {
 	testRPC := goodMessageRPC()
 	testRPC.ethSendTransactionErr = fmt.Errorf("pop")
 	testRPC.ethSendTransactionErrOnce = true
-	testRPC.ethSendTransactionFirstDelay = 1 * time.Millisecond
-	testRPC.ethSendTransactionDelay = 10 * time.Millisecond
+	var sync1, sync2 sync.Mutex
+	testRPC.ethSendTransactionFirstCond = sync.NewCond(&sync1)
+	testRPC.ethSendTransactionCond = sync.NewCond(&sync2)
 	txnProcessor.Init(testRPC)
 
 	testTxnContext1 := &testTxnContext{}
@@ -715,8 +728,35 @@ func TestOnSendTransactionMessageFailedWithGapFillOK(t *testing.T) {
 	testTxnContext2 := &testTxnContext{}
 	testTxnContext2.jsonMsg = goodSendTxnJSON
 
+	// Send both
 	txnProcessor.OnMessage(testTxnContext1)
 	txnProcessor.OnMessage(testTxnContext2)
+
+	// Wait for both to be inflight
+	from := strings.ToLower(testFromAddr)
+	for len(txnProcessor.inflightTxns) == 0 || len(txnProcessor.inflightTxns[from]) < 2 {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	// Let number 1 go first
+	testRPC.ethSendTransactionFirstCond.L.Lock()
+	testRPC.ethSendTransactionFirstReady = true
+	testRPC.ethSendTransactionFirstCond.Broadcast()
+	testRPC.ethSendTransactionFirstCond.L.Unlock()
+
+	// Wait for the gap-fill
+	for len(testRPC.calls) < 2 {
+		time.Sleep(1 * time.Millisecond)
+	}
+	assert.EqualValues([]string{"eth_getTransactionCount", "eth_sendTransaction"}, testRPC.calls)
+
+	// Let number 2 go second
+	testRPC.ethSendTransactionCond.L.Lock()
+	testRPC.ethSendTransactionReady = true
+	testRPC.ethSendTransactionCond.Broadcast()
+	testRPC.ethSendTransactionCond.L.Unlock()
+
+	// Wait for the completion
 	for len(testTxnContext1.errorReplies) == 0 || len(testRPC.calls) < 5 {
 		time.Sleep(1 * time.Millisecond)
 	}
@@ -736,8 +776,9 @@ func TestOnSendTransactionMessageFailedWithGapFillFail(t *testing.T) {
 	testRPC := goodMessageRPC()
 	testRPC.ethSendTransactionErr = fmt.Errorf("pop")
 	testRPC.ethSendTransactionErrOnce = false
-	testRPC.ethSendTransactionFirstDelay = 1 * time.Millisecond
-	testRPC.ethSendTransactionDelay = 10 * time.Millisecond
+	var sync1, sync2 sync.Mutex
+	testRPC.ethSendTransactionFirstCond = sync.NewCond(&sync1)
+	testRPC.ethSendTransactionCond = sync.NewCond(&sync2)
 	txnProcessor.Init(testRPC)
 
 	testTxnContext1 := &testTxnContext{}
@@ -745,8 +786,35 @@ func TestOnSendTransactionMessageFailedWithGapFillFail(t *testing.T) {
 	testTxnContext2 := &testTxnContext{}
 	testTxnContext2.jsonMsg = goodSendTxnJSON
 
+	// Send both
 	txnProcessor.OnMessage(testTxnContext1)
 	txnProcessor.OnMessage(testTxnContext2)
+
+	// Wait for both to be inflight
+	from := strings.ToLower(testFromAddr)
+	for len(txnProcessor.inflightTxns) == 0 || len(txnProcessor.inflightTxns[from]) < 2 {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	// Let number 1 go first
+	testRPC.ethSendTransactionFirstCond.L.Lock()
+	testRPC.ethSendTransactionFirstReady = true
+	testRPC.ethSendTransactionFirstCond.Broadcast()
+	testRPC.ethSendTransactionFirstCond.L.Unlock()
+
+	// Wait for the gap-fill
+	for len(testRPC.calls) < 2 {
+		time.Sleep(1 * time.Millisecond)
+	}
+	assert.EqualValues([]string{"eth_getTransactionCount", "eth_sendTransaction"}, testRPC.calls)
+
+	// Let number 2 go second
+	testRPC.ethSendTransactionCond.L.Lock()
+	testRPC.ethSendTransactionReady = true
+	testRPC.ethSendTransactionCond.Broadcast()
+	testRPC.ethSendTransactionCond.L.Unlock()
+
+	// Wait for the completion
 	for len(testTxnContext1.errorReplies) == 0 || len(testRPC.calls) < 4 {
 		time.Sleep(1 * time.Millisecond)
 	}

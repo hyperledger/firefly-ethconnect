@@ -53,19 +53,20 @@ type testTxnContext struct {
 }
 
 type testRPC struct {
-	ethSendTransactionResult        string
-	ethSendTransactionErr           error
-	ethSendTransactionErrOnce       bool
-	ethSendTransactionCalled        bool
-	ethSendTransactionErrFirstDelay time.Duration
-	ethGetTransactionCountResult    hexutil.Uint64
-	ethGetTransactionCountErr       error
-	ethGetTransactionReceiptResult  kldeth.TxnReceipt
-	ethGetTransactionReceiptErr     error
-	privFindPrivacyGroupResult      []kldeth.OrionPrivacyGroup
-	privFindPrivacyGroupErr         error
-	calls                           []string
-	params                          [][]interface{}
+	ethSendTransactionResult       string
+	ethSendTransactionErr          error
+	ethSendTransactionErrOnce      bool
+	ethSendTransactionCalled       bool
+	ethSendTransactionDelay        time.Duration
+	ethSendTransactionFirstDelay   time.Duration
+	ethGetTransactionCountResult   hexutil.Uint64
+	ethGetTransactionCountErr      error
+	ethGetTransactionReceiptResult kldeth.TxnReceipt
+	ethGetTransactionReceiptErr    error
+	privFindPrivacyGroupResult     []kldeth.OrionPrivacyGroup
+	privFindPrivacyGroupErr        error
+	calls                          []string
+	params                         [][]interface{}
 }
 
 const testFromAddr = "0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1"
@@ -106,10 +107,12 @@ var goodDeployTxnPrivateJSON = "{" +
 func (r *testRPC) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
 	r.calls = append(r.calls, method)
 	r.params = append(r.params, args)
-	if method == "eth_sendTransaction" {
+	if method == "eth_sendTransaction" || method == "eea_sendTransaction" {
 		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethSendTransactionResult))
-		if !r.ethSendTransactionCalled && r.ethSendTransactionErrFirstDelay > 0 {
-			time.Sleep(r.ethSendTransactionErrFirstDelay)
+		if !r.ethSendTransactionCalled && r.ethSendTransactionFirstDelay > 0 {
+			time.Sleep(r.ethSendTransactionFirstDelay)
+		} else if r.ethSendTransactionDelay > 0 {
+			time.Sleep(r.ethSendTransactionFirstDelay)
 		}
 		isFirst := !r.ethSendTransactionCalled
 		r.ethSendTransactionCalled = true
@@ -696,13 +699,15 @@ func TestOnSendTransactionMessageFailedWithGapFillOK(t *testing.T) {
 
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime:     1,
+		SendConcurrency:   10,
 		AlwaysManageNonce: true,
 		AttemptGapFill:    true,
 	}, &kldeth.RPCConf{}).(*txnProcessor)
 	testRPC := goodMessageRPC()
 	testRPC.ethSendTransactionErr = fmt.Errorf("pop")
 	testRPC.ethSendTransactionErrOnce = true
-	testRPC.ethSendTransactionErrFirstDelay = 10 * time.Millisecond
+	testRPC.ethSendTransactionFirstDelay = 1 * time.Millisecond
+	testRPC.ethSendTransactionDelay = 10 * time.Millisecond
 	txnProcessor.Init(testRPC)
 
 	testTxnContext1 := &testTxnContext{}
@@ -724,13 +729,15 @@ func TestOnSendTransactionMessageFailedWithGapFillFail(t *testing.T) {
 
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime:     1,
+		SendConcurrency:   10,
 		AlwaysManageNonce: true,
 		AttemptGapFill:    true,
 	}, &kldeth.RPCConf{}).(*txnProcessor)
 	testRPC := goodMessageRPC()
 	testRPC.ethSendTransactionErr = fmt.Errorf("pop")
 	testRPC.ethSendTransactionErrOnce = false
-	testRPC.ethSendTransactionErrFirstDelay = 10 * time.Millisecond
+	testRPC.ethSendTransactionFirstDelay = 1 * time.Millisecond
+	testRPC.ethSendTransactionDelay = 10 * time.Millisecond
 	txnProcessor.Init(testRPC)
 
 	testTxnContext1 := &testTxnContext{}
@@ -745,7 +752,6 @@ func TestOnSendTransactionMessageFailedWithGapFillFail(t *testing.T) {
 	}
 
 	assert.EqualValues([]string{"eth_getTransactionCount", "eth_sendTransaction", "eth_sendTransaction", "eth_sendTransaction"}, testRPC.calls)
-
 }
 
 func TestOnSendTransactionMessageFailedToGetNonce(t *testing.T) {
@@ -931,7 +937,7 @@ func TestOnSendTransactionMessageOrion(t *testing.T) {
 	}
 
 	assert.Empty(testTxnContext.errorReplies)
-	assert.EqualValues([]string{"priv_findPrivacyGroup", "priv_getTransactionCount", "eth_sendTransaction"}, testRPC.calls)
+	assert.EqualValues([]string{"priv_findPrivacyGroup", "priv_getTransactionCount", "eea_sendTransaction"}, testRPC.calls)
 }
 
 func TestOnSendTransactionMessageOrionPrivacyGroupId(t *testing.T) {
@@ -963,7 +969,7 @@ func TestOnSendTransactionMessageOrionPrivacyGroupId(t *testing.T) {
 	}
 
 	assert.Empty(testTxnContext.errorReplies)
-	assert.EqualValues([]string{"priv_getTransactionCount", "eth_sendTransaction"}, testRPC.calls)
+	assert.EqualValues([]string{"priv_getTransactionCount", "eea_sendTransaction"}, testRPC.calls)
 }
 
 func TestCobraInitTxnProcessor(t *testing.T) {

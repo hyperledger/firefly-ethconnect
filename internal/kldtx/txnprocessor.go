@@ -487,14 +487,8 @@ func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *kldme
 		txnContext.SendErrorReply(400, err)
 		return
 	}
-	tx.OrionPrivateAPIS = p.conf.OrionPrivateAPIS
-	tx.PrivacyGroupID = inflight.privacyGroupID
-	tx.NodeAssignNonce = inflight.nodeAssignNonce
 
-	// The above must happen synchronously for each partition in Kafka - as it is where we assign the nonce.
-	// However, the send to the node can happen at high concurrency.
-	p.concurrencySlots <- true
-	go p.sendAndTrackMining(txnContext, inflight, tx)
+	p.sendTransactionCommon(txnContext, inflight, tx)
 }
 
 func (p *txnProcessor) OnSendTransactionMessage(txnContext TxnContext, msg *kldmessages.SendTransaction) {
@@ -512,17 +506,31 @@ func (p *txnProcessor) OnSendTransactionMessage(txnContext TxnContext, msg *kldm
 		txnContext.SendErrorReply(400, err)
 		return
 	}
+
+	p.sendTransactionCommon(txnContext, inflight, tx)
+}
+
+func (p *txnProcessor) sendTransactionCommon(txnContext TxnContext, inflight *inflightTxn, tx *kldeth.Txn) {
+	tx.OrionPrivateAPIS = p.conf.OrionPrivateAPIS
+	tx.PrivacyGroupID = inflight.privacyGroupID
 	tx.NodeAssignNonce = inflight.nodeAssignNonce
 
-	// The above must happen synchronously for each partition in Kafka - as it is where we assign the nonce.
-	// However, the send to the node can happen at high concurrency.
-	p.concurrencySlots <- true
-	go p.sendAndTrackMining(txnContext, inflight, tx)
+	if p.conf.SendConcurrency > 1 {
+		// The above must happen synchronously for each partition in Kafka - as it is where we assign the nonce.
+		// However, the send to the node can happen at high concurrency.
+		p.concurrencySlots <- true
+		go p.sendAndTrackMining(txnContext, inflight, tx)
+	} else {
+		// For the special case of 1 we do it synchronously, so we don't assign the next nonce until we've sent this one
+		p.sendAndTrackMining(txnContext, inflight, tx)
+	}
 }
 
 func (p *txnProcessor) sendAndTrackMining(txnContext TxnContext, inflight *inflightTxn, tx *kldeth.Txn) {
 	err := tx.Send(txnContext.Context(), inflight.rpc)
-	<-p.concurrencySlots // return our slot as soon as send is complete, to let an awaiting send go
+	if p.conf.SendConcurrency > 1 {
+		<-p.concurrencySlots // return our slot as soon as send is complete, to let an awaiting send go
+	}
 	if err != nil {
 		// Now we potentially have a gap - if we allocated the nonce, but failed to send
 		p.cancelInFlight(inflight, true)

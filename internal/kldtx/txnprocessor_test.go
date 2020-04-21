@@ -68,6 +68,7 @@ type testRPC struct {
 	ethGetTransactionReceiptErr    error
 	privFindPrivacyGroupResult     []kldeth.OrionPrivacyGroup
 	privFindPrivacyGroupErr        error
+	condLock                       sync.Mutex
 	calls                          []string
 	params                         [][]interface{}
 }
@@ -111,23 +112,21 @@ func (r *testRPC) CallContext(ctx context.Context, result interface{}, method st
 	r.calls = append(r.calls, method)
 	r.params = append(r.params, args)
 	if method == "eth_sendTransaction" || method == "eea_sendTransaction" {
+		r.condLock.Lock()
 		isFirst := !r.ethSendTransactionCalled
 		r.ethSendTransactionCalled = true
 		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethSendTransactionResult))
 		if isFirst && r.ethSendTransactionFirstCond != nil {
-			r.ethSendTransactionFirstCond.L.Lock()
 			for !r.ethSendTransactionFirstReady {
 				fmt.Printf("Waiting for first...\n")
 				r.ethSendTransactionFirstCond.Wait()
 			}
-			r.ethSendTransactionFirstCond.L.Unlock()
 		} else if r.ethSendTransactionCond != nil {
-			r.ethSendTransactionCond.L.Lock()
 			for !r.ethSendTransactionReady {
 				r.ethSendTransactionCond.Wait()
 			}
-			r.ethSendTransactionCond.L.Unlock()
 		}
+		r.condLock.Unlock()
 		if !r.ethSendTransactionErrOnce || isFirst {
 			return r.ethSendTransactionErr
 		}
@@ -718,9 +717,8 @@ func TestOnSendTransactionMessageFailedWithGapFillOK(t *testing.T) {
 	testRPC := goodMessageRPC()
 	testRPC.ethSendTransactionErr = fmt.Errorf("pop")
 	testRPC.ethSendTransactionErrOnce = true
-	var sync1, sync2 sync.Mutex
-	testRPC.ethSendTransactionFirstCond = sync.NewCond(&sync1)
-	testRPC.ethSendTransactionCond = sync.NewCond(&sync2)
+	testRPC.ethSendTransactionFirstCond = sync.NewCond(&testRPC.condLock)
+	testRPC.ethSendTransactionCond = sync.NewCond(&testRPC.condLock)
 	txnProcessor.Init(testRPC)
 
 	testTxnContext1 := &testTxnContext{}
@@ -776,9 +774,8 @@ func TestOnSendTransactionMessageFailedWithGapFillFail(t *testing.T) {
 	testRPC := goodMessageRPC()
 	testRPC.ethSendTransactionErr = fmt.Errorf("pop")
 	testRPC.ethSendTransactionErrOnce = false
-	var sync1, sync2 sync.Mutex
-	testRPC.ethSendTransactionFirstCond = sync.NewCond(&sync1)
-	testRPC.ethSendTransactionCond = sync.NewCond(&sync2)
+	testRPC.ethSendTransactionFirstCond = sync.NewCond(&testRPC.condLock)
+	testRPC.ethSendTransactionCond = sync.NewCond(&testRPC.condLock)
 	txnProcessor.Init(testRPC)
 
 	testTxnContext1 := &testTxnContext{}

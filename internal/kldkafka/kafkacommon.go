@@ -39,7 +39,12 @@ type KafkaCommonConf struct {
 	ConsumerGroup string   `json:"consumerGroup"`
 	TopicIn       string   `json:"topicIn"`
 	TopicOut      string   `json:"topicOut"`
-	SASL          struct {
+	ProducerFlush struct {
+		Frequency int `json:"frequency"`
+		Messages  int `json:"messages"`
+		Bytes     int `json:"bytes"`
+	} `json:"producerFlush"`
+	SASL struct {
 		Username string
 		Password string
 	} `json:"sasl"`
@@ -182,7 +187,9 @@ func (k *kafkaCommon) connect() (err error) {
 	clientConf.Producer.Return.Successes = true
 	clientConf.Producer.Return.Errors = true
 	clientConf.Producer.RequiredAcks = sarama.WaitForLocal
-	clientConf.Producer.Flush.Frequency = 500 * time.Millisecond
+	clientConf.Producer.Flush.Frequency = time.Duration(k.conf.ProducerFlush.Frequency) * time.Millisecond
+	clientConf.Producer.Flush.Messages = k.conf.ProducerFlush.Messages
+	clientConf.Producer.Flush.Bytes = k.conf.ProducerFlush.Bytes
 	clientConf.Metadata.Retry.Backoff = 2 * time.Second
 	clientConf.Consumer.Return.Errors = true
 	clientConf.Version = sarama.V2_0_0_0

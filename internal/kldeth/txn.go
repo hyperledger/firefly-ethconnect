@@ -287,6 +287,20 @@ func NewSendTxn(msg *kldmessages.SendTransaction, signer TXSigner) (tx *Txn, err
 	return
 }
 
+// NewNilTX returns a transaction without any data from/to the same address
+func NewNilTX(from string, nonce int64, signer TXSigner) (tx *Txn, err error) {
+	tx = &Txn{Signer: signer}
+	if tx.Signer != nil {
+		from = signer.Address()
+	}
+	err = tx.genEthTransaction(
+		from, from,
+		json.Number(strconv.FormatInt(nonce, 10)),
+		json.Number("0"), json.Number("90000"), json.Number("0"),
+		[]byte{})
+	return
+}
+
 func buildTX(signer TXSigner, msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json.Number, methodABI *abi.Method, params []interface{}) (tx *Txn, err error) {
 	tx = &Txn{Signer: signer}
 
@@ -304,7 +318,7 @@ func buildTX(signer TXSigner, msgFrom, msgTo string, msgNonce, msgValue, msgGas,
 		return
 	}
 	methodID := methodABI.ID()
-	log.Infof("Method Name=%s ID=%x PackedArgs=%x", methodABI.RawName, methodID, packedArgs)
+	log.Debugf("Method Name=%s ID=%x PackedArgs=%x", methodABI.RawName, methodID, packedArgs)
 	packedCall := append(methodID, packedArgs...)
 
 	from := msgFrom

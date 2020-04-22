@@ -84,6 +84,10 @@ func (t *msgContext) Unmarshal(msg interface{}) error {
 }
 
 func (t *msgContext) SendErrorReply(status int, err error) {
+	t.SendErrorReplyWithGapFill(status, err, "", false)
+}
+
+func (t *msgContext) SendErrorReplyWithGapFill(status int, err error, gapFillTxHash string, gapFillSucceeded bool) {
 	t.SendErrorReplyWithTX(status, err, "")
 }
 

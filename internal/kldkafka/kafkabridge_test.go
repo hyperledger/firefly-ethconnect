@@ -366,6 +366,41 @@ func TestSingleMessageWithErrorReply(t *testing.T) {
 	wg.Wait()
 }
 
+func TestSingleMessageWithErrorReplyWithGapFillDetail(t *testing.T) {
+	assert := assert.New(t)
+
+	_, processor, mockConsumer, mockProducer, wg := setupMocks()
+
+	// Send a minimal test message
+	msg1 := kldmessages.RequestCommon{}
+	msg1.Headers.MsgType = "TestSingleMessageWithErrorReply"
+	msg1.Headers.Account = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg1bytes, _ := json.Marshal(&msg1)
+	log.Infof("Sent message: %s", string(msg1bytes))
+	mockConsumer.MockMessages <- &sarama.ConsumerMessage{Value: msg1bytes}
+
+	// Get the message via the processor
+	msgContext1 := <-processor.messages
+	assert.NotEmpty(msgContext1.Headers().ID) // Generated one as not supplied
+	go func() {
+		msgContext1.SendErrorReplyWithGapFill(400, fmt.Errorf("bang"), "txhash", true)
+	}()
+
+	// Check the reply is sent correctly to Kafka
+	replyKafkaMsg := <-mockProducer.MockInput
+	mockProducer.MockSuccesses <- replyKafkaMsg
+	replyBytes, _ := replyKafkaMsg.Value.Encode()
+	var errorReply kldmessages.ErrorReply
+	json.Unmarshal(replyBytes, &errorReply)
+	assert.Equal("bang", errorReply.ErrorMessage)
+	assert.Equal("txhash", errorReply.GapFillTxHash)
+	assert.Equal(true, *errorReply.GapFillSucceeded)
+
+	// Shut down
+	mockProducer.AsyncClose()
+	mockConsumer.Close()
+	wg.Wait()
+}
 func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 	assert := assert.New(t)
 

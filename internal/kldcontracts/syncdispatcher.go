@@ -74,7 +74,7 @@ func (t *syncTxInflight) Unmarshal(msg interface{}) error {
 }
 
 func (t *syncTxInflight) SendErrorReply(status int, err error) {
-	t.replyProcessor.ReplyWithError(err)
+	t.SendErrorReplyWithGapFill(status, err, "", false)
 }
 
 func (t *syncTxInflight) SendErrorReplyWithGapFill(status int, err error, gapFillTxHash string, gapFillSucceeded bool) {

@@ -32,6 +32,8 @@ type TxnContext interface {
 	SendErrorReply(status int, err error)
 	// Send an error reply
 	SendErrorReplyWithTX(status int, err error, txHash string)
+	// Send an error reply
+	SendErrorReplyWithGapFill(status int, err error, gapFillTxHash string, gapFillSucceeded bool)
 	// Send a reply that can be marshaled into bytes.
 	// Sets all the common headers on behalf of the caller, based on the request context
 	Reply(replyMsg kldmessages.ReplyWithHeaders)

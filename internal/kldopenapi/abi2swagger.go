@@ -377,7 +377,7 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 	callParam, _ := spec.NewRef("#/parameters/callParam")
 	privateFromParam, _ := spec.NewRef("#/parameters/privateFromParam")
 	privateForParam, _ := spec.NewRef("#/parameters/privateForParam")
-	privacyGroupIdParam, _ := spec.NewRef("#/parameters/privacyGroupIdParam")
+	privacyGroupIDParam, _ := spec.NewRef("#/parameters/privacyGroupIdParam")
 	registerParam, _ := spec.NewRef("#/parameters/registerParam")
 	op.Parameters = append(op.Parameters, spec.Parameter{
 		Refable: spec.Refable{
@@ -423,7 +423,7 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 		if c.orionPrivateAPI {
 			op.Parameters = append(op.Parameters, spec.Parameter{
 				Refable: spec.Refable{
-					Ref: privacyGroupIdParam,
+					Ref: privacyGroupIDParam,
 				},
 			})
 		}

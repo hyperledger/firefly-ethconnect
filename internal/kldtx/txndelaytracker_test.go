@@ -68,6 +68,17 @@ func TestTxnDelayTrackerExponentialBackoff(t *testing.T) {
 
 }
 
+func TestTxnDelayTrackerLimitMax(t *testing.T) {
+
+	assert := assert.New(t)
+
+	d := NewTxnDelayTracker()
+	d.ReportSuccess(MaxDelay * 2)
+	initDelay := d.GetInitialDelay()
+	assert.Equal(MaxDelay, initDelay)
+
+}
+
 func TestTxnDelayTrackerTracerAndReset(t *testing.T) {
 
 	log.SetLevel(log.DebugLevel)

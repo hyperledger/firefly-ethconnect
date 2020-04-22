@@ -79,6 +79,9 @@ func (d *txnDelayTracker) GetInitialDelay() (delay time.Duration) {
 	if delay < MinDelay {
 		delay = MinDelay
 	}
+	if delay > MaxDelay {
+		delay = MaxDelay
+	}
 	return delay
 }
 

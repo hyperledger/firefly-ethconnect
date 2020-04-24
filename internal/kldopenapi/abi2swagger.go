@@ -244,7 +244,7 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	params := make(map[string]spec.Parameter)
 	params["fromParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description: "The 'from' address - 'x-kaleido-from' header can also be used",
+			Description: "The 'from' address (header: x-kaleido-from)",
 			Name:        "kld-from",
 			In:          "query",
 			Required:    false,
@@ -255,7 +255,7 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["valueParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Ether value to send with the transaction - 'x-kaleido-ethvalue' header can also be used",
+			Description:     "Ether value to send with the transaction (header: x-kaleido-ethvalue)",
 			Name:            "kld-ethvalue",
 			In:              "query",
 			Required:        false,
@@ -267,7 +267,7 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["gasParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Gas to send with the transaction (auto-calculated if not set) - 'x-kaleido-gas' header can also be used",
+			Description:     "Gas to send with the transaction (auto-calculated if not set) (header: x-kaleido-gas)",
 			Name:            "kld-gas",
 			In:              "query",
 			Required:        false,
@@ -279,7 +279,7 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["gaspriceParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Gas Price offered - 'x-kaleido-gasprice' header can also be used",
+			Description:     "Gas Price offered (header: x-kaleido-gasprice)",
 			Name:            "kld-gasprice",
 			In:              "query",
 			Required:        false,
@@ -291,7 +291,7 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["syncParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Block the HTTP request until the tx is mined (does not store the receipt) - 'x-kaleido-sync' header can also be used",
+			Description:     "Block the HTTP request until the tx is mined (does not store the receipt) (header: x-kaleido-sync)",
 			Name:            "kld-sync",
 			In:              "query",
 			Required:        false,
@@ -304,7 +304,7 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["callParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Perform a read-only call with the same parameters that would be used to invoke, and return result - 'x-kaleido-call' header can also be used",
+			Description:     "Perform a read-only call with the same parameters that would be used to invoke, and return result (header: x-kaleido-call)",
 			Name:            "kld-call",
 			In:              "query",
 			Required:        false,
@@ -316,7 +316,7 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["privateFromParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Private transaction sender - 'x-kaleido-privatefrom' header can also be used",
+			Description:     "Private transaction sender (header: x-kaleido-privatefrom)",
 			Name:            "kld-privatefrom",
 			In:              "query",
 			Required:        false,
@@ -328,7 +328,7 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["privateForParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Private transaction recipients (comma separated or multiple params) - 'x-kaleido-privatefor' header can also be used",
+			Description:     "Private transaction recipients (comma separated or multiple params) (header: x-kaleido-privatefor)",
 			Name:            "kld-privatefor",
 			In:              "query",
 			Required:        false,
@@ -340,7 +340,7 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["privacyGroupIdParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Private transaction group ID - 'x-kaleido-privacyGroupId' header can also be used",
+			Description:     "Private transaction group ID (header: x-kaleido-privacyGroupId)",
 			Name:            "kld-privacygroupid",
 			In:              "query",
 			Required:        false,
@@ -352,7 +352,7 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["registerParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Register the installed contract on a friendly path (overwrites existing) - 'x-kaleido-register' header can also be used",
+			Description:     "Register the installed contract on a friendly path (overwrites existing) (header: x-kaleido-register)",
 			Name:            "kld-register",
 			In:              "query",
 			Required:        false,
@@ -364,7 +364,7 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["blocknumberParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "The target block number for eth_call requests. One of 'earliest/latest/pending', a number or a hex string - 'x-kaleido-blocknumber' header can also be used",
+			Description:     "The target block number for eth_call requests. One of 'earliest/latest/pending', a number or a hex string (header: x-kaleido-blocknumber)",
 			Name:            "kld-blocknumber",
 			In:              "query",
 			Required:        false,

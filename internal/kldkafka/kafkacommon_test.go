@@ -186,7 +186,7 @@ func TestExecuteWithNoTLS(t *testing.T) {
 	assert.Equal(true, f.ClientConf.Producer.Return.Successes)
 	assert.Equal(true, f.ClientConf.Producer.Return.Errors)
 	assert.Equal(sarama.WaitForLocal, f.ClientConf.Producer.RequiredAcks)
-	assert.Equal(500*time.Millisecond, f.ClientConf.Producer.Flush.Frequency)
+	assert.Equal(time.Duration(0), f.ClientConf.Producer.Flush.Frequency)
 	assert.Equal(true, f.ClientConf.Consumer.Return.Errors)
 	assert.Equal(false, f.ClientConf.Net.TLS.Enable)
 	assert.Equal((*tls.Config)(nil), f.ClientConf.Net.TLS.Config)
@@ -232,6 +232,21 @@ func TestExecuteWithDefaultTLSAndClientID(t *testing.T) {
 	assert.Equal((*x509.CertPool)(nil), f.ClientConf.Net.TLS.Config.RootCAs)
 	assert.Equal(false, f.ClientConf.Net.TLS.Config.InsecureSkipVerify)
 	assert.Equal("clientid1", f.ClientConf.ClientID) // generated UUID
+
+}
+
+func TestMissingBroker(t *testing.T) {
+	assert := assert.New(t)
+
+	f := NewMockKafkaFactory()
+	_, err := execKafkaCommonWithArgs(assert, []string{
+		"-t", "in-topic",
+		"-T", "out-topic",
+		"-g", "test-group",
+		"-i", "clientid1",
+	}, f)
+
+	assert.EqualError(err, "No Kafka brokers configured")
 
 }
 

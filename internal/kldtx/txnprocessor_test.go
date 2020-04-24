@@ -24,6 +24,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -40,9 +41,11 @@ import (
 )
 
 type errorReply struct {
-	status int
-	err    error
-	txHash string
+	status             int
+	err                error
+	txHash             string
+	gapFillTxHash      string
+	gapFillTxSucceeded bool
 }
 
 type testTxnContext struct {
@@ -55,12 +58,18 @@ type testTxnContext struct {
 type testRPC struct {
 	ethSendTransactionResult       string
 	ethSendTransactionErr          error
+	ethSendTransactionErrOnce      bool
+	ethSendTransactionCond         *sync.Cond
+	ethSendTransactionReady        bool
+	ethSendTransactionFirstCond    *sync.Cond
+	ethSendTransactionFirstReady   bool
 	ethGetTransactionCountResult   hexutil.Uint64
 	ethGetTransactionCountErr      error
 	ethGetTransactionReceiptResult kldeth.TxnReceipt
 	ethGetTransactionReceiptErr    error
 	privFindPrivacyGroupResult     []kldeth.OrionPrivacyGroup
 	privFindPrivacyGroupErr        error
+	condLock                       sync.Mutex
 	calls                          []string
 	params                         [][]interface{}
 }
@@ -103,9 +112,25 @@ var goodDeployTxnPrivateJSON = "{" +
 func (r *testRPC) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
 	r.calls = append(r.calls, method)
 	r.params = append(r.params, args)
-	if method == "eth_sendTransaction" {
+	if method == "eth_sendTransaction" || method == "eea_sendTransaction" {
+		r.condLock.Lock()
+		sendTX := args[0].(*kldeth.SendTXArgs)
+		isFirst := (sendTX.Nonce != nil && uint64(*sendTX.Nonce) == 0 && len(*sendTX.Data) > 0)
 		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethSendTransactionResult))
-		return r.ethSendTransactionErr
+		if isFirst && r.ethSendTransactionFirstCond != nil {
+			for !r.ethSendTransactionFirstReady {
+				r.ethSendTransactionFirstCond.Wait()
+			}
+		} else if r.ethSendTransactionCond != nil {
+			for !r.ethSendTransactionReady {
+				r.ethSendTransactionCond.Wait()
+			}
+		}
+		r.condLock.Unlock()
+		if !r.ethSendTransactionErrOnce || isFirst {
+			return r.ethSendTransactionErr
+		}
+		return nil
 	} else if method == "eth_sendRawTransaction" {
 		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethSendTransactionResult))
 		return r.ethSendTransactionErr
@@ -148,6 +173,16 @@ func (c *testTxnContext) Unmarshal(msg interface{}) error {
 
 func (c *testTxnContext) SendErrorReply(status int, err error) {
 	c.SendErrorReplyWithTX(status, err, "")
+}
+
+func (c *testTxnContext) SendErrorReplyWithGapFill(status int, err error, gapFillTxHash string, gapFillSucceeded bool) {
+	log.Infof("Sending error reply. Status=%d Err=%s GapTX? '%s' GapOK? %t", status, err, gapFillTxHash, gapFillSucceeded)
+	c.errorReplies = append(c.errorReplies, &errorReply{
+		status:             status,
+		err:                err,
+		gapFillTxHash:      gapFillTxHash,
+		gapFillTxSucceeded: gapFillSucceeded,
+	})
 }
 
 func (c *testTxnContext) SendErrorReplyWithTX(status int, err error, txHash string) {
@@ -227,6 +262,9 @@ func TestOnDeployContractMessageGoodTxnErrOnReceipt(t *testing.T) {
 	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
 	txnProcessor.OnMessage(testTxnContext)
+	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(testFromAddr)] {
+		time.Sleep(1 * time.Millisecond)
+	}
 	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
 
 	txnWG.Wait()
@@ -282,6 +320,9 @@ func TestOnDeployContractMessageGoodTxnMined(t *testing.T) {
 	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
 	txnProcessor.OnMessage(testTxnContext)
+	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(testFromAddr)] {
+		time.Sleep(1 * time.Millisecond)
+	}
 	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
 
 	txnWG.Wait()
@@ -337,6 +378,9 @@ func TestOnDeployContractMessageGoodTxnMinedHDWallet(t *testing.T) {
 	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
 	txnProcessor.OnMessage(testTxnContext)
+	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(addr.String())] {
+		time.Sleep(1 * time.Millisecond)
+	}
 	txnWG := &txnProcessor.inflightTxns[strings.ToLower(addr.String())][0].wg
 
 	txnWG.Wait()
@@ -378,6 +422,9 @@ func TestOnDeployContractPrivateMessageGoodTxnMined(t *testing.T) {
 	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
 	txnProcessor.OnMessage(testTxnContext)
+	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(testFromAddr)] {
+		time.Sleep(1 * time.Millisecond)
+	}
 	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
 
 	txnWG.Wait()
@@ -424,6 +471,9 @@ func TestOnDeployContractMessageGoodTxnMinedWithHex(t *testing.T) {
 	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
 	txnProcessor.OnMessage(testTxnContext)
+	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(testFromAddr)] {
+		time.Sleep(1 * time.Millisecond)
+	}
 	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
 
 	txnWG.Wait()
@@ -472,6 +522,9 @@ func TestOnDeployContractMessageFailedTxnMined(t *testing.T) {
 	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
 	txnProcessor.OnMessage(testTxnContext)
+	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(testFromAddr)] {
+		time.Sleep(1 * time.Millisecond)
+	}
 	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
 
 	txnWG.Wait()
@@ -493,6 +546,9 @@ func TestOnDeployContractMessageFailedTxn(t *testing.T) {
 	txnProcessor.Init(testRPC)
 
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.Equal("fizzle", testTxnContext.errorReplies[0].err.Error())
 	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
@@ -504,7 +560,7 @@ func TestOnDeployContractMessageFailedToGetNonce(t *testing.T) {
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
 	}, &kldeth.RPCConf{}).(*txnProcessor)
-	txnProcessor.conf.PredictNonces = true
+	txnProcessor.conf.AlwaysManageNonce = true
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"DeployContract\"}," +
@@ -516,6 +572,9 @@ func TestOnDeployContractMessageFailedToGetNonce(t *testing.T) {
 	txnProcessor.Init(testRPC)
 
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.Equal("eth_getTransactionCount returned: ding", testTxnContext.errorReplies[0].err.Error())
 	assert.EqualValues([]string{"eth_getTransactionCount"}, testRPC.calls)
@@ -531,6 +590,9 @@ func TestOnSendTransactionMessageMissingFrom(t *testing.T) {
 		"  \"nonce\":\"123\"" +
 		"}"
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.NotEmpty(testTxnContext.errorReplies)
 	assert.Empty(testTxnContext.replies)
@@ -549,6 +611,9 @@ func TestOnSendTransactionMessageBadNonce(t *testing.T) {
 		"  \"nonce\":\"abc\"" +
 		"}"
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.NotEmpty(testTxnContext.errorReplies)
 	assert.Empty(testTxnContext.replies)
@@ -569,6 +634,9 @@ func TestOnSendTransactionMessageBadMsg(t *testing.T) {
 		"  \"method\":{\"name\":\"test\"}" +
 		"}"
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.NotEmpty(testTxnContext.errorReplies)
 	assert.Empty(testTxnContext.replies)
@@ -584,6 +652,9 @@ func TestOnSendTransactionMessageBadJSON(t *testing.T) {
 	testTxnContext.jsonMsg = "badness"
 	testTxnContext.badMsgType = kldmessages.MsgTypeSendTransaction
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.NotEmpty(testTxnContext.errorReplies)
 	assert.Empty(testTxnContext.replies)
@@ -607,6 +678,9 @@ func TestOnSendTransactionMessageTxnTimeout(t *testing.T) {
 	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
 	txnProcessor.OnMessage(testTxnContext)
+	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(testFromAddr)] {
+		time.Sleep(1 * time.Millisecond)
+	}
 	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
 	txnWG.Wait()
 	assert.Equal(1, len(testTxnContext.errorReplies))
@@ -633,9 +707,132 @@ func TestOnSendTransactionMessageFailedTxn(t *testing.T) {
 	txnProcessor.Init(testRPC)
 
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.Equal("pop", testTxnContext.errorReplies[0].err.Error())
 	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
+}
+
+func TestOnSendTransactionMessageFailedWithGapFillOK(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime:     1,
+		SendConcurrency:   10,
+		AlwaysManageNonce: true,
+		AttemptGapFill:    true,
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+	testRPC := goodMessageRPC()
+	testRPC.ethSendTransactionErr = fmt.Errorf("pop")
+	testRPC.ethSendTransactionErrOnce = true
+	testRPC.ethSendTransactionFirstCond = sync.NewCond(&testRPC.condLock)
+	testRPC.ethSendTransactionCond = sync.NewCond(&testRPC.condLock)
+	txnProcessor.Init(testRPC)
+
+	testTxnContext1 := &testTxnContext{}
+	testTxnContext1.jsonMsg = goodSendTxnJSON
+	testTxnContext2 := &testTxnContext{}
+	testTxnContext2.jsonMsg = goodSendTxnJSON
+
+	// Send both
+	txnProcessor.OnMessage(testTxnContext1)
+	txnProcessor.OnMessage(testTxnContext2)
+
+	// Wait for both to be inflight
+	from := strings.ToLower(testFromAddr)
+	for len(txnProcessor.inflightTxns) == 0 || len(txnProcessor.inflightTxns[from]) < 2 {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	// Let number 1 go first
+	testRPC.ethSendTransactionFirstCond.L.Lock()
+	testRPC.ethSendTransactionFirstReady = true
+	testRPC.ethSendTransactionFirstCond.Broadcast()
+	testRPC.ethSendTransactionFirstCond.L.Unlock()
+
+	// Wait for the gap-fill
+	for len(testRPC.calls) < 4 {
+		time.Sleep(1 * time.Millisecond)
+	}
+	assert.EqualValues([]string{"eth_getTransactionCount", "eth_sendTransaction", "eth_sendTransaction", "eth_sendTransaction"}, testRPC.calls)
+
+	// Let number 2 go second
+	testRPC.ethSendTransactionCond.L.Lock()
+	testRPC.ethSendTransactionReady = true
+	testRPC.ethSendTransactionCond.Broadcast()
+	testRPC.ethSendTransactionCond.L.Unlock()
+
+	// Wait for the completion
+	for len(testTxnContext1.errorReplies) == 0 || len(testRPC.calls) < 5 {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	assert.NotEmpty(testTxnContext1.errorReplies[0].gapFillTxHash)
+	assert.True(testTxnContext1.errorReplies[0].gapFillTxSucceeded)
+
+	assert.EqualValues([]string{"eth_getTransactionCount", "eth_sendTransaction", "eth_sendTransaction", "eth_sendTransaction", "eth_getTransactionReceipt"}, testRPC.calls)
+}
+
+func TestOnSendTransactionMessageFailedWithGapFillFail(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime:     1,
+		SendConcurrency:   10,
+		AlwaysManageNonce: true,
+		AttemptGapFill:    true,
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+	testRPC := goodMessageRPC()
+	testRPC.ethSendTransactionErr = fmt.Errorf("pop")
+	testRPC.ethSendTransactionErrOnce = false
+	testRPC.ethSendTransactionFirstCond = sync.NewCond(&testRPC.condLock)
+	testRPC.ethSendTransactionCond = sync.NewCond(&testRPC.condLock)
+	txnProcessor.Init(testRPC)
+
+	testTxnContext1 := &testTxnContext{}
+	testTxnContext1.jsonMsg = goodSendTxnJSON
+	testTxnContext2 := &testTxnContext{}
+	testTxnContext2.jsonMsg = goodSendTxnJSON
+
+	// Send both
+	txnProcessor.OnMessage(testTxnContext1)
+	txnProcessor.OnMessage(testTxnContext2)
+
+	// Wait for both to be inflight
+	from := strings.ToLower(testFromAddr)
+	for len(txnProcessor.inflightTxns) == 0 || len(txnProcessor.inflightTxns[from]) < 2 {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	// Let number 1 go first
+	testRPC.ethSendTransactionFirstCond.L.Lock()
+	testRPC.ethSendTransactionFirstReady = true
+	testRPC.ethSendTransactionFirstCond.Broadcast()
+	testRPC.ethSendTransactionFirstCond.L.Unlock()
+
+	// Wait for the gap-fill
+	for len(testRPC.calls) < 4 {
+		time.Sleep(1 * time.Millisecond)
+	}
+	assert.EqualValues([]string{"eth_getTransactionCount", "eth_sendTransaction", "eth_sendTransaction", "eth_sendTransaction"}, testRPC.calls)
+
+	// Let number 2 go second
+	testRPC.ethSendTransactionCond.L.Lock()
+	testRPC.ethSendTransactionReady = true
+	testRPC.ethSendTransactionCond.Broadcast()
+	testRPC.ethSendTransactionCond.L.Unlock()
+
+	// Wait for the completion
+	for len(testTxnContext1.errorReplies) == 0 || len(testRPC.calls) < 4 {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	assert.NotEmpty(testTxnContext1.errorReplies[0].gapFillTxHash)
+	assert.False(testTxnContext1.errorReplies[0].gapFillTxSucceeded)
+
+	assert.EqualValues([]string{"eth_getTransactionCount", "eth_sendTransaction", "eth_sendTransaction", "eth_sendTransaction"}, testRPC.calls)
 }
 
 func TestOnSendTransactionMessageFailedToGetNonce(t *testing.T) {
@@ -644,7 +841,7 @@ func TestOnSendTransactionMessageFailedToGetNonce(t *testing.T) {
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
 	}, &kldeth.RPCConf{}).(*txnProcessor)
-	txnProcessor.conf.PredictNonces = true
+	txnProcessor.conf.AlwaysManageNonce = true
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
@@ -656,6 +853,9 @@ func TestOnSendTransactionMessageFailedToGetNonce(t *testing.T) {
 	txnProcessor.Init(testRPC)
 
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.Equal("eth_getTransactionCount returned: poof", testTxnContext.errorReplies[0].err.Error())
 	assert.EqualValues([]string{"eth_getTransactionCount"}, testRPC.calls)
@@ -682,6 +882,9 @@ func TestOnSendTransactionMessageInflightNonce(t *testing.T) {
 	txnProcessor.Init(testRPC)
 
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testRPC.calls) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.Empty(testTxnContext.errorReplies)
 	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
@@ -708,6 +911,9 @@ func TestOnSendTransactionMessageOrionNoPrivacyGroup(t *testing.T) {
 	}
 	txnProcessor.Init(testRPC)
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.NotEmpty(testTxnContext.errorReplies)
 	assert.Empty(testTxnContext.replies)
@@ -731,10 +937,51 @@ func TestOnSendTransactionMessageOrionCannotUsePrivacyGroupIdAndPrivateFor(t *te
 		"  \"privacyGroupId\":\"o6fFj1vwysfp92Xt2GZlVuq14KX9HWn7oVJ+64Mfoic=\"" +
 		"}"
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.NotEmpty(testTxnContext.errorReplies)
 	assert.Empty(testTxnContext.replies)
 	assert.Regexp("privacyGroupId and privateFor are mutually exclusive", testTxnContext.errorReplies[0].err.Error())
+}
+
+func TestOnSendTransactionMessageOrionFailNonce(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime:    1,
+		OrionPrivateAPIS: true,
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] =
+		[]*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = "{" +
+		"  \"headers\":{\"type\": \"SendTransaction\"}," +
+		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
+		"  \"gas\":\"123\"," +
+		"  \"method\":{\"name\":\"test\"}," +
+		"  \"privateFrom\":\"jO6dpqnMhmnrCHqUumyK09+18diF7quq/rROGs2HFWI=\"," +
+		"  \"privateFor\":[\"2QiZG7rYPzRvRsioEn6oYUff1DOvPA22EZr0+/o3RUg=\"]" +
+		"}"
+	testRPC := &testRPC{
+		ethGetTransactionCountErr: fmt.Errorf("pop"),
+		privFindPrivacyGroupResult: []kldeth.OrionPrivacyGroup{
+			kldeth.OrionPrivacyGroup{
+				PrivacyGroupID: "P8SxRUussJKqZu4+nUkMJpscQeWOR3HqbAXLakatsk8=",
+			},
+		},
+	}
+	txnProcessor.Init(testRPC)
+
+	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	assert.NotEmpty(testTxnContext.errorReplies)
+	assert.Empty(testTxnContext.replies)
+	assert.EqualValues([]string{"priv_findPrivacyGroup", "priv_getTransactionCount"}, testRPC.calls)
 }
 
 func TestOnSendTransactionMessageOrion(t *testing.T) {
@@ -766,9 +1013,12 @@ func TestOnSendTransactionMessageOrion(t *testing.T) {
 	txnProcessor.Init(testRPC)
 
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testRPC.calls) < 3 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.Empty(testTxnContext.errorReplies)
-	assert.EqualValues([]string{"priv_findPrivacyGroup", "priv_getTransactionCount", "eth_sendTransaction"}, testRPC.calls)
+	assert.EqualValues([]string{"priv_findPrivacyGroup", "priv_getTransactionCount", "eea_sendTransaction"}, testRPC.calls)
 }
 
 func TestOnSendTransactionMessageOrionPrivacyGroupId(t *testing.T) {
@@ -795,9 +1045,12 @@ func TestOnSendTransactionMessageOrionPrivacyGroupId(t *testing.T) {
 	txnProcessor.Init(testRPC)
 
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testRPC.calls) < 2 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.Empty(testTxnContext.errorReplies)
-	assert.EqualValues([]string{"priv_getTransactionCount", "eth_sendTransaction"}, testRPC.calls)
+	assert.EqualValues([]string{"priv_getTransactionCount", "eea_sendTransaction"}, testRPC.calls)
 }
 
 func TestCobraInitTxnProcessor(t *testing.T) {
@@ -810,7 +1063,7 @@ func TestCobraInitTxnProcessor(t *testing.T) {
 		"-P",
 	})
 	assert.Equal(10, txconf.MaxTXWaitTime)
-	assert.Equal(true, txconf.PredictNonces)
+	assert.Equal(true, txconf.AlwaysManageNonce)
 }
 
 func TestOnSendTransactionAddressBook(t *testing.T) {
@@ -852,6 +1105,9 @@ func TestOnSendTransactionAddressBook(t *testing.T) {
 	txnProcessor.Init(testRPC)
 
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.EqualError(testTxnContext.errorReplies[0].err, "500 Internal Server Error ")
 }
@@ -873,6 +1129,9 @@ func TestOnDeployContractMessageFailAddressLookup(t *testing.T) {
 	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.EqualError(testTxnContext.errorReplies[0].err, "Error querying Addressbook")
 
@@ -892,6 +1151,9 @@ func TestOnDeployContractMessageFailHDWalletMissing(t *testing.T) {
 	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.EqualError(testTxnContext.errorReplies[0].err, "No HD Wallet Configuration")
 
@@ -912,6 +1174,9 @@ func TestOnDeployContractMessageFailHDWalletFail(t *testing.T) {
 	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
 	txnProcessor.OnMessage(testTxnContext)
+	for len(testTxnContext.errorReplies) == 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	assert.EqualError(testTxnContext.errorReplies[0].err, "HDWallet signing failed")
 

@@ -1080,6 +1080,34 @@ func TestNewContractWithTXSignerOK(t *testing.T) {
 	assert.Equal("0x746573746279746573", rpc.capturedArgs[0])
 }
 
+func TestNewNilTXSignerOK(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg kldmessages.DeployContract
+	msg.Parameters = []interface{}{}
+
+	signer := &mockTXSigner{
+		signed: []byte("testbytes"),
+		from:   "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+	}
+
+	// Build a normal SendMessage, but use it to generate a nil transfer
+	// transaction - for example to use as a fill transaction attempt.
+	// Note the gas and gasPrice are ignored
+	tx, err := NewNilTX("hd-u0abcd1234-u0bcde9876-12345", 12345, signer)
+	assert.Nil(err)
+	msgBytes, _ := json.Marshal(&msg)
+	log.Infof(string(msgBytes))
+
+	rpc := testRPCClient{}
+
+	tx.Send(context.Background(), &rpc)
+	assert.Equal("0", signer.capturedTX.GasPrice().String())
+	assert.Equal(uint64(90000), signer.capturedTX.Gas())
+	assert.Equal(uint64(12345), signer.capturedTX.Nonce())
+	assert.Equal("eth_sendRawTransaction", rpc.capturedMethod)
+}
+
 func TestSendTxnRPFError(t *testing.T) {
 	assert := assert.New(t)
 

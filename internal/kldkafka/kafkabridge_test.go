@@ -21,6 +21,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Shopify/sarama"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
@@ -250,14 +251,6 @@ func TestSingleMessageWithReply(t *testing.T) {
 	msgContext1.Unmarshal(&msgUnmarshaled)
 	assert.Equal(msg1.Headers.MsgType, msgUnmarshaled.Headers.MsgType)
 
-	// Send a duplicate
-	mockConsumer.MockMessages <- &sarama.ConsumerMessage{
-		Topic:     "in-topic",
-		Partition: 5,
-		Offset:    500,
-		Value:     msg1bytes,
-	}
-
 	// Send the reply in a go routine
 	go func() {
 		reply1 := kldmessages.ReplyCommon{}
@@ -373,6 +366,41 @@ func TestSingleMessageWithErrorReply(t *testing.T) {
 	wg.Wait()
 }
 
+func TestSingleMessageWithErrorReplyWithGapFillDetail(t *testing.T) {
+	assert := assert.New(t)
+
+	_, processor, mockConsumer, mockProducer, wg := setupMocks()
+
+	// Send a minimal test message
+	msg1 := kldmessages.RequestCommon{}
+	msg1.Headers.MsgType = "TestSingleMessageWithErrorReply"
+	msg1.Headers.Account = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
+	msg1bytes, _ := json.Marshal(&msg1)
+	log.Infof("Sent message: %s", string(msg1bytes))
+	mockConsumer.MockMessages <- &sarama.ConsumerMessage{Value: msg1bytes}
+
+	// Get the message via the processor
+	msgContext1 := <-processor.messages
+	assert.NotEmpty(msgContext1.Headers().ID) // Generated one as not supplied
+	go func() {
+		msgContext1.SendErrorReplyWithGapFill(400, fmt.Errorf("bang"), "txhash", true)
+	}()
+
+	// Check the reply is sent correctly to Kafka
+	replyKafkaMsg := <-mockProducer.MockInput
+	mockProducer.MockSuccesses <- replyKafkaMsg
+	replyBytes, _ := replyKafkaMsg.Value.Encode()
+	var errorReply kldmessages.ErrorReply
+	json.Unmarshal(replyBytes, &errorReply)
+	assert.Equal("bang", errorReply.ErrorMessage)
+	assert.Equal("txhash", errorReply.GapFillTxHash)
+	assert.Equal(true, *errorReply.GapFillSucceeded)
+
+	// Shut down
+	mockProducer.AsyncClose()
+	mockConsumer.Close()
+	wg.Wait()
+}
 func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 	assert := assert.New(t)
 
@@ -454,20 +482,62 @@ func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 
 }
 
+func TestAddInflightDuplicateMessage(t *testing.T) {
+	assert := assert.New(t)
+
+	k, _, mockConsumer, mockProducer, wg := setupMocks()
+
+	k.addInflightMsg(&sarama.ConsumerMessage{
+		Value:     []byte("first"),
+		Partition: 64,
+		Offset:    int64(42),
+		Topic:     "test",
+	}, mockProducer)
+
+	reqOffset := "test:64:42"
+
+	firstMessage, exists := k.inFlight[reqOffset]
+	assert.True(exists)
+
+	k.addInflightMsg(&sarama.ConsumerMessage{
+		Value:     []byte("duplicate offset"),
+		Partition: 64,
+		Offset:    int64(42),
+		Topic:     "test",
+	}, mockProducer)
+
+	assert.Equal(firstMessage, k.inFlight[reqOffset])
+
+	// Shut down
+	mockProducer.AsyncClose()
+	mockConsumer.Close()
+	wg.Wait()
+
+}
+
 func TestAddInflightMessageBadMessage(t *testing.T) {
 	assert := assert.New(t)
 
-	_, _, mockConsumer, mockProducer, wg := setupMocks()
+	k, _, mockConsumer, mockProducer, wg := setupMocks()
 
 	mockConsumer.MockMessages <- &sarama.ConsumerMessage{
 		Value:     []byte("badness"),
 		Partition: 64,
 		Offset:    int64(42),
+		Topic:     "test",
 	}
 
 	// Drain the producer
 	msg := <-mockProducer.MockInput
+	for exists := false; !exists; _, exists = k.inFlight["test:64:42"] {
+		time.Sleep(1 * time.Millisecond)
+	}
+
 	mockProducer.MockSuccesses <- msg
+
+	for mockConsumer.OffsetsByPartition[64] != 42 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	// Shut down
 	mockProducer.AsyncClose()
@@ -476,7 +546,6 @@ func TestAddInflightMessageBadMessage(t *testing.T) {
 
 	// Check we acknowledge all offsets
 	assert.Equal(int64(42), mockConsumer.OffsetsByPartition[64])
-
 }
 
 func TestProducerErrorLoopPanics(t *testing.T) {

@@ -389,7 +389,7 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 	callParam, _ := spec.NewRef("#/parameters/callParam")
 	privateFromParam, _ := spec.NewRef("#/parameters/privateFromParam")
 	privateForParam, _ := spec.NewRef("#/parameters/privateForParam")
-	privacyGroupIdParam, _ := spec.NewRef("#/parameters/privacyGroupIdParam")
+	privacyGroupIDParam, _ := spec.NewRef("#/parameters/privacyGroupIdParam")
 	registerParam, _ := spec.NewRef("#/parameters/registerParam")
 	blocknumberParam, _ := spec.NewRef("#/parameters/blocknumberParam")
 	op.Parameters = append(op.Parameters, spec.Parameter{
@@ -441,7 +441,7 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 		if c.orionPrivateAPI {
 			op.Parameters = append(op.Parameters, spec.Parameter{
 				Refable: spec.Refable{
-					Ref: privacyGroupIdParam,
+					Ref: privacyGroupIDParam,
 				},
 			})
 		}
@@ -653,6 +653,7 @@ func (c *ABI2Swagger) buildArgumentsDefinition(defs map[string]spec.Schema, name
 
 	s := spec.Schema{
 		SchemaProps: spec.SchemaProps{
+			Type:       []string{"object"},
 			Properties: make(map[string]spec.Schema),
 		},
 	}

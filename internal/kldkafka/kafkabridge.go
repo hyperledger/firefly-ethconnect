@@ -256,6 +256,15 @@ func (c *msgContext) SendErrorReply(status int, err error) {
 	c.SendErrorReplyWithTX(status, err, "")
 }
 
+func (c *msgContext) SendErrorReplyWithGapFill(status int, err error, gapFillTxHash string, gapFillSucceeded bool) {
+	log.Warnf("Failed to process message %s: %s", c, err)
+	errMsg := kldmessages.NewErrorReply(err, c.saramaMsg.Value)
+	errMsg.GapFillTxHash = gapFillTxHash
+	var bGap = gapFillSucceeded
+	errMsg.GapFillSucceeded = &bGap
+	c.Reply(errMsg)
+}
+
 func (c *msgContext) SendErrorReplyWithTX(status int, err error, txHash string) {
 	log.Warnf("Failed to process message %s: %s", c, err)
 	errMsg := kldmessages.NewErrorReply(err, c.saramaMsg.Value)

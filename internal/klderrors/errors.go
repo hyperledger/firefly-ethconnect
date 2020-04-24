@@ -368,6 +368,9 @@ const (
 	// TransactionSendReceiptCheckTimeout we didn't have a problem asking the node for a receipt, but the transaction wasn't mined at the end of the timeout
 	TransactionSendReceiptCheckTimeout = "Timed out waiting for transaction receipt"
 
+	// TransactionCallInvalidBlockNumber on "eth_call" the optional parameter for the target blocknumber failed to parse to a big integer
+	TransactionCallInvalidBlockNumber = "Invalid blocknumber. Failed to parse into big integer"
+
 	// UnpackOutputsFailed RLP decoding of outputs, logs, or events failed
 	UnpackOutputsFailed = "Failed to unpack values: %s"
 	// UnpackOutputsMismatch RLP decoding of output gave an unexpected type according to the ABI

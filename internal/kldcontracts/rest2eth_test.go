@@ -1104,16 +1104,6 @@ func TestCallReadOnlyMethodViaPOSTSuccess(t *testing.T) {
 	assert.Equal(200, res.Result().StatusCode)
 	assert.Equal("eth_call", mockRPC.capturedMethod)
 	assert.Equal("pending", mockRPC.capturedArgs[1])
-
-	to = "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
-	dispatcher = &mockREST2EthDispatcher{}
-	_, mockRPC, router, res, _ = newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
-	req = httptest.NewRequest("POST", "/contracts/"+to+"/get?kld-blocknumber=ab1234", bytes.NewReader([]byte{}))
-	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
-	router.ServeHTTP(res, req)
-	assert.Equal(200, res.Result().StatusCode)
-	assert.Equal("eth_call", mockRPC.capturedMethod)
-	assert.Equal("latest", mockRPC.capturedArgs[1])
 }
 
 func TestCallMethodFail(t *testing.T) {
@@ -1134,6 +1124,14 @@ func TestCallMethodFail(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Regexp("Call failed: pop", reply.Message)
+
+	to = "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
+	dispatcher = &mockREST2EthDispatcher{}
+	_, mockRPC, router, res, _ = newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	req = httptest.NewRequest("POST", "/contracts/"+to+"/get?kld-blocknumber=ab1234", bytes.NewReader([]byte{}))
+	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
+	router.ServeHTTP(res, req)
+	assert.Equal(500, res.Result().StatusCode)
 }
 
 func TestCallMethodViaABIBadAddress(t *testing.T) {

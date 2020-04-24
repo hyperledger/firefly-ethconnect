@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"math/big"
 	"reflect"
 	"regexp"
@@ -142,12 +141,7 @@ func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr 
 			if !ok {
 				return nil, klderrors.Errorf(klderrors.TransactionCallInvalidBlockNumber)
 			} else {
-				bits := n.BitLen()
-				if bits == 0 {
-					callOption = "0x0"
-				} else {
-					callOption = fmt.Sprintf("%#x", n)
-				}
+				callOption = hexutil.EncodeBig(n)
 			}
 		}
 	}

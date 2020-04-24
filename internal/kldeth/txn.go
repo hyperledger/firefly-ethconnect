@@ -130,7 +130,7 @@ func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr 
 		return nil, err
 	}
 	callOption := "latest"
-	// only allowed values are "latest", "", a number string "12345" or a hex number "0xab23"
+	// only allowed values are "earliest/latest/pending", "", a number string "12345" or a hex number "0xab23"
 	// "latest" and "" (no kld-blocknumber given) are equivalent
 	if blocknumber != "" && blocknumber != "latest" {
 		isHex, _ := regexp.MatchString(`^0x[0-9a-fA-F]+$`, blocknumber)
@@ -140,8 +140,7 @@ func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr 
 			n := new(big.Int)
 			n, ok := n.SetString(blocknumber, 10)
 			if !ok {
-				log.Warnf("Failed to convert blocknumber to big integer: %s", blocknumber)
-				// when failed to convert, use "latest"
+				return nil, klderrors.Errorf(klderrors.TransactionCallInvalidBlockNumber)
 			} else {
 				bits := n.BitLen()
 				if bits == 0 {

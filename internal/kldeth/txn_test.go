@@ -772,6 +772,47 @@ func TestCallMethod(t *testing.T) {
 	assert.Equal("0x0", jsonSent["gasPrice"])
 	assert.Equal("0x3039", jsonSent["value"])
 	assert.Regexp("0xe5537abb000000000000000000000000000000000000000000000000000000000000007b000000000000000000000000000000000000000000000000000000000000007b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000aa983ad2a0e0ed8ac639277f37be42f2a5d2618c00000000000000000000000000000000000000000000000000000000000000036162630000000000000000000000000000000000000000000000000000000000", jsonSent["data"])
+	assert.Equal("latest", rpc.capturedArgs[1])
+
+	res, err = CallMethod(context.Background(), rpc, nil,
+		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
+		json.Number("12345"), method, params, "pending")
+	assert.NoError(err)
+	assert.Equal("eth_call", rpc.capturedMethod2)
+	assert.Equal("pending", rpc.capturedArgs2[1])
+
+	res, err = CallMethod(context.Background(), rpc, nil,
+		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
+		json.Number("12345"), method, params, "earliest")
+	assert.NoError(err)
+	assert.Equal("eth_call", rpc.capturedMethod2)
+	assert.Equal("earliest", rpc.capturedArgs2[1])
+
+	res, err = CallMethod(context.Background(), rpc, nil,
+		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
+		json.Number("12345"), method, params, "0x1234")
+	assert.NoError(err)
+	assert.Equal("eth_call", rpc.capturedMethod2)
+	assert.Equal("0x1234", rpc.capturedArgs2[1])
+
+	res, err = CallMethod(context.Background(), rpc, nil,
+		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
+		json.Number("12345"), method, params, "12345")
+	assert.NoError(err)
+	assert.Equal("eth_call", rpc.capturedMethod2)
+	assert.Equal("0x3039", rpc.capturedArgs2[1])
+
+	res, err = CallMethod(context.Background(), rpc, nil,
+		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
+		json.Number("12345"), method, params, "0")
+	assert.NoError(err)
+	assert.Equal("eth_call", rpc.capturedMethod2)
+	assert.Equal("0x0", rpc.capturedArgs2[1])
 }
 
 func TestCallMethodFail(t *testing.T) {
@@ -793,6 +834,12 @@ func TestCallMethodFail(t *testing.T) {
 
 	assert.Equal("eth_call", rpc.capturedMethod)
 	assert.EqualError(err, "Call failed: pop")
+
+	_, err = CallMethod(context.Background(), rpc, nil,
+		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
+		json.Number("12345"), method, params, "ab2345")
+	assert.EqualError(err, "Invalid blocknumber. Failed to parse into big integer")
 }
 
 func TestCallMethodRevert(t *testing.T) {

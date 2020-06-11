@@ -180,6 +180,21 @@ func TestBatchSizeCap(t *testing.T) {
 	defer stream.stop()
 
 	assert.Equal(uint64(MaxBatchSize), stream.spec.BatchSize)
+	assert.Equal("", stream.spec.Name)
+}
+
+func TestStreamName(t *testing.T) {
+	assert := assert.New(t)
+	_, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			Name:    "testStream",
+			Webhook: &webhookAction{},
+		}, 200)
+	defer close(eventStream)
+	defer svr.Close()
+	defer stream.stop()
+
+	assert.Equal("testStream", stream.spec.Name)
 }
 
 func TestBlockingBehavior(t *testing.T) {

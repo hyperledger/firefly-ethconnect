@@ -180,6 +180,21 @@ func TestBatchSizeCap(t *testing.T) {
 	defer stream.stop()
 
 	assert.Equal(uint64(MaxBatchSize), stream.spec.BatchSize)
+	assert.Equal("", stream.spec.Name)
+}
+
+func TestStreamName(t *testing.T) {
+	assert := assert.New(t)
+	_, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			Name:    "testStream",
+			Webhook: &webhookAction{},
+		}, 200)
+	defer close(eventStream)
+	defer svr.Close()
+	defer stream.stop()
+
+	assert.Equal("testStream", stream.spec.Name)
 }
 
 func TestBlockingBehavior(t *testing.T) {
@@ -405,7 +420,8 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 	}
 	addr := kldbind.HexToAddress("0x167f57a13a9c35ff92f0649d2be0e52b4f8ac3ca")
 	ctx := context.Background()
-	s, _ := sm.AddSubscription(ctx, &addr, event, stream.spec.ID, "")
+	subscriptionName := "testSub"
+	s, _ := sm.AddSubscription(ctx, &addr, event, stream.spec.ID, "", subscriptionName)
 	return s
 }
 

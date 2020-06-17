@@ -15,7 +15,6 @@
 package kldevents
 
 import (
-	"encoding/json"
 	"math/big"
 	"strconv"
 	"strings"
@@ -32,7 +31,7 @@ import (
 type logEntry struct {
 	Address          kldbind.Address   `json:"address"`
 	BlockNumber      kldbind.HexBigInt `json:"blockNumber"`
-	TransactionIndex json.Number       `json:"transactionIndex"`
+	TransactionIndex kldbind.HexUint   `json:"transactionIndex"`
 	TransactionHash  kldbind.Hash      `json:"transactionHash"`
 	Data             string            `json:"data"`
 	Topics           []*kldbind.Hash   `json:"topics"`

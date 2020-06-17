@@ -1594,7 +1594,7 @@ func TestAddStreamNoSubMgr(t *testing.T) {
 
 func TestAddStreamOK(t *testing.T) {
 	assert := assert.New(t)
-	spec := &kldevents.StreamInfo{Type: "webhook"}
+	spec := &kldevents.StreamInfo{Type: "webhook", Name: "stream-1"}
 	b, _ := json.Marshal(spec)
 	req := httptest.NewRequest("POST", kldevents.StreamPathPrefix, bytes.NewReader(b))
 	res := httptest.NewRecorder()
@@ -1607,6 +1607,7 @@ func TestAddStreamOK(t *testing.T) {
 	json.NewDecoder(res.Body).Decode(&newSpec)
 	assert.Equal(200, res.Result().StatusCode)
 	assert.Equal("webhook", newSpec.Type)
+	assert.Equal("stream-1", newSpec.Name)
 	s.Shutdown()
 }
 
@@ -1653,15 +1654,15 @@ func TestListStreams(t *testing.T) {
 
 	mockSubMgr := &mockSubMgr{
 		streams: []*kldevents.StreamInfo{
-			&kldevents.StreamInfo{
+			{
 				TimeSorted: kldmessages.TimeSorted{
 					CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
-				}, ID: "earlier",
+				}, ID: "earlier", Name: "stream-1",
 			},
-			&kldevents.StreamInfo{
+			{
 				TimeSorted: kldmessages.TimeSorted{
 					CreatedISO8601: time.Now().UTC().Add(1 * time.Hour).Format(time.RFC3339),
-				}, ID: "later",
+				}, ID: "later", Name: "stream-2",
 			},
 		},
 	}
@@ -1670,7 +1671,9 @@ func TestListStreams(t *testing.T) {
 	assert.Equal(200, res.Result().StatusCode)
 	assert.Equal(2, len(results))
 	assert.Equal("later", results[0].ID)
+	assert.Equal("stream-2", results[0].Name)
 	assert.Equal("earlier", results[1].ID)
+	assert.Equal("stream-1", results[1].Name)
 }
 
 func TestListSubs(t *testing.T) {

@@ -107,6 +107,7 @@ func TestInitLevelDBFail(t *testing.T) {
 func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)
+	subscriptionName := "testSub"
 	defer cleanup(t, dir)
 	sm := newTestSubscriptionManager()
 	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
@@ -123,7 +124,7 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	})
 	assert.NoError(err)
 
-	sub, err := sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "ping"}, stream.ID, "")
+	sub, err := sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "ping"}, stream.ID, "", subscriptionName)
 	assert.NoError(err)
 	assert.Equal(stream.ID, sub.Stream)
 
@@ -195,7 +196,7 @@ func TestActionChildCleanup(t *testing.T) {
 	})
 	assert.NoError(err)
 
-	_, err = sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "ping"}, stream.ID, "12345")
+	_, err = sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "ping"}, stream.ID, "12345", "")
 	err = sm.DeleteStream(ctx, stream.ID)
 	assert.NoError(err)
 
@@ -231,11 +232,11 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	err = sm.DeleteStream(ctx, "teststream")
 	assert.EqualError(err, "pop")
 
-	_, err = sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "any"}, "nope", "")
+	_, err = sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "any"}, "nope", "", "")
 	assert.EqualError(err, "Stream with ID 'nope' not found")
-	_, err = sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "any"}, "teststream", "")
+	_, err = sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "any"}, "teststream", "", "test")
 	assert.EqualError(err, "Failed to store subscription: pop")
-	_, err = sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "any"}, "teststream", "!bad integer")
+	_, err = sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "any"}, "teststream", "!bad integer", "")
 	assert.EqualError(err, "FromBlock cannot be parsed as a BigInt")
 	sm.subscriptions["testsub"] = &subscription{info: &SubscriptionInfo{}, rpc: sm.rpc}
 	err = sm.DeleteSubscription(ctx, "nope")

@@ -43,13 +43,14 @@ type ethFilter struct {
 // SubscriptionInfo is the persisted data for the subscription
 type SubscriptionInfo struct {
 	kldmessages.TimeSorted
-	ID        string                     `json:"id,omitempty"`
-	Path      string                     `json:"path"`
-	Name      string                     `json:"name"`
-	Stream    string                     `json:"stream"`
-	Filter    persistedFilter            `json:"filter"`
-	Event     kldbind.MarshalledABIEvent `json:"event"`
-	FromBlock string                     `json:"fromBlock,omitempty"`
+	ID         string                     `json:"id,omitempty"`
+	Path       string                     `json:"path"`
+	Name       string                     `json:"name"`
+	CustomName string                     `json:"customName,omitempty"`
+	Stream     string                     `json:"stream"`
+	Filter     persistedFilter            `json:"filter"`
+	Event      kldbind.MarshalledABIEvent `json:"event"`
+	FromBlock  string                     `json:"fromBlock,omitempty"`
 }
 
 // subscription is the runtime that manages the subscription

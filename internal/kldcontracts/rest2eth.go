@@ -432,7 +432,9 @@ func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, ad
 		address := common.HexToAddress(addrStr)
 		addr = &address
 	}
-	sub, err := r.subMgr.AddSubscription(req.Context(), addr, abiEvent, streamID, fromBlock)
+	// it is ok to have "" in customName for the subscription (legacy behavior)
+	customName := r.fromBodyOrForm(req, body, "customName")
+	sub, err := r.subMgr.AddSubscription(req.Context(), addr, abiEvent, streamID, fromBlock, customName)
 	if err != nil {
 		r.restErrReply(res, req, err, 400)
 		return

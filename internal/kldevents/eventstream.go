@@ -55,7 +55,7 @@ const (
 type StreamInfo struct {
 	kldmessages.TimeSorted
 	ID                   string         `json:"id"`
-	Name                 string         `json:"name",omitempty`
+	Name                 string         `json:"name,omitempty"`
 	Path                 string         `json:"path"`
 	Suspended            bool           `json:"suspended"`
 	Type                 string         `json:"type,omitempty"`

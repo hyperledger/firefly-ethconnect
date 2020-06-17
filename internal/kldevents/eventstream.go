@@ -55,6 +55,7 @@ const (
 type StreamInfo struct {
 	kldmessages.TimeSorted
 	ID                   string         `json:"id"`
+	Name                 string         `json:"name,omitempty"`
 	Path                 string         `json:"path"`
 	Suspended            bool           `json:"suspended"`
 	Type                 string         `json:"type,omitempty"`
@@ -422,7 +423,7 @@ func (a *eventStream) performActionWithRetry(batchNumber uint64, events []*event
 	complete := false
 	for !a.suspendOrStop() && !complete {
 		if attempt > 0 {
-			log.Infof("%s: Watiting %.2fs before re-attempting batch %d", a.spec.ID, delay.Seconds(), batchNumber)
+			log.Infof("%s: Waiting %.2fs before re-attempting batch %d", a.spec.ID, delay.Seconds(), batchNumber)
 			time.Sleep(delay)
 			delay = time.Duration(float64(delay) * a.backoffFactor)
 		}

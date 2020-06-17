@@ -45,7 +45,8 @@ type SubscriptionInfo struct {
 	kldmessages.TimeSorted
 	ID        string                     `json:"id,omitempty"`
 	Path      string                     `json:"path"`
-	Name      string                     `json:"name"`
+	Summary   string                     `json:"-"`    // System generated name for the subscription
+	Name      string                     `json:"name"` // User provided name for the subscription, set to Summary if missing
 	Stream    string                     `json:"stream"`
 	Filter    persistedFilter            `json:"filter"`
 	Event     kldbind.MarshalledABIEvent `json:"event"`
@@ -83,13 +84,18 @@ func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind
 		addrStr = addr.String()
 	}
 	event := &i.Event.E
-	i.Name = addrStr + ":" + event.Sig()
+	i.Summary = addrStr + ":" + event.Sig()
+	// If a name was not provided by the end user, set it to the system generated summary
+	if i.Name == "" {
+		log.Debugf("No name provided for subscription, using auto-generated summary:%s", i.Summary)
+		i.Name = i.Summary
+	}
 	if event == nil || event.Name == "" {
 		return nil, klderrors.Errorf(klderrors.EventStreamsSubscribeNoEvent)
 	}
 	// For now we only support filtering on the event type
-	f.Topics = [][]kldbind.Hash{[]kldbind.Hash{event.ID()}}
-	log.Infof("Created subscription %s %s topic:%s", i.ID, i.Name, event.ID().String())
+	f.Topics = [][]kldbind.Hash{{event.ID()}}
+	log.Infof("Created subscription ID:%s name:%s topic:%s", i.ID, i.Name, event.ID().String())
 	return s, nil
 }
 

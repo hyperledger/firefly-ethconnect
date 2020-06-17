@@ -78,7 +78,7 @@ const testFromAddr = "0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1"
 
 var goodDeployTxnJSON = "{" +
 	"  \"headers\":{\"type\": \"DeployContract\"}," +
-	"  \"solidity\":\"pragma solidity >=0.4.22 <0.6.0; contract t {constructor() public {}}\"," +
+	"  \"solidity\":\"pragma solidity >=0.4.22 <0.6.9; contract t {constructor() public {}}\"," +
 	"  \"from\":\"" + testFromAddr + "\"," +
 	"  \"nonce\":\"123\"," +
 	"  \"gas\":\"123\"" +
@@ -86,7 +86,7 @@ var goodDeployTxnJSON = "{" +
 
 var goodHDWalletDeployTxnJSON = "{" +
 	"  \"headers\":{\"type\": \"DeployContract\"}," +
-	"  \"solidity\":\"pragma solidity >=0.4.22 <0.6.0; contract t {constructor() public {}}\"," +
+	"  \"solidity\":\"pragma solidity >=0.4.22 <0.6.9; contract t {constructor() public {}}\"," +
 	"  \"from\":\"hd-testinst-testwallet-1234\"," +
 	"  \"nonce\":\"123\"," +
 	"  \"gas\":\"123\"" +
@@ -101,7 +101,7 @@ var goodSendTxnJSON = "{" +
 
 var goodDeployTxnPrivateJSON = "{" +
 	"  \"headers\":{\"type\": \"DeployContract\"}," +
-	"  \"solidity\":\"pragma solidity >=0.4.22 <0.6.0; contract t {constructor() public {}}\"," +
+	"  \"solidity\":\"pragma solidity >=0.4.22 <0.6.9; contract t {constructor() public {}}\"," +
 	"  \"from\":\"" + testFromAddr + "\"," +
 	"  \"nonce\":\"123\"," +
 	"  \"gas\":\"123\"," +
@@ -608,7 +608,7 @@ func TestOnSendTransactionMessageBadNonce(t *testing.T) {
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
 		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
-		"  \"nonce\":\"abc\"" +
+		"  \"nonce\":\"123.4\"" +
 		"}"
 	txnProcessor.OnMessage(testTxnContext)
 	for len(testTxnContext.errorReplies) == 0 {
@@ -630,7 +630,7 @@ func TestOnSendTransactionMessageBadMsg(t *testing.T) {
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
 		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
 		"  \"nonce\":\"123\"," +
-		"  \"value\":\"abc\"," +
+		"  \"value\":\"123.456\"," +
 		"  \"method\":{\"name\":\"test\"}" +
 		"}"
 	txnProcessor.OnMessage(testTxnContext)

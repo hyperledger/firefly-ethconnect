@@ -77,15 +77,15 @@ func TestCreateWebhookSub(t *testing.T) {
 		Name:    "glastonbury",
 		RawName: "glastonbury",
 		Inputs: []kldbind.ABIArgument{
-			kldbind.ABIArgument{
+			{
 				Name: "field",
 				Type: kldbind.ABITypeKnown("address"),
 			},
-			kldbind.ABIArgument{
+			{
 				Name: "tents",
 				Type: kldbind.ABITypeKnown("uint256"),
 			},
-			kldbind.ABIArgument{
+			{
 				Name: "mud",
 				Type: kldbind.ABITypeKnown("bool"),
 			},
@@ -105,6 +105,7 @@ func TestCreateWebhookSub(t *testing.T) {
 
 	assert.Equal(s.info.ID, s1.info.ID)
 	assert.Equal("*:glastonbury(address,uint256,bool)", s1.info.Name)
+	assert.Equal("*:glastonbury(address,uint256,bool)", s1.info.Summary)
 	assert.Equal(event.ID(), s.info.Filter.Topics[0][0])
 }
 
@@ -120,11 +121,14 @@ func TestCreateWebhookSubWithAddr(t *testing.T) {
 	}
 
 	addr := kldbind.HexToAddress("0x0123456789abcDEF0123456789abCDef01234567")
-	s, err := newSubscription(m, rpc, &addr, testSubInfo(event))
+	subInfo := testSubInfo(event)
+	subInfo.Name = "mySubscription"
+	s, err := newSubscription(m, rpc, &addr, subInfo)
 	assert.NoError(err)
 	assert.NotEmpty(s.info.ID)
 	assert.Equal(event.ID(), s.info.Filter.Topics[0][0])
-	assert.Equal("0x0123456789abcDEF0123456789abCDef01234567:devcon()", s.info.Name)
+	assert.Equal("0x0123456789abcDEF0123456789abCDef01234567:devcon()", s.info.Summary)
+	assert.Equal("mySubscription", s.info.Name)
 }
 
 func TestCreateSubscriptionNoEvent(t *testing.T) {

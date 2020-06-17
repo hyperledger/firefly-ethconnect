@@ -154,7 +154,7 @@ func (m *mockSubMgr) ResumeStream(ctx context.Context, id string) error {
 	return m.err
 }
 func (m *mockSubMgr) DeleteStream(ctx context.Context, id string) error { return m.err }
-func (m *mockSubMgr) AddSubscription(ctx context.Context, addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock, customName string) (*kldevents.SubscriptionInfo, error) {
+func (m *mockSubMgr) AddSubscription(ctx context.Context, addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock, name string) (*kldevents.SubscriptionInfo, error) {
 	m.capturedAddr = addr
 	return m.sub, m.err
 }
@@ -1247,7 +1247,7 @@ func TestSubscribeNoAddressSuccess(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{}
 	r, _, router := newTestREST2Eth(dispatcher)
 	sm := &mockSubMgr{
-		sub: &kldevents.SubscriptionInfo{ID: "sub1"},
+		sub: &kldevents.SubscriptionInfo{ID: "sub1", Name: "stream-without-address"},
 	}
 	r.subMgr = sm
 	bodyBytes, _ := json.Marshal(&map[string]string{
@@ -1262,6 +1262,7 @@ func TestSubscribeNoAddressSuccess(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("sub1", reply.ID)
+	assert.Equal("stream-without-address", reply.Name)
 	assert.Nil(sm.capturedAddr)
 }
 

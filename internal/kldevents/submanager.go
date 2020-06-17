@@ -52,7 +52,7 @@ type SubscriptionManager interface {
 	SuspendStream(ctx context.Context, id string) error
 	ResumeStream(ctx context.Context, id string) error
 	DeleteStream(ctx context.Context, id string) error
-	AddSubscription(ctx context.Context, addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock, customName string) (*SubscriptionInfo, error)
+	AddSubscription(ctx context.Context, addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock, name string) (*SubscriptionInfo, error)
 	Subscriptions(ctx context.Context) []*SubscriptionInfo
 	SubscriptionByID(ctx context.Context, id string) (*SubscriptionInfo, error)
 	DeleteSubscription(ctx context.Context, id string) error
@@ -125,7 +125,7 @@ func (s *subscriptionMGR) Subscriptions(ctx context.Context) []*SubscriptionInfo
 }
 
 // AddSubscription adds a new subscription
-func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock, customName string) (*SubscriptionInfo, error) {
+func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock, name string) (*SubscriptionInfo, error) {
 	i := &SubscriptionInfo{
 		TimeSorted: kldmessages.TimeSorted{
 			CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
@@ -144,9 +144,6 @@ func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *kldbind.Add
 			return nil, klderrors.Errorf(klderrors.EventStreamsSubscribeBadBlock)
 		}
 		i.FromBlock = bi.Text(10)
-	}
-	if customName != "" {
-		i.CustomName = customName
 	}
 	// Create it
 	sub, err := newSubscription(s, s.rpc, addr, i)

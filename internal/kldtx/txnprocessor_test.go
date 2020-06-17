@@ -605,9 +605,6 @@ func TestOnSendTransactionMessageBadNonce(t *testing.T) {
 
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
-	// Guessing this is a go version behavior change: using `abc` for nonce throws an error in parsing the
-	// json in the test file: "json: invalid number literal, trying to unmarshal "\"abc\"" into Number"
-	// instead of throwing an error in txn processing logic
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
 		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +
@@ -629,9 +626,6 @@ func TestOnSendTransactionMessageBadMsg(t *testing.T) {
 
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{}, &kldeth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
-	// Guessing this is a go version behavior change: using `abc` for nonce throws an error in parsing the
-	// json in the test file: "json: invalid number literal, trying to unmarshal "\"abc\"" into Number"
-	// instead of throwing an error in txn processing logic
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
 		"  \"from\":\"0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1\"," +

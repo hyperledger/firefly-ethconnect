@@ -35,6 +35,9 @@ type HexBigInt = hexutil.Big
 // HexUint64 models and serializes uint64
 type HexUint64 = hexutil.Uint64
 
+// HexUint models and serializes uint
+type HexUint = hexutil.Uint
+
 // ABIEvent is an event on the ABI
 type ABIEvent = abi.Event
 

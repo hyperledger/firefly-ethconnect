@@ -369,7 +369,7 @@ func TestBuildup(t *testing.T) {
 
 }
 
-func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, stream *eventStream) *SubscriptionInfo {
+func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, stream *eventStream, subscriptionName string) *SubscriptionInfo {
 	log.SetLevel(log.DebugLevel)
 	testDataBytes, err := ioutil.ReadFile("../../test/simplevents_logs.json")
 	assert.NoError(err)
@@ -393,26 +393,26 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 	event := &kldbind.ABIEvent{
 		Name: "Changed",
 		Inputs: []kldbind.ABIArgument{
-			kldbind.ABIArgument{
+			{
 				Name:    "from",
 				Type:    kldbind.ABITypeKnown("address"),
 				Indexed: true,
 			},
-			kldbind.ABIArgument{
+			{
 				Name:    "i",
 				Type:    kldbind.ABITypeKnown("int64"),
 				Indexed: true,
 			},
-			kldbind.ABIArgument{
+			{
 				Name:    "s",
 				Type:    kldbind.ABITypeKnown("string"),
 				Indexed: true,
 			},
-			kldbind.ABIArgument{
+			{
 				Name: "h",
 				Type: kldbind.ABITypeKnown("bytes32"),
 			},
-			kldbind.ABIArgument{
+			{
 				Name: "m",
 				Type: kldbind.ABITypeKnown("string"),
 			},
@@ -420,7 +420,6 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 	}
 	addr := kldbind.HexToAddress("0x167f57a13a9c35ff92f0649d2be0e52b4f8ac3ca")
 	ctx := context.Background()
-	subscriptionName := "testSub"
 	s, _ := sm.AddSubscription(ctx, &addr, event, stream.spec.ID, "", subscriptionName)
 	return s
 }
@@ -438,7 +437,8 @@ func TestProcessEventsEnd2End(t *testing.T) {
 	sm.db, _ = kldkvstore.NewLDBKeyValueStore(dir)
 	defer svr.Close()
 
-	s := setupTestSubscription(assert, sm, stream)
+	s := setupTestSubscription(assert, sm, stream, "mySubName")
+	assert.Equal("mySubName", s.Name)
 
 	// We expect three events to be sent to the webhook
 	// With the default batch size of 1, that means three separate requests
@@ -492,7 +492,8 @@ func TestCheckpointRecovery(t *testing.T) {
 		wg.Done()
 	}()
 
-	s := setupTestSubscription(assert, sm, stream)
+	s := setupTestSubscription(assert, sm, stream, "myTestSub")
+	assert.Equal("myTestSub", s.Name)
 
 	for {
 		time.Sleep(1 * time.Millisecond)
@@ -550,7 +551,7 @@ func TestWithoutCheckpointRecovery(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
-	s := setupTestSubscription(assert, sm, stream)
+	s := setupTestSubscription(assert, sm, stream, "")
 
 	var initialEndBlock string
 	sub := sm.subscriptions[s.ID]
@@ -591,7 +592,7 @@ func TestMarkStaleOnError(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
-	s := setupTestSubscription(assert, sm, stream)
+	s := setupTestSubscription(assert, sm, stream, "")
 	sm.subscriptions[s.ID].filterStale = false
 
 	sub := sm.subscriptions[s.ID]
@@ -651,7 +652,7 @@ func TestStoreCheckpointStoreError(t *testing.T) {
 		}
 		wg.Done()
 	}()
-	setupTestSubscription(assert, sm, stream)
+	setupTestSubscription(assert, sm, stream, "")
 	wg.Wait()
 
 	stream.suspend()

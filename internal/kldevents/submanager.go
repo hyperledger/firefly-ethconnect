@@ -135,6 +135,10 @@ func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *kldbind.Add
 		Stream: streamID,
 	}
 	i.Path = SubPathPrefix + "/" + i.ID
+	// Set any user supplied a name for the subscription
+	if name != "" {
+		i.Name = name
+	}
 	// Check initial block number to subscribe from
 	if initialBlock == "" || initialBlock == FromBlockLatest {
 		i.FromBlock = FromBlockLatest

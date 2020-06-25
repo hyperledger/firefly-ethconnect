@@ -49,6 +49,7 @@ type SubscriptionManager interface {
 	AddStream(ctx context.Context, spec *StreamInfo) (*StreamInfo, error)
 	Streams(ctx context.Context) []*StreamInfo
 	StreamByID(ctx context.Context, id string) (*StreamInfo, error)
+	UpdateStream(ctx context.Context, id string, spec *StreamInfo) (*StreamInfo, error)
 	SuspendStream(ctx context.Context, id string) error
 	ResumeStream(ctx context.Context, id string) error
 	DeleteStream(ctx context.Context, id string) error
@@ -217,6 +218,19 @@ func (s *subscriptionMGR) AddStream(ctx context.Context, spec *StreamInfo) (*Str
 	}
 	s.streams[stream.spec.ID] = stream
 	return s.storeStream(stream.spec)
+}
+
+// UpdateStream updates an existing stream
+func (s *subscriptionMGR) UpdateStream(ctx context.Context, id string, spec *StreamInfo) (*StreamInfo, error) {
+	stream, err := s.streamByID(id)
+	if err != nil {
+		return nil, err
+	}
+	updatedSpec, err := stream.update(spec)
+	if err != nil {
+		return nil, err
+	}
+	return s.storeStream(updatedSpec)
 }
 
 func (s *subscriptionMGR) storeStream(spec *StreamInfo) (*StreamInfo, error) {

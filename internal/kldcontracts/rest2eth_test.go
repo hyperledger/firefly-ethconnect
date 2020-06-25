@@ -141,6 +141,9 @@ func (m *mockSubMgr) Init() error { return m.err }
 func (m *mockSubMgr) AddStream(ctx context.Context, spec *kldevents.StreamInfo) (*kldevents.StreamInfo, error) {
 	return spec, m.err
 }
+func (m *mockSubMgr) UpdateStream(ctx context.Context, id string, spec *kldevents.StreamInfo) (*kldevents.StreamInfo, error) {
+	return m.stream, m.err
+}
 func (m *mockSubMgr) Streams(ctx context.Context) []*kldevents.StreamInfo { return m.streams }
 func (m *mockSubMgr) StreamByID(ctx context.Context, id string) (*kldevents.StreamInfo, error) {
 	return m.stream, m.err

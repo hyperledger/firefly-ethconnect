@@ -90,6 +90,9 @@ type eventStream struct {
 	batchCount        uint64
 	initialRetryDelay time.Duration
 	backoffFactor     float64
+	updateSync        sync.Mutex
+	updateCtx         context.Context
+	cancelFn          context.CancelFunc
 }
 
 // newEventStream constructor verfies the action is correct, kicks
@@ -150,6 +153,8 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo) (a *eventStream, e
 		// Let's us do this from UTs, without exposing it
 		a.pollingInterval = 10 * time.Millisecond
 	}
+	// create a context that can be used to indicate an update to the eventstream
+	a.updateCtx, a.cancelFn = context.WithCancel(context.Background())
 	go a.eventPoller()
 	go a.batchProcessor()
 	go a.batchDispatcher()
@@ -159,6 +164,47 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo) (a *eventStream, e
 // GetID returns the ID (for sorting)
 func (spec *StreamInfo) GetID() string {
 	return spec.ID
+}
+
+// update modifies an existing eventStream
+func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) {
+	a.suspend()  // suspend the stream because we could be updating some of the stream parameters
+	a.cancelFn() // invoke the cancel function so that the
+
+	if a.spec.BatchSize != newSpec.BatchSize && newSpec.BatchSize != 0 && newSpec.BatchSize < MaxBatchSize {
+		a.spec.BatchSize = newSpec.BatchSize
+	}
+	if a.spec.BatchTimeoutMS != newSpec.BatchTimeoutMS && newSpec.BatchTimeoutMS != 0 {
+		a.spec.BatchTimeoutMS = newSpec.BatchTimeoutMS
+	}
+	if a.spec.BlockedRetryDelaySec != newSpec.BlockedRetryDelaySec && newSpec.BlockedRetryDelaySec != 0 {
+		a.spec.BlockedRetryDelaySec = newSpec.BlockedRetryDelaySec
+	}
+	if strings.ToLower(newSpec.ErrorHandling) == ErrorHandlingBlock {
+		a.spec.ErrorHandling = ErrorHandlingBlock
+	} else {
+		a.spec.ErrorHandling = ErrorHandlingSkip
+	}
+	if a.spec.Name != newSpec.Name {
+		a.spec.Name = newSpec.Name
+	}
+	if newSpec.Webhook != nil {
+		if newSpec.Webhook.URL == "" {
+			return nil, klderrors.Errorf(klderrors.EventStreamsWebhookNoURL)
+		}
+		if _, err = url.Parse(newSpec.Webhook.URL); err != nil {
+			return nil, klderrors.Errorf(klderrors.EventStreamsWebhookInvalidURL)
+		}
+		if newSpec.Webhook.RequestTimeoutSec == 0 {
+			newSpec.Webhook.RequestTimeoutSec = 30000
+		}
+		a.spec.Webhook.URL = newSpec.Webhook.URL
+		a.spec.Webhook.RequestTimeoutSec = newSpec.Webhook.RequestTimeoutSec
+		a.spec.Webhook.TLSkipHostVerify = newSpec.Webhook.TLSkipHostVerify
+		a.spec.Webhook.Headers = newSpec.Webhook.Headers
+	}
+	a.resume()
+	return a.spec, nil
 }
 
 // HandleEvent is the entry point for the stream from the event detection logic
@@ -177,11 +223,18 @@ func (a *eventStream) stop() {
 	a.batchCond.L.Unlock()
 }
 
-// suspend only stops the dispatcher, pushing back as if we're in blockding mode
+// suspend only stops the dispatcher, pushing back as if we're in blocking mode
 func (a *eventStream) suspend() {
 	a.batchCond.L.Lock()
 	a.spec.Suspended = true
 	a.batchCond.Broadcast()
+	// we want to wait for the batch processor to have completed it's processing
+	// and returning when it realizes that the stream is suspended
+	// while !processorDone , wait on the batch condition
+	// and then unlock
+	for a.processorDone == false {
+		a.batchCond.Wait()
+	}
 	a.batchCond.L.Unlock()
 }
 
@@ -201,7 +254,7 @@ func (a *eventStream) resume() error {
 	return nil
 }
 
-// isBlocked protect us from poling for more events when the stream is blocked.
+// isBlocked protect us from polling for more events when the stream is blocked.
 // Can happen regardless of whether the error handling is
 // block or skip. It's just with skip we eventually move onto new messages
 // after the retries etc. are complete
@@ -272,11 +325,17 @@ func (a *eventStream) eventPoller() {
 				}
 			}
 		}
-		time.Sleep(a.pollingInterval)
+		select {
+		case <-a.updateCtx.Done():
+			// we were told by the caller that an update is about to occur, cancel and return
+			log.Infof("%s: Notified of an impending stream update, exiting event poller", a.spec.ID)
+			return
+		case <-time.After(a.pollingInterval): //fall through and continue to the next iteration
+		}
 	}
 }
 
-// batchDispatcher is the goroutine that is alsway available to read new
+// batchDispatcher is the goroutine that is always available to read new
 // events and form them into batches. Because we can't be sure how many
 // events we'll be dispatched from blocks before the IsBlocked() feedback
 // loop protects us, this logic has to build a list of batches
@@ -304,6 +363,11 @@ func (a *eventStream) batchDispatcher() {
 					return
 				}
 				currentBatch = append(currentBatch, event)
+			case <-a.updateCtx.Done():
+				log.Infof("%s: Notified of an impending stream update, will not dispatch batch", a.spec.ID)
+				// we were told by the caller that an update is about to occur, cancel and return
+				cancel()
+				return
 			}
 		} else {
 			// New batch
@@ -343,7 +407,13 @@ func (a *eventStream) suspendOrStop() bool {
 // We use a sync.Cond rather than a channel to communicate with this goroutine, as
 // it might be blocked for very large periods of time
 func (a *eventStream) batchProcessor() {
-	defer func() { a.processorDone = true }()
+	// inside defer, acquire the lock, set to true, broadcast and then release lock
+	defer func() {
+		a.batchCond.L.Lock()
+		a.processorDone = true
+		a.batchCond.Broadcast()
+		a.batchCond.L.Unlock()
+	}()
 	for {
 		// Wait for the next batch, or to be stopped
 		a.batchCond.L.Lock()
@@ -376,7 +446,13 @@ func (a *eventStream) processBatch(batchNumber uint64, events []*eventData) {
 	attempt := 0
 	for !a.suspendOrStop() && !processed {
 		if attempt > 0 {
-			time.Sleep(time.Duration(a.spec.BlockedRetryDelaySec) * time.Second)
+			select {
+			case <-a.updateCtx.Done():
+				log.Infof("%s: Notified of an impending stream update, will not attempt to process batch", a.spec.ID)
+				// we were told by the caller that an update is about to occur, cancel and return
+				return
+			case <-time.After(time.Duration(a.spec.BlockedRetryDelaySec) * time.Second): //fall through and continue
+			}
 		}
 		attempt++
 		log.Infof("%s: Batch %d initiated with %d events. FirstBlock=%s LastBlock=%s", a.spec.ID, batchNumber, len(events), events[0].BlockNumber, events[len(events)-1].BlockNumber)
@@ -423,10 +499,17 @@ func (a *eventStream) performActionWithRetry(batchNumber uint64, events []*event
 	delay := a.initialRetryDelay
 	var attempt uint64
 	complete := false
+
 	for !a.suspendOrStop() && !complete {
 		if attempt > 0 {
 			log.Infof("%s: Waiting %.2fs before re-attempting batch %d", a.spec.ID, delay.Seconds(), batchNumber)
-			time.Sleep(delay)
+			select {
+			case <-a.updateCtx.Done():
+				// we were told by the caller that an update is about to occur, cancel and return
+				log.Infof("%s: Notified of an impending stream update, will not attempt webhook action", a.spec.ID)
+				return
+			case <-time.After(delay): //fall through and continue
+			}
 			delay = time.Duration(float64(delay) * a.backoffFactor)
 		}
 		attempt++

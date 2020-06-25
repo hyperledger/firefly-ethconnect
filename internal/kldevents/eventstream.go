@@ -391,9 +391,11 @@ func (a *eventStream) processBatch(batchNumber uint64, events []*eventData) {
 		}
 	}
 
-	// Always decrement the in-flight count once we've processed
+	// decrement the in-flight count if we've processed (wouldn't have occurred if we were suspended or stopped)
 	a.batchCond.L.Lock()
-	a.inFlight -= uint64(len(events))
+	if processed {
+		a.inFlight -= uint64(len(events))
+	}
 	a.batchCond.L.Unlock()
 
 	// If we were suspended, do not ack the batch

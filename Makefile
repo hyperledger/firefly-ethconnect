@@ -19,7 +19,6 @@ coverage: coverage.txt coverage.html
 clean: 
 		$(VGO) clean
 		rm -f coverage.txt
-		rm -f coverage.out
 		rm -f $(BINARY_NAME)
 		rm -f $(BINARY_UNIX)
 run:

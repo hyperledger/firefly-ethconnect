@@ -80,7 +80,6 @@ type eventStream struct {
 	spec              *StreamInfo
 	eventStream       chan *eventData
 	stopped           bool
-	dispatcherDone    bool
 	processorDone     bool
 	pollingInterval   time.Duration
 	pollerDone        bool
@@ -375,9 +374,7 @@ func (a *eventStream) batchDispatcher() {
 	var currentBatch []*eventData
 	var batchStart time.Time
 	batchTimeout := time.Duration(a.spec.BatchTimeoutMS) * time.Millisecond
-	defer func() {
-		a.dispatcherDone = true
-	}()
+	defer a.updateWG.Done()
 	for {
 		// Wait for the next event - if we're in the middle of a batch, we
 		// need to cope with a timeout

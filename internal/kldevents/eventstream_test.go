@@ -169,7 +169,6 @@ func TestStopDuringTimeout(t *testing.T) {
 	stream.stop()
 	time.Sleep(10 * time.Millisecond)
 	assert.True(stream.processorDone)
-	assert.True(stream.dispatcherDone)
 }
 
 func TestBatchSizeCap(t *testing.T) {

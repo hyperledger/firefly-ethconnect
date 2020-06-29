@@ -681,6 +681,11 @@ func TestProcessBatchEmptyArray(t *testing.T) {
 }
 
 func TestUpdateStream(t *testing.T) {
+	// The test performs the following steps:
+	// * Create a stream with batch size 5
+	// * Push 3 events
+	// * Update the event stream and verify updated fields
+	// * close event stream
 	assert := assert.New(t)
 	dir := tempdir(t)
 	defer cleanup(t, dir)
@@ -689,32 +694,23 @@ func TestUpdateStream(t *testing.T) {
 	sm, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
+			BatchSize:     5,
 			Webhook:       &webhookAction{},
 		}, db, 200)
 	defer svr.Close()
+	defer close(eventStream)
+	defer stream.stop()
 
-	s := setupTestSubscription(assert, sm, stream, "mySubName")
-	assert.Equal("mySubName", s.Name)
-
-	// We expect three events to be sent to the webhook
-	// With the default batch size of 1, that means three separate requests
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		<-eventStream
-		<-eventStream
-		<-eventStream
-		wg.Done()
-	}()
-	wg.Wait()
-
+	for i := 0; i < 3; i++ {
+		stream.handleEvent(testEvent(fmt.Sprintf("sub%d", i)))
+	}
 	ctx := context.Background()
 	headers := make(map[string]string)
 	headers["test-h1"] = "val1"
 	updateSpec := &StreamInfo{
-		BatchSize:            10,
-		BatchTimeoutMS:       1234,
-		BlockedRetryDelaySec: 27,
+		BatchSize:            4,
+		BatchTimeoutMS:       10000,
+		BlockedRetryDelaySec: 5,
 		ErrorHandling:        ErrorHandlingBlock,
 		Name:                 "new-name",
 		Webhook: &webhookAction{
@@ -726,17 +722,14 @@ func TestUpdateStream(t *testing.T) {
 	}
 	updatedStream, err := sm.UpdateStream(ctx, stream.spec.ID, updateSpec)
 	assert.Equal(updatedStream.Name, "new-name")
-	assert.Equal(updatedStream.BatchSize, uint64(10))
-	assert.Equal(updatedStream.BatchTimeoutMS, uint64(1234))
-	assert.Equal(updatedStream.BlockedRetryDelaySec, uint64(27))
+	assert.Equal(updatedStream.BatchSize, uint64(4))
+	assert.Equal(updatedStream.BatchTimeoutMS, uint64(10000))
+	assert.Equal(updatedStream.BlockedRetryDelaySec, uint64(5))
 	assert.Equal(updatedStream.ErrorHandling, ErrorHandlingBlock)
 	assert.Equal(updatedStream.Webhook.URL, "http://foo.url")
 	assert.Equal(updatedStream.Webhook.Headers["test-h1"], "val1")
-	err = sm.DeleteSubscription(ctx, s.ID)
+
 	assert.NoError(err)
-	err = sm.DeleteStream(ctx, stream.spec.ID)
-	assert.NoError(err)
-	sm.Close()
 }
 
 func TestUpdateStreamMissingWebhookURL(t *testing.T) {
@@ -784,7 +777,7 @@ func TestUpdateStreamMissingWebhookURL(t *testing.T) {
 	sm.Close()
 }
 
-func TestUpdateStreamNoWebhookURL(t *testing.T) {
+func TestUpdateStreamInvalidWebhookURL(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)
 	defer cleanup(t, dir)
@@ -815,7 +808,7 @@ func TestUpdateStreamNoWebhookURL(t *testing.T) {
 	ctx := context.Background()
 	updateSpec := &StreamInfo{
 		Webhook: &webhookAction{
-			URL:               ":bad",
+			URL:               ":badurl",
 			TLSkipHostVerify:  true,
 			RequestTimeoutSec: 5,
 		},

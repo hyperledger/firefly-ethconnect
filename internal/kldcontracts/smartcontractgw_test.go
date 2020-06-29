@@ -1698,6 +1698,26 @@ func TestUpdateStreamNotFoundError(t *testing.T) {
 	assert.Regexp("pop", resError.Message)
 }
 
+func TestUpdateStreamSubMgrError(t *testing.T) {
+	assert := assert.New(t)
+	spec := &kldevents.StreamInfo{Type: "webhook"}
+	b, _ := json.Marshal(spec)
+	req := httptest.NewRequest("PATCH", kldevents.StreamPathPrefix, bytes.NewReader(b))
+	res := httptest.NewRecorder()
+	s := &smartContractGW{}
+	s.sm = &mockSubMgr{
+		updateStreamErr: fmt.Errorf("pop"),
+		err:             nil,
+	}
+	r := &httprouter.Router{}
+	s.AddRoutes(r)
+	r.ServeHTTP(res, req)
+	var resError restErrMsg
+	json.NewDecoder(res.Body).Decode(&resError)
+	assert.Equal(500, res.Result().StatusCode)
+	assert.Regexp("pop", resError.Message)
+}
+
 func TestListStreamsNoSubMgr(t *testing.T) {
 	assert := assert.New(t)
 	res := testGWPath("GET", kldevents.StreamPathPrefix, nil, nil)

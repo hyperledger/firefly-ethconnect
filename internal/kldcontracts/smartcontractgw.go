@@ -676,6 +676,10 @@ func (g *smartContractGW) updateStream(res http.ResponseWriter, req *http.Reques
 		return
 	}
 	newSpec, err := g.sm.UpdateStream(req.Context(), streamID, &spec)
+	if err != nil {
+		g.gatewayErrReply(res, req, err, 500)
+		return
+	}
 
 	status := 200
 	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)

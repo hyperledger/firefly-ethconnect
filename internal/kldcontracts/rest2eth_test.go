@@ -127,14 +127,15 @@ func (m *mockRPC) CallContext(ctx context.Context, result interface{}, method st
 }
 
 type mockSubMgr struct {
-	err          error
-	sub          *kldevents.SubscriptionInfo
-	stream       *kldevents.StreamInfo
-	subs         []*kldevents.SubscriptionInfo
-	streams      []*kldevents.StreamInfo
-	suspended    bool
-	resumed      bool
-	capturedAddr *kldbind.Address
+	err             error
+	updateStreamErr error
+	sub             *kldevents.SubscriptionInfo
+	stream          *kldevents.StreamInfo
+	subs            []*kldevents.SubscriptionInfo
+	streams         []*kldevents.StreamInfo
+	suspended       bool
+	resumed         bool
+	capturedAddr    *kldbind.Address
 }
 
 func (m *mockSubMgr) Init() error { return m.err }
@@ -142,7 +143,7 @@ func (m *mockSubMgr) AddStream(ctx context.Context, spec *kldevents.StreamInfo) 
 	return spec, m.err
 }
 func (m *mockSubMgr) UpdateStream(ctx context.Context, id string, spec *kldevents.StreamInfo) (*kldevents.StreamInfo, error) {
-	return m.stream, m.err
+	return m.stream, m.updateStreamErr
 }
 func (m *mockSubMgr) Streams(ctx context.Context) []*kldevents.StreamInfo { return m.streams }
 func (m *mockSubMgr) StreamByID(ctx context.Context, id string) (*kldevents.StreamInfo, error) {

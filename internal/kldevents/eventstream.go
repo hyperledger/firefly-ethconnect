@@ -90,7 +90,7 @@ type eventStream struct {
 	initialRetryDelay time.Duration
 	backoffFactor     float64
 	updateInProgress  bool
-	updateInterrupt   chan struct{}
+	updateInterrupt   chan struct{}   // a zero-sized struct used only for signaling (hand rolled alternative to context)
 	updateWG          *sync.WaitGroup // Wait group for the go routines to reply back after they have stopped
 }
 
@@ -300,6 +300,7 @@ func (a *eventStream) isBlocked() bool {
 // eventPoller checks every few seconds against the ethereum node for any
 // new events on the subscriptions that are registered for this stream
 func (a *eventStream) eventPoller() {
+	defer a.updateWG.Done()
 
 	ctx := kldauth.NewSystemAuthContext()
 
@@ -359,7 +360,6 @@ func (a *eventStream) eventPoller() {
 		case <-a.updateInterrupt:
 			// we were notified by the caller about an ongoing update, no need to continue
 			log.Infof("%s: Notified of an ongoing stream update, exiting event poller", a.spec.ID)
-			a.updateWG.Done()
 			return
 		case <-time.After(a.pollingInterval): //fall through and continue to the next iteration
 		}
@@ -398,7 +398,6 @@ func (a *eventStream) batchDispatcher() {
 			case <-a.updateInterrupt:
 				// we were notified by the caller about an ongoing update, cancel the timeout ctx and return
 				log.Infof("%s: Notified of an ongoing stream update, will not dispatch batch", a.spec.ID)
-				a.updateWG.Done()
 				cancel() // cancel the ctx which was started to track timeout
 				return
 			}
@@ -408,7 +407,6 @@ func (a *eventStream) batchDispatcher() {
 			case <-a.updateInterrupt:
 				// we were notified by the caller about an ongoing update, return
 				log.Infof("%s: Notified of an ongoing stream update, not waiting for new events", a.spec.ID)
-				a.updateWG.Done()
 				return
 			case event := <-a.eventStream:
 				if event == nil {
@@ -448,9 +446,7 @@ func (a *eventStream) suspendOrStop() bool {
 // We use a sync.Cond rather than a channel to communicate with this goroutine, as
 // it might be blocked for very large periods of time
 func (a *eventStream) batchProcessor() {
-	defer func() {
-		a.processorDone = true
-	}()
+	defer func() { a.processorDone = true }()
 	for {
 		// Wait for the next batch, or to be stopped
 		a.batchCond.L.Lock()
@@ -460,7 +456,7 @@ func (a *eventStream) batchProcessor() {
 				case <-a.updateInterrupt:
 					// we were notified by the caller about an ongoing update, return
 					log.Infof("%s: Notified of an ongoing stream update, exiting batch processor", a.spec.ID)
-					a.updateWG.Done()
+					a.updateWG.Done() //Not moving this to a 'defer' since we need to unlock after calling Done()
 					a.batchCond.L.Unlock()
 					return
 				}

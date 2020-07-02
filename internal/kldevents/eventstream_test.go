@@ -378,6 +378,13 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 	assert.NoError(err)
 	var testData []*logEntry
 	json.Unmarshal(testDataBytes, &testData)
+	testBlockDetailBytes, err := ioutil.ReadFile("../../test/block_details.json")
+	assert.NoError(err)
+	testBlock := &kldbind.Header{}
+	var parsedBlock map[string]interface{}
+	json.Unmarshal(testBlockDetailBytes, &parsedBlock)
+	ts := parsedBlock["timestamp"].(float64)
+	testBlock.Time = uint64(ts)
 
 	callCount := 0
 	rpc := kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
@@ -385,10 +392,13 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 		if method == "eth_blockNumber" || method == "eth_newFilter" {
 		} else if method == "eth_getFilterLogs" {
 			*(res.(*[]*logEntry)) = testData[0:2]
-		} else if method == "eth_getFilterChanges" && (callCount == 4) {
+		} else if method == "eth_getFilterChanges" &&
+			((!stream.spec.Timestamps && callCount == 4) || (stream.spec.Timestamps && callCount == 5)) { //eth_blockNumber is an extra call to retrieve timestamps
 			*(res.(*[]*logEntry)) = testData[2:]
 		} else if method == "eth_getFilterChanges" {
 			*(res.(*[]*logEntry)) = []*logEntry{}
+		} else if method == "eth_getBlockByNumber" {
+			*(res.(*kldbind.Header)) = *testBlock
 		}
 	})
 	sm.rpc = rpc
@@ -435,8 +445,9 @@ func TestProcessEventsEnd2End(t *testing.T) {
 	db, _ := kldkvstore.NewLDBKeyValueStore(dir)
 	sm, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
-			BatchSize: 1,
-			Webhook:   &webhookAction{},
+			BatchSize:  1,
+			Webhook:    &webhookAction{},
+			Timestamps: false,
 		}, db, 200)
 	defer svr.Close()
 
@@ -457,7 +468,7 @@ func TestProcessEventsEnd2End(t *testing.T) {
 		assert.Equal(1, len(e2s))
 		assert.Equal("1977", e2s[0].Data["i"])
 		assert.Equal("A long time ago in a galaxy far, far away....", e2s[0].Data["m"])
-		assert.Equal("150676", e2s[0].BlockNumber)
+		assert.Equal("150665", e2s[0].BlockNumber)
 		e3s := <-eventStream
 		assert.Equal(1, len(e3s))
 		assert.Equal("20151021", e3s[0].Data["i"])
@@ -475,6 +486,57 @@ func TestProcessEventsEnd2End(t *testing.T) {
 	sm.Close()
 }
 
+func TestProcessEventsEnd2EndWithTimestamps(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	db, _ := kldkvstore.NewLDBKeyValueStore(dir)
+	sm, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			BatchSize:  1,
+			Webhook:    &webhookAction{},
+			Timestamps: true,
+		}, db, 200)
+	defer svr.Close()
+
+	s := setupTestSubscription(assert, sm, stream, "mySubName")
+	assert.Equal("mySubName", s.Name)
+
+	// We expect three events to be sent to the webhook
+	// With the default batch size of 1, that means three separate requests
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		e1s := <-eventStream
+		assert.Equal(1, len(e1s))
+		assert.Equal("42", e1s[0].Data["i"])
+		assert.Equal("But what is the question?", e1s[0].Data["m"])
+		assert.Equal("150665", e1s[0].BlockNumber)
+		assert.Equal("1588748143", e1s[0].Timestamp)
+		e2s := <-eventStream
+		assert.Equal(1, len(e2s))
+		assert.Equal("1977", e2s[0].Data["i"])
+		assert.Equal("A long time ago in a galaxy far, far away....", e2s[0].Data["m"])
+		assert.Equal("150665", e2s[0].BlockNumber)
+		assert.Equal("1588748143", e2s[0].Timestamp)
+		e3s := <-eventStream
+		assert.Equal(1, len(e3s))
+		assert.Equal("20151021", e3s[0].Data["i"])
+		assert.Equal("1.21 Gigawatts!", e3s[0].Data["m"])
+		assert.Equal("150721", e3s[0].BlockNumber)
+		assert.Equal("1588748143", e3s[0].Timestamp)
+		wg.Done()
+	}()
+	wg.Wait()
+
+	ctx := context.Background()
+	err := sm.DeleteSubscription(ctx, s.ID)
+	assert.NoError(err)
+	err = sm.DeleteStream(ctx, stream.spec.ID)
+	assert.NoError(err)
+	sm.Close()
+}
 func TestCheckpointRecovery(t *testing.T) {
 	assert := assert.New(t)
 	sm, stream, svr, eventStream := newTestStreamForBatching(

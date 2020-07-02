@@ -54,6 +54,12 @@ func TestTopicToValue(t *testing.T) {
 func TestProcessLogEntryNillAndTooFewFields(t *testing.T) {
 	assert := assert.New(t)
 
+	spec := &StreamInfo{
+		Timestamps: false,
+	}
+	stream := &eventStream{
+		spec: spec,
+	}
 	lp := &logProcessor{
 		event: &kldbind.ABIEvent{
 			Anonymous: true,
@@ -68,6 +74,7 @@ func TestProcessLogEntryNillAndTooFewFields(t *testing.T) {
 				},
 			},
 		},
+		stream: stream,
 	}
 	err := lp.processLogEntry("ut", &logEntry{
 		Topics: []*kldbind.Hash{nil},
@@ -79,6 +86,12 @@ func TestProcessLogEntryNillAndTooFewFields(t *testing.T) {
 func TestProcessLogBadRLPData(t *testing.T) {
 	assert := assert.New(t)
 
+	spec := &StreamInfo{
+		Timestamps: false,
+	}
+	stream := &eventStream{
+		spec: spec,
+	}
 	lp := &logProcessor{
 		event: &kldbind.ABIEvent{
 			Anonymous: true,
@@ -93,6 +106,7 @@ func TestProcessLogBadRLPData(t *testing.T) {
 				},
 			},
 		},
+		stream: stream,
 	}
 	err := lp.processLogEntry(t.Name(), &logEntry{
 		Data: "0x00",

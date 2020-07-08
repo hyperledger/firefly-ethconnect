@@ -265,7 +265,7 @@ func TestOnDeployContractMessageGoodTxnErrOnReceipt(t *testing.T) {
 	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(testFromAddr)] {
 		time.Sleep(1 * time.Millisecond)
 	}
-	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
+	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)].txnsInFlight[0].wg
 
 	txnWG.Wait()
 	assert.Equal(1, len(testTxnContext.errorReplies))
@@ -320,10 +320,12 @@ func TestOnDeployContractMessageGoodTxnMined(t *testing.T) {
 	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
 	txnProcessor.OnMessage(testTxnContext)
+	// the txn should be present in the in-flight list
+	assert.Equal(len(txnProcessor.inflightTxns[strings.ToLower(testFromAddr)].txnsInFlight), 1)
 	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(testFromAddr)] {
 		time.Sleep(1 * time.Millisecond)
 	}
-	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
+	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)].txnsInFlight[0].wg
 
 	txnWG.Wait()
 	assert.Equal(0, len(testTxnContext.errorReplies))
@@ -337,6 +339,9 @@ func TestOnDeployContractMessageGoodTxnMined(t *testing.T) {
 	var replyMsgMap map[string]interface{}
 	json.Unmarshal(replyMsgBytes, &replyMsgMap)
 
+	// the map of in-flight txns must not contain an entry for testFromAddr
+	_, exists := txnProcessor.inflightTxns[strings.ToLower(testFromAddr)]
+	assert.Equal(exists, false)
 	assert.Equal("0x6e710868fd2d0ac1f141ba3f0cd569e38ce1999d8f39518ee7633d2b9a7122af", replyMsgMap["blockHash"])
 	assert.Equal("12345", replyMsgMap["blockNumber"])
 	assert.Equal("0x28a62cb478a3c3d4daad84f1148ea16cd1a66f37", replyMsgMap["contractAddress"])
@@ -381,7 +386,7 @@ func TestOnDeployContractMessageGoodTxnMinedHDWallet(t *testing.T) {
 	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(addr.String())] {
 		time.Sleep(1 * time.Millisecond)
 	}
-	txnWG := &txnProcessor.inflightTxns[strings.ToLower(addr.String())][0].wg
+	txnWG := &txnProcessor.inflightTxns[strings.ToLower(addr.String())].txnsInFlight[0].wg
 
 	txnWG.Wait()
 	assert.Equal(0, len(testTxnContext.errorReplies))
@@ -425,7 +430,7 @@ func TestOnDeployContractPrivateMessageGoodTxnMined(t *testing.T) {
 	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(testFromAddr)] {
 		time.Sleep(1 * time.Millisecond)
 	}
-	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
+	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)].txnsInFlight[0].wg
 
 	txnWG.Wait()
 	assert.Equal(0, len(testTxnContext.errorReplies))
@@ -474,7 +479,7 @@ func TestOnDeployContractMessageGoodTxnMinedWithHex(t *testing.T) {
 	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(testFromAddr)] {
 		time.Sleep(1 * time.Millisecond)
 	}
-	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
+	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)].txnsInFlight[0].wg
 
 	txnWG.Wait()
 	assert.Equal(0, len(testTxnContext.errorReplies))
@@ -525,7 +530,7 @@ func TestOnDeployContractMessageFailedTxnMined(t *testing.T) {
 	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(testFromAddr)] {
 		time.Sleep(1 * time.Millisecond)
 	}
-	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
+	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)].txnsInFlight[0].wg
 
 	txnWG.Wait()
 	replyMsg := testTxnContext.replies[0]
@@ -681,7 +686,7 @@ func TestOnSendTransactionMessageTxnTimeout(t *testing.T) {
 	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(testFromAddr)] {
 		time.Sleep(1 * time.Millisecond)
 	}
-	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)][0].wg
+	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)].txnsInFlight[0].wg
 	txnWG.Wait()
 	assert.Equal(1, len(testTxnContext.errorReplies))
 
@@ -742,7 +747,7 @@ func TestOnSendTransactionMessageFailedWithGapFillOK(t *testing.T) {
 
 	// Wait for both to be inflight
 	from := strings.ToLower(testFromAddr)
-	for len(txnProcessor.inflightTxns) == 0 || len(txnProcessor.inflightTxns[from]) < 2 {
+	for len(txnProcessor.inflightTxns) == 0 || len(txnProcessor.inflightTxns[from].txnsInFlight) < 2 {
 		time.Sleep(1 * time.Millisecond)
 	}
 
@@ -802,7 +807,7 @@ func TestOnSendTransactionMessageFailedWithGapFillFail(t *testing.T) {
 
 	// Wait for both to be inflight
 	from := strings.ToLower(testFromAddr)
-	for len(txnProcessor.inflightTxns) == 0 || len(txnProcessor.inflightTxns[from]) < 2 {
+	for len(txnProcessor.inflightTxns) == 0 || len(txnProcessor.inflightTxns[from].txnsInFlight) < 2 {
 		time.Sleep(1 * time.Millisecond)
 	}
 
@@ -865,10 +870,12 @@ func TestOnSendTransactionMessageInflightNonce(t *testing.T) {
 	assert := assert.New(t)
 
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
-		MaxTXWaitTime: 1,
+		MaxTXWaitTime:     1,
+		AlwaysManageNonce: true,
 	}, &kldeth.RPCConf{}).(*txnProcessor)
-	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] =
-		[]*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] = &inflightTxnState{}
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight = []*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].highestNonce = 101
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
@@ -887,6 +894,7 @@ func TestOnSendTransactionMessageInflightNonce(t *testing.T) {
 	}
 
 	assert.Empty(testTxnContext.errorReplies)
+	assert.Equal(txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].highestNonce, int64(102))
 	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
 }
 
@@ -953,8 +961,8 @@ func TestOnSendTransactionMessageOrionFailNonce(t *testing.T) {
 		MaxTXWaitTime:    1,
 		OrionPrivateAPIS: true,
 	}, &kldeth.RPCConf{}).(*txnProcessor)
-	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] =
-		[]*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] = &inflightTxnState{}
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight = []*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
@@ -991,8 +999,8 @@ func TestOnSendTransactionMessageOrion(t *testing.T) {
 		MaxTXWaitTime:    1,
 		OrionPrivateAPIS: true,
 	}, &kldeth.RPCConf{}).(*txnProcessor)
-	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] =
-		[]*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] = &inflightTxnState{}
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight = []*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
@@ -1028,8 +1036,8 @@ func TestOnSendTransactionMessageOrionPrivacyGroupId(t *testing.T) {
 		MaxTXWaitTime:    1,
 		OrionPrivateAPIS: true,
 	}, &kldeth.RPCConf{}).(*txnProcessor)
-	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] =
-		[]*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] = &inflightTxnState{}
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight = []*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
@@ -1090,7 +1098,8 @@ func TestOnSendTransactionAddressBook(t *testing.T) {
 			URL: server.URL,
 		},
 	}).(*txnProcessor)
-	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] =
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] = &inflightTxnState{}
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight =
 		[]*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +

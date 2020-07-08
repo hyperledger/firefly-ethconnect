@@ -86,10 +86,15 @@ type TxnProcessorConf struct {
 	HDWalletConf       HDWalletConf    `json:"hdWallet"`
 }
 
+type inflightTxnState struct {
+	txnsInFlight []*inflightTxn
+	highestNonce int64
+}
+
 type txnProcessor struct {
 	maxTXWaitTime      time.Duration
 	inflightTxnsLock   *sync.Mutex
-	inflightTxns       map[string][]*inflightTxn
+	inflightTxns       map[string]*inflightTxnState
 	inflightTxnDelayer TxnDelayTracker
 	rpc                kldeth.RPCClient
 	addressBook        AddressBook
@@ -106,7 +111,7 @@ func NewTxnProcessor(conf *TxnProcessorConf, rpcConf *kldeth.RPCConf) TxnProcess
 	}
 	p := &txnProcessor{
 		inflightTxnsLock:   &sync.Mutex{},
-		inflightTxns:       make(map[string][]*inflightTxn),
+		inflightTxns:       make(map[string]*inflightTxnState),
 		inflightTxnDelayer: NewTxnDelayTracker(),
 		conf:               conf,
 		rpcConf:            rpcConf,
@@ -230,16 +235,18 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 	var highestNonce int64 = -1
 	suppliedNonce := msg.Nonce
 	inflightForAddr, exists := p.inflightTxns[inflight.from]
+	// Add the inflight transaction to our tracking structure
+	if !exists {
+		p.inflightTxns[inflight.from] = &inflightTxnState{}
+		inflightForAddr = p.inflightTxns[inflight.from]
+		inflightForAddr.txnsInFlight = []*inflightTxn{}
+	}
 
 	if !nodeAssignNonce && suppliedNonce == "" {
 		// Check the currently inflight txns to see if we have a high nonce to use without
 		// needing to query the node to find the highest nonce.
 		if exists {
-			for _, alreadyInflight := range inflightForAddr {
-				if alreadyInflight.nonce > highestNonce {
-					highestNonce = alreadyInflight.nonce
-				}
-			}
+			highestNonce = inflightForAddr.highestNonce
 		}
 	}
 
@@ -264,8 +271,9 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 		}
 		fromNode = true
 	} else if highestNonce >= 0 {
-		// If we found a nonce in-flight in memory, return one higher.
+		// If we found a nonce in-flight in memory, store & return one higher.
 		inflight.nonce = highestNonce + 1
+		inflightForAddr.highestNonce = inflight.nonce
 	} else if nodeAssignNonce {
 		// We've been asked to defer to the node for signing, and are not performing HD Wallet signing
 		inflight.nodeAssignNonce = true
@@ -277,21 +285,18 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 		// (or if gas price is being varied by the submitter the potential of
 		// overwriting a transaction)
 		if inflight.nonce, err = kldeth.GetTransactionCount(txnContext.Context(), p.rpc, &from, "pending"); err != nil {
+			inflightForAddr.highestNonce = inflight.nonce // store the nonce in our inflight txns state
 			p.inflightTxnsLock.Unlock()
 			return
 		}
 		fromNode = true
 	}
 
-	// Add the inflight transaction to our tracking structure
-	if !exists {
-		inflightForAddr = []*inflightTxn{}
-	}
-	before := len(inflightForAddr)
-	p.inflightTxns[inflight.from] = append(inflightForAddr, inflight)
+	before := len(inflightForAddr.txnsInFlight)
+	inflightForAddr.txnsInFlight = append(inflightForAddr.txnsInFlight, inflight)
 	inflight.initialWaitDelay = p.inflightTxnDelayer.GetInitialDelay() // Must call under lock
 
-	// Clear lock beofre logging
+	// Clear lock before logging
 	p.inflightTxnsLock.Unlock()
 
 	log.Infof("In-flight %d added. nonce=%d addr=%s before=%d (node=%t)", inflight.id, inflight.nonce, inflight.from, before, fromNode)
@@ -304,18 +309,21 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, gapPotential bool) 
 	var higherNonceInflight = int64(-1)
 	p.inflightTxnsLock.Lock()
 	if inflightForAddr, exists := p.inflightTxns[inflight.from]; exists {
-		before = len(inflightForAddr)
-		for idx, alreadyInflight := range inflightForAddr {
+		before = len(inflightForAddr.txnsInFlight)
+		for idx, alreadyInflight := range inflightForAddr.txnsInFlight {
 			if alreadyInflight.id == inflight.id {
-				inflightForAddr = append(inflightForAddr[0:idx], inflightForAddr[idx+1:]...)
-				p.inflightTxns[inflight.from] = inflightForAddr
+				p.inflightTxns[inflight.from].txnsInFlight = append(inflightForAddr.txnsInFlight[0:idx], inflightForAddr.txnsInFlight[idx+1:]...)
 				break
 			}
 		}
-		after = len(inflightForAddr)
+		after = len(inflightForAddr.txnsInFlight)
+		// clear the entry for inflight.from when there are no in-flight txns
+		if after == 0 {
+			delete(p.inflightTxns, inflight.from)
+		}
 		// Check the transactions that are left, to see if any nonce is higher
 		if gapPotential && !inflight.nodeAssignNonce {
-			for _, alreadyInflight := range inflightForAddr {
+			for _, alreadyInflight := range inflightForAddr.txnsInFlight {
 				if alreadyInflight.nonce > inflight.nonce && alreadyInflight.nonce > higherNonceInflight {
 					higherNonceInflight = alreadyInflight.nonce
 				}

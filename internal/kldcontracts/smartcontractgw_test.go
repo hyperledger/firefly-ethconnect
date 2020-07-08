@@ -1643,6 +1643,81 @@ func TestAddStreamSubMgrError(t *testing.T) {
 	assert.Regexp("pop", resError.Message)
 }
 
+func TestUpdateStreamNoSubMgr(t *testing.T) {
+	assert := assert.New(t)
+	res := testGWPath("PATCH", kldevents.StreamPathPrefix, nil, nil)
+	assert.Equal(405, res.Result().StatusCode)
+}
+
+func TestUpdateStreamOK(t *testing.T) {
+	assert := assert.New(t)
+	spec := &kldevents.StreamInfo{Type: "webhook", Name: "stream-new-name"}
+	b, _ := json.Marshal(spec)
+	req := httptest.NewRequest("PATCH", kldevents.StreamPathPrefix, bytes.NewReader(b))
+	res := httptest.NewRecorder()
+	s := &smartContractGW{}
+	s.sm = &mockSubMgr{}
+	r := &httprouter.Router{}
+	s.AddRoutes(r)
+	r.ServeHTTP(res, req)
+	var newSpec kldevents.StreamInfo
+	json.NewDecoder(res.Body).Decode(&newSpec)
+	assert.Equal(200, res.Result().StatusCode)
+	s.Shutdown()
+}
+
+func TestUpdateStreamBadData(t *testing.T) {
+	assert := assert.New(t)
+	req := httptest.NewRequest("PATCH", kldevents.StreamPathPrefix, bytes.NewReader([]byte(":bad json")))
+	res := httptest.NewRecorder()
+	s := &smartContractGW{}
+	s.sm = &mockSubMgr{}
+	r := &httprouter.Router{}
+	s.AddRoutes(r)
+	r.ServeHTTP(res, req)
+	var resError restErrMsg
+	json.NewDecoder(res.Body).Decode(&resError)
+	assert.Equal(400, res.Result().StatusCode)
+	assert.Regexp("Invalid event stream specification", resError.Message)
+}
+
+func TestUpdateStreamNotFoundError(t *testing.T) {
+	assert := assert.New(t)
+	spec := &kldevents.StreamInfo{Type: "webhook"}
+	b, _ := json.Marshal(spec)
+	req := httptest.NewRequest("PATCH", kldevents.StreamPathPrefix, bytes.NewReader(b))
+	res := httptest.NewRecorder()
+	s := &smartContractGW{}
+	s.sm = &mockSubMgr{err: fmt.Errorf("pop")}
+	r := &httprouter.Router{}
+	s.AddRoutes(r)
+	r.ServeHTTP(res, req)
+	var resError restErrMsg
+	json.NewDecoder(res.Body).Decode(&resError)
+	assert.Equal(404, res.Result().StatusCode)
+	assert.Regexp("pop", resError.Message)
+}
+
+func TestUpdateStreamSubMgrError(t *testing.T) {
+	assert := assert.New(t)
+	spec := &kldevents.StreamInfo{Type: "webhook"}
+	b, _ := json.Marshal(spec)
+	req := httptest.NewRequest("PATCH", kldevents.StreamPathPrefix, bytes.NewReader(b))
+	res := httptest.NewRecorder()
+	s := &smartContractGW{}
+	s.sm = &mockSubMgr{
+		updateStreamErr: fmt.Errorf("pop"),
+		err:             nil,
+	}
+	r := &httprouter.Router{}
+	s.AddRoutes(r)
+	r.ServeHTTP(res, req)
+	var resError restErrMsg
+	json.NewDecoder(res.Body).Decode(&resError)
+	assert.Equal(500, res.Result().StatusCode)
+	assert.Regexp("pop", resError.Message)
+}
+
 func TestListStreamsNoSubMgr(t *testing.T) {
 	assert := assert.New(t)
 	res := testGWPath("GET", kldevents.StreamPathPrefix, nil, nil)
@@ -1681,12 +1756,12 @@ func TestListSubs(t *testing.T) {
 
 	mockSubMgr := &mockSubMgr{
 		subs: []*kldevents.SubscriptionInfo{
-			&kldevents.SubscriptionInfo{
+			{
 				TimeSorted: kldmessages.TimeSorted{
 					CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
 				}, ID: "earlier",
 			},
-			&kldevents.SubscriptionInfo{
+			{
 				TimeSorted: kldmessages.TimeSorted{
 					CreatedISO8601: time.Now().UTC().Add(1 * time.Hour).Format(time.RFC3339),
 				}, ID: "later",

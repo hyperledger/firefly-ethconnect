@@ -35,7 +35,7 @@ type logEntry struct {
 	TransactionHash  kldbind.Hash      `json:"transactionHash"`
 	Data             string            `json:"data"`
 	Topics           []*kldbind.Hash   `json:"topics"`
-	Timestamp        uint64            `json:"timestamp,omitifempty"`
+	Timestamp        uint64            `json:"timestamp,omitempty"`
 }
 
 type eventData struct {
@@ -47,7 +47,7 @@ type eventData struct {
 	SubID            string                 `json:"subId"`
 	Signature        string                 `json:"signature"`
 	LogIndex         string                 `json:"logIndex"`
-	Timestamp        string                 `json:"timestamp,omitifempty"`
+	Timestamp        string                 `json:"timestamp,omitempty"`
 	// Used for callback handling
 	batchComplete func(*eventData)
 }

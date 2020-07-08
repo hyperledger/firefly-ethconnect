@@ -245,7 +245,7 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 	if !nodeAssignNonce && suppliedNonce == "" {
 		// Check the currently inflight txns to see if we have a high nonce to use without
 		// needing to query the node to find the highest nonce.
-		if exists && len(inflightForAddr.txnsInFlight) > 0 {
+		if exists {
 			highestNonce = inflightForAddr.highestNonce
 		}
 	}

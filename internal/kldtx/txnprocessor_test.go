@@ -320,6 +320,8 @@ func TestOnDeployContractMessageGoodTxnMined(t *testing.T) {
 	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
 
 	txnProcessor.OnMessage(testTxnContext)
+	// the txn should be present in the in-flight list
+	assert.Equal(len(txnProcessor.inflightTxns[strings.ToLower(testFromAddr)].txnsInFlight), 1)
 	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(testFromAddr)] {
 		time.Sleep(1 * time.Millisecond)
 	}
@@ -337,6 +339,9 @@ func TestOnDeployContractMessageGoodTxnMined(t *testing.T) {
 	var replyMsgMap map[string]interface{}
 	json.Unmarshal(replyMsgBytes, &replyMsgMap)
 
+	// the map of in-flight txns must not contain an entry for testFromAddr
+	_, exists := txnProcessor.inflightTxns[strings.ToLower(testFromAddr)]
+	assert.Equal(exists, false)
 	assert.Equal("0x6e710868fd2d0ac1f141ba3f0cd569e38ce1999d8f39518ee7633d2b9a7122af", replyMsgMap["blockHash"])
 	assert.Equal("12345", replyMsgMap["blockNumber"])
 	assert.Equal("0x28a62cb478a3c3d4daad84f1148ea16cd1a66f37", replyMsgMap["contractAddress"])

@@ -317,6 +317,10 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, gapPotential bool) 
 			}
 		}
 		after = len(inflightForAddr.txnsInFlight)
+		// clear the entry for inflight.from when there are no in-flight txns
+		if after == 0 {
+			delete(p.inflightTxns, inflight.from)
+		}
 		// Check the transactions that are left, to see if any nonce is higher
 		if gapPotential && !inflight.nodeAssignNonce {
 			for _, alreadyInflight := range inflightForAddr.txnsInFlight {

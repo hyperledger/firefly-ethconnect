@@ -60,10 +60,8 @@ type ABI struct {
 	abi.ABI
 }
 
-// Header is a wrapper around the ethereum block Header representation
-type Header struct {
-	types.Header
-}
+// Header is a type for ethereum block Header representation
+type Header = types.Header
 
 const (
 	// IntTy - type

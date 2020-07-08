@@ -115,7 +115,7 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 		batchComplete:    lp.batchComplete,
 	}
 	if lp.stream.spec.Timestamps {
-		result.Timestamp = strconv.Itoa(int(entry.Timestamp))
+		result.Timestamp = strconv.FormatUint(entry.Timestamp, 10)
 	}
 	topicIdx := 0
 	if !lp.event.Anonymous {

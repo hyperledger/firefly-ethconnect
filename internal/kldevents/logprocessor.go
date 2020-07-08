@@ -35,6 +35,7 @@ type logEntry struct {
 	TransactionHash  kldbind.Hash      `json:"transactionHash"`
 	Data             string            `json:"data"`
 	Topics           []*kldbind.Hash   `json:"topics"`
+	Timestamp        uint64            `json:"timestamp,omitempty"`
 }
 
 type eventData struct {
@@ -46,6 +47,7 @@ type eventData struct {
 	SubID            string                 `json:"subId"`
 	Signature        string                 `json:"signature"`
 	LogIndex         string                 `json:"logIndex"`
+	Timestamp        string                 `json:"timestamp,omitempty"`
 	// Used for callback handling
 	batchComplete func(*eventData)
 }
@@ -111,6 +113,9 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 		SubID:            lp.subID,
 		LogIndex:         strconv.Itoa(idx),
 		batchComplete:    lp.batchComplete,
+	}
+	if lp.stream.spec.Timestamps {
+		result.Timestamp = strconv.FormatUint(entry.Timestamp, 10)
 	}
 	topicIdx := 0
 	if !lp.event.Anonymous {

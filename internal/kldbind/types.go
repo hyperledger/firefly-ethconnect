@@ -18,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 // This module provides some basic types proxied through from ethereum, to avoid
@@ -58,6 +59,9 @@ type ABIMethod = abi.Method
 type ABI struct {
 	abi.ABI
 }
+
+// Header is a type for ethereum block Header representation
+type Header = types.Header
 
 const (
 	// IntTy - type

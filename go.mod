@@ -62,6 +62,7 @@ require (
 	golang.org/x/text v0.3.2
 	gopkg.in/jcmturner/gokrb5.v7 v7.3.0 // indirect
 	gopkg.in/yaml.v2 v2.2.5
+	github.com/hashicorp/golang-lru v0.5.4
 )
 
 go 1.13

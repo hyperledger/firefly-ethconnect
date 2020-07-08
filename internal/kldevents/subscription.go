@@ -166,6 +166,33 @@ func (s *subscription) restartFilter(ctx context.Context, since *big.Int) error 
 	return err
 }
 
+// getEventTimestamp adds the block timestamp to the log entry.
+// It uses a lru cache (blocknumber, timestamp) in the eventstream to determine the timestamp
+// and falls back to querying the node if we don't have timestamp in the cache (at which point it gets
+// added to the cache)
+func (s *subscription) getEventTimestamp(ctx context.Context, l *logEntry) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	// the key in the cache is the block number represented as a string
+	blockNumber := l.BlockNumber.String()
+	if ts, ok := s.lp.stream.blockTimestampCache.Get(blockNumber); ok {
+		// we found the timestamp for the block in our local cache, assert it's type and return, no need to query the chain
+		l.Timestamp = ts.(uint64)
+		return
+	}
+	// we didn't find the timestamp in our cache, query the node for the block header where we can find the timestamp
+	rpcMethod := "eth_getBlockByNumber"
+
+	var hdr kldbind.Header
+	if err := s.rpc.CallContext(ctx, &hdr, rpcMethod, blockNumber); err != nil {
+		log.Errorf("Unable to retrieve block[%s] timestamp: %s", blockNumber, err)
+		l.Timestamp = 0 // set to 0, we were not able to retrieve the timestamp.
+		return
+	}
+	l.Timestamp = hdr.Time
+	s.lp.stream.blockTimestampCache.Add(blockNumber, l.Timestamp)
+}
+
 func (s *subscription) processNewEvents(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -185,8 +212,11 @@ func (s *subscription) processNewEvents(ctx context.Context) error {
 		log.Debugf("%s: received %d events (%s)", s.logName, len(logs), rpcMethod)
 	}
 	for idx, logEntry := range logs {
+		if s.lp.stream.spec.Timestamps {
+			s.getEventTimestamp(context.Background(), logEntry)
+		}
 		if err := s.lp.processLogEntry(s.logName, logEntry, idx); err != nil {
-			log.Errorf("Failed to processs event: %s", err)
+			log.Errorf("Failed to process event: %s", err)
 		}
 	}
 	s.filteredOnce = true

@@ -33,6 +33,7 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 
+	lru "github.com/hashicorp/golang-lru"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -49,6 +50,8 @@ const (
 	DefaultExponentialBackoffInitial = time.Duration(1) * time.Second
 	// DefaultExponentialBackoffFactor is the factor we use between retries
 	DefaultExponentialBackoffFactor = float64(2.0)
+	// DefaultTimestampCacheSize is the number of entries we will hold in a LRU cache for block timestamps
+	DefaultTimestampCacheSize = 1000
 )
 
 // StreamInfo configures the stream to perform an action for each event
@@ -65,6 +68,7 @@ type StreamInfo struct {
 	RetryTimeoutSec      uint64         `json:"retryTimeoutSec,omitempty"`
 	BlockedRetryDelaySec uint64         `json:"blockedReryDelaySec,omitempty"`
 	Webhook              *webhookAction `json:"webhook,omitempty"`
+	Timestamps           bool           `json:"timestamps,omitempty"` // Include block timestamps in the events generated
 }
 
 type webhookAction struct {
@@ -75,23 +79,24 @@ type webhookAction struct {
 }
 
 type eventStream struct {
-	sm                subscriptionManager
-	allowPrivateIPs   bool
-	spec              *StreamInfo
-	eventStream       chan *eventData
-	stopped           bool
-	processorDone     bool
-	pollingInterval   time.Duration
-	pollerDone        bool
-	inFlight          uint64
-	batchCond         *sync.Cond
-	batchQueue        *list.List
-	batchCount        uint64
-	initialRetryDelay time.Duration
-	backoffFactor     float64
-	updateInProgress  bool
-	updateInterrupt   chan struct{}   // a zero-sized struct used only for signaling (hand rolled alternative to context)
-	updateWG          *sync.WaitGroup // Wait group for the go routines to reply back after they have stopped
+	sm                  subscriptionManager
+	allowPrivateIPs     bool
+	spec                *StreamInfo
+	eventStream         chan *eventData
+	stopped             bool
+	processorDone       bool
+	pollingInterval     time.Duration
+	pollerDone          bool
+	inFlight            uint64
+	batchCond           *sync.Cond
+	batchQueue          *list.List
+	batchCount          uint64
+	initialRetryDelay   time.Duration
+	backoffFactor       float64
+	updateInProgress    bool
+	updateInterrupt     chan struct{}   // a zero-sized struct used only for signaling (hand rolled alternative to context)
+	updateWG            *sync.WaitGroup // Wait group for the go routines to reply back after they have stopped
+	blockTimestampCache *lru.Cache
 }
 
 // newEventStream constructor verfies the action is correct, kicks
@@ -147,6 +152,9 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo) (a *eventStream, e
 		initialRetryDelay: DefaultExponentialBackoffInitial,
 		backoffFactor:     DefaultExponentialBackoffFactor,
 		pollingInterval:   time.Duration(sm.config().EventPollingIntervalSec) * time.Second,
+	}
+	if a.blockTimestampCache, err = lru.New(DefaultTimestampCacheSize); err != nil {
+		return nil, klderrors.Errorf(klderrors.EventStreamsCreateStreamResourceErr)
 	}
 	if a.pollingInterval == 0 {
 		// Let's us do this from UTs, without exposing it
@@ -222,6 +230,9 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 	}
 	if a.spec.Name != newSpec.Name {
 		a.spec.Name = newSpec.Name
+	}
+	if a.spec.Timestamps != newSpec.Timestamps {
+		a.spec.Timestamps = newSpec.Timestamps
 	}
 	if newSpec.Webhook != nil {
 		if newSpec.Webhook.URL == "" {

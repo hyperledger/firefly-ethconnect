@@ -1594,7 +1594,7 @@ func TestAddStreamNoSubMgr(t *testing.T) {
 
 func TestAddStreamOK(t *testing.T) {
 	assert := assert.New(t)
-	spec := &kldevents.StreamInfo{Type: "webhook", Name: "stream-1"}
+	spec := &kldevents.StreamInfo{Type: "webhook", Name: "stream-1", Timestamps: true}
 	b, _ := json.Marshal(spec)
 	req := httptest.NewRequest("POST", kldevents.StreamPathPrefix, bytes.NewReader(b))
 	res := httptest.NewRecorder()
@@ -1608,6 +1608,27 @@ func TestAddStreamOK(t *testing.T) {
 	assert.Equal(200, res.Result().StatusCode)
 	assert.Equal("webhook", newSpec.Type)
 	assert.Equal("stream-1", newSpec.Name)
+	assert.Equal(true, newSpec.Timestamps)
+	s.Shutdown()
+}
+
+func TestAddStreamDefaultNoTimestamps(t *testing.T) {
+	assert := assert.New(t)
+	spec := &kldevents.StreamInfo{Type: "webhook", Name: "stream-no-timestamps"}
+	b, _ := json.Marshal(spec)
+	req := httptest.NewRequest("POST", kldevents.StreamPathPrefix, bytes.NewReader(b))
+	res := httptest.NewRecorder()
+	s := &smartContractGW{}
+	s.sm = &mockSubMgr{}
+	r := &httprouter.Router{}
+	s.AddRoutes(r)
+	r.ServeHTTP(res, req)
+	var newSpec kldevents.StreamInfo
+	json.NewDecoder(res.Body).Decode(&newSpec)
+	assert.Equal(200, res.Result().StatusCode)
+	assert.Equal("webhook", newSpec.Type)
+	assert.Equal("stream-no-timestamps", newSpec.Name)
+	assert.Equal(false, newSpec.Timestamps)
 	s.Shutdown()
 }
 

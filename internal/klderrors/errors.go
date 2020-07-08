@@ -111,6 +111,8 @@ const (
 	EventStreamsSubscriptionNotFound = "Subscription with ID '%s' not found"
 	// EventStreamsCreateStreamStoreFailed problem saving a subscription to our DB
 	EventStreamsCreateStreamStoreFailed = "Failed to store stream: %s"
+	// EventStreamsCreateStreamResourceErr problem creating a resource required by the eventstream
+	EventStreamsCreateStreamResourceErr = "Failed to create a resource for the stream: %s"
 	// EventStreamsStreamNotFound stream not found
 	EventStreamsStreamNotFound = "Stream with ID '%s' not found"
 	// EventStreamsLogDecode problem decoding the logs for an event emitted on the chain

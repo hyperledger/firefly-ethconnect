@@ -224,6 +224,21 @@ func TestRestartFilterFail(t *testing.T) {
 	assert.EqualError(err, "eth_newFilter returned: pop")
 }
 
+func TestEventTimestampFail(t *testing.T) {
+	assert := assert.New(t)
+	stream := newTestStream()
+	lp := &logProcessor{stream: stream}
+
+	s := &subscription{
+		lp:   lp,
+		info: &SubscriptionInfo{},
+		rpc:  kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
+	}
+	l := &logEntry{Timestamp: 100} // set it to a fake value, should get overwritten
+	s.getEventTimestamp(context.Background(), l)
+	assert.Equal(l.Timestamp, uint64(0))
+}
+
 func TestUnsubscribe(t *testing.T) {
 	assert := assert.New(t)
 	s := &subscription{

@@ -780,9 +780,11 @@ func TestUpdateStream(t *testing.T) {
 			TLSkipHostVerify:  true,
 			RequestTimeoutSec: 0,
 		},
+		Timestamps: true,
 	}
 	updatedStream, err := sm.UpdateStream(ctx, stream.spec.ID, updateSpec)
 	assert.Equal(updatedStream.Name, "new-name")
+	assert.Equal(updatedStream.Timestamps, true)
 	assert.Equal(updatedStream.BatchSize, uint64(4))
 	assert.Equal(updatedStream.BatchTimeoutMS, uint64(10000))
 	assert.Equal(updatedStream.BlockedRetryDelaySec, uint64(5))

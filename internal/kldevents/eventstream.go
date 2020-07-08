@@ -231,6 +231,9 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 	if a.spec.Name != newSpec.Name {
 		a.spec.Name = newSpec.Name
 	}
+	if a.spec.Timestamps != newSpec.Timestamps {
+		a.spec.Timestamps = newSpec.Timestamps
+	}
 	if newSpec.Webhook != nil {
 		if newSpec.Webhook.URL == "" {
 			return nil, klderrors.Errorf(klderrors.EventStreamsWebhookNoURL)

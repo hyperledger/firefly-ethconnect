@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 	log "github.com/sirupsen/logrus"
@@ -76,7 +77,7 @@ func testEvent(subID string) *eventData {
 	}
 }
 
-func newTestStreamForBatching(spec *StreamInfo, status ...int) (*subscriptionMGR, *eventStream, *httptest.Server, chan []*eventData) {
+func newTestStreamForBatching(spec *StreamInfo, db kldkvstore.KVStore, status ...int) (*subscriptionMGR, *eventStream, *httptest.Server, chan []*eventData) {
 	mux := http.NewServeMux()
 	eventStream := make(chan []*eventData)
 	count := 0
@@ -98,6 +99,9 @@ func newTestStreamForBatching(spec *StreamInfo, status ...int) (*subscriptionMGR
 	sm := newTestSubscriptionManager()
 	sm.config().WebhooksAllowPrivateIPs = true
 	sm.config().EventPollingIntervalSec = 0
+	if db != nil {
+		sm.db = db
+	}
 	ctx := context.Background()
 	stream, _ := sm.AddStream(ctx, spec)
 	return sm, sm.streams[stream.ID], svr, eventStream
@@ -110,7 +114,7 @@ func TestBatchTimeout(t *testing.T) {
 			BatchSize:      10,
 			BatchTimeoutMS: 50,
 			Webhook:        &webhookAction{},
-		}, 200)
+		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
 	defer stream.stop()
@@ -156,7 +160,7 @@ func TestStopDuringTimeout(t *testing.T) {
 			BatchSize:      10,
 			BatchTimeoutMS: 2000,
 			Webhook:        &webhookAction{},
-		}, 200)
+		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
 
@@ -165,7 +169,6 @@ func TestStopDuringTimeout(t *testing.T) {
 	stream.stop()
 	time.Sleep(10 * time.Millisecond)
 	assert.True(stream.processorDone)
-	assert.True(stream.dispatcherDone)
 }
 
 func TestBatchSizeCap(t *testing.T) {
@@ -174,7 +177,7 @@ func TestBatchSizeCap(t *testing.T) {
 		&StreamInfo{
 			BatchSize: 10000000,
 			Webhook:   &webhookAction{},
-		}, 200)
+		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
 	defer stream.stop()
@@ -189,7 +192,7 @@ func TestStreamName(t *testing.T) {
 		&StreamInfo{
 			Name:    "testStream",
 			Webhook: &webhookAction{},
-		}, 200)
+		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
 	defer stream.stop()
@@ -205,7 +208,7 @@ func TestBlockingBehavior(t *testing.T) {
 			Webhook:              &webhookAction{},
 			ErrorHandling:        ErrorHandlingBlock,
 			BlockedRetryDelaySec: 1,
-		}, 404)
+		}, nil, 404)
 	defer close(eventStream)
 	defer svr.Close()
 	defer stream.stop()
@@ -230,7 +233,7 @@ func TestSkippingBehavior(t *testing.T) {
 			Webhook:              &webhookAction{},
 			ErrorHandling:        ErrorHandlingSkip,
 			BlockedRetryDelaySec: 1,
-		}, 404 /* fail the requests */)
+		}, nil, 404 /* fail the requests */)
 	defer close(eventStream)
 	defer svr.Close()
 	defer stream.stop()
@@ -259,7 +262,7 @@ func TestBackoffRetry(t *testing.T) {
 			ErrorHandling:        ErrorHandlingBlock,
 			RetryTimeoutSec:      1,
 			BlockedRetryDelaySec: 1,
-		}, 404, 500, 503, 504, 200)
+		}, nil, 404, 500, 503, 504, 200)
 	defer close(eventStream)
 	defer svr.Close()
 	defer stream.stop()
@@ -294,7 +297,7 @@ func TestBlockedAddresses(t *testing.T) {
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
 			Webhook:       &webhookAction{},
-		}, 200)
+		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
 	defer stream.stop()
@@ -317,7 +320,7 @@ func TestBadDNSName(t *testing.T) {
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingSkip,
 			Webhook:       &webhookAction{},
-		}, 200)
+		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
 	defer stream.stop()
@@ -342,7 +345,7 @@ func TestBuildup(t *testing.T) {
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
 			Webhook:       &webhookAction{},
-		}, 200)
+		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
 	defer stream.stop()
@@ -429,12 +432,12 @@ func TestProcessEventsEnd2End(t *testing.T) {
 	dir := tempdir(t)
 	defer cleanup(t, dir)
 
+	db, _ := kldkvstore.NewLDBKeyValueStore(dir)
 	sm, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize: 1,
 			Webhook:   &webhookAction{},
-		}, 200)
-	sm.db, _ = kldkvstore.NewLDBKeyValueStore(dir)
+		}, db, 200)
 	defer svr.Close()
 
 	s := setupTestSubscription(assert, sm, stream, "mySubName")
@@ -478,7 +481,7 @@ func TestCheckpointRecovery(t *testing.T) {
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
 			Webhook:       &webhookAction{},
-		}, 200)
+		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
 	defer stream.stop()
@@ -541,7 +544,7 @@ func TestWithoutCheckpointRecovery(t *testing.T) {
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
 			Webhook:       &webhookAction{},
-		}, 200)
+		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
 	defer stream.stop()
@@ -582,7 +585,7 @@ func TestMarkStaleOnError(t *testing.T) {
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
 			Webhook:       &webhookAction{},
-		}, 200)
+		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
 	defer stream.stop()
@@ -613,7 +616,7 @@ func TestStoreCheckpointLoadError(t *testing.T) {
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
 			Webhook:       &webhookAction{},
-		}, 200)
+		}, nil, 200)
 	mockKV := kldkvstore.NewMockKV(fmt.Errorf("pop"))
 	sm.db = mockKV
 	defer close(eventStream)
@@ -636,10 +639,9 @@ func TestStoreCheckpointStoreError(t *testing.T) {
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
 			Webhook:       &webhookAction{},
-		}, 200)
+		}, nil, 200)
 	mockKV := kldkvstore.NewMockKV(nil)
 	mockKV.StoreErr = fmt.Errorf("pop")
-	sm.db = mockKV
 	defer close(eventStream)
 	defer svr.Close()
 	defer stream.stop()
@@ -666,7 +668,7 @@ func TestProcessBatchEmptyArray(t *testing.T) {
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
 			Webhook:       &webhookAction{},
-		}, 200)
+		}, nil, 200)
 	mockKV := kldkvstore.NewMockKV(nil)
 	mockKV.StoreErr = fmt.Errorf("pop")
 	sm.db = mockKV
@@ -675,4 +677,146 @@ func TestProcessBatchEmptyArray(t *testing.T) {
 	defer stream.stop()
 
 	stream.processBatch(0, []*eventData{})
+}
+
+func TestUpdateStream(t *testing.T) {
+	// The test performs the following steps:
+	// * Create a stream with batch size 5
+	// * Push 3 events
+	// * Update the event stream and verify updated fields
+	// * close event stream
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	db, _ := kldkvstore.NewLDBKeyValueStore(dir)
+	sm, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingBlock,
+			BatchSize:     5,
+			Webhook:       &webhookAction{},
+		}, db, 200)
+	defer svr.Close()
+	defer close(eventStream)
+	defer stream.stop()
+
+	for i := 0; i < 3; i++ {
+		stream.handleEvent(testEvent(fmt.Sprintf("sub%d", i)))
+	}
+	ctx := context.Background()
+	headers := make(map[string]string)
+	headers["test-h1"] = "val1"
+	updateSpec := &StreamInfo{
+		BatchSize:            4,
+		BatchTimeoutMS:       10000,
+		BlockedRetryDelaySec: 5,
+		ErrorHandling:        ErrorHandlingBlock,
+		Name:                 "new-name",
+		Webhook: &webhookAction{
+			URL:               "http://foo.url",
+			Headers:           headers,
+			TLSkipHostVerify:  true,
+			RequestTimeoutSec: 0,
+		},
+	}
+	updatedStream, err := sm.UpdateStream(ctx, stream.spec.ID, updateSpec)
+	assert.Equal(updatedStream.Name, "new-name")
+	assert.Equal(updatedStream.BatchSize, uint64(4))
+	assert.Equal(updatedStream.BatchTimeoutMS, uint64(10000))
+	assert.Equal(updatedStream.BlockedRetryDelaySec, uint64(5))
+	assert.Equal(updatedStream.ErrorHandling, ErrorHandlingBlock)
+	assert.Equal(updatedStream.Webhook.URL, "http://foo.url")
+	assert.Equal(updatedStream.Webhook.Headers["test-h1"], "val1")
+
+	assert.NoError(err)
+}
+
+func TestUpdateStreamMissingWebhookURL(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	db, _ := kldkvstore.NewLDBKeyValueStore(dir)
+	sm, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingBlock,
+			Webhook:       &webhookAction{},
+		}, db, 200)
+	defer svr.Close()
+
+	s := setupTestSubscription(assert, sm, stream, "mySubName")
+	assert.Equal("mySubName", s.Name)
+
+	// We expect three events to be sent to the webhook
+	// With the default batch size of 1, that means three separate requests
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		<-eventStream
+		<-eventStream
+		<-eventStream
+		wg.Done()
+	}()
+	wg.Wait()
+
+	ctx := context.Background()
+	updateSpec := &StreamInfo{
+		Webhook: &webhookAction{
+			URL:               "",
+			TLSkipHostVerify:  true,
+			RequestTimeoutSec: 5,
+		},
+	}
+	_, err := sm.UpdateStream(ctx, stream.spec.ID, updateSpec)
+	assert.EqualError(err, klderrors.EventStreamsWebhookNoURL)
+	err = sm.DeleteSubscription(ctx, s.ID)
+	assert.NoError(err)
+	err = sm.DeleteStream(ctx, stream.spec.ID)
+	assert.NoError(err)
+	sm.Close()
+}
+
+func TestUpdateStreamInvalidWebhookURL(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	db, _ := kldkvstore.NewLDBKeyValueStore(dir)
+	sm, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingBlock,
+			Webhook:       &webhookAction{},
+		}, db, 200)
+	defer svr.Close()
+
+	s := setupTestSubscription(assert, sm, stream, "mySubName")
+	assert.Equal("mySubName", s.Name)
+
+	// We expect three events to be sent to the webhook
+	// With the default batch size of 1, that means three separate requests
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		<-eventStream
+		<-eventStream
+		<-eventStream
+		wg.Done()
+	}()
+	wg.Wait()
+
+	ctx := context.Background()
+	updateSpec := &StreamInfo{
+		Webhook: &webhookAction{
+			URL:               ":badurl",
+			TLSkipHostVerify:  true,
+			RequestTimeoutSec: 5,
+		},
+	}
+	_, err := sm.UpdateStream(ctx, stream.spec.ID, updateSpec)
+	assert.EqualError(err, klderrors.EventStreamsWebhookInvalidURL)
+	err = sm.DeleteSubscription(ctx, s.ID)
+	assert.NoError(err)
+	err = sm.DeleteStream(ctx, stream.spec.ID)
+	assert.NoError(err)
+	sm.Close()
 }

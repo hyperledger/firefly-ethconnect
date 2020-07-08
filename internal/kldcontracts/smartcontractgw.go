@@ -115,6 +115,7 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	router.GET("/gateways/:gateway_lookup", g.getRemoteRegistrySwaggerOrABI)
 	router.GET("/g/:gateway_lookup", g.getRemoteRegistrySwaggerOrABI)
 	router.POST(kldevents.StreamPathPrefix, g.withEventsAuth(g.createStream))
+	router.PATCH(kldevents.StreamPathPrefix, g.withEventsAuth(g.updateStream))
 	router.GET(kldevents.StreamPathPrefix, g.withEventsAuth(g.listStreamsOrSubs))
 	router.GET(kldevents.SubPathPrefix, g.withEventsAuth(g.listStreamsOrSubs))
 	router.GET(kldevents.StreamPathPrefix+"/:id", g.withEventsAuth(g.getStreamOrSub))
@@ -642,6 +643,41 @@ func (g *smartContractGW) createStream(res http.ResponseWriter, req *http.Reques
 	newSpec, err := g.sm.AddStream(req.Context(), &spec)
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 400)
+		return
+	}
+
+	status := 200
+	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(status)
+	enc := json.NewEncoder(res)
+	enc.SetIndent("", "  ")
+	enc.Encode(&newSpec)
+}
+
+// updateStream updates a stream
+func (g *smartContractGW) updateStream(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	log.Infof("--> %s %s", req.Method, req.URL)
+
+	if g.sm == nil {
+		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		return
+	}
+
+	streamID := params.ByName("id")
+	_, err := g.sm.StreamByID(req.Context(), streamID)
+	if err != nil {
+		g.gatewayErrReply(res, req, err, 404)
+		return
+	}
+	var spec kldevents.StreamInfo
+	if err := json.NewDecoder(req.Body).Decode(&spec); err != nil {
+		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayEventStreamInvalid, err), 400)
+		return
+	}
+	newSpec, err := g.sm.UpdateStream(req.Context(), streamID, &spec)
+	if err != nil {
+		g.gatewayErrReply(res, req, err, 500)
 		return
 	}
 

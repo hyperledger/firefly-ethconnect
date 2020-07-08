@@ -71,6 +71,7 @@ func TestHDWalletSignOK(t *testing.T) {
 	s, err := hd.SignerFor(hdr)
 	assert.NoError(err)
 
+	assert.Equal(s.Type(), "HD Wallet")
 	assert.Equal(addr.String(), s.Address())
 
 	tx := types.NewContractCreation(12345, big.NewInt(0), 0, big.NewInt(0), []byte("hello world"))

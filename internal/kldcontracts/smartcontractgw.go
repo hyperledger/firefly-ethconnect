@@ -115,7 +115,7 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	router.GET("/gateways/:gateway_lookup", g.getRemoteRegistrySwaggerOrABI)
 	router.GET("/g/:gateway_lookup", g.getRemoteRegistrySwaggerOrABI)
 	router.POST(kldevents.StreamPathPrefix, g.withEventsAuth(g.createStream))
-	router.PATCH(kldevents.StreamPathPrefix, g.withEventsAuth(g.updateStream))
+	router.PATCH(kldevents.StreamPathPrefix+"/:id", g.withEventsAuth(g.updateStream))
 	router.GET(kldevents.StreamPathPrefix, g.withEventsAuth(g.listStreamsOrSubs))
 	router.GET(kldevents.SubPathPrefix, g.withEventsAuth(g.listStreamsOrSubs))
 	router.GET(kldevents.StreamPathPrefix+"/:id", g.withEventsAuth(g.getStreamOrSub))

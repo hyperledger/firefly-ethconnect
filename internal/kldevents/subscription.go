@@ -184,7 +184,8 @@ func (s *subscription) getEventTimestamp(ctx context.Context, l *logEntry) {
 	rpcMethod := "eth_getBlockByNumber"
 
 	var hdr kldbind.Header
-	if err := s.rpc.CallContext(ctx, &hdr, rpcMethod, blockNumber); err != nil {
+	// 2nd parameter (false) indicates it is sufficient to retrieve only hashes of tx objects
+	if err := s.rpc.CallContext(ctx, &hdr, rpcMethod, blockNumber, false); err != nil {
 		log.Errorf("Unable to retrieve block[%s] timestamp: %s", blockNumber, err)
 		l.Timestamp = 0 // set to 0, we were not able to retrieve the timestamp.
 		return

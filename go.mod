@@ -21,7 +21,7 @@ require (
 	github.com/go-openapi/spec v0.19.4
 	github.com/golang/mock v1.3.1
 	github.com/gorilla/websocket v1.4.1 // indirect
-	github.com/hashicorp/golang-lru v0.5.1 // indirect
+	github.com/hashicorp/golang-lru v0.5.4
 	github.com/huin/goupnp v1.0.0 // indirect
 	github.com/icza/dyno v0.0.0-20180601094105-0c96289f9585
 	github.com/jcmturner/gofork v1.0.0 // indirect
@@ -56,13 +56,12 @@ require (
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	go.uber.org/atomic v1.4.0
-	golang.org/x/crypto v0.0.0-20200128174031-69ecbb4d6d5d // indirect
+	golang.org/x/crypto v0.0.0-20200709230013-948cd5f35899 // indirect
 	golang.org/x/net v0.0.0-20191112182307-2180aed22343 // indirect
 	golang.org/x/sys v0.0.0-20200124204421-9fbb57f87de9 // indirect
 	golang.org/x/text v0.3.2
 	gopkg.in/jcmturner/gokrb5.v7 v7.3.0 // indirect
 	gopkg.in/yaml.v2 v2.2.5
-	github.com/hashicorp/golang-lru v0.5.4
 )
 
 go 1.13

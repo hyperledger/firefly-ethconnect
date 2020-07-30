@@ -731,12 +731,20 @@ func TestNewSendTxnMissingParamTypes(t *testing.T) {
 	assert.EqualError(err, "Param 0: supplied as an object must have 'type' and 'value' fields")
 }
 
-func TestGenMethodABIFunctionType(t *testing.T) {
+func TestGenMethodABIBadType(t *testing.T) {
 	assert := assert.New(t)
 	_, err := genMethodABI(&kldmessages.ABIMethod{
 		Type: "badness",
 	}, abi.Arguments{})
 	assert.EqualError(err, "Unsupported method type: badness")
+}
+
+func TestGenMethodABIFunctionType(t *testing.T) {
+	assert := assert.New(t)
+	_, err := genMethodABI(&kldmessages.ABIMethod{
+		Type: "function",
+	}, abi.Arguments{})
+	assert.NoError(err)
 }
 
 func TestCallMethod(t *testing.T) {

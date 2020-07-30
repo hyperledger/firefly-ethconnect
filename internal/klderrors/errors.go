@@ -358,7 +358,7 @@ const (
 	TransactionSendInputTypeNotSupported = "Type '%s' is not yet supported"
 	// TransactionSendInputCountMismatch wrong number of args supplied according to the ABI
 	TransactionSendInputCountMismatch = "Method '%s': Requires %d args (supplied=%d)"
-	// TransactionSendInputStructureWrong the JSON structure supplied to decribe the arguments is incorrect according to our schema
+	// TransactionSendInputStructureWrong the JSON structure supplied to describe the arguments is incorrect according to our schema
 	TransactionSendInputStructureWrong = "Param %d: supplied as an object must have 'type' and 'value' fields"
 	// TransactionSendInputInLineTypeArrayNotString when sending us an ABI definition for the inputs directly
 	TransactionSendInputInLineTypeArrayNotString = "Param %d: supplied as an object must be string"

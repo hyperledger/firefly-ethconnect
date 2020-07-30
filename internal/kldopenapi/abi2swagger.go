@@ -90,7 +90,7 @@ func (c *ABI2Swagger) convert(basePath, name string, abi *abi.ABI, devdocsJSON s
 			Definitions: definitions,
 			Parameters:  parameters,
 			SecurityDefinitions: map[string]*spec.SecurityScheme{
-				kaleidoAppCredential: &spec.SecurityScheme{
+				kaleidoAppCredential: {
 					SecuritySchemeProps: spec.SecuritySchemeProps{
 						Type: "basic",
 					},
@@ -155,7 +155,7 @@ func (c *ABI2Swagger) getDeclaredIDDetails(inst bool, declaredID string, inputs 
 	}
 	sig += ")"
 	search := strings.ReplaceAll(sig, "(", "\\(")
-	search = strings.ReplaceAll(sig, ")", "\\)")
+	search = strings.ReplaceAll(search, ")", "\\)")
 	methodDocs := devdocs.Get(search)
 	return constructor, sig, path, methodDocs
 }
@@ -194,7 +194,7 @@ func (c *ABI2Swagger) addRegisterPath(paths map[string]spec.PathItem) {
 			Responses: &spec.Responses{
 				ResponsesProps: spec.ResponsesProps{
 					StatusCodeResponses: map[int]spec.Response{
-						201: spec.Response{
+						201: {
 							ResponseProps: spec.ResponseProps{
 								Description: "Successfully registered",
 							},
@@ -204,12 +204,12 @@ func (c *ABI2Swagger) addRegisterPath(paths map[string]spec.PathItem) {
 			},
 			Parameters: []spec.Parameter{
 				c.getAddressParam(),
-				spec.Parameter{
+				{
 					Refable: spec.Refable{
 						Ref: registerParam,
 					},
 				},
-				spec.Parameter{
+				{
 					ParamProps: spec.ParamProps{
 						Name:     "body",
 						In:       "body",
@@ -379,7 +379,7 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 
 func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstructor bool) {
 
-	op.Security = append(op.Security, map[string][]string{kaleidoAppCredential: []string{}})
+	op.Security = append(op.Security, map[string][]string{kaleidoAppCredential: {}})
 
 	fromParam, _ := spec.NewRef("#/parameters/fromParam")
 	valueParam, _ := spec.NewRef("#/parameters/valueParam")
@@ -577,13 +577,13 @@ func (c *ABI2Swagger) buildEventPOSTPath(eventSchema string, inst bool, event ab
 			Schema: &spec.Schema{
 				SchemaProps: spec.SchemaProps{
 					Properties: map[string]spec.Schema{
-						"stream": spec.Schema{
+						"stream": {
 							SchemaProps: spec.SchemaProps{
 								Description: "The ID of an event stream already configured in the REST Gateway",
 								Type:        []string{"string"},
 							},
 						},
-						"fromBlock": spec.Schema{
+						"fromBlock": {
 							SchemaProps: spec.SchemaProps{
 								Description: "The block number to start the subscription from",
 								Type:        []string{"string"},
@@ -631,7 +631,7 @@ func (c *ABI2Swagger) buildResponses(outputSchema string, devdocs gjson.Result) 
 	return &spec.Responses{
 		ResponsesProps: spec.ResponsesProps{
 			StatusCodeResponses: map[int]spec.Response{
-				200: spec.Response{
+				200: {
 					ResponseProps: spec.ResponseProps{
 						Description: desc,
 						Schema: &spec.Schema{

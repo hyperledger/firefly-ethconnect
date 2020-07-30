@@ -95,7 +95,7 @@ func TestHTTPRequesterPOSTSuccess(t *testing.T) {
 
 	hr := NewHTTPRequester("unit test", &HTTPRequesterConf{
 		Headers: map[string][]string{
-			"someheader": []string{"headerval"},
+			"someheader": {"headerval"},
 		},
 	})
 

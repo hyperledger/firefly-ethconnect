@@ -196,7 +196,7 @@ func TestActionChildCleanup(t *testing.T) {
 	})
 	assert.NoError(err)
 
-	_, err = sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "ping"}, stream.ID, "12345", "")
+	sm.AddSubscription(ctx, nil, &kldbind.ABIEvent{Name: "ping"}, stream.ID, "12345", "")
 	err = sm.DeleteStream(ctx, stream.ID)
 	assert.NoError(err)
 

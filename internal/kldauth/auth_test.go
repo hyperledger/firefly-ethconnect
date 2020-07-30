@@ -50,7 +50,7 @@ func TestAccessToken(t *testing.T) {
 	assert.Equal(nil, GetAuthContext(context.Background()))
 	assert.Equal("", GetAccessToken(context.Background()))
 
-	ctx, err = WithAuthContext(context.Background(), "badone")
+	_, err = WithAuthContext(context.Background(), "badone")
 	assert.EqualError(err, "badness")
 
 	RegisterSecurityModule(nil)

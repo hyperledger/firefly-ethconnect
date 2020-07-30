@@ -54,10 +54,24 @@ type ABIType = abi.Type
 // ABIMethod is an method on the ABI
 type ABIMethod = abi.Method
 
+// ABIArgumentMarshaling is abi.ArgumentMarshaling
+type ABIArgumentMarshaling = abi.ArgumentMarshaling
+
 // ABI is a wrapper around the ethereum ABI implementation that includes
 // marshal, as well as unmarshal
 type ABI struct {
 	abi.ABI
+}
+
+// NewABIEvent constructor for abi.Event
+func NewABIEvent(name, rawName string, anonymous bool, inputs ABIArguments) *ABIEvent {
+	abiEvent := abi.NewEvent(name, rawName, anonymous, inputs)
+	return &abiEvent
+}
+
+// NewABIType constructor for abi.Type
+func NewABIType(t string, internalType string, components []ABIArgumentMarshaling) (ABIType, error) {
+	return abi.NewType(t, internalType, components)
 }
 
 // Header is a type for ethereum block Header representation

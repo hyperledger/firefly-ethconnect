@@ -106,7 +106,7 @@ func TestCreateWebhookSub(t *testing.T) {
 	assert.Equal(s.info.ID, s1.info.ID)
 	assert.Equal("*:glastonbury(address,uint256,bool)", s1.info.Name)
 	assert.Equal("*:glastonbury(address,uint256,bool)", s1.info.Summary)
-	assert.Equal(event.ID(), s.info.Filter.Topics[0][0])
+	assert.Equal(event.ID, s.info.Filter.Topics[0][0])
 }
 
 func TestCreateWebhookSubWithAddr(t *testing.T) {
@@ -126,7 +126,7 @@ func TestCreateWebhookSubWithAddr(t *testing.T) {
 	s, err := newSubscription(m, rpc, &addr, subInfo)
 	assert.NoError(err)
 	assert.NotEmpty(s.info.ID)
-	assert.Equal(event.ID(), s.info.Filter.Topics[0][0])
+	assert.Equal(event.ID, s.info.Filter.Topics[0][0])
 	assert.Equal("0x0123456789abcDEF0123456789abCDef01234567:devcon()", s.info.Summary)
 	assert.Equal("mySubscription", s.info.Name)
 }

@@ -108,7 +108,7 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 		BlockNumber:      entry.BlockNumber.ToInt().String(),
 		TransactionIndex: entry.TransactionIndex.String(),
 		TransactionHash:  entry.TransactionHash.String(),
-		Signature:        lp.event.Sig(),
+		Signature:        kldbind.ABIEventSignature(lp.event),
 		Data:             make(map[string]interface{}),
 		SubID:            lp.subID,
 		LogIndex:         strconv.Itoa(idx),
@@ -129,7 +129,7 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 		var val interface{}
 		if input.Indexed {
 			if topicIdx >= len(entry.Topics) {
-				return klderrors.Errorf(klderrors.EventStreamsLogDecodeInsufficientTopics, subInfo, idx, lp.event)
+				return klderrors.Errorf(klderrors.EventStreamsLogDecodeInsufficientTopics, subInfo, idx, kldbind.ABIEventSignature(lp.event))
 			}
 			topic := entry.Topics[topicIdx]
 			topicIdx++

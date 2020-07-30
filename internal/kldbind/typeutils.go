@@ -16,6 +16,8 @@ package kldbind
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -63,6 +65,15 @@ func ABITypeKnown(typeName string) ABIType {
 	return t
 }
 
+// ABIEventSignature returns a signature for an ABI event
+func ABIEventSignature(event *ABIEvent) string {
+	typeStrings := make([]string, len(event.Inputs))
+	for i, input := range event.Inputs {
+		typeStrings[i] = input.Type.String()
+	}
+	return fmt.Sprintf("%v(%v)", event.RawName, strings.Join(typeStrings, ","))
+}
+
 type arg struct {
 	Name    string `json:"name,omitempty"`
 	Type    string `json:"type,omitempty"`
@@ -70,33 +81,31 @@ type arg struct {
 }
 
 type field struct {
-	Type      string `json:"type,omitempty"`
-	Name      string `json:"name,omitempty"`
-	Constant  bool   `json:"constant,omitempty"`
-	Anonymous bool   `json:"anonymous,omitempty"`
-	Inputs    []arg
-	Outputs   []arg
-}
-
-// UnmarshalJSON pass through the unmarshal (which abi.ABI implements)
-func (abi *ABI) UnmarshalJSON(data []byte) error {
-	return abi.ABI.UnmarshalJSON(data)
+	Type            string `json:"type,omitempty"`
+	Name            string `json:"name,omitempty"`
+	Constant        bool   `json:"constant,omitempty"`
+	Anonymous       bool   `json:"anonymous,omitempty"`
+	StateMutability string `json:"stateMutability,omitempty"`
+	Inputs          []arg
+	Outputs         []arg
 }
 
 // MarshalJSON implements the reverse of UnmarshalJSON
 func (abi *ABI) MarshalJSON() ([]byte, error) {
 	var fields []field
 	fields = append(fields, field{
-		Type:   "constructor",
-		Inputs: marshalArgs(abi.Constructor.Inputs),
+		Type:            "constructor",
+		StateMutability: abi.Constructor.StateMutability,
+		Inputs:          marshalArgs(abi.Constructor.Inputs),
 	})
 	for name, method := range abi.Methods {
 		fields = append(fields, field{
-			Type:     "function",
-			Name:     name,
-			Constant: method.Const,
-			Inputs:   marshalArgs(method.Inputs),
-			Outputs:  marshalArgs(method.Outputs),
+			Type:            "function",
+			Name:            name,
+			Constant:        method.IsConstant(),
+			StateMutability: method.StateMutability,
+			Inputs:          marshalArgs(method.Inputs),
+			Outputs:         marshalArgs(method.Outputs),
 		})
 	}
 	for name, event := range abi.Events {

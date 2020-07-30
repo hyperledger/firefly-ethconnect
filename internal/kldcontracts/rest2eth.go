@@ -385,7 +385,7 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 
 	if c.abiEvent != nil {
 		r.subscribeEvent(res, req, c.addr, c.abiEvent, c.body)
-	} else if (req.Method == http.MethodPost && !c.abiMethod.Const) && strings.ToLower(getKLDParam("call", req, true)) != "true" {
+	} else if (req.Method == http.MethodPost && !c.abiMethod.IsConstant()) && strings.ToLower(getKLDParam("call", req, true)) != "true" {
 		if c.from == "" {
 			err = klderrors.Errorf(klderrors.RESTGatewayMissingFromAddress)
 			r.restErrReply(res, req, err, 400)

@@ -163,7 +163,7 @@ func (c *ABI2Swagger) getDeclaredIDDetails(inst bool, declaredID string, inputs 
 func (c *ABI2Swagger) buildMethodDefinitionsAndPath(inst bool, defs map[string]spec.Schema, paths map[string]spec.PathItem, name string, method abi.Method, devdocs gjson.Result) {
 
 	constructor, methodSig, path, methodDocs := c.getDeclaredIDDetails(inst, name, method.Inputs, devdocs)
-	if method.Const {
+	if method.IsConstant() {
 		methodSig += " [read only]"
 	}
 

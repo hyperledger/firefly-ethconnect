@@ -60,27 +60,32 @@ func TestProcessLogEntryNillAndTooFewFields(t *testing.T) {
 	stream := &eventStream{
 		spec: spec,
 	}
+	uint256Type, _ := kldbind.NewABIType("uint256", "big.Int", []kldbind.ABIArgumentMarshaling{})
 	lp := &logProcessor{
-		event: &kldbind.ABIEvent{
-			Anonymous: true,
-			Inputs: []kldbind.ABIArgument{
+		event: kldbind.NewABIEvent(
+			"testEvent",
+			"testEvent",
+			true,
+			[]kldbind.ABIArgument{
 				kldbind.ABIArgument{
 					Name:    "one",
 					Indexed: true,
+					Type:    uint256Type,
 				},
 				kldbind.ABIArgument{
 					Name:    "two",
 					Indexed: true,
+					Type:    uint256Type,
 				},
 			},
-		},
+		),
 		stream: stream,
 	}
 	err := lp.processLogEntry("ut", &logEntry{
 		Topics: []*kldbind.Hash{nil},
 	}, 2)
 
-	assert.EqualError(err, "ut: Ran out of topics for indexed fields at field 1 of event ( indexed one,  indexed two)")
+	assert.EqualError(err, "ut: Ran out of topics for indexed fields at field 1 of testEvent(uint256,uint256)")
 }
 
 func TestProcessLogBadRLPData(t *testing.T) {

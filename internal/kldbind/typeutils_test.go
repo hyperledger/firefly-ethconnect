@@ -50,33 +50,43 @@ func TestABIMarshalUnMarshal(t *testing.T) {
 	tUint256, _ := abi.NewType("uint256", "", []abi.ArgumentMarshaling{})
 	a1 := ABI{
 		ABI: abi.ABI{
-			Constructor: abi.Method{
-				Inputs: abi.Arguments{
+			Constructor: abi.NewMethod(
+				"",
+				"",
+				abi.Constructor,
+				"",
+				false,
+				false,
+				abi.Arguments{
 					abi.Argument{Name: "carg1", Type: tUint256, Indexed: true},
 				},
-			},
+				nil,
+			),
 			Methods: map[string]abi.Method{
-				"method1": abi.Method{
-					Name:    "method1",
-					RawName: "method1",
-					Const:   true,
-					Inputs: abi.Arguments{
+				"method1": abi.NewMethod(
+					"method1",
+					"method1",
+					abi.Function,
+					"",
+					true,
+					false,
+					abi.Arguments{
 						abi.Argument{Name: "marg1", Type: tUint256, Indexed: true},
 					},
-					Outputs: abi.Arguments{
+					abi.Arguments{
 						abi.Argument{Name: "ret1", Type: tUint256, Indexed: true},
 					},
-				},
+				),
 			},
 			Events: map[string]abi.Event{
-				"event1": abi.Event{
-					Name:      "event1",
-					RawName:   "event1",
-					Anonymous: true,
-					Inputs: abi.Arguments{
+				"event1": abi.NewEvent(
+					"event1",
+					"event1",
+					true,
+					abi.Arguments{
 						abi.Argument{Name: "earg1", Type: tUint256, Indexed: true},
 					},
-				},
+				),
 			},
 		},
 	}
@@ -124,4 +134,18 @@ func TestABIEventMarshalUnMarshal(t *testing.T) {
 	badStuct := "{\"inputs\": false}"
 	err = json.Unmarshal([]byte(badStuct), &me)
 	assert.Regexp("cannot unmarshal", err.Error())
+}
+
+func TestABISignature(t *testing.T) {
+	assert := assert.New(t)
+
+	tuint256, _ := NewABIType("uint256", "uint256", []ABIArgumentMarshaling{})
+	assert.Equal("uint256", tuint256.String())
+
+	ev := NewABIEvent("test", "test", true, ABIArguments{ABIArgument{
+		Name: "arg1",
+		Type: tuint256,
+	}})
+	assert.Equal("test(uint256)", ABIEventSignature(ev))
+
 }

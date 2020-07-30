@@ -1,8 +1,8 @@
 # github.com/kaleido-io/ethconnect
 
-[![codecov](https://codecov.io/gh/kaleido-io/ethconnect/branch/master/graph/badge.svg?token=RWlSbY389z)](https://codecov.io/gh/kaleido-io/ethconnect)
+[![codecov](https://codecov.io/gh/kaleido-io/ethconnect/branch/master/graph/badge.svg?token=RWlSbY389z)](https://codecov.io/gh/kaleido-io/ethconnect) [![Go Report Card](https://goreportcard.com/badge/github.com/kaleido-io/ethconnect)](https://goreportcard.com/report/github.com/kaleido-io/ethconnect)
 
-- [github.com/kaleido-io/ethconnect](#githubcomkaleido-ioethconnect-20)
+- [github.com/kaleido-io/ethconnect](#githubcomkaleido-ioethconnect)
   - [Kaleido's Ethconnect REST Gateway](#kaleidos-ethconnect-rest-gateway)
   - [License](#license)
   - [Example payloads](#example-payloads)

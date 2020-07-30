@@ -118,7 +118,7 @@ const (
 	// EventStreamsLogDecode problem decoding the logs for an event emitted on the chain
 	EventStreamsLogDecode = "%s: Failed to decode data: %s"
 	// EventStreamsLogDecodeInsufficientTopics ran out of topics according to the indexed fields described on the ABI event
-	EventStreamsLogDecodeInsufficientTopics = "%s: Ran out of topics for indexed fields at field %d of %+v"
+	EventStreamsLogDecodeInsufficientTopics = "%s: Ran out of topics for indexed fields at field %d of %s"
 	// EventStreamsLogDecodeData RLP decoding of the data section of the logs failed
 	EventStreamsLogDecodeData = "%s: Failed to parse RLP data from event: %s"
 
@@ -237,6 +237,8 @@ const (
 	RESTGatewaySyncMsgTypeMismatch = "Unexpected condition (message types do not match when processing)"
 	// RESTGatewaySyncWrapErrorWithTXDetail wraps a low level error with transaction hash context on sync APIs before returning
 	RESTGatewaySyncWrapErrorWithTXDetail = "TX %s: %s"
+	// RESTGatewayMethodTypeInvalid unsupported method type
+	RESTGatewayMethodTypeInvalid = "Unsupported method type: %s"
 
 	// RESTGatewayCompileContractInvalidFormData invalid form data when requesting a compilation to generate an ABI/bytecode
 	RESTGatewayCompileContractInvalidFormData = "Could not parse supplied multi-part form data: %s"
@@ -364,6 +366,8 @@ const (
 	TransactionSendInputInLineTypeUnknown = "Param %d: Unable to map %s to etherueum type: %s"
 	// TransactionSendMsgTypeUnknown we got a JSON message into the core processor (from Kafka, Webhooks etc.) that we don't understand
 	TransactionSendMsgTypeUnknown = "Unknown message type '%s'"
+	// TransactionSendInputTooManyParams more parameters provided than specified on ABI
+	TransactionSendInputTooManyParams = "Supplied %d paramters for ABI that supports %d"
 
 	// TransactionSendReceiptCheckError we continually had bad RCs back from the node while trying to check for the receipt up to the timeout
 	TransactionSendReceiptCheckError = "Error obtaining transaction receipt (%d retries): %s"

@@ -140,9 +140,8 @@ func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr 
 			n, ok := n.SetString(blocknumber, 10)
 			if !ok {
 				return nil, klderrors.Errorf(klderrors.TransactionCallInvalidBlockNumber)
-			} else {
-				callOption = hexutil.EncodeBig(n)
 			}
+			callOption = hexutil.EncodeBig(n)
 		}
 	}
 
@@ -274,23 +273,31 @@ func mapOutput(argName, argType string, t *abi.Type, rawValue interface{}) (inte
 	}
 }
 
-// NewSendTxn builds a new ethereum transactio`n from the supplied
+// NewSendTxn builds a new ethereum transaction from the supplied
 // SendTranasction message
 func NewSendTxn(msg *kldmessages.SendTransaction, signer TXSigner) (tx *Txn, err error) {
 
 	var methodABI *abi.Method
 	if msg.Method == nil || msg.Method.Name == "" {
-		if msg.MethodName != "" {
-			methodABI = &abi.Method{
-				Name:    msg.MethodName,
-				RawName: msg.MethodName,
-			}
-		} else {
+		if msg.MethodName == "" {
 			err = klderrors.Errorf(klderrors.TransactionSendMissingMethod)
 			return
 		}
+		var abiInputs abi.Arguments
+		jsonABI := &kldmessages.ABIMethod{
+			Name:    msg.MethodName,
+			Inputs:  []kldmessages.ABIParam{},
+			Outputs: []kldmessages.ABIParam{},
+		}
+		msg.Parameters, err = flattenParams(msg.Parameters, &abiInputs, true)
+		if err == nil {
+			methodABI, err = genMethodABI(jsonABI, abiInputs)
+		}
+		if err != nil {
+			return
+		}
 	} else {
-		methodABI, err = genMethodABI(msg.Method)
+		methodABI, err = genMethodABI(msg.Method, nil)
 		if err != nil {
 			return
 		}
@@ -336,7 +343,7 @@ func buildTX(signer TXSigner, msgFrom, msgTo string, msgNonce, msgValue, msgGas,
 		log.Errorf("Attempted to pack args %+v: %s", typedArgs, err)
 		return
 	}
-	methodID := methodABI.ID()
+	methodID := methodABI.ID
 	log.Debugf("Method Name=%s ID=%x PackedArgs=%x", methodABI.RawName, methodID, packedArgs)
 	packedCall := append(methodID, packedArgs...)
 
@@ -350,20 +357,25 @@ func buildTX(signer TXSigner, msgFrom, msgTo string, msgNonce, msgValue, msgGas,
 	return
 }
 
-func genMethodABI(jsonABI *kldmessages.ABIMethod) (method *abi.Method, err error) {
-	method = &abi.Method{}
-	method.Name = jsonABI.Name
-	method.RawName = jsonABI.Name
-	for i := 0; i < len(jsonABI.Inputs); i++ {
-		jsonInput := jsonABI.Inputs[i]
-		var arg abi.Argument
-		arg.Name = jsonInput.Name
-		if arg.Type, err = abi.NewType(jsonInput.Type, "", []abi.ArgumentMarshaling{}); err != nil {
-			err = klderrors.Errorf(klderrors.TransactionSendInputTypeUnknown, i, jsonInput.Name, err)
-			return
+func genMethodABI(jsonABI *kldmessages.ABIMethod, predeterminedInputs abi.Arguments) (method *abi.Method, err error) {
+	var inputs abi.Arguments
+	if predeterminedInputs != nil {
+		inputs = predeterminedInputs
+	} else {
+		inputs = make(abi.Arguments, len(jsonABI.Inputs))
+		for i := 0; i < len(jsonABI.Inputs); i++ {
+			jsonInput := jsonABI.Inputs[i]
+			var arg abi.Argument
+			arg.Name = jsonInput.Name
+			if arg.Type, err = abi.NewType(jsonInput.Type, "", []abi.ArgumentMarshaling{}); err != nil {
+				err = klderrors.Errorf(klderrors.TransactionSendInputTypeUnknown, i, jsonInput.Name, err)
+				return
+			}
+			inputs[i] = arg
 		}
-		method.Inputs = append(method.Inputs, arg)
 	}
+
+	outputs := make(abi.Arguments, len(jsonABI.Outputs))
 	for i := 0; i < len(jsonABI.Outputs); i++ {
 		jsonOutput := jsonABI.Outputs[i]
 		var arg abi.Argument
@@ -372,9 +384,20 @@ func genMethodABI(jsonABI *kldmessages.ABIMethod) (method *abi.Method, err error
 			err = klderrors.Errorf(klderrors.TransactionSendOutputTypeUnknown, i, jsonOutput.Name, err)
 			return
 		}
-		method.Outputs = append(method.Outputs, arg)
+		outputs[i] = arg
 	}
-	return
+
+	var abiMethod abi.Method
+	// Note we only support "normal" functions here - constructors do not follow this code path, and we don't have support
+	// of Fallback or Receive yet
+	switch jsonABI.Type {
+	case "function":
+	case "":
+		abiMethod = abi.NewMethod(jsonABI.Name, jsonABI.Name, abi.Function, jsonABI.StateMutability, jsonABI.Constant, jsonABI.Payable, inputs, outputs)
+	default:
+		return nil, klderrors.Errorf(klderrors.RESTGatewayMethodTypeInvalid, jsonABI.Type)
+	}
+	return &abiMethod, nil
 }
 
 func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json.Number, data []byte) (err error) {
@@ -486,11 +509,12 @@ func (tx *Txn) generateTypedArrayOrSlice(methodName string, idx int, requiredTyp
 	}
 	paramV := reflect.ValueOf(param)
 	var genericSlice reflect.Value
-	if requiredType.Type.Kind() == reflect.Array {
-		arrayType := reflect.ArrayOf(requiredType.Size, requiredType.Elem.Type)
+	var requiredReflectType = requiredType.GetType()
+	if requiredReflectType.Kind() == reflect.Array {
+		arrayType := reflect.ArrayOf(requiredType.Size, requiredType.Elem.GetType())
 		genericSlice = reflect.New(arrayType).Elem()
 	} else {
-		genericSlice = reflect.MakeSlice(requiredType.Type, paramV.Len(), paramV.Len())
+		genericSlice = reflect.MakeSlice(requiredReflectType, paramV.Len(), paramV.Len())
 	}
 	innerType := requiredType.Elem
 	for i := 0; i < paramV.Len(); i++ {
@@ -593,7 +617,7 @@ func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, metho
 		}
 		if len(bSlice) == 0 {
 			return [0]byte{}, nil
-		} else if requiredType.Type.Kind() == reflect.Array {
+		} else if requiredType.GetType().Kind() == reflect.Array {
 			// Create ourselves an array of the right size (ethereum won't accept a slice)
 			bArrayType := reflect.ArrayOf(len(bSlice), reflect.TypeOf(bSlice[0]))
 			bNewArray := reflect.New(bArrayType).Elem()
@@ -611,7 +635,7 @@ func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, metho
 // GenerateTypedArgs parses string arguments into a range of types to pass to the ABI call
 func (tx *Txn) generateTypedArgs(origParams []interface{}, method *abi.Method) ([]interface{}, error) {
 
-	params, err := tx.flattenParams(origParams, method)
+	params, err := flattenParams(origParams, &method.Inputs, false)
 	if err != nil {
 		return nil, err
 	}
@@ -647,11 +671,16 @@ func (tx *Txn) generateTypedArgs(origParams []interface{}, method *abi.Method) (
 // types specified.
 // If a flat structure is passed in, then there are no changes.
 // A mix is tollerated by the code, but no usecase is known for that.
-func (tx *Txn) flattenParams(origParams []interface{}, method *abi.Method) (params []interface{}, err error) {
+func flattenParams(origParams []interface{}, inputs *abi.Arguments, lazyTyping bool) (params []interface{}, err error) {
+	if !lazyTyping && len(origParams) > len(*inputs) {
+		err = klderrors.Errorf(klderrors.TransactionSendInputTooManyParams, len(origParams), len(*inputs))
+	}
 	// Allows us to support
 	params = make([]interface{}, len(origParams))
 	for i, unflattened := range origParams {
-		if reflect.TypeOf(unflattened).Kind() != reflect.Map {
+		if unflattened == nil {
+			params[i] = nil
+		} else if reflect.TypeOf(unflattened).Kind() != reflect.Map {
 			// No change needed
 			params[i] = unflattened
 		} else {
@@ -677,10 +706,10 @@ func (tx *Txn) flattenParams(origParams []interface{}, method *abi.Method) (para
 				err = klderrors.Errorf(klderrors.TransactionSendInputInLineTypeUnknown, i, typeStr, err)
 				return
 			}
-			for len(method.Inputs) <= i {
-				method.Inputs = append(method.Inputs, abi.Argument{})
+			for len(*inputs) <= i {
+				*inputs = append(*inputs, abi.Argument{})
 			}
-			method.Inputs[i].Type = ethType
+			(*inputs)[i].Type = ethType
 		}
 	}
 	return

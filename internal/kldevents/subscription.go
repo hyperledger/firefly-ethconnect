@@ -74,7 +74,7 @@ func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind
 		info:        i,
 		rpc:         rpc,
 		lp:          newLogProcessor(i.ID, &i.Event.E, stream),
-		logName:     i.ID + ":" + i.Event.E.Sig(),
+		logName:     i.ID + ":" + kldbind.ABIEventSignature(&i.Event.E),
 		filterStale: true,
 	}
 	f := &i.Filter
@@ -84,7 +84,7 @@ func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind
 		addrStr = addr.String()
 	}
 	event := &i.Event.E
-	i.Summary = addrStr + ":" + event.Sig()
+	i.Summary = addrStr + ":" + kldbind.ABIEventSignature(event)
 	// If a name was not provided by the end user, set it to the system generated summary
 	if i.Name == "" {
 		log.Debugf("No name provided for subscription, using auto-generated summary:%s", i.Summary)
@@ -94,8 +94,8 @@ func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind
 		return nil, klderrors.Errorf(klderrors.EventStreamsSubscribeNoEvent)
 	}
 	// For now we only support filtering on the event type
-	f.Topics = [][]kldbind.Hash{{event.ID()}}
-	log.Infof("Created subscription ID:%s name:%s topic:%s", i.ID, i.Name, event.ID().String())
+	f.Topics = [][]kldbind.Hash{{event.ID}}
+	log.Infof("Created subscription ID:%s name:%s topic:%s", i.ID, i.Name, event.ID)
 	return s, nil
 }
 
@@ -117,7 +117,7 @@ func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *Subscr
 		rpc:         rpc,
 		info:        i,
 		lp:          newLogProcessor(i.ID, &i.Event.E, stream),
-		logName:     i.ID + ":" + i.Event.E.Sig(),
+		logName:     i.ID + ":" + kldbind.ABIEventSignature(&i.Event.E),
 		filterStale: true,
 	}
 	return s, nil

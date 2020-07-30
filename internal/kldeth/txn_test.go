@@ -571,8 +571,10 @@ func TestTypeNotYetSupported(t *testing.T) {
 	assert := assert.New(t)
 	var tx Txn
 	var m abi.Method
-	m.Inputs = append(m.Inputs, abi.Argument{Name: "random", Type: abi.Type{Type: reflect.TypeOf(t), T: 42}})
-	_, err := tx.generateTypedArgs([]interface{}{"abc"}, &m)
+	functionType, err := abi.NewType("function", "uint256", []abi.ArgumentMarshaling{})
+	assert.NoError(err)
+	m.Inputs = append(m.Inputs, abi.Argument{Name: "functionType", Type: functionType})
+	_, err = tx.generateTypedArgs([]interface{}{"abc"}, &m)
 	assert.Regexp("Type '.*' is not yet supported", err)
 }
 
@@ -714,6 +716,37 @@ func TestSendTxnNilParam(t *testing.T) {
 
 }
 
+func TestNewSendTxnMissingParamTypes(t *testing.T) {
+	assert := assert.New(t)
+	_, err := NewSendTxn(&kldmessages.SendTransaction{
+		TransactionCommon: kldmessages.TransactionCommon{
+			Parameters: []interface{}{
+				map[string]interface{}{
+					"wrong": "stuff",
+				},
+			},
+		},
+		MethodName: "test",
+	}, nil)
+	assert.EqualError(err, "Param 0: supplied as an object must have 'type' and 'value' fields")
+}
+
+func TestGenMethodABIBadType(t *testing.T) {
+	assert := assert.New(t)
+	_, err := genMethodABI(&kldmessages.ABIMethod{
+		Type: "badness",
+	}, abi.Arguments{})
+	assert.EqualError(err, "Unsupported method type: badness")
+}
+
+func TestGenMethodABIFunctionType(t *testing.T) {
+	assert := assert.New(t)
+	_, err := genMethodABI(&kldmessages.ABIMethod{
+		Type: "function",
+	}, abi.Arguments{})
+	assert.NoError(err)
+}
+
 func TestCallMethod(t *testing.T) {
 	assert := assert.New(t)
 
@@ -739,12 +772,19 @@ func TestCallMethod(t *testing.T) {
 	param4["type"] = "address"
 	param4["value"] = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 
-	method := &abi.Method{}
-	method.Name = "testFunc"
-	method.RawName = "testFunc"
-
-	uint256Type, _ := kldbind.ABITypeFor("uint256")
-	method.Outputs = append(method.Outputs, abi.Argument{Name: "retval1", Type: uint256Type})
+	genMethod := func(params []interface{}) *abi.Method {
+		uint256Type, _ := kldbind.ABITypeFor("uint256")
+		inputs := make(abi.Arguments, len(params))
+		for i := range params {
+			abiType, _ := abi.NewType(params[i].(map[string]interface{})["type"].(string), "", []abi.ArgumentMarshaling{})
+			inputs[i] = abi.Argument{
+				Type: abiType,
+			}
+		}
+		outputs := abi.Arguments{abi.Argument{Name: "retval1", Type: uint256Type}}
+		method := abi.NewMethod("testFunc", "testFunc", abi.Function, "payable", false, true, inputs, outputs)
+		return &method
+	}
 
 	rpc := &testRPCClient{
 		resultWrangler: func(retString interface{}) {
@@ -756,7 +796,7 @@ func TestCallMethod(t *testing.T) {
 	res, err := CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
-		json.Number("12345"), method, params, "")
+		json.Number("12345"), genMethod(params), params, "")
 	assert.NoError(err)
 	assert.Equal(map[string]interface{}{
 		"retval1": "1",
@@ -777,7 +817,7 @@ func TestCallMethod(t *testing.T) {
 	res, err = CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
-		json.Number("12345"), method, params, "pending")
+		json.Number("12345"), genMethod(params), params, "pending")
 	assert.NoError(err)
 	assert.Equal("eth_call", rpc.capturedMethod2)
 	assert.Equal("pending", rpc.capturedArgs2[1])
@@ -785,7 +825,7 @@ func TestCallMethod(t *testing.T) {
 	res, err = CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
-		json.Number("12345"), method, params, "earliest")
+		json.Number("12345"), genMethod(params), params, "earliest")
 	assert.NoError(err)
 	assert.Equal("eth_call", rpc.capturedMethod2)
 	assert.Equal("earliest", rpc.capturedArgs2[1])
@@ -793,7 +833,7 @@ func TestCallMethod(t *testing.T) {
 	res, err = CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
-		json.Number("12345"), method, params, "0x1234")
+		json.Number("12345"), genMethod(params), params, "0x1234")
 	assert.NoError(err)
 	assert.Equal("eth_call", rpc.capturedMethod2)
 	assert.Equal("0x1234", rpc.capturedArgs2[1])
@@ -801,7 +841,7 @@ func TestCallMethod(t *testing.T) {
 	res, err = CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
-		json.Number("12345"), method, params, "12345")
+		json.Number("12345"), genMethod(params), params, "12345")
 	assert.NoError(err)
 	assert.Equal("eth_call", rpc.capturedMethod2)
 	assert.Equal("0x3039", rpc.capturedArgs2[1])
@@ -809,7 +849,7 @@ func TestCallMethod(t *testing.T) {
 	res, err = CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
-		json.Number("12345"), method, params, "0")
+		json.Number("12345"), genMethod(params), params, "0")
 	assert.NoError(err)
 	assert.Equal("eth_call", rpc.capturedMethod2)
 	assert.Equal("0x0", rpc.capturedArgs2[1])

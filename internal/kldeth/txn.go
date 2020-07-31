@@ -22,7 +22,8 @@ import (
 	"reflect"
 	"regexp"
 	"strconv"
-	"strings"
+  "strings"
+  "fmt"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -461,51 +462,51 @@ func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgG
 	return
 }
 
-func (tx *Txn) getInteger(methodName string, idx int, requiredType *abi.Type, suppliedType reflect.Type, param interface{}) (val int64, err error) {
+func (tx *Txn) getInteger(methodName string, path string, requiredType *abi.Type, suppliedType reflect.Type, param interface{}) (val int64, err error) {
 	if suppliedType.Kind() == reflect.String {
 		if val, err = strconv.ParseInt(param.(string), 10, 64); err != nil {
-			err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadNumber, methodName, idx)
+			err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadNumber, methodName, path)
 			return
 		}
 	} else if suppliedType.Kind() == reflect.Float64 {
 		val = int64(param.(float64))
 	} else {
-		err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForNumber, methodName, idx, requiredType)
+		err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForNumber, methodName, path, requiredType, suppliedType)
 	}
 	return
 }
 
-func (tx *Txn) getUnsignedInteger(methodName string, idx int, requiredType *abi.Type, suppliedType reflect.Type, param interface{}) (val uint64, err error) {
+func (tx *Txn) getUnsignedInteger(methodName string, path string, requiredType *abi.Type, suppliedType reflect.Type, param interface{}) (val uint64, err error) {
 	if suppliedType.Kind() == reflect.String {
 		if val, err = strconv.ParseUint(param.(string), 10, 64); err != nil {
-			err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadNumber, methodName, idx)
+			err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadNumber, methodName, path)
 			return
 		}
 	} else if suppliedType.Kind() == reflect.Float64 {
 		val = uint64(param.(float64))
 	} else {
-		err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForNumber, methodName, idx, requiredType)
+		err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForNumber, methodName, path, requiredType, suppliedType)
 	}
 	return
 }
 
-func (tx *Txn) getBigInteger(methodName string, idx int, requiredType *abi.Type, suppliedType reflect.Type, param interface{}) (bigInt *big.Int, err error) {
+func (tx *Txn) getBigInteger(methodName string, path string, requiredType *abi.Type, suppliedType reflect.Type, param interface{}) (bigInt *big.Int, err error) {
 	bigInt = big.NewInt(0)
 	if suppliedType.Kind() == reflect.String {
 		if _, ok := bigInt.SetString(param.(string), 10); !ok {
-			err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadNumber, methodName, idx)
+			err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadNumber, methodName, path)
 		}
 	} else if suppliedType.Kind() == reflect.Float64 {
 		bigInt.SetInt64(int64(param.(float64)))
 	} else {
-		err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForNumber, methodName, idx, requiredType)
+		err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForNumber, methodName, path, requiredType, suppliedType)
 	}
 	return
 }
 
-func (tx *Txn) generateTypedArrayOrSlice(methodName string, idx int, requiredType *abi.Type, suppliedType reflect.Type, param interface{}) (interface{}, error) {
+func (tx *Txn) generateTypedArrayOrSlice(methodName string, path string, requiredType *abi.Type, suppliedType reflect.Type, param interface{}) (interface{}, error) {
 	if suppliedType.Kind() != reflect.Slice {
-		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForArray, methodName, idx, requiredType)
+		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForArray, methodName, path, requiredType, suppliedType)
 	}
 	paramV := reflect.ValueOf(param)
 	var genericSlice reflect.Value
@@ -519,7 +520,7 @@ func (tx *Txn) generateTypedArrayOrSlice(methodName string, idx int, requiredTyp
 	innerType := requiredType.Elem
 	for i := 0; i < paramV.Len(); i++ {
 		paramInSlice := paramV.Index(i).Interface()
-		val, err := tx.generateTypedArg(innerType, paramInSlice, methodName, idx)
+		val, err := tx.generateTypedArg(innerType, paramInSlice, methodName, fmt.Sprintf("%s[%d]", path, i))
 		if err != nil {
 			return nil, err
 		}
@@ -528,16 +529,40 @@ func (tx *Txn) generateTypedArrayOrSlice(methodName string, idx int, requiredTyp
 	return genericSlice.Interface(), nil
 }
 
-func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, methodName string, idx int) (interface{}, error) {
+func (tx *Txn) generateTupleFromMap( methodName string, path string, requiredType *abi.Type, param map[string]interface{}) (v interface{}, err error) {
+  tuple := reflect.New(requiredType.TupleType).Elem()
+  for i, inputElemName := range requiredType.TupleRawNames {
+    var typedVal interface{}
+    var suppliedType reflect.Type
+    inputVal, ok := param[inputElemName]
+    if ok {
+      typedVal, err = tx.generateTypedArg(requiredType.TupleElems[i], inputVal, methodName, fmt.Sprintf("%s.%s", path, inputElemName))
+      if err != nil {
+        return nil, err
+      }
+      suppliedType = reflect.TypeOf(typedVal)
+    }
+    tupleField := tuple.Field(i)
+    if suppliedType != nil {
+      if !suppliedType.AssignableTo(tupleField.Type()) {
+        return nil, klderrors.Errorf(klderrors.TransactionSendInputNotAssignable, methodName, path, typedVal, inputElemName)
+      }
+      tupleField.Set(reflect.ValueOf(typedVal))
+    }
+  }
+  return tuple.Interface(), nil
+}
+
+func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, methodName string, path string) (interface{}, error) {
 	suppliedType := reflect.TypeOf(param)
 	if suppliedType == nil {
-		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadNull, methodName, idx)
+		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadNull, methodName, path)
 	}
 	switch requiredType.T {
 	case abi.IntTy, abi.UintTy:
 		if requiredType.Size <= 64 {
 			if requiredType.T == abi.IntTy {
-				intVal, err := tx.getInteger(methodName, idx, requiredType, suppliedType, param)
+				intVal, err := tx.getInteger(methodName, path, requiredType, suppliedType, param)
 				if err != nil {
 					return nil, err
 				}
@@ -552,7 +577,7 @@ func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, metho
 					return int64(intVal), nil
 				}
 			} else {
-				uintVal, err := tx.getUnsignedInteger(methodName, idx, requiredType, suppliedType, param)
+				uintVal, err := tx.getUnsignedInteger(methodName, path, requiredType, suppliedType, param)
 				if err != nil {
 					return nil, err
 				}
@@ -569,27 +594,27 @@ func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, metho
 			}
 		}
 		// Catch-all is a big.Int - anyting that isn't an exact match power of 2, or greater than 64 bit
-		return tx.getBigInteger(methodName, idx, requiredType, suppliedType, param)
+		return tx.getBigInteger(methodName, path, requiredType, suppliedType, param)
 	case abi.BoolTy:
 		if suppliedType.Kind() == reflect.String {
 			return (strings.ToLower(param.(string)) == "true"), nil
 		} else if suppliedType.Kind() == reflect.Bool {
 			return param.(bool), nil
 		}
-		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForBoolean, methodName, idx, requiredType)
+		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForBoolean, methodName, path, requiredType, suppliedType)
 	case abi.StringTy:
 		if suppliedType.Kind() == reflect.String {
 			return param.(string), nil
 		}
-		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForString, methodName, idx)
+		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForString, methodName, path, suppliedType)
 	case abi.AddressTy:
 		if suppliedType.Kind() == reflect.String {
 			if !common.IsHexAddress(param.(string)) {
-				return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeAddress, methodName, idx)
+				return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeAddress, methodName, path, suppliedType)
 			}
 			return common.HexToAddress(param.(string)), nil
 		}
-		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForAddress, methodName, idx, requiredType)
+		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForAddress, methodName, path, requiredType, suppliedType)
 	case abi.BytesTy, abi.FixedBytesTy:
 		var bSlice []byte
 		if suppliedType.Kind() == reflect.Slice {
@@ -602,18 +627,18 @@ func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, metho
 					valV = valV.Elem()
 				}
 				if valV.Kind() != reflect.Float64 {
-					return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeInNumericArray, methodName, idx, requiredType, i, valV.Kind())
+					return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeInNumericArray, methodName, path, requiredType, i, valV.Kind())
 				}
 				floatVal := valV.Float()
 				if floatVal > 255 || floatVal < 0 {
-					return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadByteOutsideRange, methodName, idx, requiredType)
+					return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadByteOutsideRange, methodName, path, requiredType)
 				}
 				bSlice[i] = byte(floatVal)
 			}
 		} else if suppliedType.Kind() == reflect.String {
 			bSlice = common.FromHex(param.(string))
 		} else {
-			return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForBytes, methodName, idx, requiredType)
+			return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForBytes, methodName, path, requiredType, suppliedType)
 		}
 		if len(bSlice) == 0 {
 			return [0]byte{}, nil
@@ -626,7 +651,12 @@ func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, metho
 		}
 		return bSlice, nil
 	case abi.SliceTy, abi.ArrayTy:
-		return tx.generateTypedArrayOrSlice(methodName, idx, requiredType, suppliedType, param)
+    return tx.generateTypedArrayOrSlice(methodName, path, requiredType, suppliedType, param)
+  case abi.TupleTy:
+    if suppliedType.Kind() != reflect.Map || suppliedType.Key().Kind() != reflect.String {
+      return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForTuple, methodName, path, requiredType, suppliedType)
+    }
+    return tx.generateTupleFromMap(methodName, path, requiredType, param.(map[string]interface{}))
 	default:
 		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeNotSupported, requiredType)
 	}
@@ -654,7 +684,7 @@ func (tx *Txn) generateTypedArgs(origParams []interface{}, method *abi.Method) (
 		param := params[idx]
 		requiredType := &inputArg.Type
 		log.Debugf("Arg %d requiredType: %s", idx, requiredType)
-		arg, err := tx.generateTypedArg(requiredType, param, methodName, idx)
+		arg, err := tx.generateTypedArg(requiredType, param, methodName, fmt.Sprintf("%d", idx))
 		if err != nil {
 			log.Errorf("%s [Required=%s Supplied=%s Value=%+v]", err, requiredType, reflect.TypeOf(param), param)
 			return nil, err
@@ -683,7 +713,10 @@ func flattenParams(origParams []interface{}, inputs *abi.Arguments, lazyTyping b
 		} else if reflect.TypeOf(unflattened).Kind() != reflect.Map {
 			// No change needed
 			params[i] = unflattened
-		} else {
+		} else if len(*inputs) > i && (*inputs)[i].Type.T == abi.TupleTy {
+      // No change needed - structure input
+      params[i] = unflattened
+    } else {
 			// We need to flatten
 			mapParam := unflattened.(map[string]interface{}) // safe case as we came in from JSON only
 			var value, typeStr interface{}

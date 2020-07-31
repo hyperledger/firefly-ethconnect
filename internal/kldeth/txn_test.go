@@ -20,13 +20,14 @@ import (
 	"fmt"
 	"math/big"
 	"reflect"
-	"testing"
+  "testing"
+  "io/ioutil"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
-	"github.com/stretchr/testify/assert"
+  "github.com/stretchr/testify/assert"
 )
 
 // Slim interface for stubbing
@@ -1539,6 +1540,52 @@ func TestProcessRLPBytesValidTypes(t *testing.T) {
 	assert.Equal("-456", res["retval8"].([]interface{})[1])
 	assert.Equal("123", res["retval9"].([]interface{})[0])
 	assert.Equal("456", res["retval9"].([]interface{})[1])
+}
+
+func TestProcessRLPV2ABIEncodedStructs(t *testing.T) {
+	assert := assert.New(t)
+
+  var v2abi abi.ABI
+  testABIInput, err := ioutil.ReadFile("../../test/abicoderv2_example.abi.json")
+  assert.NoError(err)
+  err = json.Unmarshal(testABIInput, &v2abi)
+  assert.NoError(err)
+
+  var abiMethod abi.Method
+  for _, m := range v2abi.Methods {
+    if m.Name == "inOutType1" {
+      abiMethod = m
+    }
+  }
+
+  input1Map := map[string]interface{}{
+    "str1": "test1",
+    "val1": float64(12345),
+    "nested": map[string]interface{}{
+      "str1": "test2",
+      "str2": "test3",
+      "addr1": "0x1212121212121212121212121212121212121212",
+      "bytearray": "feedbeef",
+      "nestarray": []map[string]interface{}{
+        map[string]interface{}{
+          "str1": "test4",
+          "str2": "test5",
+          "address": "0x2121212121212121212121212121212121212121",
+        },
+      },
+    },
+  }
+
+  tx := Txn{}
+  typedArgs, err := tx.generateTypedArgs([]interface{}{input1Map}, &abiMethod)
+  assert.NoError(err)
+  t.Logf("typeArgs: %+v", typedArgs)
+
+  _, err = abiMethod.Inputs.Pack(typedArgs...)
+	assert.NoError(err)
+	// res, err := ProcessRLPBytes(abiMethod.Outputs, rlp)
+	// assert.NoError(err)
+	// assert.Nil(res["error"])
 }
 
 func TestProcessRLPBytesInvalidNumber(t *testing.T) {

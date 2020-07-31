@@ -333,27 +333,29 @@ const (
 	// TransactionSendBadGasPrice a user-supplied gasPrice (eth to pay for each unit of gas spent) string in the JSON input cannot be processed
 	TransactionSendBadGasPrice = "Converting supplied 'gasPrice' to big integer"
 	// TransactionSendInputTypeBadNumber the input JSON value supplied for a method parameter cannot be converted to a number
-	TransactionSendInputTypeBadNumber = "Method '%s' param %d: Could not be converted to a number"
+	TransactionSendInputTypeBadNumber = "Method '%s' param %s: Could not be converted to a number"
 	// TransactionSendInputTypeBadJSONTypeForNumber the input JSON value supplied for a method parameter was not a number or a string, and needs to be converted to a number
-	TransactionSendInputTypeBadJSONTypeForNumber = "Method '%s' param %d is a %s: Must supply a number or a string"
+	TransactionSendInputTypeBadJSONTypeForNumber = "Method '%s' param %s is a %s: Must supply a number or a string (supplied=%s)"
 	// TransactionSendInputTypeBadJSONTypeForArray the input JSON value supplied for a method parameter was not compatible with coercion to an array
-	TransactionSendInputTypeBadJSONTypeForArray = "Method '%s' param %d is a %s: Must supply an array"
+	TransactionSendInputTypeBadJSONTypeForArray = "Method '%s' param %s is a %s: Must supply an array (supplied=%s)"
 	// TransactionSendInputTypeBadNull the input JSON value supplied was null
-	TransactionSendInputTypeBadNull = "Method '%s' param %d: Cannot supply a null value"
+	TransactionSendInputTypeBadNull = "Method '%s' param %s: Cannot supply a null value"
 	// TransactionSendInputTypeBadJSONTypeForBoolean the input JSON value supplied for a method parameter was not compatible with coercion to a boolean
-	TransactionSendInputTypeBadJSONTypeForBoolean = "Method '%s' param %d is a %s: Must supply a boolean or a string"
+	TransactionSendInputTypeBadJSONTypeForBoolean = "Method '%s' param %s is a %s: Must supply a boolean or a string (supplied=%s)"
 	// TransactionSendInputTypeBadJSONTypeForString the input JSON value supplied for a method parameter was not compatible with coercion to a boolean
-	TransactionSendInputTypeBadJSONTypeForString = "Method '%s' param %d: Must supply a string"
+	TransactionSendInputTypeBadJSONTypeForString = "Method '%s' param %s: Must supply a string (supplied=%s)"
 	// TransactionSendInputTypeAddress the input JSON value supplied for a method parameter couldn't be parsed as an eth address
-	TransactionSendInputTypeAddress = "Method '%s' param %d: Could not be converted to a hex address"
+	TransactionSendInputTypeAddress = "Method '%s' param %s: Could not be converted to a hex address (supplied=%s)"
 	// TransactionSendInputTypeBadJSONTypeForAddress the input JSON value supplied for a method parameter was not compatible with coercion to an eth address
-	TransactionSendInputTypeBadJSONTypeForAddress = "Method '%s' param %d is a %s: Must supply a hex address string"
+	TransactionSendInputTypeBadJSONTypeForAddress = "Method '%s' param %s is a %s: Must supply a hex address string (supplied=%s)"
 	// TransactionSendInputTypeBadJSONTypeInNumericArray one of the entries inside of a numeric array, is not valid as a number
-	TransactionSendInputTypeBadJSONTypeInNumericArray = "Method '%s' param %d is a %s: Invalid entry in number array at index %d (%s)"
+	TransactionSendInputTypeBadJSONTypeInNumericArray = "Method '%s' param %s is a %s: Invalid entry in number array at index %d (%s)"
 	// TransactionSendInputTypeBadByteOutsideRange one of the entries inside of a byte array, is a number outside the range for bytes
-	TransactionSendInputTypeBadByteOutsideRange = "Method '%s' param %d is a %s: Invalid number - outside of range for byte"
+	TransactionSendInputTypeBadByteOutsideRange = "Method '%s' param %s is a %s: Invalid number - outside of range for byte"
 	// TransactionSendInputTypeBadJSONTypeForBytes one of the entries inside of a byte array, is a number outside the range for bytes
-	TransactionSendInputTypeBadJSONTypeForBytes = "Method '%s' param %d is a %s: Must supply a hex string, or number array"
+	TransactionSendInputTypeBadJSONTypeForBytes = "Method '%s' param %s is a %s: Must supply a hex string, or number array"
+  // TransactionSendInputTypeBadJSONTypeForTuple if we are provided a non object input on the JSON for a struct (tuple)
+  TransactionSendInputTypeBadJSONTypeForTuple = "Method '%s' param %s is a %s: Must supply an object (supplied=%s)"
 	// TransactionSendInputTypeNotSupported did not know how to handle this type - enhancement required
 	TransactionSendInputTypeNotSupported = "Type '%s' is not yet supported"
 	// TransactionSendInputCountMismatch wrong number of args supplied according to the ABI
@@ -367,7 +369,9 @@ const (
 	// TransactionSendMsgTypeUnknown we got a JSON message into the core processor (from Kafka, Webhooks etc.) that we don't understand
 	TransactionSendMsgTypeUnknown = "Unknown message type '%s'"
 	// TransactionSendInputTooManyParams more parameters provided than specified on ABI
-	TransactionSendInputTooManyParams = "Supplied %d paramters for ABI that supports %d"
+  TransactionSendInputTooManyParams = "Supplied %d paramters for ABI that supports %d"
+  // TransactionSendInputNotAssignable if we end up in a situation where the generated type cannot be assiend
+  TransactionSendInputNotAssignable = "Method %s param %s: supplied value '%+v' could not be assigned to '%s' field"
 
 	// TransactionSendReceiptCheckError we continually had bad RCs back from the node while trying to check for the receipt up to the timeout
 	TransactionSendReceiptCheckError = "Error obtaining transaction receipt (%d retries): %s"

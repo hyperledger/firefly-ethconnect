@@ -280,7 +280,7 @@ func genTupleMapOutput(argName, argType string, t *abi.Type, rawValue interface{
   reflectValue := reflect.ValueOf(rawValue)
   if reflectValue.Kind() != reflect.Struct || reflectValue.Type() != t.TupleType {
 		return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchTupleType,
-			argName, argType, rawValue, t.TupleType)
+			argName, argType, t.TupleType, rawValue)
   }
   if len(t.TupleRawNames) != reflectValue.NumField() {
 		return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchTupleFieldCount,

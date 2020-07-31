@@ -1591,6 +1591,98 @@ func TestProcessRLPV2ABIEncodedStructs(t *testing.T) {
   assert.Equal(input1Map, res["out1"])
 }
 
+func TestProcessRLPV2ABIEncodedStructsUnasignableVal(t *testing.T) {
+	assert := assert.New(t)
+
+  var v2abi abi.ABI
+  testABIInput, err := ioutil.ReadFile("../../test/abicoderv2_example.abi.json")
+  assert.NoError(err)
+  err = json.Unmarshal(testABIInput, &v2abi)
+  assert.NoError(err)
+
+  var abiMethod abi.Method
+  for _, m := range v2abi.Methods {
+    if m.Name == "inOutType1" {
+      abiMethod = m
+    }
+  }
+
+  input1Map := map[string]interface{}{
+    "str1": []interface{}{},
+  }
+
+  tx := Txn{}
+  _, err = tx.generateTypedArgs([]interface{}{input1Map}, &abiMethod)
+  assert.Regexp("Method 'inOutType1' param 0.str1: Must supply a string", err.Error())
+}
+
+func TestProcessRLPV2ABIEncodedStructsBadInputType(t *testing.T) {
+	assert := assert.New(t)
+
+  var v2abi abi.ABI
+  testABIInput, err := ioutil.ReadFile("../../test/abicoderv2_example.abi.json")
+  assert.NoError(err)
+  err = json.Unmarshal(testABIInput, &v2abi)
+  assert.NoError(err)
+
+  var abiMethod abi.Method
+  for _, m := range v2abi.Methods {
+    if m.Name == "inOutType1" {
+      abiMethod = m
+    }
+  }
+
+  input1Map := map[string]interface{}{
+    "nested": "Not a map",
+  }
+
+  tx := Txn{}
+  _, err = tx.generateTypedArgs([]interface{}{input1Map}, &abiMethod)
+  assert.EqualError(err, "Method 'inOutType1' param 0.nested is a (string,string,address,bytes): Must supply an object (supplied=string)")
+}
+
+func TestGenerateTupleFromMapBadStructType(t *testing.T) {
+	assert := assert.New(t)
+  tx := Txn{}
+  type random struct { stuff string }
+  tUint, _ := abi.NewType("uint256", "", []abi.ArgumentMarshaling{})
+  _, err := tx.generateTupleFromMap("method1", "test", &abi.Type{
+    TupleType: reflect.TypeOf((*random)(nil)).Elem(), // random type that should never happen
+    TupleRawNames: []string{"field1"},
+    TupleElems: []*abi.Type{&tUint},
+  }, map[string]interface{}{"field1": float64(42)})
+  assert.EqualError(err, "Method method1 param test: supplied value '+42' could not be assigned to 'field1' field")
+}
+
+func TestGenTupleMapOutputBadTypeNonStruct(t *testing.T) {
+	assert := assert.New(t)
+  type random struct { stuff string }
+  _, err := genTupleMapOutput("test", "random", &abi.Type{TupleType: reflect.TypeOf((*string)(nil)).Elem()}, 42)
+  assert.EqualError(err, "Unable to process type for test (random). Expected string. Received 42")
+}
+
+func TestGenTupleMapOutputBadTypeCountMismatch(t *testing.T) {
+	assert := assert.New(t)
+  type random struct { }
+  _, err := genTupleMapOutput("test", "random", &abi.Type{
+    TupleType: reflect.TypeOf((*random)(nil)).Elem(),
+    TupleRawNames: []string{"field1", "field2"},
+  }, random{})
+  assert.EqualError(err, "Unable to process type for test (random). Expected 2 fields on the structure. Received 0")
+}
+
+func TestGenTupleMapOutputBadTypeValMismatch(t *testing.T) {
+	assert := assert.New(t)
+  type random struct { Field1 string }
+  tUint, _ := abi.NewType("uint256", "", []abi.ArgumentMarshaling{})
+  _, err := genTupleMapOutput("test", "random", &abi.Type{
+    TupleType: reflect.TypeOf((*random)(nil)).Elem(),
+    TupleRawNames: []string{"field1"},
+    TupleElems: []*abi.Type{&tUint},
+  }, random{ Field1: "stuff" })
+  assert.EqualError(err, "Expected number type in JSON/RPC response for test.field1 (uint256). Received string")
+}
+
 func TestProcessRLPBytesInvalidNumber(t *testing.T) {
 	assert := assert.New(t)
 

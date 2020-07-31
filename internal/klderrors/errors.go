@@ -393,6 +393,10 @@ const (
 	UnpackOutputsMismatchType = "Expected %s type in JSON/RPC response for %s (%s). Received %s"
 	// UnpackOutputsUnknownType did not know how to handle this type - enhancement required
 	UnpackOutputsUnknownType = "Unable to process type for %s (%s). Received %s"
+	// UnpackOutputsMismatchTupleType we got a type back from the unpacking that doesn't match the ABI
+	UnpackOutputsMismatchTupleType = "Unable to process type for %s (%s). Expected %s. Received %+v"
+  // UnpackOutputsMismatchTupleFieldCount we had a mismatch in the number of fields described on the ABI and the number on the go structure
+  UnpackOutputsMismatchTupleFieldCount = "Unable to process type for %s (%s). Expected %d fields on the structure. Received %d"
 
 	// Unauthorized (401 error)
 	Unauthorized = "Unauthorized"

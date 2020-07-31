@@ -1560,18 +1560,19 @@ func TestProcessRLPV2ABIEncodedStructs(t *testing.T) {
 
   input1Map := map[string]interface{}{
     "str1": "test1",
-    "val1": float64(12345),
+    "val1": "12345",
     "nested": map[string]interface{}{
       "str1": "test2",
       "str2": "test3",
       "addr1": "0x1212121212121212121212121212121212121212",
-      "bytearray": "feedbeef",
-      "nestarray": []map[string]interface{}{
-        map[string]interface{}{
-          "str1": "test4",
-          "str2": "test5",
-          "address": "0x2121212121212121212121212121212121212121",
-        },
+      "bytearray": "0xfeedbeef",
+    },
+    "nestarray": []interface{}{
+      map[string]interface{}{
+        "str1": "test4",
+        "str2": "test5",
+        "addr1": "0x2121212121212121212121212121212121212121",
+        "bytearray": "0x01010101",
       },
     },
   }
@@ -1581,11 +1582,13 @@ func TestProcessRLPV2ABIEncodedStructs(t *testing.T) {
   assert.NoError(err)
   t.Logf("typeArgs: %+v", typedArgs)
 
-  _, err = abiMethod.Inputs.Pack(typedArgs...)
+  rlp, err := abiMethod.Inputs.Pack(typedArgs...)
 	assert.NoError(err)
-	// res, err := ProcessRLPBytes(abiMethod.Outputs, rlp)
-	// assert.NoError(err)
-	// assert.Nil(res["error"])
+	res, err := ProcessRLPBytes(abiMethod.Outputs, rlp)
+	assert.NoError(err)
+  assert.Nil(res["error"])
+  
+  assert.Equal(input1Map, res["out1"])
 }
 
 func TestProcessRLPBytesInvalidNumber(t *testing.T) {
@@ -1633,7 +1636,7 @@ func TestProcessRLPBytesInvalidArrayType(t *testing.T) {
 
 	t1, _ := kldbind.ABITypeFor("int32[]")
 	_, err := mapOutput("test1", "int32[]", &t1, []string{"wrong"})
-	assert.EqualError(err, "Expected number type in JSON/RPC response for test1 (int32[]). Received string")
+	assert.EqualError(err, "Expected number type in JSON/RPC response for test1[0] (int32[]). Received string")
 }
 
 func TestProcessRLPBytesInvalidTypeByte(t *testing.T) {

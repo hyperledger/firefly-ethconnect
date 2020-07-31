@@ -261,17 +261,39 @@ func mapOutput(argName, argType string, t *abi.Type, rawValue interface{}) (inte
 		s := reflect.ValueOf(rawValue)
 		arrayVal := make([]interface{}, 0, s.Len())
 		for i := 0; i < s.Len(); i++ {
-			mapped, err := mapOutput(argName, argType, t.Elem, s.Index(i).Interface())
+			mapped, err := mapOutput(fmt.Sprintf("%s[%d]", argName, i), argType, t.Elem, s.Index(i).Interface())
 			if err != nil {
 				return nil, err
 			}
 			arrayVal = append(arrayVal, mapped)
 		}
-		return arrayVal, nil
+    return arrayVal, nil
+  case abi.TupleTy:
+    return genTupleMapOutput(argName, argType, t, rawValue)
 	default:
 		return nil, klderrors.Errorf(klderrors.UnpackOutputsUnknownType,
 			argName, argType, rawType.Kind())
 	}
+}
+
+func genTupleMapOutput(argName, argType string, t *abi.Type, rawValue interface{}) (r map[string]interface{}, err error) {
+  reflectValue := reflect.ValueOf(rawValue)
+  if reflectValue.Kind() != reflect.Struct || reflectValue.Type() != t.TupleType {
+		return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchTupleType,
+			argName, argType, rawValue, t.TupleType)
+  }
+  if len(t.TupleRawNames) != reflectValue.NumField() {
+		return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchTupleFieldCount,
+			argName, argType, len(t.TupleRawNames), reflectValue.NumField())
+  }
+  returnMap := make(map[string]interface{})
+  for i, fieldName := range t.TupleRawNames {    
+    returnMap[fieldName], err = mapOutput(fmt.Sprintf("%s.%s", argName, fieldName), t.TupleElems[i].String(), t.TupleElems[i], reflectValue.Field(i).Interface())
+    if err != nil {
+      return nil, err
+    }
+  }
+  return returnMap, nil
 }
 
 // NewSendTxn builds a new ethereum transaction from the supplied

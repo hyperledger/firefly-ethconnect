@@ -278,7 +278,7 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 		// We've been asked to defer to the node for signing, and are not performing HD Wallet signing
 		inflight.nodeAssignNonce = true
 	} else {
-		// Alternatively we do a dirty read from the node of the highest comitted
+		// Alternatively we do a dirty read from the node of the highest committed
 		// transaction. This will be ok as long as we're the only JSON/RPC writing to
 		// this address. But if we're competing with other transactions
 		// we need to accept the possibility of 'replacement transaction underpriced'

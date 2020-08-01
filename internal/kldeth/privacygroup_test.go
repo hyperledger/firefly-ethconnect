@@ -34,7 +34,7 @@ func TestGetOrionPrivacyGroupExists(t *testing.T) {
 		resultWrangler: func(retString interface{}) {
 			if firstCall {
 				retVal := []OrionPrivacyGroup{
-					OrionPrivacyGroup{
+					{
 						PrivacyGroupID: "P8SxRUussJKqZu4+nUkMJpscQeWOR3HqbAXLakatsk8=",
 					},
 				}

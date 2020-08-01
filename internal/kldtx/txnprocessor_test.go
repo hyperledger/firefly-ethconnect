@@ -874,7 +874,7 @@ func TestOnSendTransactionMessageInflightNonce(t *testing.T) {
 		AlwaysManageNonce: true,
 	}, &kldeth.RPCConf{}).(*txnProcessor)
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] = &inflightTxnState{}
-	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight = []*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight = []*inflightTxn{{nonce: 100}, {nonce: 101}}
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].highestNonce = 101
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
@@ -962,7 +962,7 @@ func TestOnSendTransactionMessageOrionFailNonce(t *testing.T) {
 		OrionPrivateAPIS: true,
 	}, &kldeth.RPCConf{}).(*txnProcessor)
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] = &inflightTxnState{}
-	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight = []*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight = []*inflightTxn{{nonce: 100}, {nonce: 101}}
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
@@ -975,7 +975,7 @@ func TestOnSendTransactionMessageOrionFailNonce(t *testing.T) {
 	testRPC := &testRPC{
 		ethGetTransactionCountErr: fmt.Errorf("pop"),
 		privFindPrivacyGroupResult: []kldeth.OrionPrivacyGroup{
-			kldeth.OrionPrivacyGroup{
+			{
 				PrivacyGroupID: "P8SxRUussJKqZu4+nUkMJpscQeWOR3HqbAXLakatsk8=",
 			},
 		},
@@ -1000,7 +1000,7 @@ func TestOnSendTransactionMessageOrion(t *testing.T) {
 		OrionPrivateAPIS: true,
 	}, &kldeth.RPCConf{}).(*txnProcessor)
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] = &inflightTxnState{}
-	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight = []*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight = []*inflightTxn{{nonce: 100}, {nonce: 101}}
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
@@ -1013,7 +1013,7 @@ func TestOnSendTransactionMessageOrion(t *testing.T) {
 	testRPC := &testRPC{
 		ethSendTransactionResult: "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b",
 		privFindPrivacyGroupResult: []kldeth.OrionPrivacyGroup{
-			kldeth.OrionPrivacyGroup{
+			{
 				PrivacyGroupID: "P8SxRUussJKqZu4+nUkMJpscQeWOR3HqbAXLakatsk8=",
 			},
 		},
@@ -1037,7 +1037,7 @@ func TestOnSendTransactionMessageOrionPrivacyGroupId(t *testing.T) {
 		OrionPrivateAPIS: true,
 	}, &kldeth.RPCConf{}).(*txnProcessor)
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] = &inflightTxnState{}
-	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight = []*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
+	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight = []*inflightTxn{{nonce: 100}, {nonce: 101}}
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +
@@ -1100,7 +1100,7 @@ func TestOnSendTransactionAddressBook(t *testing.T) {
 	}).(*txnProcessor)
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] = &inflightTxnState{}
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight =
-		[]*inflightTxn{&inflightTxn{nonce: 100}, &inflightTxn{nonce: 101}}
+		[]*inflightTxn{{nonce: 100}, {nonce: 101}}
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
 		"  \"headers\":{\"type\": \"SendTransaction\"}," +

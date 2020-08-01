@@ -80,8 +80,8 @@ func (hr *HTTPRequester) DoRequest(method, url string, bodyMap map[string]interf
 	if res.StatusCode == 204 {
 		jsonBody = make(map[string]interface{})
 	} else {
-		resBody, ehr := ioutil.ReadAll(res.Body)
-		if ehr = json.Unmarshal(resBody, &jsonBody); ehr != nil {
+		resBody, _ := ioutil.ReadAll(res.Body)
+		if err := json.Unmarshal(resBody, &jsonBody); err != nil {
 			log.Errorf("%s %s <-- [%d] !Failed to read body: %s", method, url, res.StatusCode, ehr)
 			return nil, klderrors.Errorf(klderrors.HTTPRequesterStatusErrorNoData, hr.name, res.StatusCode)
 		}

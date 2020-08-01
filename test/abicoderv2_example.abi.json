@@ -1,0 +1,153 @@
+[
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "string",
+            "name": "str1",
+            "type": "string"
+          },
+          {
+            "internalType": "uint232",
+            "name": "val1",
+            "type": "uint232"
+          },
+          {
+            "components": [
+              {
+                "internalType": "string",
+                "name": "str1",
+                "type": "string"
+              },
+              {
+                "internalType": "string",
+                "name": "str2",
+                "type": "string"
+              },
+              {
+                "internalType": "address",
+                "name": "addr1",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes",
+                "name": "bytearray",
+                "type": "bytes"
+              }
+            ],
+            "internalType": "struct ExampleV2Coder.Type2",
+            "name": "nested",
+            "type": "tuple"
+          },
+          {
+            "components": [
+              {
+                "internalType": "string",
+                "name": "str1",
+                "type": "string"
+              },
+              {
+                "internalType": "string",
+                "name": "str2",
+                "type": "string"
+              },
+              {
+                "internalType": "address",
+                "name": "addr1",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes",
+                "name": "bytearray",
+                "type": "bytes"
+              }
+            ],
+            "internalType": "struct ExampleV2Coder.Type2[]",
+            "name": "nestarray",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct ExampleV2Coder.Type1",
+        "name": "arg1",
+        "type": "tuple"
+      }
+    ],
+    "name": "inOutType1",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "string",
+            "name": "str1",
+            "type": "string"
+          },
+          {
+            "internalType": "uint232",
+            "name": "val1",
+            "type": "uint232"
+          },
+          {
+            "components": [
+              {
+                "internalType": "string",
+                "name": "str1",
+                "type": "string"
+              },
+              {
+                "internalType": "string",
+                "name": "str2",
+                "type": "string"
+              },
+              {
+                "internalType": "address",
+                "name": "addr1",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes",
+                "name": "bytearray",
+                "type": "bytes"
+              }
+            ],
+            "internalType": "struct ExampleV2Coder.Type2",
+            "name": "nested",
+            "type": "tuple"
+          },
+          {
+            "components": [
+              {
+                "internalType": "string",
+                "name": "str1",
+                "type": "string"
+              },
+              {
+                "internalType": "string",
+                "name": "str2",
+                "type": "string"
+              },
+              {
+                "internalType": "address",
+                "name": "addr1",
+                "type": "address"
+              },
+              {
+                "internalType": "bytes",
+                "name": "bytearray",
+                "type": "bytes"
+              }
+            ],
+            "internalType": "struct ExampleV2Coder.Type2[]",
+            "name": "nestarray",
+            "type": "tuple[]"
+          }
+        ],
+        "internalType": "struct ExampleV2Coder.Type1",
+        "name": "out1",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  }
+]

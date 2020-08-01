@@ -153,7 +153,7 @@ func (w *webhooksKafka) sendWebhookMsg(ctx context.Context, key, msgID string, m
 	accessToken := kldauth.GetAccessToken(ctx)
 	if accessToken != "" {
 		sentMsg.Headers = []sarama.RecordHeader{
-			sarama.RecordHeader{
+			{
 				Key:   []byte(kldmessages.RecordHeaderAccessToken),
 				Value: []byte(accessToken),
 			},

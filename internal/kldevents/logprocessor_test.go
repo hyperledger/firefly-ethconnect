@@ -67,12 +67,12 @@ func TestProcessLogEntryNillAndTooFewFields(t *testing.T) {
 			"testEvent",
 			true,
 			[]kldbind.ABIArgument{
-				kldbind.ABIArgument{
+				{
 					Name:    "one",
 					Indexed: true,
 					Type:    uint256Type,
 				},
-				kldbind.ABIArgument{
+				{
 					Name:    "two",
 					Indexed: true,
 					Type:    uint256Type,
@@ -101,11 +101,11 @@ func TestProcessLogBadRLPData(t *testing.T) {
 		event: &kldbind.ABIEvent{
 			Anonymous: true,
 			Inputs: []kldbind.ABIArgument{
-				kldbind.ABIArgument{
+				{
 					Name:    "one",
 					Indexed: false,
 				},
-				kldbind.ABIArgument{
+				{
 					Name:    "two",
 					Indexed: false,
 				},

@@ -1222,7 +1222,7 @@ func (g *smartContractGW) writeHTMLForUI(prefix, id, from string, isGateway, fac
 	html := `<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
 <html>
 <head>
-  <meta charset="utf-8"> <!-- Important: rapi-doc uses utf8 charecters -->
+  <meta charset="utf-8"> <!-- Important: rapi-doc uses utf8 characters -->
   <script src="https://unpkg.com/rapidoc@7.1.0/dist/rapidoc-min.js"></script>
 </head>
 <body>
@@ -1250,7 +1250,7 @@ func (g *smartContractGW) writeHTMLForUI(prefix, id, from string, isGateway, fac
         <p><a href="#quickstart" style="text-decoration: none" onclick="document.getElementById('kaleido-quickstart-header').style.display = 'block'; this.style.display = 'none'; return false;">Show additional instructions</a></p>
         <div id="kaleido-quickstart-header" style="display: none;">
           <ul>
-            <li>Authorization with Kaleido Applicaiton Credentials has already been performed when loading this page, and is passed to API calls by your browser.</code>
+            <li>Authorization with Kaleido Application Credentials has already been performed when loading this page, and is passed to API calls by your browser.</code>
             <li><code>POST</code> actions against Solidity methods will <b>write to the chain</b> unless <code>kld-call</code> is set, or the method is marked <code>[read-only]</code>
             <ul>
               <li>When <code>kld-sync</code> is set, the response will not be returned until the transaction is mined <b>taking a few seconds</b></li>

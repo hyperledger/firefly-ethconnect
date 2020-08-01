@@ -140,7 +140,6 @@ func TestExecuteWithIncompleteArgs(t *testing.T) {
 	testArgs = append(testArgs, []string{"--sasl-username", "testuser"}...)
 	_, err = execKafkaCommonWithArgs(assert, testArgs, f)
 	assert.Equal("Username and Password must both be provided for SASL", err.Error())
-	testArgs = append(testArgs, []string{"--sasl-password", "testpass"}...)
 
 }
 

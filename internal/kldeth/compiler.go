@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	// DefaultEVMVersion is the EVMVersion to be used when not specified explicity
+	// DefaultEVMVersion is the EVMVersion to be used when not specified explicitly
 	defaultEVMVersion = "byzantium"
 )
 
@@ -115,7 +115,7 @@ func CompileContract(soliditySource, contractName, requestedVersion, evmVersion 
 	if err := cmd.Run(); err != nil {
 		return nil, klderrors.Errorf(klderrors.CompilerFailedSolc, err, stderr.String())
 	}
-	c, err := compiler.ParseCombinedJSON(stdout.Bytes(), soliditySource, s.Version, s.Version, strings.Join(solcArgs, " "))
+	c, _ := compiler.ParseCombinedJSON(stdout.Bytes(), soliditySource, s.Version, s.Version, strings.Join(solcArgs, " "))
 	return ProcessCompiled(c, contractName, true)
 }
 

@@ -316,7 +316,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 
 	// If we have an address, it must be valid
 	if c.addr != "" && !validAddress {
-		log.Errorf("Invalid to addres: '%s'", params.ByName("address"))
+		log.Errorf("Invalid to address: '%s'", params.ByName("address"))
 		err = klderrors.Errorf(klderrors.RESTGatewayInvalidToAddress)
 		r.restErrReply(res, req, err, 404)
 		return

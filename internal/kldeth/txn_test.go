@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math/big"
 	"reflect"
 	"testing"
@@ -559,7 +560,7 @@ func TestSolidityBytesParamConversion(t *testing.T) {
 }
 
 func TestSolidityArrayOfByteArraysParamConversion(t *testing.T) {
-	// These types are wierd, as they are arrays of arrays of bytes.
+	// These types are weird, as they are arrays of arrays of bytes.
 	// We do not support HEX strings for these, but the docs explicitly discourage their
 	// use in favour of bytes8 etc.
 	testComplexParam(t, "byte[8] memory", []string{"fe", "ed", "be", "ef"}, "")
@@ -586,29 +587,29 @@ func TestSendTxnABIParam(t *testing.T) {
 	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "param1",
 				Type: "uint8",
 			},
-			kldmessages.ABIParam{
+			{
 				Name: "param2",
 				Type: "int256",
 			},
-			kldmessages.ABIParam{
+			{
 				Name: "param3",
 				Type: "string",
 			},
-			kldmessages.ABIParam{
+			{
 				Name: "param4",
 				Type: "address",
 			},
-			kldmessages.ABIParam{
+			{
 				Name: "param5",
 				Type: "bytes",
 			},
 		},
 		Outputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "ret1",
 				Type: "uint256",
 			},
@@ -814,7 +815,7 @@ func TestCallMethod(t *testing.T) {
 	assert.Regexp("0xe5537abb000000000000000000000000000000000000000000000000000000000000007b000000000000000000000000000000000000000000000000000000000000007b0000000000000000000000000000000000000000000000000000000000000080000000000000000000000000aa983ad2a0e0ed8ac639277f37be42f2a5d2618c00000000000000000000000000000000000000000000000000000000000000036162630000000000000000000000000000000000000000000000000000000000", jsonSent["data"])
 	assert.Equal("latest", rpc.capturedArgs[1])
 
-	res, err = CallMethod(context.Background(), rpc, nil,
+	_, err = CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
 		json.Number("12345"), genMethod(params), params, "pending")
@@ -822,7 +823,7 @@ func TestCallMethod(t *testing.T) {
 	assert.Equal("eth_call", rpc.capturedMethod2)
 	assert.Equal("pending", rpc.capturedArgs2[1])
 
-	res, err = CallMethod(context.Background(), rpc, nil,
+	_, err = CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
 		json.Number("12345"), genMethod(params), params, "earliest")
@@ -830,7 +831,7 @@ func TestCallMethod(t *testing.T) {
 	assert.Equal("eth_call", rpc.capturedMethod2)
 	assert.Equal("earliest", rpc.capturedArgs2[1])
 
-	res, err = CallMethod(context.Background(), rpc, nil,
+	_, err = CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
 		json.Number("12345"), genMethod(params), params, "0x1234")
@@ -838,7 +839,7 @@ func TestCallMethod(t *testing.T) {
 	assert.Equal("eth_call", rpc.capturedMethod2)
 	assert.Equal("0x1234", rpc.capturedArgs2[1])
 
-	res, err = CallMethod(context.Background(), rpc, nil,
+	_, err = CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
 		json.Number("12345"), genMethod(params), params, "12345")
@@ -846,7 +847,7 @@ func TestCallMethod(t *testing.T) {
 	assert.Equal("eth_call", rpc.capturedMethod2)
 	assert.Equal("0x3039", rpc.capturedArgs2[1])
 
-	res, err = CallMethod(context.Background(), rpc, nil,
+	_, err = CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
 		json.Number("12345"), genMethod(params), params, "0")
@@ -1321,13 +1322,13 @@ func TestSendTxnBadInputType(t *testing.T) {
 	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "param1",
 				Type: "badness",
 			},
 		},
 		Outputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "ret1",
 				Type: "uint256",
 			},
@@ -1360,13 +1361,13 @@ func TestSendTxnBadFrom(t *testing.T) {
 	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "param1",
 				Type: "uint8",
 			},
 		},
 		Outputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "ret1",
 				Type: "uint256",
 			},
@@ -1390,13 +1391,13 @@ func TestSendTxnBadTo(t *testing.T) {
 	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "param1",
 				Type: "uint8",
 			},
 		},
 		Outputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "ret1",
 				Type: "uint256",
 			},
@@ -1419,13 +1420,13 @@ func TestSendTxnBadOutputType(t *testing.T) {
 	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "param1",
 				Type: "uint256",
 			},
 		},
 		Outputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "ret1",
 				Type: "badness",
 			},
@@ -1443,13 +1444,13 @@ func TestSendBadParams(t *testing.T) {
 	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "param1",
 				Type: "int8",
 			},
 		},
 		Outputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "ret1",
 				Type: "uint256",
 			},
@@ -1467,13 +1468,13 @@ func TestSendTxnPackError(t *testing.T) {
 	msg.Method = &kldmessages.ABIMethod{
 		Name: "testFunc",
 		Inputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "param1",
 				Type: "bytes1",
 			},
 		},
 		Outputs: []kldmessages.ABIParam{
-			kldmessages.ABIParam{
+			{
 				Name: "ret1",
 				Type: "uint256",
 			},
@@ -1499,15 +1500,15 @@ func TestProcessRLPBytesValidTypes(t *testing.T) {
 		Name:   "echoTypes2",
 		Inputs: []abi.Argument{},
 		Outputs: []abi.Argument{
-			abi.Argument{Name: "retval1", Type: t1},
-			abi.Argument{Name: "retval2", Type: t2},
-			abi.Argument{Name: "retval3", Type: t3},
-			abi.Argument{Name: "retval4", Type: t4},
-			abi.Argument{Name: "retval5", Type: t5},
-			abi.Argument{Name: "retval6", Type: t6},
-			abi.Argument{Name: "retval7", Type: t7},
-			abi.Argument{Name: "retval8", Type: t8},
-			abi.Argument{Name: "retval9", Type: t9},
+			{Name: "retval1", Type: t1},
+			{Name: "retval2", Type: t2},
+			{Name: "retval3", Type: t3},
+			{Name: "retval4", Type: t4},
+			{Name: "retval5", Type: t5},
+			{Name: "retval6", Type: t6},
+			{Name: "retval7", Type: t7},
+			{Name: "retval8", Type: t8},
+			{Name: "retval9", Type: t9},
 		},
 	}
 	rlp, err := methodABI.Outputs.Pack(
@@ -1539,6 +1540,147 @@ func TestProcessRLPBytesValidTypes(t *testing.T) {
 	assert.Equal("-456", res["retval8"].([]interface{})[1])
 	assert.Equal("123", res["retval9"].([]interface{})[0])
 	assert.Equal("456", res["retval9"].([]interface{})[1])
+}
+
+func TestProcessRLPV2ABIEncodedStructs(t *testing.T) {
+	assert := assert.New(t)
+
+	var v2abi abi.ABI
+	testABIInput, err := ioutil.ReadFile("../../test/abicoderv2_example.abi.json")
+	assert.NoError(err)
+	err = json.Unmarshal(testABIInput, &v2abi)
+	assert.NoError(err)
+
+	var abiMethod abi.Method
+	for _, m := range v2abi.Methods {
+		if m.Name == "inOutType1" {
+			abiMethod = m
+		}
+	}
+
+	input1Map := map[string]interface{}{
+		"str1": "test1",
+		"val1": "12345",
+		"nested": map[string]interface{}{
+			"str1":      "test2",
+			"str2":      "test3",
+			"addr1":     "0x1212121212121212121212121212121212121212",
+			"bytearray": "0xfeedbeef",
+		},
+		"nestarray": []interface{}{
+			map[string]interface{}{
+				"str1":      "test4",
+				"str2":      "test5",
+				"addr1":     "0x2121212121212121212121212121212121212121",
+				"bytearray": "0x01010101",
+			},
+		},
+	}
+
+	tx := Txn{}
+	typedArgs, err := tx.generateTypedArgs([]interface{}{input1Map}, &abiMethod)
+	assert.NoError(err)
+	t.Logf("typeArgs: %+v", typedArgs)
+
+	rlp, err := abiMethod.Inputs.Pack(typedArgs...)
+	assert.NoError(err)
+	res, err := ProcessRLPBytes(abiMethod.Outputs, rlp)
+	assert.NoError(err)
+	assert.Nil(res["error"])
+
+	assert.Equal(input1Map, res["out1"])
+}
+
+func TestProcessRLPV2ABIEncodedStructsUnasignableVal(t *testing.T) {
+	assert := assert.New(t)
+
+	var v2abi abi.ABI
+	testABIInput, err := ioutil.ReadFile("../../test/abicoderv2_example.abi.json")
+	assert.NoError(err)
+	err = json.Unmarshal(testABIInput, &v2abi)
+	assert.NoError(err)
+
+	var abiMethod abi.Method
+	for _, m := range v2abi.Methods {
+		if m.Name == "inOutType1" {
+			abiMethod = m
+		}
+	}
+
+	input1Map := map[string]interface{}{
+		"str1": []interface{}{},
+	}
+
+	tx := Txn{}
+	_, err = tx.generateTypedArgs([]interface{}{input1Map}, &abiMethod)
+	assert.Regexp("Method 'inOutType1' param 0.str1: Must supply a string", err.Error())
+}
+
+func TestProcessRLPV2ABIEncodedStructsBadInputType(t *testing.T) {
+	assert := assert.New(t)
+
+	var v2abi abi.ABI
+	testABIInput, err := ioutil.ReadFile("../../test/abicoderv2_example.abi.json")
+	assert.NoError(err)
+	err = json.Unmarshal(testABIInput, &v2abi)
+	assert.NoError(err)
+
+	var abiMethod abi.Method
+	for _, m := range v2abi.Methods {
+		if m.Name == "inOutType1" {
+			abiMethod = m
+		}
+	}
+
+	input1Map := map[string]interface{}{
+		"nested": "Not a map",
+	}
+
+	tx := Txn{}
+	_, err = tx.generateTypedArgs([]interface{}{input1Map}, &abiMethod)
+	assert.EqualError(err, "Method 'inOutType1' param 0.nested is a (string,string,address,bytes): Must supply an object (supplied=string)")
+}
+
+func TestGenerateTupleFromMapBadStructType(t *testing.T) {
+	assert := assert.New(t)
+	tx := Txn{}
+	type random struct{ stuff string }
+	tUint, _ := abi.NewType("uint256", "", []abi.ArgumentMarshaling{})
+	_, err := tx.generateTupleFromMap("method1", "test", &abi.Type{
+		TupleType:     reflect.TypeOf((*random)(nil)).Elem(), // random type that should never happen
+		TupleRawNames: []string{"field1"},
+		TupleElems:    []*abi.Type{&tUint},
+	}, map[string]interface{}{"field1": float64(42)})
+	assert.EqualError(err, "Method method1 param test: supplied value '+42' could not be assigned to 'field1' field")
+}
+
+func TestGenTupleMapOutputBadTypeNonStruct(t *testing.T) {
+	assert := assert.New(t)
+	type random struct{ stuff string }
+	_, err := genTupleMapOutput("test", "random", &abi.Type{TupleType: reflect.TypeOf((*string)(nil)).Elem()}, 42)
+	assert.EqualError(err, "Unable to process type for test (random). Expected string. Received 42")
+}
+
+func TestGenTupleMapOutputBadTypeCountMismatch(t *testing.T) {
+	assert := assert.New(t)
+	type random struct{}
+	_, err := genTupleMapOutput("test", "random", &abi.Type{
+		TupleType:     reflect.TypeOf((*random)(nil)).Elem(),
+		TupleRawNames: []string{"field1", "field2"},
+	}, random{})
+	assert.EqualError(err, "Unable to process type for test (random). Expected 2 fields on the structure. Received 0")
+}
+
+func TestGenTupleMapOutputBadTypeValMismatch(t *testing.T) {
+	assert := assert.New(t)
+	type random struct{ Field1 string }
+	tUint, _ := abi.NewType("uint256", "", []abi.ArgumentMarshaling{})
+	_, err := genTupleMapOutput("test", "random", &abi.Type{
+		TupleType:     reflect.TypeOf((*random)(nil)).Elem(),
+		TupleRawNames: []string{"field1"},
+		TupleElems:    []*abi.Type{&tUint},
+	}, random{Field1: "stuff"})
+	assert.EqualError(err, "Expected number type in JSON/RPC response for test.field1 (uint256). Received string")
 }
 
 func TestProcessRLPBytesInvalidNumber(t *testing.T) {
@@ -1586,7 +1728,7 @@ func TestProcessRLPBytesInvalidArrayType(t *testing.T) {
 
 	t1, _ := kldbind.ABITypeFor("int32[]")
 	_, err := mapOutput("test1", "int32[]", &t1, []string{"wrong"})
-	assert.EqualError(err, "Expected number type in JSON/RPC response for test1 (int32[]). Received string")
+	assert.EqualError(err, "Expected number type in JSON/RPC response for test1[0] (int32[]). Received string")
 }
 
 func TestProcessRLPBytesInvalidTypeByte(t *testing.T) {
@@ -1606,7 +1748,7 @@ func TestProcessRLPBytesUnpackFailure(t *testing.T) {
 		Name:   "echoTypes2",
 		Inputs: []abi.Argument{},
 		Outputs: []abi.Argument{
-			abi.Argument{Name: "retval1", Type: t1},
+			{Name: "retval1", Type: t1},
 		},
 	}
 
@@ -1622,7 +1764,7 @@ func TestProcessOutputsTooFew(t *testing.T) {
 		Name:   "echoTypes2",
 		Inputs: []abi.Argument{},
 		Outputs: []abi.Argument{
-			abi.Argument{Name: "retval1", Type: t1},
+			{Name: "retval1", Type: t1},
 		},
 	}
 
@@ -1651,8 +1793,8 @@ func TestProcessOutputsDefaultName(t *testing.T) {
 		Name:   "anonReturn",
 		Inputs: []abi.Argument{},
 		Outputs: []abi.Argument{
-			abi.Argument{Name: "", Type: t1},
-			abi.Argument{Name: "", Type: t1},
+			{Name: "", Type: t1},
+			{Name: "", Type: t1},
 		},
 	}
 
@@ -1670,7 +1812,7 @@ func TestProcessOutputsBadArgs(t *testing.T) {
 		Name:   "echoTypes2",
 		Inputs: []abi.Argument{},
 		Outputs: []abi.Argument{
-			abi.Argument{Name: "retval1", Type: t1},
+			{Name: "retval1", Type: t1},
 		},
 	}
 

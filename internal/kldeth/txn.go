@@ -18,12 +18,12 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"reflect"
 	"regexp"
 	"strconv"
-  "strings"
-  "fmt"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -267,9 +267,9 @@ func mapOutput(argName, argType string, t *abi.Type, rawValue interface{}) (inte
 			}
 			arrayVal = append(arrayVal, mapped)
 		}
-    return arrayVal, nil
-  case abi.TupleTy:
-    return genTupleMapOutput(argName, argType, t, rawValue)
+		return arrayVal, nil
+	case abi.TupleTy:
+		return genTupleMapOutput(argName, argType, t, rawValue)
 	default:
 		return nil, klderrors.Errorf(klderrors.UnpackOutputsUnknownType,
 			argName, argType, rawType.Kind())
@@ -277,23 +277,23 @@ func mapOutput(argName, argType string, t *abi.Type, rawValue interface{}) (inte
 }
 
 func genTupleMapOutput(argName, argType string, t *abi.Type, rawValue interface{}) (r map[string]interface{}, err error) {
-  reflectValue := reflect.ValueOf(rawValue)
-  if reflectValue.Kind() != reflect.Struct || reflectValue.Type() != t.TupleType {
+	reflectValue := reflect.ValueOf(rawValue)
+	if reflectValue.Kind() != reflect.Struct || reflectValue.Type() != t.TupleType {
 		return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchTupleType,
 			argName, argType, t.TupleType, rawValue)
-  }
-  if len(t.TupleRawNames) != reflectValue.NumField() {
+	}
+	if len(t.TupleRawNames) != reflectValue.NumField() {
 		return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchTupleFieldCount,
 			argName, argType, len(t.TupleRawNames), reflectValue.NumField())
-  }
-  returnMap := make(map[string]interface{})
-  for i, fieldName := range t.TupleRawNames {    
-    returnMap[fieldName], err = mapOutput(fmt.Sprintf("%s.%s", argName, fieldName), t.TupleElems[i].String(), t.TupleElems[i], reflectValue.Field(i).Interface())
-    if err != nil {
-      return nil, err
-    }
-  }
-  return returnMap, nil
+	}
+	returnMap := make(map[string]interface{})
+	for i, fieldName := range t.TupleRawNames {
+		returnMap[fieldName], err = mapOutput(fmt.Sprintf("%s.%s", argName, fieldName), t.TupleElems[i].String(), t.TupleElems[i], reflectValue.Field(i).Interface())
+		if err != nil {
+			return nil, err
+		}
+	}
+	return returnMap, nil
 }
 
 // NewSendTxn builds a new ethereum transaction from the supplied
@@ -551,28 +551,28 @@ func (tx *Txn) generateTypedArrayOrSlice(methodName string, path string, require
 	return genericSlice.Interface(), nil
 }
 
-func (tx *Txn) generateTupleFromMap( methodName string, path string, requiredType *abi.Type, param map[string]interface{}) (v interface{}, err error) {
-  tuple := reflect.New(requiredType.TupleType).Elem()
-  for i, inputElemName := range requiredType.TupleRawNames {
-    var typedVal interface{}
-    var suppliedType reflect.Type
-    inputVal, ok := param[inputElemName]
-    if ok {
-      typedVal, err = tx.generateTypedArg(requiredType.TupleElems[i], inputVal, methodName, fmt.Sprintf("%s.%s", path, inputElemName))
-      if err != nil {
-        return nil, err
-      }
-      suppliedType = reflect.TypeOf(typedVal)
-    }
-    tupleField := tuple.Field(i)
-    if suppliedType != nil {
-      if !suppliedType.AssignableTo(tupleField.Type()) {
-        return nil, klderrors.Errorf(klderrors.TransactionSendInputNotAssignable, methodName, path, typedVal, inputElemName)
-      }
-      tupleField.Set(reflect.ValueOf(typedVal))
-    }
-  }
-  return tuple.Interface(), nil
+func (tx *Txn) generateTupleFromMap(methodName string, path string, requiredType *abi.Type, param map[string]interface{}) (v interface{}, err error) {
+	tuple := reflect.New(requiredType.TupleType).Elem()
+	for i, inputElemName := range requiredType.TupleRawNames {
+		var typedVal interface{}
+		var suppliedType reflect.Type
+		inputVal, ok := param[inputElemName]
+		if ok {
+			typedVal, err = tx.generateTypedArg(requiredType.TupleElems[i], inputVal, methodName, fmt.Sprintf("%s.%s", path, inputElemName))
+			if err != nil {
+				return nil, err
+			}
+			suppliedType = reflect.TypeOf(typedVal)
+		}
+		tupleField := tuple.Field(i)
+		if suppliedType != nil {
+			if !suppliedType.AssignableTo(tupleField.Type()) {
+				return nil, klderrors.Errorf(klderrors.TransactionSendInputNotAssignable, methodName, path, typedVal, inputElemName)
+			}
+			tupleField.Set(reflect.ValueOf(typedVal))
+		}
+	}
+	return tuple.Interface(), nil
 }
 
 func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, methodName string, path string) (interface{}, error) {
@@ -673,12 +673,12 @@ func (tx *Txn) generateTypedArg(requiredType *abi.Type, param interface{}, metho
 		}
 		return bSlice, nil
 	case abi.SliceTy, abi.ArrayTy:
-    return tx.generateTypedArrayOrSlice(methodName, path, requiredType, suppliedType, param)
-  case abi.TupleTy:
-    if suppliedType.Kind() != reflect.Map || suppliedType.Key().Kind() != reflect.String {
-      return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForTuple, methodName, path, requiredType, suppliedType)
-    }
-    return tx.generateTupleFromMap(methodName, path, requiredType, param.(map[string]interface{}))
+		return tx.generateTypedArrayOrSlice(methodName, path, requiredType, suppliedType, param)
+	case abi.TupleTy:
+		if suppliedType.Kind() != reflect.Map || suppliedType.Key().Kind() != reflect.String {
+			return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForTuple, methodName, path, requiredType, suppliedType)
+		}
+		return tx.generateTupleFromMap(methodName, path, requiredType, param.(map[string]interface{}))
 	default:
 		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeNotSupported, requiredType)
 	}
@@ -736,9 +736,9 @@ func flattenParams(origParams []interface{}, inputs *abi.Arguments, lazyTyping b
 			// No change needed
 			params[i] = unflattened
 		} else if len(*inputs) > i && (*inputs)[i].Type.T == abi.TupleTy {
-      // No change needed - structure input
-      params[i] = unflattened
-    } else {
+			// No change needed - structure input
+			params[i] = unflattened
+		} else {
 			// We need to flatten
 			mapParam := unflattened.(map[string]interface{}) // safe case as we came in from JSON only
 			var value, typeStr interface{}

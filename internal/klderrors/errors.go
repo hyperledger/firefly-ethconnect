@@ -354,8 +354,8 @@ const (
 	TransactionSendInputTypeBadByteOutsideRange = "Method '%s' param %s is a %s: Invalid number - outside of range for byte"
 	// TransactionSendInputTypeBadJSONTypeForBytes one of the entries inside of a byte array, is a number outside the range for bytes
 	TransactionSendInputTypeBadJSONTypeForBytes = "Method '%s' param %s is a %s: Must supply a hex string, or number array"
-  // TransactionSendInputTypeBadJSONTypeForTuple if we are provided a non object input on the JSON for a struct (tuple)
-  TransactionSendInputTypeBadJSONTypeForTuple = "Method '%s' param %s is a %s: Must supply an object (supplied=%s)"
+	// TransactionSendInputTypeBadJSONTypeForTuple if we are provided a non object input on the JSON for a struct (tuple)
+	TransactionSendInputTypeBadJSONTypeForTuple = "Method '%s' param %s is a %s: Must supply an object (supplied=%s)"
 	// TransactionSendInputTypeNotSupported did not know how to handle this type - enhancement required
 	TransactionSendInputTypeNotSupported = "Type '%s' is not yet supported"
 	// TransactionSendInputCountMismatch wrong number of args supplied according to the ABI
@@ -369,9 +369,9 @@ const (
 	// TransactionSendMsgTypeUnknown we got a JSON message into the core processor (from Kafka, Webhooks etc.) that we don't understand
 	TransactionSendMsgTypeUnknown = "Unknown message type '%s'"
 	// TransactionSendInputTooManyParams more parameters provided than specified on ABI
-  TransactionSendInputTooManyParams = "Supplied %d paramters for ABI that supports %d"
-  // TransactionSendInputNotAssignable if we end up in a situation where the generated type cannot be assiend
-  TransactionSendInputNotAssignable = "Method %s param %s: supplied value '%+v' could not be assigned to '%s' field"
+	TransactionSendInputTooManyParams = "Supplied %d paramters for ABI that supports %d"
+	// TransactionSendInputNotAssignable if we end up in a situation where the generated type cannot be assigned
+	TransactionSendInputNotAssignable = "Method %s param %s: supplied value '%+v' could not be assigned to '%s' field"
 
 	// TransactionSendReceiptCheckError we continually had bad RCs back from the node while trying to check for the receipt up to the timeout
 	TransactionSendReceiptCheckError = "Error obtaining transaction receipt (%d retries): %s"
@@ -395,8 +395,8 @@ const (
 	UnpackOutputsUnknownType = "Unable to process type for %s (%s). Received %s"
 	// UnpackOutputsMismatchTupleType we got a type back from the unpacking that doesn't match the ABI
 	UnpackOutputsMismatchTupleType = "Unable to process type for %s (%s). Expected %s. Received %+v"
-  // UnpackOutputsMismatchTupleFieldCount we had a mismatch in the number of fields described on the ABI and the number on the go structure
-  UnpackOutputsMismatchTupleFieldCount = "Unable to process type for %s (%s). Expected %d fields on the structure. Received %d"
+	// UnpackOutputsMismatchTupleFieldCount we had a mismatch in the number of fields described on the ABI and the number on the go structure
+	UnpackOutputsMismatchTupleFieldCount = "Unable to process type for %s (%s). Expected %d fields on the structure. Received %d"
 
 	// Unauthorized (401 error)
 	Unauthorized = "Unauthorized"

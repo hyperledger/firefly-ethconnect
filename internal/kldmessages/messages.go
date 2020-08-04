@@ -145,15 +145,15 @@ type SendTransaction struct {
 // DeployContract message instructs the bridge to install a contract
 type DeployContract struct {
 	TransactionCommon
-	Solidity        string       `json:"solidity,omitempty"`
-	CompilerVersion string       `json:"compilerVersion,omitempty"`
-	EVMVersion      string       `json:"evmVersion,omitempty"`
-	ABI             *kldbind.ABI `json:"abi,omitempty"`
-	DevDoc          string       `json:"devDocs,omitempty"`
-	Compiled        []byte       `json:"compiled,omitempty"`
-	ContractName    string       `json:"contractName,omitempty"`
-	Description     string       `json:"description,omitempty"`
-	RegisterAs      string       `json:"registerAs,omitempty"`
+	Solidity        string                `json:"solidity,omitempty"`
+	CompilerVersion string                `json:"compilerVersion,omitempty"`
+	EVMVersion      string                `json:"evmVersion,omitempty"`
+	ABI             kldbind.ABIMarshaling `json:"abi,omitempty"`
+	DevDoc          string                `json:"devDocs,omitempty"`
+	Compiled        []byte                `json:"compiled,omitempty"`
+	ContractName    string                `json:"contractName,omitempty"`
+	Description     string                `json:"description,omitempty"`
+	RegisterAs      string                `json:"registerAs,omitempty"`
 }
 
 // TransactionReceipt is sent when a transaction has been successfully mined

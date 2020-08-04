@@ -181,24 +181,22 @@ func (r *rest2eth) addRoutes(router *httprouter.Router) {
 }
 
 type restCmd struct {
-	from        string
-	addr        string
-	value       json.Number
-	abiMethod   *abi.Method
-	abiEvent    *abi.Event
-	isDeploy    bool
-	deployMsg   *kldmessages.DeployContract
-	body        map[string]interface{}
-	msgParams   []interface{}
-	blocknumber string
+	from         string
+	addr         string
+	value        json.Number
+	abiMethod    *kldbind.ABIMethod
+	abiEvent     *kldbind.ABIEvent
+	abiEventElem *kldbind.ABIElementMarshaling
+	isDeploy     bool
+	deployMsg    *kldmessages.DeployContract
+	body         map[string]interface{}
+	msgParams    []interface{}
+	blocknumber  string
 }
 
-func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, params httprouter.Params) (c restCmd, err error) {
-
-	// Check if we have a valid address in :address (verified later if required)
-	addrParam := params.ByName("address")
+func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params httprouter.Params, c *restCmd, addrParam string) (a kldbind.ABIMarshaling, validAddress bool, err error) {
 	c.addr = strings.ToLower(strings.TrimPrefix(addrParam, "0x"))
-	validAddress := addrCheck.MatchString(c.addr)
+	validAddress = addrCheck.MatchString(c.addr)
 
 	// There are multiple ways we resolve the path into an ABI
 	// 1. we lookup it up remotely in a REST attached contract registry (the newer option)
@@ -207,7 +205,6 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 	// 2. we lookup it up locally in a simple filestore managed in ethconnect (the original option)
 	//    - /abis      is for factory interfaces installed into ethconnect by uploading the Solidity
 	//    - /contracts is for individual instances deployed via ethconnect factory interfaces
-	var a *kldbind.ABI
 	if strings.HasPrefix(req.URL.Path, "/gateways/") || strings.HasPrefix(req.URL.Path, "/g/") {
 		c.deployMsg, err = r.rr.loadFactoryForGateway(params.ByName("gateway_lookup"))
 		if err != nil {
@@ -241,7 +238,6 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 				r.restErrReply(res, req, err, 404)
 				return
 			}
-			a = c.deployMsg.ABI
 		} else {
 			if !validAddress {
 				// Resolve the address as a registered name, to an actual contract address
@@ -255,11 +251,83 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 			c.deployMsg, _, err = r.gw.loadDeployMsgForInstance(addrParam)
 			if err != nil {
 				r.restErrReply(res, req, err, 404)
-				return c, err
+				return
 			}
 		}
 	}
 	a = c.deployMsg.ABI
+	return
+}
+
+func (r *rest2eth) resolveMethod(res http.ResponseWriter, req *http.Request, c *restCmd, a kldbind.ABIMarshaling, methodParam string) (err error) {
+	for _, element := range a {
+		if element.Type == "function" && element.Name == methodParam {
+			if c.abiMethod, err = kldbind.ABIElementMarshalingToABIMethod(&element); err != nil {
+				err = klderrors.Errorf(klderrors.RESTGatewayMethodABIInvalid, methodParam, err)
+				r.restErrReply(res, req, err, 400)
+				return
+			}
+			return
+		}
+	}
+	return
+}
+
+func (r *rest2eth) resolveConstructor(res http.ResponseWriter, req *http.Request, c *restCmd, a kldbind.ABIMarshaling) (err error) {
+	for _, element := range a {
+		if element.Type == "constructor" {
+			if c.abiMethod, err = kldbind.ABIElementMarshalingToABIMethod(&element); err != nil {
+				err = klderrors.Errorf(klderrors.RESTGatewayMethodABIInvalid, "constructor", err)
+				r.restErrReply(res, req, err, 400)
+				return
+			}
+			c.isDeploy = true
+			return
+		}
+	}
+	if !c.isDeploy {
+		// Default constructor
+		c.abiMethod, _ = kldbind.ABIElementMarshalingToABIMethod(&kldbind.ABIElementMarshaling{
+			Type: "constructor",
+		})
+		c.isDeploy = true
+	}
+	return
+}
+
+func (r *rest2eth) resolveEvent(res http.ResponseWriter, req *http.Request, c *restCmd, a kldbind.ABIMarshaling, methodParam, methodParamLC, addrParam string) (err error) {
+	var eventDef *kldbind.ABIElementMarshaling
+	for _, element := range a {
+		if element.Type == "event" {
+			if element.Name == methodParam {
+				eventDef = &element
+				break
+			}
+			if methodParamLC == "subscribe" && element.Name == addrParam {
+				c.addr = ""
+				eventDef = &element
+				break
+			}
+		}
+	}
+	if eventDef != nil {
+		c.abiEventElem = eventDef
+		if c.abiEvent, err = kldbind.ABIElementMarshalingToABIEvent(eventDef); err != nil {
+			err = klderrors.Errorf(klderrors.RESTGatewayEventABIInvalid, eventDef.Name, err)
+			r.restErrReply(res, req, err, 400)
+			return
+		}
+	}
+	return
+}
+
+func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, params httprouter.Params) (c restCmd, err error) {
+	// Check if we have a valid address in :address (verified later if required)
+	addrParam := params.ByName("address")
+	a, validAddress, err := r.resolveABI(res, req, params, &c, addrParam)
+	if err != nil {
+		return c, err
+	}
 
 	// See addRoutes for all the various routes we support under the factory/instance.
 	// We need to handle the special case of
@@ -271,11 +339,8 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 	methodParam := params.ByName("method")
 	methodParamLC := strings.ToLower(methodParam)
 	if methodParam != "" {
-		for _, method := range a.ABI.Methods {
-			if method.Name == methodParam {
-				c.abiMethod = &method
-				break
-			}
+		if err = r.resolveMethod(res, req, &c, a, methodParam); err != nil {
+			return
 		}
 	}
 
@@ -283,23 +348,16 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 	// an event in either the :event OR :address param (see special case above)
 	// Note solidity guarantees no overlap in method / event names
 	if c.abiMethod == nil && methodParam != "" {
-		for _, event := range a.ABI.Events {
-			if event.Name == methodParam {
-				c.abiEvent = &event
-				break
-			}
-			if methodParamLC == "subscribe" && event.Name == addrParam {
-				c.addr = ""
-				c.abiEvent = &event
-				break
-			}
+		if err = r.resolveEvent(res, req, &c, a, methodParam, methodParamLC, addrParam); err != nil {
+			return
 		}
 	}
 
 	// Last case is the constructor, where nothing is specified
 	if methodParam == "" && c.abiMethod == nil && c.abiEvent == nil {
-		c.abiMethod = &a.ABI.Constructor
-		c.isDeploy = true
+		if err = r.resolveConstructor(res, req, &c, a); err != nil {
+			return
+		}
 	}
 
 	// If we didn't find the method or event, report to the user
@@ -352,22 +410,18 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 		return
 	}
 
-	c.msgParams = make([]interface{}, 0, len(c.abiMethod.Inputs))
+	c.msgParams = make([]interface{}, len(c.abiMethod.Inputs))
 	queryParams := req.Form
-	for _, abiParam := range c.abiMethod.Inputs {
-		// Body takes precedence
-		msgParam := make(map[string]interface{})
-		msgParam["type"] = abiParam.Type.String()
+	for i, abiParam := range c.abiMethod.Inputs {
 		if bv, exists := c.body[abiParam.Name]; exists {
-			msgParam["value"] = bv
+			c.msgParams[i] = bv
 		} else if vs := queryParams[abiParam.Name]; len(vs) > 0 {
-			msgParam["value"] = vs[0]
+			c.msgParams[i] = vs[0]
 		} else {
 			err = klderrors.Errorf(klderrors.RESTGatewayMissingParameter, abiParam.Name, c.abiMethod.Name)
 			r.restErrReply(res, req, err, 400)
 			return
 		}
-		c.msgParams = append(c.msgParams, msgParam)
 	}
 
 	c.blocknumber = getKLDParam("blocknumber", req, false)
@@ -384,7 +438,7 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 	}
 
 	if c.abiEvent != nil {
-		r.subscribeEvent(res, req, c.addr, c.abiEvent, c.body)
+		r.subscribeEvent(res, req, c.addr, c.abiEventElem, c.body)
 	} else if (req.Method == http.MethodPost && !c.abiMethod.IsConstant()) && strings.ToLower(getKLDParam("call", req, true)) != "true" {
 		if c.from == "" {
 			err = klderrors.Errorf(klderrors.RESTGatewayMissingFromAddress)
@@ -408,7 +462,7 @@ func (r *rest2eth) fromBodyOrForm(req *http.Request, body map[string]interface{}
 	return req.FormValue(param)
 }
 
-func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, addrStr string, abiEvent *abi.Event, body map[string]interface{}) {
+func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, addrStr string, abiEvent *kldbind.ABIElementMarshaling, body map[string]interface{}) {
 
 	err := kldauth.AuthEventStreams(req.Context())
 	if err != nil {

@@ -74,108 +74,58 @@ func ABIEventSignature(event *ABIEvent) string {
 	return fmt.Sprintf("%v(%v)", event.RawName, strings.Join(typeStrings, ","))
 }
 
-type arg struct {
-	Name    string `json:"name,omitempty"`
-	Type    string `json:"type,omitempty"`
-	Indexed bool   `json:"indexed"`
+// ABIMarshalingToABIRuntime takes a serialized form ABI and converts it into RuntimeABI
+// This is not performance optimized, so the RuntimeABI once generated should be used
+// for runtime processing
+func ABIMarshalingToABIRuntime(marshalable ABIMarshaling) (*RuntimeABI, error) {
+	var runtime RuntimeABI
+	b, _ := json.Marshal(&marshalable)
+	err := json.Unmarshal(b, &runtime)
+	return &runtime, err
 }
 
-type field struct {
-	Type            string `json:"type,omitempty"`
-	Name            string `json:"name,omitempty"`
-	Constant        bool   `json:"constant,omitempty"`
-	Anonymous       bool   `json:"anonymous,omitempty"`
-	StateMutability string `json:"stateMutability,omitempty"`
-	Inputs          []arg
-	Outputs         []arg
-}
-
-// MarshalJSON implements the reverse of UnmarshalJSON
-func (abi *ABI) MarshalJSON() ([]byte, error) {
-	var fields []field
-	fields = append(fields, field{
-		Type:            "constructor",
-		StateMutability: abi.Constructor.StateMutability,
-		Inputs:          marshalArgs(abi.Constructor.Inputs),
-	})
-	for name, method := range abi.Methods {
-		fields = append(fields, field{
-			Type:            "function",
-			Name:            name,
-			Constant:        method.IsConstant(),
-			StateMutability: method.StateMutability,
-			Inputs:          marshalArgs(method.Inputs),
-			Outputs:         marshalArgs(method.Outputs),
-		})
-	}
-	for name, event := range abi.Events {
-		fields = append(fields, field{
-			Type:      "event",
-			Name:      name,
-			Anonymous: event.Anonymous,
-			Inputs:    marshalArgs(event.Inputs),
-		})
-	}
-	return json.Marshal(&fields)
-}
-
-// MarshalledABIEvent needed because events can't be marshalled correctly either with abi.Event
-type MarshalledABIEvent struct {
-	E ABIEvent
-}
-
-// UnmarshalJSON converts to the inner structure
-func (e *MarshalledABIEvent) UnmarshalJSON(data []byte) error {
-	var field field
-	if err := json.Unmarshal(data, &field); err != nil {
-		return err
-	}
-	inputs, err := unmarshalArgs(field.Inputs)
-	if err != nil {
-		return err
-	}
-	e.E = ABIEvent{
-		Name:      field.Name,
-		Anonymous: field.Anonymous,
-		Inputs:    inputs,
-	}
-	return nil
-}
-
-// MarshalJSON converts from the inner structure
-func (e *MarshalledABIEvent) MarshalJSON() ([]byte, error) {
-	field := field{
-		Name:      e.E.Name,
-		Anonymous: e.E.Anonymous,
-		Inputs:    marshalArgs(e.E.Inputs),
-	}
-	return json.Marshal(&field)
-}
-
-func marshalArgs(abiArgs []ABIArgument) []arg {
-	args := make([]arg, 0, len(abiArgs))
-	for _, abiArg := range abiArgs {
-		args = append(args, arg{
-			Name:    abiArg.Name,
-			Type:    abiArg.Type.String(),
-			Indexed: abiArg.Indexed,
-		})
-	}
-	return args
-}
-
-func unmarshalArgs(args []arg) ([]ABIArgument, error) {
-	abiArgs := make([]ABIArgument, 0, len(args))
-	for _, arg := range args {
-		t, err := ABITypeFor(arg.Type)
+// ABIArgumentsMarshalingToABIArguments converts ABI serialized reprsentations of arguments
+// to the processed type information
+func ABIArgumentsMarshalingToABIArguments(marshalable []ABIArgumentMarshaling) (ABIArguments, error) {
+	arguments := make(ABIArguments, len(marshalable))
+	var err error
+	for i, mArg := range marshalable {
+		var components []abi.ArgumentMarshaling
+		if mArg.Components != nil {
+			b, _ := json.Marshal(&mArg.Components)
+			json.Unmarshal(b, &components)
+		}
+		arguments[i].Type, err = abi.NewType(mArg.Type, mArg.InternalType, components)
 		if err != nil {
 			return nil, err
 		}
-		abiArgs = append(abiArgs, ABIArgument{
-			Name:    arg.Name,
-			Type:    t,
-			Indexed: arg.Indexed,
-		})
+		arguments[i].Name = mArg.Name
+		arguments[i].Indexed = mArg.Indexed
 	}
-	return abiArgs, nil
+	return arguments, nil
+}
+
+// ABIElementMarshalingToABIEvent converts a de-serialized event with full type information,
+// per the original ABI, into a runtime ABIEvent with a processed type
+func ABIElementMarshalingToABIEvent(marshalable *ABIElementMarshaling) (event *ABIEvent, err error) {
+	inputs, err := ABIArgumentsMarshalingToABIArguments(marshalable.Inputs)
+	if err == nil {
+		nEvent := abi.NewEvent(marshalable.Name, marshalable.Name, marshalable.Anonymous, inputs)
+		event = &nEvent
+	}
+	return
+}
+
+// ABIElementMarshalingToABIMethod converts a de-serialized method with full type information,
+// per the original ABI, into a runtime ABIEvent with a processed type
+func ABIElementMarshalingToABIMethod(m *ABIElementMarshaling) (method *ABIMethod, err error) {
+	inputs, err := ABIArgumentsMarshalingToABIArguments(m.Inputs)
+	if err == nil {
+		outputs, err := ABIArgumentsMarshalingToABIArguments(m.Outputs)
+		if err == nil {
+			nMethod := abi.NewMethod(m.Name, m.Name, abi.Function, m.StateMutability, m.Constant, m.Payable, inputs, outputs)
+			method = &nMethod
+		}
+	}
+	return
 }

@@ -59,8 +59,8 @@ func (r *testRPCClient) CallContext(ctx context.Context, result interface{}, met
 }
 
 const (
-	simpleStorage = "pragma solidity >=0.4.22 <0.6.9;\n\ncontract simplestorage {\nuint public storedData;\n\nconstructor(uint initVal) public {\nstoredData = initVal;\n}\n\nfunction set(uint x) public {\nstoredData = x;\n}\n\nfunction get() public view returns (uint retVal) {\nreturn storedData;\n}\n}"
-	twoContracts  = "pragma solidity >=0.4.22 <0.6.9;\n\ncontract contract1 {function f1() public pure returns (uint retVal) {\nreturn 1;\n}\n}\n\ncontract contract2 {function f2() public pure returns (uint retVal) {\nreturn 2;\n}\n}"
+	simpleStorage = "pragma solidity >=0.4.22 <0.7;\n\ncontract simplestorage {\nuint public storedData;\n\nconstructor(uint initVal) public {\nstoredData = initVal;\n}\n\nfunction set(uint x) public {\nstoredData = x;\n}\n\nfunction get() public view returns (uint retVal) {\nreturn storedData;\n}\n}"
+	twoContracts  = "pragma solidity >=0.4.22 <0.7;\n\ncontract contract1 {function f1() public pure returns (uint retVal) {\nreturn 1;\n}\n}\n\ncontract contract2 {function f2() public pure returns (uint retVal) {\nreturn 2;\n}\n}"
 )
 
 func TestNewContractDeployTxnSimpleStorage(t *testing.T) {
@@ -262,13 +262,12 @@ func TestNewContractDeployMissingCompiledOrSolidity(t *testing.T) {
 func TestNewContractDeployPrecompiledSimpleStorage(t *testing.T) {
 	assert := assert.New(t)
 
-	c, _ := CompileContract(simpleStorage, "simplestorage", "", "")
+	c, err := CompileContract(simpleStorage, "simplestorage", "", "")
+	assert.NoError(err)
 
 	var msg kldmessages.DeployContract
 	msg.Compiled = c.Compiled
-	msg.ABI = &kldbind.ABI{
-		ABI: *c.ABI,
-	}
+	msg.ABI = c.ABI
 	msg.Parameters = []interface{}{float64(999999)}
 	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 	msg.Nonce = "123"
@@ -447,7 +446,7 @@ func testComplexParam(t *testing.T, solidityType string, val interface{}, expect
 	assert := assert.New(t)
 
 	var msg kldmessages.DeployContract
-	msg.Solidity = "pragma solidity >=0.4.22 <0.6.9; contract test {constructor(" + solidityType + " p1) public {}}"
+	msg.Solidity = "pragma solidity >=0.4.22 <0.7; contract test {constructor(" + solidityType + " p1) public {}}"
 	msg.Parameters = []interface{}{val}
 	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 	msg.Nonce = "123"
@@ -1633,12 +1632,37 @@ func TestProcessRLPV2ABIEncodedStructsBadInputType(t *testing.T) {
 	}
 
 	input1Map := map[string]interface{}{
+		"str1":   "ok",
+		"val1":   "12345",
 		"nested": "Not a map",
 	}
 
 	tx := Txn{}
 	_, err = tx.generateTypedArgs([]interface{}{input1Map}, &abiMethod)
 	assert.EqualError(err, "Method 'inOutType1' param 0.nested is a (string,string,address,bytes): Must supply an object (supplied=string)")
+}
+
+func TestProcessRLPV2ABIEncodedStructsBadNilType(t *testing.T) {
+	assert := assert.New(t)
+
+	var v2abi abi.ABI
+	testABIInput, err := ioutil.ReadFile("../../test/abicoderv2_example.abi.json")
+	assert.NoError(err)
+	err = json.Unmarshal(testABIInput, &v2abi)
+	assert.NoError(err)
+
+	var abiMethod abi.Method
+	for _, m := range v2abi.Methods {
+		if m.Name == "inOutType1" {
+			abiMethod = m
+		}
+	}
+
+	input1Map := map[string]interface{}{}
+
+	tx := Txn{}
+	_, err = tx.generateTypedArgs([]interface{}{input1Map}, &abiMethod)
+	assert.EqualError(err, "Method inOutType1 param 0: supplied value '<nil>' could not be assigned to 'str1' field (string)")
 }
 
 func TestGenerateTupleFromMapBadStructType(t *testing.T) {
@@ -1651,7 +1675,7 @@ func TestGenerateTupleFromMapBadStructType(t *testing.T) {
 		TupleRawNames: []string{"field1"},
 		TupleElems:    []*abi.Type{&tUint},
 	}, map[string]interface{}{"field1": float64(42)})
-	assert.EqualError(err, "Method method1 param test: supplied value '+42' could not be assigned to 'field1' field")
+	assert.EqualError(err, "Method method1 param test: supplied value '+42' could not be assigned to 'field1' field (uint256)")
 }
 
 func TestGenTupleMapOutputBadTypeNonStruct(t *testing.T) {

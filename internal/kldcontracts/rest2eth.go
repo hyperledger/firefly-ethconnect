@@ -181,17 +181,18 @@ func (r *rest2eth) addRoutes(router *httprouter.Router) {
 }
 
 type restCmd struct {
-	from         string
-	addr         string
-	value        json.Number
-	abiMethod    *kldbind.ABIMethod
-	abiEvent     *kldbind.ABIEvent
-	abiEventElem *kldbind.ABIElementMarshaling
-	isDeploy     bool
-	deployMsg    *kldmessages.DeployContract
-	body         map[string]interface{}
-	msgParams    []interface{}
-	blocknumber  string
+	from          string
+	addr          string
+	value         json.Number
+	abiMethod     *kldbind.ABIMethod
+	abiMethodElem *kldbind.ABIElementMarshaling
+	abiEvent      *kldbind.ABIEvent
+	abiEventElem  *kldbind.ABIElementMarshaling
+	isDeploy      bool
+	deployMsg     *kldmessages.DeployContract
+	body          map[string]interface{}
+	msgParams     []interface{}
+	blocknumber   string
 }
 
 func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params httprouter.Params, c *restCmd, addrParam string) (a kldbind.ABIMarshaling, validAddress bool, err error) {
@@ -262,6 +263,7 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 func (r *rest2eth) resolveMethod(res http.ResponseWriter, req *http.Request, c *restCmd, a kldbind.ABIMarshaling, methodParam string) (err error) {
 	for _, element := range a {
 		if element.Type == "function" && element.Name == methodParam {
+			c.abiMethodElem = &element
 			if c.abiMethod, err = kldbind.ABIElementMarshalingToABIMethod(&element); err != nil {
 				err = klderrors.Errorf(klderrors.RESTGatewayMethodABIInvalid, methodParam, err)
 				r.restErrReply(res, req, err, 400)
@@ -276,6 +278,7 @@ func (r *rest2eth) resolveMethod(res http.ResponseWriter, req *http.Request, c *
 func (r *rest2eth) resolveConstructor(res http.ResponseWriter, req *http.Request, c *restCmd, a kldbind.ABIMarshaling) (err error) {
 	for _, element := range a {
 		if element.Type == "constructor" {
+			c.abiMethodElem = &element
 			if c.abiMethod, err = kldbind.ABIElementMarshalingToABIMethod(&element); err != nil {
 				err = klderrors.Errorf(klderrors.RESTGatewayMethodABIInvalid, "constructor", err)
 				r.restErrReply(res, req, err, 400)
@@ -287,9 +290,10 @@ func (r *rest2eth) resolveConstructor(res http.ResponseWriter, req *http.Request
 	}
 	if !c.isDeploy {
 		// Default constructor
-		c.abiMethod, _ = kldbind.ABIElementMarshalingToABIMethod(&kldbind.ABIElementMarshaling{
+		c.abiMethodElem = &kldbind.ABIElementMarshaling{
 			Type: "constructor",
-		})
+		}
+		c.abiMethod, _ = kldbind.ABIElementMarshalingToABIMethod(c.abiMethodElem)
 		c.isDeploy = true
 	}
 	return
@@ -444,9 +448,9 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 			err = klderrors.Errorf(klderrors.RESTGatewayMissingFromAddress)
 			r.restErrReply(res, req, err, 400)
 		} else if c.isDeploy {
-			r.deployContract(res, req, c.from, c.value, c.abiMethod, c.deployMsg, c.msgParams)
+			r.deployContract(res, req, c.from, c.value, c.abiMethodElem, c.deployMsg, c.msgParams)
 		} else {
-			r.sendTransaction(res, req, c.from, c.addr, c.value, c.abiMethod, c.msgParams)
+			r.sendTransaction(res, req, c.from, c.addr, c.value, c.abiMethodElem, c.msgParams)
 		}
 	} else {
 		r.callContract(res, req, c.from, c.addr, c.value, c.abiMethod, c.msgParams, c.blocknumber)
@@ -525,7 +529,7 @@ func (r *rest2eth) addPrivateTx(msg *kldmessages.TransactionCommon, req *http.Re
 	return nil
 }
 
-func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, from string, value json.Number, abiMethod *abi.Method, deployMsg *kldmessages.DeployContract, msgParams []interface{}) {
+func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, from string, value json.Number, abiMethodElem *kldbind.ABIElementMarshaling, deployMsg *kldmessages.DeployContract, msgParams []interface{}) {
 
 	deployMsg.Headers.MsgType = kldmessages.MsgTypeDeployContract
 	deployMsg.From = from
@@ -574,11 +578,11 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 	return
 }
 
-func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, from, addr string, value json.Number, abiMethod *abi.Method, msgParams []interface{}) {
+func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, from, addr string, value json.Number, abiMethodElem *kldbind.ABIElementMarshaling, msgParams []interface{}) {
 
 	msg := &kldmessages.SendTransaction{}
 	msg.Headers.MsgType = kldmessages.MsgTypeSendTransaction
-	msg.MethodName = abiMethod.Name
+	msg.Method = abiMethodElem
 	msg.To = addr
 	msg.From = from
 	msg.Gas = json.Number(getKLDParam("gas", req, false))

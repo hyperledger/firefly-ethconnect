@@ -21,7 +21,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
-// This module provides some basic types proxied through from ethereØum, to avoid
+// This module provides some basic types proxied through from ethereum, to avoid
 // ethereum imports throughout the codebase
 
 // Address models and serializes a 20 byte ethereum address

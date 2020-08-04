@@ -67,7 +67,7 @@ func TestProcessLogEntryNillAndTooFewFields(t *testing.T) {
     "anonymous": true,
     "inputs": [
       {"name": "one", "type": "uint256", "indexed": true},
-      {"name": "two", "type": "uint256", "indexed": true},
+      {"name": "two", "type": "uint256", "indexed": true}
     ]
   }`
 	var marshaling kldbind.ABIElementMarshaling

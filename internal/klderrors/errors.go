@@ -240,9 +240,9 @@ const (
 	// RESTGatewayMethodTypeInvalid unsupported method type
 	RESTGatewayMethodTypeInvalid = "Unsupported method type: %s"
 	// RESTGatewayMethodABIInvalid error processing method from ABI
-	RESTGatewayMethodABIInvalid = "Unsupported method '%s' in ABI: %s"
+	RESTGatewayMethodABIInvalid = "Invalid method '%s' in ABI: %s"
 	// RESTGatewayEventABIInvalid error processing method from ABI
-	RESTGatewayEventABIInvalid = "Unsupported event '%s' in ABI: %s"
+	RESTGatewayEventABIInvalid = "Invalid event '%s' in ABI: %s"
 
 	// RESTGatewayCompileContractInvalidFormData invalid form data when requesting a compilation to generate an ABI/bytecode
 	RESTGatewayCompileContractInvalidFormData = "Could not parse supplied multi-part form data: %s"

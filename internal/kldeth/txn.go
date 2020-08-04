@@ -185,7 +185,7 @@ func processOutputs(args abi.Arguments, rawRetval []interface{}, retval map[stri
 				return err
 			}
 		}
-	} else if len(rawRetval) > 0 {
+	} else if rawRetval != nil {
 		return klderrors.Errorf(klderrors.UnpackOutputsMismatchNil, rawRetval)
 	}
 	return nil

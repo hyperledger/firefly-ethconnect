@@ -39,13 +39,6 @@ const (
 	RecordHeaderAccessToken = "kld-accesstoken"
 )
 
-// ABIMethod is the web3 form for an individual function
-// described in https://web3js.readthedocs.io/en/1.0/glossary.html
-type ABIMethod = kldbind.ABIElementMarshaling
-
-// ABIParam is an individual function parameter, for input or output, in an ABI
-type ABIParam = kldbind.ABIArgumentMarshaling
-
 // AsyncSentMsg is a standard response for async requests
 type AsyncSentMsg struct {
 	Sent    bool   `json:"sent"`

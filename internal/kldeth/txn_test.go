@@ -583,9 +583,9 @@ func TestSendTxnABIParam(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"123", float64(123), "abc", "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", "0xfeedbeef"}
-	msg.Method = &kldmessages.ABIMethod{
+	msg.Method = &kldbind.ABIElementMarshaling{
 		Name: "testFunc",
-		Inputs: []kldmessages.ABIParam{
+		Inputs: []kldbind.ABIArgumentMarshaling{
 			{
 				Name: "param1",
 				Type: "uint8",
@@ -607,7 +607,7 @@ func TestSendTxnABIParam(t *testing.T) {
 				Type: "bytes",
 			},
 		},
-		Outputs: []kldmessages.ABIParam{
+		Outputs: []kldbind.ABIArgumentMarshaling{
 			{
 				Name: "ret1",
 				Type: "uint256",
@@ -733,7 +733,7 @@ func TestNewSendTxnMissingParamTypes(t *testing.T) {
 
 func TestGenMethodABIBadType(t *testing.T) {
 	assert := assert.New(t)
-	_, err := genMethodABI(&kldmessages.ABIMethod{
+	_, err := genMethodABI(&kldbind.ABIElementMarshaling{
 		Type: "badness",
 	}, abi.Arguments{})
 	assert.EqualError(err, "Unsupported method type: badness")
@@ -741,7 +741,7 @@ func TestGenMethodABIBadType(t *testing.T) {
 
 func TestGenMethodABIFunctionType(t *testing.T) {
 	assert := assert.New(t)
-	_, err := genMethodABI(&kldmessages.ABIMethod{
+	_, err := genMethodABI(&kldbind.ABIElementMarshaling{
 		Type: "function",
 	}, abi.Arguments{})
 	assert.NoError(err)
@@ -1232,7 +1232,7 @@ func TestSendTxnInlineBadParamType(t *testing.T) {
 	param1["type"] = "badness"
 	param1["value"] = "123"
 
-	msg.Method = &kldmessages.ABIMethod{
+	msg.Method = &kldbind.ABIElementMarshaling{
 		Name: "testFunc",
 	}
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
@@ -1255,7 +1255,7 @@ func TestSendTxnInlineMissingParamType(t *testing.T) {
 	msg.Parameters = append(msg.Parameters, param1)
 	param1["value"] = "123"
 
-	msg.Method = &kldmessages.ABIMethod{
+	msg.Method = &kldbind.ABIElementMarshaling{
 		Name: "testFunc",
 	}
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
@@ -1278,7 +1278,7 @@ func TestSendTxnInlineMissingParamValue(t *testing.T) {
 	msg.Parameters = append(msg.Parameters, param1)
 	param1["type"] = "uint256"
 
-	msg.Method = &kldmessages.ABIMethod{
+	msg.Method = &kldbind.ABIElementMarshaling{
 		Name: "testFunc",
 	}
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
@@ -1302,7 +1302,7 @@ func TestSendTxnInlineBadTypeType(t *testing.T) {
 	param1["type"] = false
 	param1["value"] = "abcde"
 
-	msg.Method = &kldmessages.ABIMethod{
+	msg.Method = &kldbind.ABIElementMarshaling{
 		Name: "testFunc",
 	}
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
@@ -1342,7 +1342,7 @@ func TestSendTxnMissingMethod(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"123"}
-	msg.Method = &kldmessages.ABIMethod{}
+	msg.Method = &kldbind.ABIElementMarshaling{}
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
 	msg.From = "abc"
 	msg.Nonce = "123"
@@ -1357,15 +1357,15 @@ func TestSendTxnBadFrom(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"123"}
-	msg.Method = &kldmessages.ABIMethod{
+	msg.Method = &kldbind.ABIElementMarshaling{
 		Name: "testFunc",
-		Inputs: []kldmessages.ABIParam{
+		Inputs: []kldbind.ABIArgumentMarshaling{
 			{
 				Name: "param1",
 				Type: "uint8",
 			},
 		},
-		Outputs: []kldmessages.ABIParam{
+		Outputs: []kldbind.ABIArgumentMarshaling{
 			{
 				Name: "ret1",
 				Type: "uint256",
@@ -1387,15 +1387,15 @@ func TestSendTxnBadTo(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"123"}
-	msg.Method = &kldmessages.ABIMethod{
+	msg.Method = &kldbind.ABIElementMarshaling{
 		Name: "testFunc",
-		Inputs: []kldmessages.ABIParam{
+		Inputs: []kldbind.ABIArgumentMarshaling{
 			{
 				Name: "param1",
 				Type: "uint8",
 			},
 		},
-		Outputs: []kldmessages.ABIParam{
+		Outputs: []kldbind.ABIArgumentMarshaling{
 			{
 				Name: "ret1",
 				Type: "uint256",

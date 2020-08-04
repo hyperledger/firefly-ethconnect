@@ -127,4 +127,5 @@ func ABIElementMarshalingToABIMethod(m *ABIElementMarshaling) (method *ABIMethod
 			method = &nMethod
 		}
 	}
+	return
 }

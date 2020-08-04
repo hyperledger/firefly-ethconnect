@@ -25,12 +25,18 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+// ABI2SwaggerConf are configuration options
+type ABI2SwaggerConf struct {
+	ExternalHost     string
+	ExternalSchemes  []string
+	ExternalRootPath string
+	BasicAuth        bool
+	OrionPrivateAPI  bool
+}
+
 // ABI2Swagger is the main entry point for conversion
 type ABI2Swagger struct {
-	externalHost     string
-	externalSchemes  []string
-	externalRootPath string
-	orionPrivateAPI  bool
+	conf *ABI2SwaggerConf
 }
 
 const (
@@ -38,15 +44,12 @@ const (
 )
 
 // NewABI2Swagger constructor
-func NewABI2Swagger(externalHost, externalRootPath string, externalSchemes []string, orionPrivateAPI bool) *ABI2Swagger {
+func NewABI2Swagger(conf *ABI2SwaggerConf) *ABI2Swagger {
 	c := &ABI2Swagger{
-		externalHost:     externalHost,
-		externalRootPath: externalRootPath,
-		externalSchemes:  externalSchemes,
-		orionPrivateAPI:  orionPrivateAPI,
+		conf: conf,
 	}
-	if len(c.externalSchemes) == 0 {
-		c.externalSchemes = []string{"http", "https"}
+	if len(c.conf.ExternalSchemes) == 0 {
+		c.conf.ExternalSchemes = []string{"http", "https"}
 	}
 	return c
 }
@@ -64,7 +67,7 @@ func (c *ABI2Swagger) Gen4Factory(basePath, name string, factoryOnly, externalRe
 // convert does the conversion and fills in the details on the Swagger Schema
 func (c *ABI2Swagger) convert(basePath, name string, abi *abi.ABI, devdocsJSON string, inst, factoryOnly, externalRegistry bool) *spec.Swagger {
 
-	basePath = c.externalRootPath + basePath
+	basePath = c.conf.ExternalRootPath + basePath
 
 	devdocs := gjson.Parse(devdocsJSON)
 
@@ -73,7 +76,7 @@ func (c *ABI2Swagger) convert(basePath, name string, abi *abi.ABI, devdocsJSON s
 	definitions := make(map[string]spec.Schema)
 	parameters := c.getCommonParameters()
 	c.buildDefinitionsAndPaths(inst, factoryOnly, externalRegistry, abi, definitions, paths.Paths, devdocs)
-	return &spec.Swagger{
+	swagger := &spec.Swagger{
 		SwaggerProps: spec.SwaggerProps{
 			Swagger: "2.0",
 			Info: &spec.Info{
@@ -83,21 +86,24 @@ func (c *ABI2Swagger) convert(basePath, name string, abi *abi.ABI, devdocsJSON s
 					Description: devdocs.Get("details").String(),
 				},
 			},
-			Host:        c.externalHost,
-			Schemes:     c.externalSchemes,
+			Host:        c.conf.ExternalHost,
+			Schemes:     c.conf.ExternalSchemes,
 			BasePath:    basePath,
 			Paths:       paths,
 			Definitions: definitions,
 			Parameters:  parameters,
-			SecurityDefinitions: map[string]*spec.SecurityScheme{
-				kaleidoAppCredential: {
-					SecuritySchemeProps: spec.SecuritySchemeProps{
-						Type: "basic",
-					},
-				},
-			},
 		},
 	}
+	if c.conf.BasicAuth {
+		swagger.SwaggerProps.SecurityDefinitions = map[string]*spec.SecurityScheme{
+			kaleidoAppCredential: {
+				SecuritySchemeProps: spec.SecuritySchemeProps{
+					Type: "basic",
+				},
+			},
+		}
+	}
+	return swagger
 }
 
 func (c *ABI2Swagger) buildDefinitionsAndPaths(inst, factoryOnly, externalRegistry bool, abi *abi.ABI, defs map[string]spec.Schema, paths map[string]spec.PathItem, devdocs gjson.Result) {
@@ -379,7 +385,9 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 
 func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstructor bool) {
 
-	op.Security = append(op.Security, map[string][]string{kaleidoAppCredential: {}})
+	if c.conf.BasicAuth {
+		op.Security = append(op.Security, map[string][]string{kaleidoAppCredential: {}})
+	}
 
 	fromParam, _ := spec.NewRef("#/parameters/fromParam")
 	valueParam, _ := spec.NewRef("#/parameters/valueParam")
@@ -438,7 +446,7 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 				Ref: blocknumberParam,
 			},
 		})
-		if c.orionPrivateAPI {
+		if c.conf.OrionPrivateAPI {
 			op.Parameters = append(op.Parameters, spec.Parameter{
 				Refable: spec.Refable{
 					Ref: privacyGroupIDParam,

@@ -15,6 +15,7 @@
 package kldevents
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
@@ -60,28 +61,25 @@ func TestProcessLogEntryNillAndTooFewFields(t *testing.T) {
 	stream := &eventStream{
 		spec: spec,
 	}
-	uint256Type, _ := kldbind.NewABIType("uint256", "big.Int", []kldbind.ABIArgumentMarshaling{})
+
+	eventABI := `{
+    "name": "testEvent",
+    "anonymous": true,
+    "inputs": [
+      {"name": "one", "type": "uint256", "indexed": true},
+      {"name": "two", "type": "uint256", "indexed": true},
+    ]
+  }`
+	var marshaling kldbind.ABIElementMarshaling
+	json.Unmarshal([]byte(eventABI), &marshaling)
+	event, err := kldbind.ABIElementMarshalingToABIEvent(&marshaling)
+	assert.NoError(err)
+
 	lp := &logProcessor{
-		event: kldbind.NewABIEvent(
-			"testEvent",
-			"testEvent",
-			true,
-			[]kldbind.ABIArgument{
-				{
-					Name:    "one",
-					Indexed: true,
-					Type:    uint256Type,
-				},
-				{
-					Name:    "two",
-					Indexed: true,
-					Type:    uint256Type,
-				},
-			},
-		),
+		event:  event,
 		stream: stream,
 	}
-	err := lp.processLogEntry("ut", &logEntry{
+	err = lp.processLogEntry("ut", &logEntry{
 		Topics: []*kldbind.Hash{nil},
 	}, 2)
 
@@ -97,20 +95,18 @@ func TestProcessLogBadRLPData(t *testing.T) {
 	stream := &eventStream{
 		spec: spec,
 	}
+	eventABI := `{
+    "name": "event1",
+    "inputs": [
+      {"name": "one", "type": "uint256"},
+      {"name": "two", "type": "uint256"},
+    ]
+  }`
+	var marshaling kldbind.ABIElementMarshaling
+	json.Unmarshal([]byte(eventABI), &marshaling)
+	event, _ := kldbind.ABIElementMarshalingToABIEvent(&marshaling)
 	lp := &logProcessor{
-		event: &kldbind.ABIEvent{
-			Anonymous: true,
-			Inputs: []kldbind.ABIArgument{
-				{
-					Name:    "one",
-					Indexed: false,
-				},
-				{
-					Name:    "two",
-					Indexed: false,
-				},
-			},
-		},
+		event:  event,
 		stream: stream,
 	}
 	err := lp.processLogEntry(t.Name(), &logEntry{

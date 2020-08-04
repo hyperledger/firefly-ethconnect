@@ -158,7 +158,7 @@ func (m *mockSubMgr) ResumeStream(ctx context.Context, id string) error {
 	return m.err
 }
 func (m *mockSubMgr) DeleteStream(ctx context.Context, id string) error { return m.err }
-func (m *mockSubMgr) AddSubscription(ctx context.Context, addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock, name string) (*kldevents.SubscriptionInfo, error) {
+func (m *mockSubMgr) AddSubscription(ctx context.Context, addr *kldbind.Address, event *kldbind.ABIElementMarshaling, streamID, initialBlock, name string) (*kldevents.SubscriptionInfo, error) {
 	m.capturedAddr = addr
 	return m.sub, m.err
 }
@@ -171,9 +171,8 @@ func (m *mockSubMgr) Close()                                                  {}
 
 func newTestDeployMsg(addr string) *deployContractWithAddress {
 	compiled, _ := kldeth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")
-	a := &kldbind.ABI{ABI: *compiled.ABI}
 	return &deployContractWithAddress{
-		DeployContract: kldmessages.DeployContract{ABI: a},
+		DeployContract: kldmessages.DeployContract{ABI: compiled.ABI},
 		Address:        addr,
 	}
 }

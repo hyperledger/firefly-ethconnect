@@ -201,9 +201,9 @@ type abiInfo struct {
 
 // remoteContractInfo is the ABI raw data back out of the REST API gateway with bytecode
 type remoteContractInfo struct {
-	ID      string       `json:"id"`
-	Address string       `json:"address,omitempty"`
-	ABI     *kldbind.ABI `json:"abi"`
+	ID      string                `json:"id"`
+	Address string                `json:"address,omitempty"`
+	ABI     kldbind.ABIMarshaling `json:"abi"`
 }
 
 func (i *contractInfo) GetID() string {
@@ -281,7 +281,7 @@ func (g *smartContractGW) PostDeploy(msg *kldmessages.TransactionReceipt) error 
 	return nil
 }
 
-func (g *smartContractGW) swaggerForRemoteRegistry(apiName, addr string, factoryOnly bool, abi *kldbind.ABI, devdoc, path string) *spec.Swagger {
+func (g *smartContractGW) swaggerForRemoteRegistry(apiName, addr string, factoryOnly bool, abi *kldbind.RuntimeABI, devdoc, path string) *spec.Swagger {
 	var swagger *spec.Swagger
 	if addr == "" {
 		swagger = g.abi2swagger.Gen4Factory(path, apiName, factoryOnly, true, &abi.ABI, devdoc)
@@ -291,7 +291,7 @@ func (g *smartContractGW) swaggerForRemoteRegistry(apiName, addr string, factory
 	return swagger
 }
 
-func (g *smartContractGW) swaggerForABI(abiID, apiName string, factoryOnly bool, abi *kldbind.ABI, devdoc string, addrHexNo0x, registerAs string) *spec.Swagger {
+func (g *smartContractGW) swaggerForABI(abiID, apiName string, factoryOnly bool, abi *kldbind.RuntimeABI, devdoc string, addrHexNo0x, registerAs string) *spec.Swagger {
 	// Ensure we have a contract name in all cases, as the Swagger
 	// won't be valid without a title
 	if apiName == "" {
@@ -396,9 +396,7 @@ func (g *smartContractGW) storeDeployableABI(msg *kldmessages.DeployContract, co
 
 	if compiled != nil {
 		msg.Compiled = compiled.Compiled
-		msg.ABI = &kldbind.ABI{
-			ABI: *compiled.ABI,
-		}
+		msg.ABI = compiled.ABI
 		msg.DevDoc = compiled.DevDoc
 		msg.ContractName = compiled.ContractName
 		msg.CompilerVersion = compiled.ContractInfo.CompilerVersion
@@ -406,11 +404,16 @@ func (g *smartContractGW) storeDeployableABI(msg *kldmessages.DeployContract, co
 		return nil, klderrors.Errorf(klderrors.RESTGatewayLocalStoreMissingABI)
 	}
 
+	runtimeABI, err := kldbind.ABIMarshalingToABIRuntime(msg.ABI)
+	if err != nil {
+		return nil, klderrors.Errorf(klderrors.RESTGatewayInvalidABI, err)
+	}
+
 	requestID := msg.Headers.ID
 	// We store the swagger in a generic format that can be used to deploy
 	// additional instances, or generically call other instances
 	// Generate and store the swagger
-	swagger := g.swaggerForABI(requestID, msg.ContractName, false, msg.ABI, msg.DevDoc, "", "")
+	swagger := g.swaggerForABI(requestID, msg.ContractName, false, runtimeABI, msg.DevDoc, "", "")
 	msg.Description = swagger.Info.Description // Swagger generation parses the devdoc
 	info := g.addToABIIndex(requestID, msg, time.Now().UTC())
 
@@ -896,7 +899,12 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 		g.writeHTMLForUI(prefix, id, from, (prefix == "abi"), factoryOnly, res)
 	} else if swaggerRequest {
 		addr := params.ByName("address")
-		swagger := g.swaggerForABI(abiID, deployMsg.ContractName, factoryOnly, deployMsg.ABI, deployMsg.DevDoc, addr, registeredName)
+		runtimeABI, err := kldbind.ABIMarshalingToABIRuntime(deployMsg.ABI)
+		if err != nil {
+			g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayInvalidABI, err), 404)
+			return
+		}
+		swagger := g.swaggerForABI(abiID, deployMsg.ContractName, factoryOnly, runtimeABI, deployMsg.DevDoc, addr, registeredName)
 		g.replyWithSwagger(res, req, swagger, id, from)
 	} else {
 		log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
@@ -950,7 +958,12 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 	if uiRequest {
 		g.writeHTMLForUI(prefix, id, from, isGateway, factoryOnly, res)
 	} else if swaggerRequest {
-		swagger := g.swaggerForRemoteRegistry(id, addr, factoryOnly, deployMsg.ABI, deployMsg.DevDoc, req.URL.Path)
+		runtimeABI, err := kldbind.ABIMarshalingToABIRuntime(deployMsg.ABI)
+		if err != nil {
+			g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayInvalidABI, err), 404)
+			return
+		}
+		swagger := g.swaggerForRemoteRegistry(id, addr, factoryOnly, runtimeABI, deployMsg.DevDoc, req.URL.Path)
 		g.replyWithSwagger(res, req, swagger, id, from)
 	} else {
 		ci := &remoteContractInfo{

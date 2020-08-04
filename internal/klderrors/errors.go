@@ -239,6 +239,10 @@ const (
 	RESTGatewaySyncWrapErrorWithTXDetail = "TX %s: %s"
 	// RESTGatewayMethodTypeInvalid unsupported method type
 	RESTGatewayMethodTypeInvalid = "Unsupported method type: %s"
+	// RESTGatewayMethodABIInvalid error processing method from ABI
+	RESTGatewayMethodABIInvalid = "Unsupported method '%s' in ABI: %s"
+	// RESTGatewayEventABIInvalid error processing method from ABI
+	RESTGatewayEventABIInvalid = "Unsupported event '%s' in ABI: %s"
 
 	// RESTGatewayCompileContractInvalidFormData invalid form data when requesting a compilation to generate an ABI/bytecode
 	RESTGatewayCompileContractInvalidFormData = "Could not parse supplied multi-part form data: %s"
@@ -281,6 +285,8 @@ const (
 	RESTGatewayLocalStoreABIParse = "Failed to parse ABI with ID %s: %s"
 	// RESTGatewayLocalStoreMissingABI did not supply ABI JSON when attempting to install ABI (non-registry code flow)
 	RESTGatewayLocalStoreMissingABI = "Must supply ABI to install an existing ABI into the REST Gateway"
+	// RESTGatewayInvalidABI invalid serialized ABI in msg
+	RESTGatewayInvalidABI = "Invalid ABI: %s"
 	// RESTGatewayLocalStoreContractSavePostDeploy local filesystem storage failure for contract instance post deploy (non-registry code flow)
 	RESTGatewayLocalStoreContractSavePostDeploy = "%s: Failed to write deployment details: %s"
 	// RESTGatewayFriendlyNameClash duplicate friendly name when reigstering

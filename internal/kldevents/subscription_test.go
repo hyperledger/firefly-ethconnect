@@ -65,29 +65,28 @@ func newTestStream() *eventStream {
 	return a
 }
 
-func testSubInfo(event *kldbind.ABIEvent) *SubscriptionInfo {
-	return &SubscriptionInfo{ID: "test", Stream: "streamID", Event: kldbind.MarshalledABIEvent{E: *event}}
+func testSubInfo(event *kldbind.ABIElementMarshaling) *SubscriptionInfo {
+	return &SubscriptionInfo{ID: "test", Stream: "streamID", Event: event}
 }
 
 func TestCreateWebhookSub(t *testing.T) {
 	assert := assert.New(t)
 
 	rpc := kldeth.NewMockRPCClientForSync(nil, nil)
-	event := &kldbind.ABIEvent{
-		Name:    "glastonbury",
-		RawName: "glastonbury",
-		Inputs: []kldbind.ABIArgument{
+	event := &kldbind.ABIElementMarshaling{
+		Name: "glastonbury",
+		Inputs: []kldbind.ABIArgumentMarshaling{
 			{
 				Name: "field",
-				Type: kldbind.ABITypeKnown("address"),
+				Type: "address",
 			},
 			{
 				Name: "tents",
-				Type: kldbind.ABITypeKnown("uint256"),
+				Type: "uint256",
 			},
 			{
 				Name: "mud",
-				Type: kldbind.ABITypeKnown("bool"),
+				Type: "bool",
 			},
 		},
 	}
@@ -106,7 +105,8 @@ func TestCreateWebhookSub(t *testing.T) {
 	assert.Equal(s.info.ID, s1.info.ID)
 	assert.Equal("*:glastonbury(address,uint256,bool)", s1.info.Name)
 	assert.Equal("*:glastonbury(address,uint256,bool)", s1.info.Summary)
-	assert.Equal(event.ID, s.info.Filter.Topics[0][0])
+	// common.BytesToHash(crypto.Keccak256([]byte("glastonbury(address,uint256,bool)"))).Hex()
+	assert.Equal("0x80f327694f71b67acac8d8c4b097d66a508a3cb6f8f27644c932bf508654a046", s.info.Filter.Topics[0][0].Hex())
 }
 
 func TestCreateWebhookSubWithAddr(t *testing.T) {
@@ -114,9 +114,8 @@ func TestCreateWebhookSubWithAddr(t *testing.T) {
 
 	rpc := kldeth.NewMockRPCClientForSync(nil, nil)
 	m := &mockSubMgr{stream: newTestStream()}
-	event := &kldbind.ABIEvent{
+	event := &kldbind.ABIElementMarshaling{
 		Name:      "devcon",
-		RawName:   "devcon",
 		Anonymous: true,
 	}
 
@@ -126,22 +125,35 @@ func TestCreateWebhookSubWithAddr(t *testing.T) {
 	s, err := newSubscription(m, rpc, &addr, subInfo)
 	assert.NoError(err)
 	assert.NotEmpty(s.info.ID)
-	assert.Equal(event.ID, s.info.Filter.Topics[0][0])
+	// common.BytesToHash(crypto.Keccak256([]byte("devcon()"))).Hex()
+	assert.Equal("0x81b7baac232325e8fb0e2446cc62852d9f68c86874699311b99ef89d8ed424dd", s.info.Filter.Topics[0][0].Hex())
 	assert.Equal("0x0123456789abcDEF0123456789abCDef01234567:devcon()", s.info.Summary)
 	assert.Equal("mySubscription", s.info.Name)
 }
 
 func TestCreateSubscriptionNoEvent(t *testing.T) {
 	assert := assert.New(t)
-	event := &kldbind.ABIEvent{}
+	event := &kldbind.ABIElementMarshaling{}
 	m := &mockSubMgr{stream: newTestStream()}
 	_, err := newSubscription(m, nil, nil, testSubInfo(event))
 	assert.EqualError(err, "Solidity event name must be specified")
 }
 
+func TestCreateSubscriptionBadABI(t *testing.T) {
+	assert := assert.New(t)
+	event := &kldbind.ABIElementMarshaling{
+		Inputs: []kldbind.ABIArgumentMarshaling{
+			{Name: "badness", Type: "-1"},
+		},
+	}
+	m := &mockSubMgr{stream: newTestStream()}
+	_, err := newSubscription(m, nil, nil, testSubInfo(event))
+	assert.EqualError(err, "invalid type '-1'")
+}
+
 func TestCreateSubscriptionMissingAction(t *testing.T) {
 	assert := assert.New(t)
-	event := &kldbind.ABIEvent{Name: "party"}
+	event := &kldbind.ABIElementMarshaling{Name: "party"}
 	m := &mockSubMgr{err: fmt.Errorf("nope")}
 	_, err := newSubscription(m, nil, nil, testSubInfo(event))
 	assert.EqualError(err, "nope")
@@ -150,8 +162,20 @@ func TestCreateSubscriptionMissingAction(t *testing.T) {
 func TestRestoreSubscriptionMissingAction(t *testing.T) {
 	assert := assert.New(t)
 	m := &mockSubMgr{err: fmt.Errorf("nope")}
-	_, err := restoreSubscription(m, nil, testSubInfo(&kldbind.ABIEvent{}))
+	_, err := restoreSubscription(m, nil, testSubInfo(&kldbind.ABIElementMarshaling{}))
 	assert.EqualError(err, "nope")
+}
+
+func TestRestoreSubscriptionBadType(t *testing.T) {
+	assert := assert.New(t)
+	event := &kldbind.ABIElementMarshaling{
+		Inputs: []kldbind.ABIArgumentMarshaling{
+			{Name: "badness", Type: "-1"},
+		},
+	}
+	m := &mockSubMgr{stream: newTestStream()}
+	_, err := restoreSubscription(m, nil, testSubInfo(event))
+	assert.EqualError(err, "invalid type '-1'")
 }
 
 func TestProcessEventsStaleFilter(t *testing.T) {

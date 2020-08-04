@@ -21,7 +21,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
-// This module provides some basic types proxied through from ethereum, to avoid
+// This module provides some basic types proxied through from ethereØum, to avoid
 // ethereum imports throughout the codebase
 
 // Address models and serializes a 20 byte ethereum address
@@ -39,9 +39,6 @@ type HexUint64 = hexutil.Uint64
 // HexUint models and serializes uint
 type HexUint = hexutil.Uint
 
-// ABIEvent is an event on the ABI
-type ABIEvent = abi.Event
-
 // ABIArguments is an array of arguments with helper functions
 type ABIArguments = abi.Arguments
 
@@ -54,24 +51,31 @@ type ABIType = abi.Type
 // ABIMethod is an method on the ABI
 type ABIMethod = abi.Method
 
+// ABIEvent is an event on the ABI
+type ABIEvent = abi.Event
+
 // ABIArgumentMarshaling is abi.ArgumentMarshaling
 type ABIArgumentMarshaling = abi.ArgumentMarshaling
 
-// ABI is a wrapper around the ethereum ABI implementation that includes
-// marshal, as well as unmarshal
-type ABI struct {
+// ABIElementMarshaling is the serialized representation of a method or event in an ABI
+type ABIElementMarshaling struct {
+	Type            string                  `json:"type,omitempty"`
+	Name            string                  `json:"name,omitempty"`
+	Payable         bool                    `json:"payable,omitempty"`
+	Constant        bool                    `json:"constant,omitempty"`
+	Anonymous       bool                    `json:"anonymous,omitempty"`
+	StateMutability string                  `json:"stateMutability,omitempty"`
+	Inputs          []ABIArgumentMarshaling `json:"inputs"`
+	Outputs         []ABIArgumentMarshaling `json:"outputs"`
+}
+
+// ABIMarshaling is the JSON array representation of an ABI
+type ABIMarshaling []ABIElementMarshaling
+
+// RuntimeABI is the ethereum implementation of an ABI. It can be unmarshalled from an ABI JSON,
+// but does not support marshalling.
+type RuntimeABI struct {
 	abi.ABI
-}
-
-// NewABIEvent constructor for abi.Event
-func NewABIEvent(name, rawName string, anonymous bool, inputs ABIArguments) *ABIEvent {
-	abiEvent := abi.NewEvent(name, rawName, anonymous, inputs)
-	return &abiEvent
-}
-
-// NewABIType constructor for abi.Type
-func NewABIType(t string, internalType string, components []ABIArgumentMarshaling) (ABIType, error) {
-	return abi.NewType(t, internalType, components)
 }
 
 // Header is a type for ethereum block Header representation

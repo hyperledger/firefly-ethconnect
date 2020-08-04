@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
+
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
 
@@ -172,7 +174,9 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	deployMsg, abiID, err := scgw.(*smartContractGW).loadDeployMsgForInstance("0123456789abcdef0123456789abcdef01234567")
 	assert.NoError(err)
 	assert.NotEmpty(abiID)
-	assert.Equal("set", deployMsg.ABI.Methods["set"].Name)
+	runtimeABI, err := kldbind.ABIMarshalingToABIRuntime(deployMsg.ABI)
+	assert.NoError(err)
+	assert.Equal("set", runtimeABI.Methods["set"].Name)
 
 	// Check we can list it back over REST
 	router := &httprouter.Router{}

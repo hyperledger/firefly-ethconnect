@@ -139,14 +139,19 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *kldtx.TxnP
 		baseURL, _ = url.Parse("http://localhost:8080")
 	}
 	log.Infof("OpenAPI Smart Contract Gateway configured with base URL '%s'", baseURL.String())
-	abi2swagger := kldopenapi.NewABI2Swagger(baseURL.Host, baseURL.Path, []string{baseURL.Scheme}, txnConf.OrionPrivateAPIS)
 	gw := &smartContractGW{
 		conf:                  conf,
 		rr:                    NewRemoteRegistry(&conf.RemoteRegistry),
-		abi2swagger:           abi2swagger,
 		contractIndex:         make(map[string]kldmessages.TimeSortable),
 		contractRegistrations: make(map[string]*contractInfo),
 		abiIndex:              make(map[string]kldmessages.TimeSortable),
+		baseSwaggerConf: &kldopenapi.ABI2SwaggerConf{
+			ExternalHost:     baseURL.Host,
+			ExternalRootPath: baseURL.Path,
+			ExternalSchemes:  []string{baseURL.Scheme},
+			OrionPrivateAPI:  txnConf.OrionPrivateAPIS,
+			BasicAuth:        true,
+		},
 	}
 	if err = gw.rr.init(); err != nil {
 		return nil, err
@@ -168,12 +173,12 @@ type smartContractGW struct {
 	conf                  *SmartContractGatewayConf
 	sm                    kldevents.SubscriptionManager
 	rr                    RemoteRegistry
-	abi2swagger           *kldopenapi.ABI2Swagger
 	r2e                   *rest2eth
 	contractIndex         map[string]kldmessages.TimeSortable
 	contractRegistrations map[string]*contractInfo
 	idxLock               sync.Mutex
 	abiIndex              map[string]kldmessages.TimeSortable
+	baseSwaggerConf       *kldopenapi.ABI2SwaggerConf
 }
 
 // contractInfo is the minimal data structure we keep in memory, indexed by address
@@ -281,17 +286,17 @@ func (g *smartContractGW) PostDeploy(msg *kldmessages.TransactionReceipt) error 
 	return nil
 }
 
-func (g *smartContractGW) swaggerForRemoteRegistry(apiName, addr string, factoryOnly bool, abi *kldbind.RuntimeABI, devdoc, path string) *spec.Swagger {
+func (g *smartContractGW) swaggerForRemoteRegistry(swaggerGen *kldopenapi.ABI2Swagger, apiName, addr string, factoryOnly bool, abi *kldbind.RuntimeABI, devdoc, path string) *spec.Swagger {
 	var swagger *spec.Swagger
 	if addr == "" {
-		swagger = g.abi2swagger.Gen4Factory(path, apiName, factoryOnly, true, &abi.ABI, devdoc)
+		swagger = swaggerGen.Gen4Factory(path, apiName, factoryOnly, true, &abi.ABI, devdoc)
 	} else {
-		swagger = g.abi2swagger.Gen4Instance(path, apiName, &abi.ABI, devdoc)
+		swagger = swaggerGen.Gen4Instance(path, apiName, &abi.ABI, devdoc)
 	}
 	return swagger
 }
 
-func (g *smartContractGW) swaggerForABI(abiID, apiName string, factoryOnly bool, abi *kldbind.RuntimeABI, devdoc string, addrHexNo0x, registerAs string) *spec.Swagger {
+func (g *smartContractGW) swaggerForABI(swaggerGen *kldopenapi.ABI2Swagger, abiID, apiName string, factoryOnly bool, abi *kldbind.RuntimeABI, devdoc string, addrHexNo0x, registerAs string) *spec.Swagger {
 	// Ensure we have a contract name in all cases, as the Swagger
 	// won't be valid without a title
 	if apiName == "" {
@@ -303,12 +308,12 @@ func (g *smartContractGW) swaggerForABI(abiID, apiName string, factoryOnly bool,
 		if pathSuffix == "" {
 			pathSuffix = addrHexNo0x
 		}
-		swagger = g.abi2swagger.Gen4Instance("/contracts/"+pathSuffix, apiName, &abi.ABI, devdoc)
+		swagger = swaggerGen.Gen4Instance("/contracts/"+pathSuffix, apiName, &abi.ABI, devdoc)
 		if registerAs != "" {
 			swagger.Info.AddExtension("x-kaleido-registered-name", pathSuffix)
 		}
 	} else {
-		swagger = g.abi2swagger.Gen4Factory("/abis/"+abiID, apiName, factoryOnly, false, &abi.ABI, devdoc)
+		swagger = swaggerGen.Gen4Factory("/abis/"+abiID, apiName, factoryOnly, false, &abi.ABI, devdoc)
 	}
 
 	// Add in an extension to the Swagger that points back at the filename of the deployment info
@@ -413,7 +418,7 @@ func (g *smartContractGW) storeDeployableABI(msg *kldmessages.DeployContract, co
 	// We store the swagger in a generic format that can be used to deploy
 	// additional instances, or generically call other instances
 	// Generate and store the swagger
-	swagger := g.swaggerForABI(requestID, msg.ContractName, false, runtimeABI, msg.DevDoc, "", "")
+	swagger := g.swaggerForABI(kldopenapi.NewABI2Swagger(g.baseSwaggerConf), requestID, msg.ContractName, false, runtimeABI, msg.DevDoc, "", "")
 	msg.Description = swagger.Info.Description // Swagger generation parses the devdoc
 	info := g.addToABIIndex(requestID, msg, time.Now().UTC())
 
@@ -829,24 +834,44 @@ func (g *smartContractGW) resolveAddressOrName(id string) (deployMsg *kldmessage
 	return deployMsg, registeredName, info, err
 }
 
-func (g *smartContractGW) isSwaggerRequest(req *http.Request) (swaggerRequest, uiRequest, factoryOnly, abiRequest bool, from string) {
+func (g *smartContractGW) isSwaggerRequest(req *http.Request) (swaggerGen *kldopenapi.ABI2Swagger, uiRequest, factoryOnly, abiRequest bool, from string) {
 	req.ParseForm()
+	var swaggerRequest bool
 	if vs := req.Form["swagger"]; len(vs) > 0 {
-		swaggerRequest = true
+		swaggerRequest = strings.ToLower(vs[0]) != "false"
 	}
 	if vs := req.Form["openapi"]; len(vs) > 0 {
-		swaggerRequest = true
+		swaggerRequest = strings.ToLower(vs[0]) != "false"
 	}
 	if vs := req.Form["ui"]; len(vs) > 0 {
-		uiRequest = true
+		uiRequest = strings.ToLower(vs[0]) != "false"
 	}
 	if vs := req.Form["factory"]; len(vs) > 0 {
-		factoryOnly = true
+		factoryOnly = strings.ToLower(vs[0]) != "false"
 	}
 	if vs := req.Form["abi"]; len(vs) > 0 {
-		abiRequest = true
+		abiRequest = strings.ToLower(vs[0]) != "false"
 	}
 	from = req.FormValue("from")
+	if swaggerRequest {
+		var conf = *g.baseSwaggerConf
+		if vs := req.Form["noauth"]; len(vs) > 0 {
+			conf.BasicAuth = strings.ToLower(vs[0]) == "false"
+		}
+		if vs := req.Form["schemes"]; len(vs) > 0 {
+			requested := strings.Split(vs[0], ",")
+			conf.ExternalSchemes = []string{}
+			for _, scheme := range requested {
+				// Only allow http and https
+				if scheme == "http" || scheme == "https" {
+					conf.ExternalSchemes = append(conf.ExternalSchemes, scheme)
+				} else {
+					log.Warnf("Excluded unknown scheme: %s", scheme)
+				}
+			}
+		}
+		swaggerGen = kldopenapi.NewABI2Swagger(&conf)
+	}
 	return
 }
 
@@ -872,7 +897,7 @@ func (g *smartContractGW) replyWithSwagger(res http.ResponseWriter, req *http.Re
 
 func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
-	swaggerRequest, uiRequest, factoryOnly, abiRequest, from := g.isSwaggerRequest(req)
+	swaggerGen, uiRequest, factoryOnly, abiRequest, from := g.isSwaggerRequest(req)
 	id := strings.TrimPrefix(strings.ToLower(params.ByName("address")), "0x")
 	prefix := "contract"
 	if id == "" {
@@ -900,14 +925,14 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 	}
 	if uiRequest {
 		g.writeHTMLForUI(prefix, id, from, (prefix == "abi"), factoryOnly, res)
-	} else if swaggerRequest {
+	} else if swaggerGen != nil {
 		addr := params.ByName("address")
 		runtimeABI, err := kldbind.ABIMarshalingToABIRuntime(deployMsg.ABI)
 		if err != nil {
 			g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayInvalidABI, err), 404)
 			return
 		}
-		swagger := g.swaggerForABI(abiID, deployMsg.ContractName, factoryOnly, runtimeABI, deployMsg.DevDoc, addr, registeredName)
+		swagger := g.swaggerForABI(swaggerGen, abiID, deployMsg.ContractName, factoryOnly, runtimeABI, deployMsg.DevDoc, addr, registeredName)
 		g.replyWithSwagger(res, req, swagger, id, from)
 	} else if abiRequest {
 		log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
@@ -929,7 +954,7 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
 
-	swaggerRequest, uiRequest, factoryOnly, abiRequest, from := g.isSwaggerRequest(req)
+	swaggerGen, uiRequest, factoryOnly, abiRequest, from := g.isSwaggerRequest(req)
 
 	var deployMsg *kldmessages.DeployContract
 	var err error
@@ -967,13 +992,13 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 
 	if uiRequest {
 		g.writeHTMLForUI(prefix, id, from, isGateway, factoryOnly, res)
-	} else if swaggerRequest {
+	} else if swaggerGen != nil {
 		runtimeABI, err := kldbind.ABIMarshalingToABIRuntime(deployMsg.ABI)
 		if err != nil {
 			g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayInvalidABI, err), 404)
 			return
 		}
-		swagger := g.swaggerForRemoteRegistry(id, addr, factoryOnly, runtimeABI, deployMsg.DevDoc, req.URL.Path)
+		swagger := g.swaggerForRemoteRegistry(swaggerGen, id, addr, factoryOnly, runtimeABI, deployMsg.DevDoc, req.URL.Path)
 		g.replyWithSwagger(res, req, swagger, id, from)
 	} else if abiRequest {
 		log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)

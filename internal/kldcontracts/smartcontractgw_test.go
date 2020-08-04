@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
+
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
 
@@ -172,7 +174,9 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	deployMsg, abiID, err := scgw.(*smartContractGW).loadDeployMsgForInstance("0123456789abcdef0123456789abcdef01234567")
 	assert.NoError(err)
 	assert.NotEmpty(abiID)
-	assert.Equal("set", deployMsg.ABI.Methods["set"].Name)
+	runtimeABI, err := kldbind.ABIMarshalingToABIRuntime(deployMsg.ABI)
+	assert.NoError(err)
+	assert.Equal("set", runtimeABI.Methods["set"].Name)
 
 	// Check we can list it back over REST
 	router := &httprouter.Router{}
@@ -207,6 +211,16 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal("SimpleEvents", swagger.Info.Title)
 
+	// Check we can get the full ABI back over REST
+	req = httptest.NewRequest("GET", "/abis/message1?abi", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(200, res.Result().StatusCode)
+	var abi kldbind.RuntimeABI
+	err = json.NewDecoder(res.Body).Decode(&abi)
+	assert.NoError(err)
+	assert.Equal("set", abi.Methods["set"].Name)
+
 	// Check we can get the full contract swagger back over REST with contract addr that includes 0x prefix
 	req = httptest.NewRequest("GET", "/contracts/0x0123456789abcdef0123456789abcdef01234567?swagger", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
@@ -224,6 +238,15 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	err = json.NewDecoder(res.Body).Decode(&swagger)
 	assert.NoError(err)
 	assert.Equal("SimpleEvents", swagger.Info.Title)
+
+	// Check we can get the full contract ABI back over REST
+	req = httptest.NewRequest("GET", "/contracts/0123456789abcdef0123456789abcdef01234567?abi", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(200, res.Result().StatusCode)
+	err = json.NewDecoder(res.Body).Decode(&abi)
+	assert.NoError(err)
+	assert.Equal("set", abi.Methods["set"].Name)
 
 	// Check we can get the full swagger back over REST using the registered name
 	req = httptest.NewRequest("GET", "/contracts/Test+1?ui&from=0x0123456789abcdef0123456789abcdef01234567", bytes.NewReader([]byte{}))
@@ -335,6 +358,14 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	assert.Equal(200, res.Code)
 	json.NewDecoder(res.Body).Decode(&returnedSwagger)
 	assert.Equal("/api/v1/g/test", returnedSwagger.BasePath)
+
+	req = httptest.NewRequest("GET", "/g/test?abi", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	var returnedABI kldbind.RuntimeABI
+	assert.Equal(200, res.Code)
+	json.NewDecoder(res.Body).Decode(&returnedABI)
+	assert.Equal("set", returnedABI.Methods["set"].Name)
 
 	req = httptest.NewRequest("GET", "/i/test?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()

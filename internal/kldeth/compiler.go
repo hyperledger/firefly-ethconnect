@@ -23,10 +23,11 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
+
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common/compiler"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 )
@@ -41,7 +42,7 @@ type CompiledSolidity struct {
 	ContractName string
 	Compiled     []byte
 	DevDoc       string
-	ABI          *abi.ABI
+	ABI          kldbind.ABIMarshaling
 	ContractInfo *compiler.ContractInfo
 }
 
@@ -164,11 +165,12 @@ func packContract(contractName string, contract *compiler.Contract) (c *Compiled
 	if err != nil {
 		return nil, klderrors.Errorf(klderrors.CompilerABISerialize, err)
 	}
-	abi, err := abi.JSON(bytes.NewReader(abiJSON))
+	var abi kldbind.ABIMarshaling
+	err = json.Unmarshal(abiJSON, &abi)
 	if err != nil {
 		return nil, klderrors.Errorf(klderrors.CompilerABIReRead, err)
 	}
-	c.ABI = &abi
+	c.ABI = abi
 	devdocBytes, err := json.Marshal(contract.Info.DeveloperDoc)
 	if err != nil {
 		return nil, klderrors.Errorf(klderrors.CompilerSerializeDevDocs, err)

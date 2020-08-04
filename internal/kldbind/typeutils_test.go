@@ -16,9 +16,11 @@ package kldbind
 
 import (
 	"encoding/json"
+	"io/ioutil"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -44,108 +46,118 @@ func TestABITypeFor(t *testing.T) {
 	assert.Equal("uint256", abiType.String())
 }
 
-func TestABIMarshalUnMarshal(t *testing.T) {
+func TestABITypeKnown(t *testing.T) {
 	assert := assert.New(t)
-
-	tUint256, _ := abi.NewType("uint256", "", []abi.ArgumentMarshaling{})
-	a1 := ABI{
-		ABI: abi.ABI{
-			Constructor: abi.NewMethod(
-				"",
-				"",
-				abi.Constructor,
-				"",
-				false,
-				false,
-				abi.Arguments{
-					abi.Argument{Name: "carg1", Type: tUint256, Indexed: true},
-				},
-				nil,
-			),
-			Methods: map[string]abi.Method{
-				"method1": abi.NewMethod(
-					"method1",
-					"method1",
-					abi.Function,
-					"",
-					true,
-					false,
-					abi.Arguments{
-						abi.Argument{Name: "marg1", Type: tUint256, Indexed: true},
-					},
-					abi.Arguments{
-						abi.Argument{Name: "ret1", Type: tUint256, Indexed: true},
-					},
-				),
-			},
-			Events: map[string]abi.Event{
-				"event1": abi.NewEvent(
-					"event1",
-					"event1",
-					true,
-					abi.Arguments{
-						abi.Argument{Name: "earg1", Type: tUint256, Indexed: true},
-					},
-				),
-			},
-		},
-	}
-
-	jsonBytes, err := json.Marshal(&a1)
-	assert.NoError(err)
-
-	var a2 ABI
-	err = json.Unmarshal(jsonBytes, &a2)
-	assert.NoError(err)
-
-	t.Log(string(jsonBytes))
-
-	assert.Equal(a1, a2)
-}
-
-func TestABIEventMarshalUnMarshal(t *testing.T) {
-	assert := assert.New(t)
-
-	me := MarshalledABIEvent{
-		E: ABIEvent{
-			Name:      "event1",
-			Anonymous: true,
-			Inputs: abi.Arguments{
-				abi.Argument{Name: "earg1", Type: ABITypeKnown("uint256"), Indexed: true},
-			},
-		},
-	}
-
-	jsonBytes, err := json.Marshal(&me)
-	assert.NoError(err)
-
-	var me2 MarshalledABIEvent
-	err = json.Unmarshal(jsonBytes, &me2)
-	assert.NoError(err)
-
-	t.Log(string(jsonBytes))
-
-	assert.Equal(me, me2)
-
-	badType := "{\"inputs\": [{\"type\":\"badness\"}]}"
-	err = json.Unmarshal([]byte(badType), &me)
-	assert.EqualError(err, "unsupported arg type: badness")
-
-	badStuct := "{\"inputs\": false}"
-	err = json.Unmarshal([]byte(badStuct), &me)
-	assert.Regexp("cannot unmarshal", err.Error())
+	assert.Equal("uint256", ABITypeKnown("uint256").String())
 }
 
 func TestABISignature(t *testing.T) {
 	assert := assert.New(t)
 
-	tuint256, _ := NewABIType("uint256", "uint256", []ABIArgumentMarshaling{})
-	assert.Equal("uint256", tuint256.String())
-
-	ev := NewABIEvent("test", "test", true, ABIArguments{ABIArgument{
+	ev := abi.NewEvent("test", "test", true, ABIArguments{ABIArgument{
 		Name: "arg1",
-		Type: tuint256,
+		Type: ABITypeKnown("uint256"),
 	}})
-	assert.Equal("test(uint256)", ABIEventSignature(ev))
+	assert.Equal("test(uint256)", ABIEventSignature(&ev))
+
+}
+
+func TestRABIMarshalingToABIRuntime(t *testing.T) {
+	assert := assert.New(t)
+
+	var marshalableABI ABIMarshaling
+	b, err := ioutil.ReadFile("../../test/abicoderv2_example.abi.json")
+	assert.NoError(err)
+	err = json.Unmarshal(b, &marshalableABI)
+	assert.NoError(err)
+
+	runtimeABI, err := ABIMarshalingToABIRuntime(marshalableABI)
+	assert.NoError(err)
+	assert.Equal(abi.TupleTy, runtimeABI.Methods["inOutType1"].Inputs[0].Type.T)
+}
+
+func TestABIElementMarshalingToABIEvent(t *testing.T) {
+	assert := assert.New(t)
+
+	eventBytes := `{
+    "components": [
+      {
+        "internalType": "string",
+        "name": "str1",
+        "type": "string"
+      },
+      {
+        "internalType": "uint232",
+        "name": "val1",
+        "type": "uint232"
+      }
+    ],
+    "internalType": "struct ExampleV2Coder.Type1",
+    "name": "input1",
+    "type": "tuple"
+  }`
+
+	var input1 ABIArgumentMarshaling
+	json.Unmarshal([]byte(eventBytes), &input1)
+	marshalable := &ABIElementMarshaling{
+		Name:   "testevent",
+		Inputs: []ABIArgumentMarshaling{input1},
+	}
+
+	event, err := ABIElementMarshalingToABIEvent(marshalable)
+	assert.NoError(err)
+	assert.Equal(abi.TupleTy, event.Inputs[0].Type.T)
+
+}
+
+func TestABIElementMarshalingToABIMethod(t *testing.T) {
+	assert := assert.New(t)
+
+	eventBytes := `{
+    "components": [
+      {
+        "internalType": "string",
+        "name": "str1",
+        "type": "string"
+      },
+      {
+        "internalType": "uint232",
+        "name": "val1",
+        "type": "uint232"
+      }
+    ],
+    "internalType": "struct ExampleV2Coder.Type1",
+    "name": "input1",
+    "type": "tuple"
+  }`
+
+	var input1 ABIArgumentMarshaling
+	json.Unmarshal([]byte(eventBytes), &input1)
+	marshalable := &ABIElementMarshaling{
+		Name:     "testmethod",
+		Constant: true,
+		Inputs:   []ABIArgumentMarshaling{input1},
+		Outputs:  []ABIArgumentMarshaling{input1},
+	}
+
+	method, err := ABIElementMarshalingToABIMethod(marshalable)
+	assert.NoError(err)
+	assert.Equal(abi.TupleTy, method.Inputs[0].Type.T)
+	assert.Equal(abi.TupleTy, method.Outputs[0].Type.T)
+	assert.Equal(true, method.IsConstant())
+
+}
+
+func TestABIElementMarshalingToABIMethodFail(t *testing.T) {
+	assert := assert.New(t)
+
+	marshalable := &ABIElementMarshaling{
+		Name:     "testmethod",
+		Constant: true,
+		Inputs:   []ABIArgumentMarshaling{{Name: "test", Type: "badness"}},
+	}
+
+	_, err := ABIElementMarshalingToABIMethod(marshalable)
+	assert.EqualError(err, "unsupported arg type: badness")
 
 }

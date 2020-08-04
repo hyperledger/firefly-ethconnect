@@ -16,7 +16,6 @@ package kldeth
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -29,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
@@ -77,7 +77,7 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract, signer TXSigner) (tx 
 	if msg.Compiled != nil && msg.ABI != nil {
 		compiled = &CompiledSolidity{
 			Compiled: msg.Compiled,
-			ABI:      &msg.ABI.ABI,
+			ABI:      msg.ABI,
 		}
 	} else if msg.Solidity != "" {
 		// Compile the solidity contract
@@ -89,14 +89,19 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract, signer TXSigner) (tx 
 		return
 	}
 
-	// Build correctly typed args for the ethereum call
-	typedArgs, err := tx.generateTypedArgs(msg.Parameters, &compiled.ABI.Constructor)
+	// Build a runtime ABI from the serialized one
+	var typedArgs []interface{}
+	abi, err := kldbind.ABIMarshalingToABIRuntime(compiled.ABI)
+	if err == nil {
+		// Build correctly typed args for the ethereum call
+		typedArgs, err = tx.generateTypedArgs(msg.Parameters, &abi.Constructor)
+	}
 	if err != nil {
 		return
 	}
 
 	// Pack the arguments
-	packedCall, err := compiled.ABI.Pack("", typedArgs...)
+	packedCall, err := abi.Pack("", typedArgs...)
 	if err != nil {
 		err = klderrors.Errorf(klderrors.TransactionSendConstructorPackArgs, err)
 		return
@@ -123,8 +128,8 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract, signer TXSigner) (tx 
 }
 
 // CallMethod performs eth_call to return data from the chain
-func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr string, value json.Number, methodABI *abi.Method, msgParams []interface{}, blocknumber string) (map[string]interface{}, error) {
-	log.Debugf("Calling method: %+v %+v", methodABI, msgParams)
+func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr string, value json.Number, methodABI *kldbind.ABIMethod, msgParams []interface{}, blocknumber string) (map[string]interface{}, error) {
+	log.Debugf("Calling method. ABI: %+v Params: %+v", methodABI, msgParams)
 	tx, err := buildTX(signer, from, addr, "", value, "", "", methodABI, msgParams)
 	if err != nil {
 		return nil, err
@@ -147,34 +152,26 @@ func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr 
 	}
 
 	retBytes, err := tx.Call(ctx, rpc, callOption)
-	if err != nil {
+	if err != nil || retBytes == nil {
 		return nil, err
 	}
-	if retBytes == nil {
-		return nil, nil
-	}
 	return ProcessRLPBytes(methodABI.Outputs, retBytes)
-}
-
-func addErrorToRetval(retval map[string]interface{}, retBytes []byte, rawRetval interface{}, err error) {
-	log.Warnf(err.Error())
-	retval["rlp"] = hex.EncodeToString(retBytes)
-	retval["raw"] = rawRetval
-	retval["error"] = err.Error()
 }
 
 // ProcessRLPBytes converts binary packed set of bytes into a map
 func ProcessRLPBytes(args abi.Arguments, retBytes []byte) (map[string]interface{}, error) {
 	retval := make(map[string]interface{})
-	rawRetval, err := args.UnpackValues(retBytes)
+	rawRetval, unpackErr := args.UnpackValues(retBytes)
+	var err error
+	if unpackErr != nil {
+		err = klderrors.Errorf(klderrors.UnpackOutputsFailed, unpackErr)
+	} else {
+		err = processOutputs(args, rawRetval, retval)
+	}
 	if err != nil {
-		addErrorToRetval(retval, retBytes, rawRetval, klderrors.Errorf(klderrors.UnpackOutputsFailed, err))
-		return nil, err
+		log.Errorf("Unable to process bytes '%s': %s", rawRetval, err)
 	}
-	if err = processOutputs(args, rawRetval, retval); err != nil {
-		addErrorToRetval(retval, retBytes, rawRetval, err)
-	}
-	return retval, nil
+	return retval, err
 }
 
 func processOutputs(args abi.Arguments, rawRetval []interface{}, retval map[string]interface{}) error {
@@ -565,9 +562,12 @@ func (tx *Txn) generateTupleFromMap(methodName string, path string, requiredType
 			suppliedType = reflect.TypeOf(typedVal)
 		}
 		tupleField := tuple.Field(i)
-		if suppliedType != nil {
+		if suppliedType == nil {
+			// No known cases where nil can be assigned
+			return nil, klderrors.Errorf(klderrors.TransactionSendInputNotAssignable, methodName, path, typedVal, inputElemName, requiredType.TupleElems[i])
+		} else {
 			if !suppliedType.AssignableTo(tupleField.Type()) {
-				return nil, klderrors.Errorf(klderrors.TransactionSendInputNotAssignable, methodName, path, typedVal, inputElemName)
+				return nil, klderrors.Errorf(klderrors.TransactionSendInputNotAssignable, methodName, path, typedVal, inputElemName, requiredType.TupleElems[i])
 			}
 			tupleField.Set(reflect.ValueOf(typedVal))
 		}

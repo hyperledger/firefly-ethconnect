@@ -144,7 +144,7 @@ func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string) (*de
 	if err != nil {
 		return nil, err
 	}
-	var abi *kldbind.ABI
+	var abi kldbind.ABIMarshaling
 	err = json.Unmarshal([]byte(abiString), &abi)
 	if err != nil {
 		log.Errorf("GET %s <-- !Failed to decode ABI: %s\n%s", queryURL, err, abiString)

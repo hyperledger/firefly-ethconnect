@@ -43,14 +43,14 @@ type ethFilter struct {
 // SubscriptionInfo is the persisted data for the subscription
 type SubscriptionInfo struct {
 	kldmessages.TimeSorted
-	ID        string                     `json:"id,omitempty"`
-	Path      string                     `json:"path"`
-	Summary   string                     `json:"-"`    // System generated name for the subscription
-	Name      string                     `json:"name"` // User provided name for the subscription, set to Summary if missing
-	Stream    string                     `json:"stream"`
-	Filter    persistedFilter            `json:"filter"`
-	Event     kldbind.MarshalledABIEvent `json:"event"`
-	FromBlock string                     `json:"fromBlock,omitempty"`
+	ID        string                        `json:"id,omitempty"`
+	Path      string                        `json:"path"`
+	Summary   string                        `json:"-"`    // System generated name for the subscription
+	Name      string                        `json:"name"` // User provided name for the subscription, set to Summary if missing
+	Stream    string                        `json:"stream"`
+	Filter    persistedFilter               `json:"filter"`
+	Event     *kldbind.ABIElementMarshaling `json:"event"`
+	FromBlock string                        `json:"fromBlock,omitempty"`
 }
 
 // subscription is the runtime that manages the subscription
@@ -69,12 +69,15 @@ func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind
 	if err != nil {
 		return nil, err
 	}
-	i.Event.E.RawName = i.Event.E.Name
+	event, err := kldbind.ABIElementMarshalingToABIEvent(i.Event)
+	if err != nil {
+		return nil, err
+	}
 	s := &subscription{
 		info:        i,
 		rpc:         rpc,
-		lp:          newLogProcessor(i.ID, &i.Event.E, stream),
-		logName:     i.ID + ":" + kldbind.ABIEventSignature(&i.Event.E),
+		lp:          newLogProcessor(i.ID, event, stream),
+		logName:     i.ID + ":" + kldbind.ABIEventSignature(event),
 		filterStale: true,
 	}
 	f := &i.Filter
@@ -83,7 +86,6 @@ func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind
 		f.Addresses = []kldbind.Address{*addr}
 		addrStr = addr.String()
 	}
-	event := &i.Event.E
 	i.Summary = addrStr + ":" + kldbind.ABIEventSignature(event)
 	// If a name was not provided by the end user, set it to the system generated summary
 	if i.Name == "" {
@@ -112,12 +114,15 @@ func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *Subscr
 	if err != nil {
 		return nil, err
 	}
-	i.Event.E.RawName = i.Event.E.Name
+	event, err := kldbind.ABIElementMarshalingToABIEvent(i.Event)
+	if err != nil {
+		return nil, err
+	}
 	s := &subscription{
 		rpc:         rpc,
 		info:        i,
-		lp:          newLogProcessor(i.ID, &i.Event.E, stream),
-		logName:     i.ID + ":" + kldbind.ABIEventSignature(&i.Event.E),
+		lp:          newLogProcessor(i.ID, event, stream),
+		logName:     i.ID + ":" + kldbind.ABIEventSignature(event),
 		filterStale: true,
 	}
 	return s, nil

@@ -403,31 +403,31 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 	})
 	sm.rpc = rpc
 
-	event := &kldbind.ABIEvent{
+	event := &kldbind.ABIElementMarshaling{
 		Name: "Changed",
-		Inputs: []kldbind.ABIArgument{
+		Inputs: []kldbind.ABIArgumentMarshaling{
 			{
 				Name:    "from",
-				Type:    kldbind.ABITypeKnown("address"),
+				Type:    "address",
 				Indexed: true,
 			},
 			{
 				Name:    "i",
-				Type:    kldbind.ABITypeKnown("int64"),
+				Type:    "int64",
 				Indexed: true,
 			},
 			{
 				Name:    "s",
-				Type:    kldbind.ABITypeKnown("string"),
+				Type:    "string",
 				Indexed: true,
 			},
 			{
 				Name: "h",
-				Type: kldbind.ABITypeKnown("bytes32"),
+				Type: "bytes32",
 			},
 			{
 				Name: "m",
-				Type: kldbind.ABITypeKnown("string"),
+				Type: "string",
 			},
 		},
 	}

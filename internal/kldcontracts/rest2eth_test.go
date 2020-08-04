@@ -158,7 +158,7 @@ func (m *mockSubMgr) ResumeStream(ctx context.Context, id string) error {
 	return m.err
 }
 func (m *mockSubMgr) DeleteStream(ctx context.Context, id string) error { return m.err }
-func (m *mockSubMgr) AddSubscription(ctx context.Context, addr *kldbind.Address, event *kldbind.ABIEvent, streamID, initialBlock, name string) (*kldevents.SubscriptionInfo, error) {
+func (m *mockSubMgr) AddSubscription(ctx context.Context, addr *kldbind.Address, event *kldbind.ABIElementMarshaling, streamID, initialBlock, name string) (*kldevents.SubscriptionInfo, error) {
 	m.capturedAddr = addr
 	return m.sub, m.err
 }
@@ -171,9 +171,8 @@ func (m *mockSubMgr) Close()                                                  {}
 
 func newTestDeployMsg(addr string) *deployContractWithAddress {
 	compiled, _ := kldeth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")
-	a := &kldbind.ABI{ABI: *compiled.ABI}
 	return &deployContractWithAddress{
-		DeployContract: kldmessages.DeployContract{ABI: a},
+		DeployContract: kldmessages.DeployContract{ABI: compiled.ABI},
 		Address:        addr,
 	}
 }
@@ -638,7 +637,7 @@ func TestDeployContractSyncRemoteRegitryGateway404(t *testing.T) {
 	assert.Equal(404, res.Result().StatusCode)
 }
 
-func TestDeployContractSyncRemoteRegitryGateway(t *testing.T) {
+func TestDeployContractSyncRemoteRegistryGateway(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
@@ -835,6 +834,128 @@ func TestSendTransactionMissingContract(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("Please specify a valid address in the 'kld-from' query string parameter or x-kaleido-from HTTP header", reply.Message)
+}
+
+func TestSendTransactionBadMethodABI(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+	dispatcher := &mockREST2EthDispatcher{
+		asyncDispatchReply: &kldmessages.AsyncSentMsg{
+			Sent:    true,
+			Request: "request1",
+		},
+	}
+	abiLoader := &mockABILoader{
+		deployMsg: &kldmessages.DeployContract{
+			ABI: kldbind.ABIMarshaling{
+				{
+					Name: "badmethod", Type: "function", Inputs: []kldbind.ABIArgumentMarshaling{
+						{Name: "badness", Type: "badness"},
+					},
+				},
+			},
+		},
+	}
+	_, _, router := newTestREST2EthCustomAbiLoader(dispatcher, abiLoader)
+	req := httptest.NewRequest("GET", "/contracts/0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8/badmethod", bytes.NewReader([]byte{}))
+	req.Header.Add("x-kaleido-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(400, res.Result().StatusCode)
+	reply := restErrMsg{}
+	err := json.NewDecoder(res.Result().Body).Decode(&reply)
+	assert.NoError(err)
+	assert.Equal("Invalid method 'badmethod' in ABI: unsupported arg type: badness", reply.Message)
+}
+
+func TestSendTransactionBadEventABI(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+	dispatcher := &mockREST2EthDispatcher{
+		asyncDispatchReply: &kldmessages.AsyncSentMsg{
+			Sent:    true,
+			Request: "request1",
+		},
+	}
+	abiLoader := &mockABILoader{
+		deployMsg: &kldmessages.DeployContract{
+			ABI: kldbind.ABIMarshaling{
+				{
+					Name: "badevent", Type: "event", Inputs: []kldbind.ABIArgumentMarshaling{
+						{Name: "badness", Type: "badness"},
+					},
+				},
+			},
+		},
+	}
+	_, _, router := newTestREST2EthCustomAbiLoader(dispatcher, abiLoader)
+	req := httptest.NewRequest("POST", "/contracts/0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8/badevent/subscribe", bytes.NewReader([]byte{}))
+	req.Header.Add("x-kaleido-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(400, res.Result().StatusCode)
+	reply := restErrMsg{}
+	err := json.NewDecoder(res.Result().Body).Decode(&reply)
+	assert.NoError(err)
+	assert.Equal("Invalid event 'badevent' in ABI: unsupported arg type: badness", reply.Message)
+}
+
+func TestSendTransactionBadConstructorABI(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+	dispatcher := &mockREST2EthDispatcher{
+		asyncDispatchReply: &kldmessages.AsyncSentMsg{
+			Sent:    true,
+			Request: "request1",
+		},
+	}
+	abiLoader := &mockABILoader{
+		deployMsg: &kldmessages.DeployContract{
+			ABI: kldbind.ABIMarshaling{
+				{
+					Name: "badevent", Type: "constructor", Inputs: []kldbind.ABIArgumentMarshaling{
+						{Name: "badness", Type: "badness"},
+					},
+				},
+			},
+		},
+	}
+	_, _, router := newTestREST2EthCustomAbiLoader(dispatcher, abiLoader)
+	req := httptest.NewRequest("POST", "/abis/testabi", bytes.NewReader([]byte{}))
+	req.Header.Add("x-kaleido-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(400, res.Result().StatusCode)
+	reply := restErrMsg{}
+	err := json.NewDecoder(res.Result().Body).Decode(&reply)
+	assert.NoError(err)
+	assert.Equal("Invalid method 'constructor' in ABI: unsupported arg type: badness", reply.Message)
+}
+
+func TestSendTransactionDefaultConstructorABI(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+	dispatcher := &mockREST2EthDispatcher{
+		asyncDispatchReply: &kldmessages.AsyncSentMsg{
+			Sent:    true,
+			Request: "request1",
+		},
+	}
+	abiLoader := &mockABILoader{
+		deployMsg: &kldmessages.DeployContract{
+			ABI: kldbind.ABIMarshaling{}, // completely empty ABI is ok
+		},
+	}
+	_, _, router := newTestREST2EthCustomAbiLoader(dispatcher, abiLoader)
+	req := httptest.NewRequest("POST", "/abis/testabi", bytes.NewReader([]byte{}))
+	req.Header.Add("x-kaleido-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(202, res.Result().StatusCode)
 }
 
 func TestSendTransactionBadFrom(t *testing.T) {

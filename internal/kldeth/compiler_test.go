@@ -51,6 +51,15 @@ func TestPackContractFailBadHexCode(t *testing.T) {
 	assert.EqualError(err, "Decoding bytecode: hex string without 0x prefix")
 }
 
+func TestPackContractEmpty(t *testing.T) {
+	assert := assert.New(t)
+	contract := &compiler.Contract{
+		Code: "0x",
+	}
+	_, err := packContract("", contract)
+	assert.EqualError(err, "Specified contract compiled ok, but did not result in any bytecode: ")
+}
+
 func TestPackContractFailMarshalABI(t *testing.T) {
 	assert := assert.New(t)
 	contract := &compiler.Contract{

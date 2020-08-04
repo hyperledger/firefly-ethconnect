@@ -169,7 +169,7 @@ func ProcessRLPBytes(args abi.Arguments, retBytes []byte) (map[string]interface{
 		err = processOutputs(args, rawRetval, retval)
 	}
 	if err != nil {
-		log.Errorf("Unabled to process bytes '%s': %s", rawRetval, err)
+		log.Errorf("Unable to process bytes '%s': %s", rawRetval, err)
 	}
 	return retval, err
 }

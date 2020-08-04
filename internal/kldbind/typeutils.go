@@ -119,9 +119,10 @@ func ABIElementMarshalingToABIEvent(marshalable *ABIElementMarshaling) (event *A
 // ABIElementMarshalingToABIMethod converts a de-serialized method with full type information,
 // per the original ABI, into a runtime ABIEvent with a processed type
 func ABIElementMarshalingToABIMethod(m *ABIElementMarshaling) (method *ABIMethod, err error) {
-	inputs, err := ABIArgumentsMarshalingToABIArguments(m.Inputs)
+	var inputs, outputs ABIArguments
+	inputs, err = ABIArgumentsMarshalingToABIArguments(m.Inputs)
 	if err == nil {
-		outputs, err := ABIArgumentsMarshalingToABIArguments(m.Outputs)
+		outputs, err = ABIArgumentsMarshalingToABIArguments(m.Outputs)
 		if err == nil {
 			nMethod := abi.NewMethod(m.Name, m.Name, abi.Function, m.StateMutability, m.Constant, m.Payable, inputs, outputs)
 			method = &nMethod

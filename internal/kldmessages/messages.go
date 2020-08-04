@@ -39,24 +39,6 @@ const (
 	RecordHeaderAccessToken = "kld-accesstoken"
 )
 
-// ABIMethod is the web3 form for an individual function
-// described in https://web3js.readthedocs.io/en/1.0/glossary.html
-type ABIMethod struct {
-	Type            string     `json:"type,omitempty"`
-	Name            string     `json:"name"`
-	Constant        bool       `json:"constant"`
-	Payable         bool       `json:"payable,omitempty"`
-	StateMutability string     `json:"stateMutability"`
-	Inputs          []ABIParam `json:"inputs"`
-	Outputs         []ABIParam `json:"outputs"`
-}
-
-// ABIParam is an individual function parameter, for input or output, in an ABI
-type ABIParam struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
-}
-
 // AsyncSentMsg is a standard response for async requests
 type AsyncSentMsg struct {
 	Sent    bool   `json:"sent"`
@@ -137,9 +119,9 @@ type TransactionCommon struct {
 // SendTransaction message instructs the bridge to install a contract
 type SendTransaction struct {
 	TransactionCommon
-	To         string     `json:"to"`
-	Method     *ABIMethod `json:"method,omitempty"`
-	MethodName string     `json:"methodName,omitempty"`
+	To         string                        `json:"to"`
+	Method     *kldbind.ABIElementMarshaling `json:"method,omitempty"`
+	MethodName string                        `json:"methodName,omitempty"`
 }
 
 // DeployContract message instructs the bridge to install a contract

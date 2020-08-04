@@ -304,10 +304,10 @@ func NewSendTxn(msg *kldmessages.SendTransaction, signer TXSigner) (tx *Txn, err
 			return
 		}
 		var abiInputs abi.Arguments
-		jsonABI := &kldmessages.ABIMethod{
+		jsonABI := &kldbind.ABIElementMarshaling{
 			Name:    msg.MethodName,
-			Inputs:  []kldmessages.ABIParam{},
-			Outputs: []kldmessages.ABIParam{},
+			Inputs:  []kldbind.ABIArgumentMarshaling{},
+			Outputs: []kldbind.ABIArgumentMarshaling{},
 		}
 		msg.Parameters, err = flattenParams(msg.Parameters, &abiInputs, true)
 		if err == nil {
@@ -317,7 +317,7 @@ func NewSendTxn(msg *kldmessages.SendTransaction, signer TXSigner) (tx *Txn, err
 			return
 		}
 	} else {
-		methodABI, err = genMethodABI(msg.Method, nil)
+		methodABI, err = kldbind.ABIElementMarshalingToABIMethod(msg.Method)
 		if err != nil {
 			return
 		}
@@ -377,7 +377,7 @@ func buildTX(signer TXSigner, msgFrom, msgTo string, msgNonce, msgValue, msgGas,
 	return
 }
 
-func genMethodABI(jsonABI *kldmessages.ABIMethod, predeterminedInputs abi.Arguments) (method *abi.Method, err error) {
+func genMethodABI(jsonABI *kldbind.ABIElementMarshaling, predeterminedInputs abi.Arguments) (method *abi.Method, err error) {
 	var inputs abi.Arguments
 	if predeterminedInputs != nil {
 		inputs = predeterminedInputs
@@ -565,12 +565,11 @@ func (tx *Txn) generateTupleFromMap(methodName string, path string, requiredType
 		if suppliedType == nil {
 			// No known cases where nil can be assigned
 			return nil, klderrors.Errorf(klderrors.TransactionSendInputNotAssignable, methodName, path, typedVal, inputElemName, requiredType.TupleElems[i])
-		} else {
-			if !suppliedType.AssignableTo(tupleField.Type()) {
-				return nil, klderrors.Errorf(klderrors.TransactionSendInputNotAssignable, methodName, path, typedVal, inputElemName, requiredType.TupleElems[i])
-			}
-			tupleField.Set(reflect.ValueOf(typedVal))
 		}
+		if !suppliedType.AssignableTo(tupleField.Type()) {
+			return nil, klderrors.Errorf(klderrors.TransactionSendInputNotAssignable, methodName, path, typedVal, inputElemName, requiredType.TupleElems[i])
+		}
+		tupleField.Set(reflect.ValueOf(typedVal))
 	}
 	return tuple.Interface(), nil
 }

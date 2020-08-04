@@ -829,7 +829,7 @@ func (g *smartContractGW) resolveAddressOrName(id string) (deployMsg *kldmessage
 	return deployMsg, registeredName, info, err
 }
 
-func (g *smartContractGW) isSwaggerRequest(req *http.Request) (swaggerRequest, uiRequest, factoryOnly bool, from string) {
+func (g *smartContractGW) isSwaggerRequest(req *http.Request) (swaggerRequest, uiRequest, factoryOnly, abiRequest bool, from string) {
 	req.ParseForm()
 	if vs := req.Form["swagger"]; len(vs) > 0 {
 		swaggerRequest = true
@@ -842,6 +842,9 @@ func (g *smartContractGW) isSwaggerRequest(req *http.Request) (swaggerRequest, u
 	}
 	if vs := req.Form["factory"]; len(vs) > 0 {
 		factoryOnly = true
+	}
+	if vs := req.Form["abi"]; len(vs) > 0 {
+		abiRequest = true
 	}
 	from = req.FormValue("from")
 	return
@@ -869,7 +872,7 @@ func (g *smartContractGW) replyWithSwagger(res http.ResponseWriter, req *http.Re
 
 func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
-	swaggerRequest, uiRequest, factoryOnly, from := g.isSwaggerRequest(req)
+	swaggerRequest, uiRequest, factoryOnly, abiRequest, from := g.isSwaggerRequest(req)
 	id := strings.TrimPrefix(strings.ToLower(params.ByName("address")), "0x")
 	prefix := "contract"
 	if id == "" {
@@ -906,6 +909,13 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 		}
 		swagger := g.swaggerForABI(abiID, deployMsg.ContractName, factoryOnly, runtimeABI, deployMsg.DevDoc, addr, registeredName)
 		g.replyWithSwagger(res, req, swagger, id, from)
+	} else if abiRequest {
+		log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
+		res.Header().Set("Content-Type", "application/json")
+		res.WriteHeader(200)
+		enc := json.NewEncoder(res)
+		enc.SetIndent("", "  ")
+		enc.Encode(deployMsg.ABI)
 	} else {
 		log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
 		res.Header().Set("Content-Type", "application/json")
@@ -919,7 +929,7 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
 
-	swaggerRequest, uiRequest, factoryOnly, from := g.isSwaggerRequest(req)
+	swaggerRequest, uiRequest, factoryOnly, abiRequest, from := g.isSwaggerRequest(req)
 
 	var deployMsg *kldmessages.DeployContract
 	var err error
@@ -965,6 +975,13 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 		}
 		swagger := g.swaggerForRemoteRegistry(id, addr, factoryOnly, runtimeABI, deployMsg.DevDoc, req.URL.Path)
 		g.replyWithSwagger(res, req, swagger, id, from)
+	} else if abiRequest {
+		log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
+		res.Header().Set("Content-Type", "application/json")
+		res.WriteHeader(200)
+		enc := json.NewEncoder(res)
+		enc.SetIndent("", "  ")
+		enc.Encode(deployMsg.ABI)
 	} else {
 		ci := &remoteContractInfo{
 			ID:      deployMsg.Headers.ID,

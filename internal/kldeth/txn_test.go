@@ -1632,12 +1632,37 @@ func TestProcessRLPV2ABIEncodedStructsBadInputType(t *testing.T) {
 	}
 
 	input1Map := map[string]interface{}{
+		"str1":   "ok",
+		"val1":   "12345",
 		"nested": "Not a map",
 	}
 
 	tx := Txn{}
 	_, err = tx.generateTypedArgs([]interface{}{input1Map}, &abiMethod)
 	assert.EqualError(err, "Method 'inOutType1' param 0.nested is a (string,string,address,bytes): Must supply an object (supplied=string)")
+}
+
+func TestProcessRLPV2ABIEncodedStructsBadNilType(t *testing.T) {
+	assert := assert.New(t)
+
+	var v2abi abi.ABI
+	testABIInput, err := ioutil.ReadFile("../../test/abicoderv2_example.abi.json")
+	assert.NoError(err)
+	err = json.Unmarshal(testABIInput, &v2abi)
+	assert.NoError(err)
+
+	var abiMethod abi.Method
+	for _, m := range v2abi.Methods {
+		if m.Name == "inOutType1" {
+			abiMethod = m
+		}
+	}
+
+	input1Map := map[string]interface{}{}
+
+	tx := Txn{}
+	_, err = tx.generateTypedArgs([]interface{}{input1Map}, &abiMethod)
+	assert.EqualError(err, "Method inOutType1 param 0: supplied value '<nil>' could not be assigned to 'str1' field (string)")
 }
 
 func TestGenerateTupleFromMapBadStructType(t *testing.T) {
@@ -1650,7 +1675,7 @@ func TestGenerateTupleFromMapBadStructType(t *testing.T) {
 		TupleRawNames: []string{"field1"},
 		TupleElems:    []*abi.Type{&tUint},
 	}, map[string]interface{}{"field1": float64(42)})
-	assert.EqualError(err, "Method method1 param test: supplied value '+42' could not be assigned to 'field1' field")
+	assert.EqualError(err, "Method method1 param test: supplied value '+42' could not be assigned to 'field1' field (uint256)")
 }
 
 func TestGenTupleMapOutputBadTypeNonStruct(t *testing.T) {

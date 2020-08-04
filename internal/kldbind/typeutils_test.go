@@ -54,12 +54,9 @@ func TestABITypeKnown(t *testing.T) {
 func TestABISignature(t *testing.T) {
 	assert := assert.New(t)
 
-	tuint256, _ := abi.NewType("uint256", "uint256", []ABIArgumentMarshaling{})
-	assert.Equal("uint256", tuint256.String())
-
 	ev := abi.NewEvent("test", "test", true, ABIArguments{ABIArgument{
 		Name: "arg1",
-		Type: tuint256,
+		Type: ABITypeKnown("uint256"),
 	}})
 	assert.Equal("test(uint256)", ABIEventSignature(&ev))
 

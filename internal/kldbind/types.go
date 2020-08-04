@@ -55,7 +55,13 @@ type ABIMethod = abi.Method
 type ABIEvent = abi.Event
 
 // ABIArgumentMarshaling is abi.ArgumentMarshaling
-type ABIArgumentMarshaling = abi.ArgumentMarshaling
+type ABIArgumentMarshaling struct {
+	Name         string                  `json:"name"`
+	Type         string                  `json:"type"`
+	InternalType string                  `json:"internalType,omitempty"`
+	Components   []ABIArgumentMarshaling `json:"components,omitempty"`
+	Indexed      bool                    `json:"indexed,omitempty"`
+}
 
 // ABIElementMarshaling is the serialized representation of a method or event in an ABI
 type ABIElementMarshaling struct {

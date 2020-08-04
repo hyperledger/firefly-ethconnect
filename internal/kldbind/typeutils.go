@@ -90,7 +90,12 @@ func ABIArgumentsMarshalingToABIArguments(marshalable []ABIArgumentMarshaling) (
 	arguments := make(ABIArguments, len(marshalable))
 	var err error
 	for i, mArg := range marshalable {
-		arguments[i].Type, err = abi.NewType(mArg.Type, mArg.InternalType, mArg.Components)
+		var components []abi.ArgumentMarshaling
+		if mArg.Components != nil {
+			b, _ := json.Marshal(&mArg.Components)
+			json.Unmarshal(b, &components)
+		}
+		arguments[i].Type, err = abi.NewType(mArg.Type, mArg.InternalType, components)
 		if err != nil {
 			return nil, err
 		}

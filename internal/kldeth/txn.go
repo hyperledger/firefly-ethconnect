@@ -129,7 +129,7 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract, signer TXSigner) (tx 
 
 // CallMethod performs eth_call to return data from the chain
 func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr string, value json.Number, methodABI *kldbind.ABIMethod, msgParams []interface{}, blocknumber string) (map[string]interface{}, error) {
-	log.Debugf("Calling method: %+v %+v", methodABI, msgParams)
+	log.Debugf("Calling method. ABI: %+v Params: %+v", methodABI, msgParams)
 	tx, err := buildTX(signer, from, addr, "", value, "", "", methodABI, msgParams)
 	if err != nil {
 		return nil, err
@@ -562,9 +562,12 @@ func (tx *Txn) generateTupleFromMap(methodName string, path string, requiredType
 			suppliedType = reflect.TypeOf(typedVal)
 		}
 		tupleField := tuple.Field(i)
-		if suppliedType != nil {
+		if suppliedType == nil {
+			// No known cases where nil can be assigned
+			return nil, klderrors.Errorf(klderrors.TransactionSendInputNotAssignable, methodName, path, typedVal, inputElemName, requiredType.TupleElems[i])
+		} else {
 			if !suppliedType.AssignableTo(tupleField.Type()) {
-				return nil, klderrors.Errorf(klderrors.TransactionSendInputNotAssignable, methodName, path, typedVal, inputElemName)
+				return nil, klderrors.Errorf(klderrors.TransactionSendInputNotAssignable, methodName, path, typedVal, inputElemName, requiredType.TupleElems[i])
 			}
 			tupleField.Set(reflect.ValueOf(typedVal))
 		}

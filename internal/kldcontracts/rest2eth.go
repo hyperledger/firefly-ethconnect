@@ -285,6 +285,13 @@ func (r *rest2eth) resolveConstructor(res http.ResponseWriter, req *http.Request
 			return
 		}
 	}
+	if !c.isDeploy {
+		// Default constructor
+		c.abiMethod, _ = kldbind.ABIElementMarshalingToABIMethod(&kldbind.ABIElementMarshaling{
+			Type: "constructor",
+		})
+		c.isDeploy = true
+	}
 	return
 }
 
@@ -403,22 +410,18 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 		return
 	}
 
-	c.msgParams = make([]interface{}, 0, len(c.abiMethod.Inputs))
+	c.msgParams = make([]interface{}, len(c.abiMethod.Inputs))
 	queryParams := req.Form
-	for _, abiParam := range c.abiMethod.Inputs {
-		// Body takes precedence
-		msgParam := make(map[string]interface{})
-		msgParam["type"] = abiParam.Type.String()
+	for i, abiParam := range c.abiMethod.Inputs {
 		if bv, exists := c.body[abiParam.Name]; exists {
-			msgParam["value"] = bv
+			c.msgParams[i] = bv
 		} else if vs := queryParams[abiParam.Name]; len(vs) > 0 {
-			msgParam["value"] = vs[0]
+			c.msgParams[i] = vs[0]
 		} else {
 			err = klderrors.Errorf(klderrors.RESTGatewayMissingParameter, abiParam.Name, c.abiMethod.Name)
 			r.restErrReply(res, req, err, 400)
 			return
 		}
-		c.msgParams = append(c.msgParams, msgParam)
 	}
 
 	c.blocknumber = getKLDParam("blocknumber", req, false)

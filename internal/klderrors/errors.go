@@ -377,7 +377,7 @@ const (
 	// TransactionSendInputTooManyParams more parameters provided than specified on ABI
 	TransactionSendInputTooManyParams = "Supplied %d paramters for ABI that supports %d"
 	// TransactionSendInputNotAssignable if we end up in a situation where the generated type cannot be assigned
-	TransactionSendInputNotAssignable = "Method %s param %s: supplied value '%+v' could not be assigned to '%s' field"
+	TransactionSendInputNotAssignable = "Method %s param %s: supplied value '%+v' could not be assigned to '%s' field (%s)"
 
 	// TransactionSendReceiptCheckError we continually had bad RCs back from the node while trying to check for the receipt up to the timeout
 	TransactionSendReceiptCheckError = "Error obtaining transaction receipt (%d retries): %s"

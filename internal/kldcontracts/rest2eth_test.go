@@ -935,6 +935,29 @@ func TestSendTransactionBadConstructorABI(t *testing.T) {
 	assert.Equal("Invalid method 'constructor' in ABI: unsupported arg type: badness", reply.Message)
 }
 
+func TestSendTransactionDefaultConstructorABI(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+	dispatcher := &mockREST2EthDispatcher{
+		asyncDispatchReply: &kldmessages.AsyncSentMsg{
+			Sent:    true,
+			Request: "request1",
+		},
+	}
+	abiLoader := &mockABILoader{
+		deployMsg: &kldmessages.DeployContract{
+			ABI: kldbind.ABIMarshaling{}, // completely empty ABI is ok
+		},
+	}
+	_, _, router := newTestREST2EthCustomAbiLoader(dispatcher, abiLoader)
+	req := httptest.NewRequest("POST", "/abis/testabi", bytes.NewReader([]byte{}))
+	req.Header.Add("x-kaleido-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(202, res.Result().StatusCode)
+}
+
 func TestSendTransactionBadFrom(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()

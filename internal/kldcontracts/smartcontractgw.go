@@ -859,7 +859,16 @@ func (g *smartContractGW) isSwaggerRequest(req *http.Request) (swaggerGen *kldop
 			conf.BasicAuth = strings.ToLower(vs[0]) == "false"
 		}
 		if vs := req.Form["schemes"]; len(vs) > 0 {
-			conf.ExternalSchemes = strings.Split(vs[0], ",")
+			requested := strings.Split(vs[0], ",")
+			conf.ExternalSchemes = []string{}
+			for _, scheme := range requested {
+				// Only allow http and https
+				if scheme == "http" || scheme == "https" {
+					conf.ExternalSchemes = append(conf.ExternalSchemes, scheme)
+				} else {
+					log.Warnf("Excluded unknown scheme: %s", scheme)
+				}
+			}
 		}
 		swaggerGen = kldopenapi.NewABI2Swagger(&conf)
 	}

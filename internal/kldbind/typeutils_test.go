@@ -76,6 +76,21 @@ func TestRABIMarshalingToABIRuntime(t *testing.T) {
 	assert.Equal(abi.TupleTy, runtimeABI.Methods["inOutType1"].Inputs[0].Type.T)
 }
 
+func TestRABIMarshalingToABIRuntimeSimpleStorage(t *testing.T) {
+	assert := assert.New(t)
+
+	var marshalableABI ABIMarshaling
+	b, err := ioutil.ReadFile("../../test/simplestorage.abi.json")
+	assert.NoError(err)
+	err = json.Unmarshal(b, &marshalableABI)
+	assert.NoError(err)
+
+	runtimeABI, err := ABIMarshalingToABIRuntime(marshalableABI)
+	assert.NoError(err)
+	assert.Equal("x", runtimeABI.ABI.Methods["set"].Inputs[0].Name)
+	assert.Equal(abi.UintTy, runtimeABI.ABI.Methods["set"].Inputs[0].Type.T)
+}
+
 func TestABIElementMarshalingToABIEvent(t *testing.T) {
 	assert := assert.New(t)
 

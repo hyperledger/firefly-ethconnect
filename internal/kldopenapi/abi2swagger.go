@@ -732,6 +732,9 @@ func (c *ABI2Swagger) mapTypeToSchema(s *spec.Schema, t abi.Type) {
 		s.Items.Schema = &spec.Schema{}
 		c.mapTypeToSchema(s.Items.Schema, *t.Elem)
 		break
+	case abi.TupleTy:
+		s.Type = []string{"object"}
+		break
 	}
 
 }

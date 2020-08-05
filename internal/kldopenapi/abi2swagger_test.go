@@ -15,8 +15,10 @@
 package kldopenapi
 
 import (
+	"bufio"
 	"encoding/json"
 	"io/ioutil"
+	"os"
 	"strings"
 	"testing"
 
@@ -96,6 +98,28 @@ func TestABI2SwaggerLotsOfTypesInstance(t *testing.T) {
 	t.Log(string(swaggerBytes))
 
 	expectedJSON, _ := ioutil.ReadFile("../../test/lotsoftypes.swagger.json")
+	assert.Equal(string(expectedJSON), string(swaggerBytes))
+	return
+}
+
+func TestABI2SwaggerV2ABIEncoder(t *testing.T) {
+	assert := assert.New(t)
+
+	c := NewABI2Swagger(&ABI2SwaggerConf{
+		ExternalHost:     "localhost",
+		ExternalRootPath: "/contracts",
+	})
+	f, err := os.Open("../../test/abicoderv2_example.abi.json")
+	assert.NoError(err)
+	abi, err := abi.JSON(bufio.NewReader(f))
+	assert.NoError(err)
+	swagger := c.Gen4Instance("/0x0123456789abcdef0123456789abcdef0123456", "abicoderv2", &abi, lotsOfTypesDevDocs)
+
+	swaggerBytes, err := json.MarshalIndent(&swagger, "", "  ")
+	assert.NoError(err)
+	t.Log(string(swaggerBytes))
+
+	expectedJSON, _ := ioutil.ReadFile("../../test/abicoderv2_example.swagger.json")
 	assert.Equal(string(expectedJSON), string(swaggerBytes))
 	return
 }

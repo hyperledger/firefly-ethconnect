@@ -41,6 +41,7 @@ const (
 type TxnProcessor interface {
 	OnMessage(TxnContext)
 	Init(kldeth.RPCClient)
+	ResolveAddress(from string) (resolvedFrom string, err error)
 }
 
 var highestID = 1000000
@@ -174,6 +175,29 @@ func (p *txnProcessor) OnMessage(txnContext TxnContext) {
 
 }
 
+func (p *txnProcessor) ResolveAddress(from string) (resolvedFrom string, err error) {
+	signer, err := p.resolveSigner(from)
+	if signer != nil {
+		resolvedFrom = signer.Address()
+	} else if err == nil {
+		resolvedFrom = from
+	}
+	return
+}
+
+func (p *txnProcessor) resolveSigner(from string) (signer kldeth.TXSigner, err error) {
+	if hdWalletRequest := IsHDWalletRequest(from); hdWalletRequest != nil {
+		if p.hdwallet == nil {
+			err = klderrors.Errorf(klderrors.HDWalletSigningNoConfig)
+			return
+		}
+		if signer, err = p.hdwallet.SignerFor(hdWalletRequest); err != nil {
+			return
+		}
+	}
+	return
+}
+
 // newInflightWrapper uses the supplied transaction, the inflight txn list
 // and the ethereum node's transction count to determine the right next
 // nonce for the transaction.
@@ -187,14 +211,10 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 
 	// Use the correct RPC for sending transactions
 	inflight.rpc = p.rpc
-	if hdWalletRequest := IsHDWalletRequest(msg.From); hdWalletRequest != nil {
-		if p.hdwallet == nil {
-			return nil, klderrors.Errorf(klderrors.HDWalletSigningNoConfig)
-		}
-		if inflight.signer, err = p.hdwallet.SignerFor(hdWalletRequest); err != nil {
-			return
-		}
+	if inflight.signer, err = p.resolveSigner(msg.From); inflight.signer != nil {
 		msg.From = inflight.signer.Address()
+	} else if err != nil {
+		return nil, err
 	} else if p.addressBook != nil {
 		if inflight.rpc, err = p.addressBook.lookup(txnContext.Context(), msg.From); err != nil {
 			return

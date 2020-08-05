@@ -36,6 +36,7 @@ type mockProcessor struct {
 	capturedCtx *msgContext
 }
 
+func (p *mockProcessor) ResolveAddress(from string) (string, error) { return "", nil }
 func (p *mockProcessor) OnMessage(ctx kldtx.TxnContext) {
 	p.capturedCtx = ctx.(*msgContext)
 }

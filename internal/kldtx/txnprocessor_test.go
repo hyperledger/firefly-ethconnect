@@ -1190,3 +1190,57 @@ func TestOnDeployContractMessageFailHDWalletFail(t *testing.T) {
 	assert.EqualError(testTxnContext.errorReplies[0].err, "HDWallet signing failed")
 
 }
+
+func TestResolveAddressNonHDWallet(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+	testRPC := goodMessageRPC()
+	txnProcessor.Init(testRPC)
+
+	from, err := txnProcessor.ResolveAddress(testFromAddr)
+	assert.NoError(err)
+	assert.Equal(testFromAddr, from)
+}
+
+func TestResolveAddressHDWalletSuccess(t *testing.T) {
+	assert := assert.New(t)
+
+	key, _ := ecrypto.GenerateKey()
+	addr := ecrypto.PubkeyToAddress(key.PublicKey)
+	svr := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+		res.WriteHeader(200)
+		res.Write([]byte(`
+    {
+      "address": "` + addr.String() + `",
+      "privateKey": "` + hex.EncodeToString(ecrypto.FromECDSA(key)) + `"
+    }`))
+	}))
+	defer svr.Close()
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+		HDWalletConf: HDWalletConf{
+			URLTemplate: svr.URL,
+		},
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+	testRPC := goodMessageRPC()
+	txnProcessor.Init(testRPC)
+
+	from, err := txnProcessor.ResolveAddress("hd-testinst-testwallet-1234")
+	assert.NoError(err)
+	assert.Equal(addr.String(), from)
+}
+
+func TestResolveAddressHDWalletFail(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+
+	_, err := txnProcessor.ResolveAddress("hd-testinst-testwallet-1234")
+	assert.EqualError(err, "No HD Wallet Configuration")
+}

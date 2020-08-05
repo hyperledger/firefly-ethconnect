@@ -32,6 +32,11 @@ type mockProcessor struct {
 	reply        kldmessages.ReplyWithHeaders
 	unmarshalErr error
 	badUnmarshal bool
+	resolvedFrom string
+}
+
+func (p *mockProcessor) ResolveAddress(from string) (resolvedFrom string, err error) {
+	return p.resolvedFrom, p.err
 }
 
 func (p *mockProcessor) OnMessage(c kldtx.TxnContext) {

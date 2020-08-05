@@ -79,6 +79,10 @@ type testKafkaMsgProcessor struct {
 	rpc      kldeth.RPCClient
 }
 
+func (p *testKafkaMsgProcessor) ResolveAddress(from string) (resolvedFrom string, err error) {
+	return from, nil
+}
+
 func (p *testKafkaMsgProcessor) Init(rpc kldeth.RPCClient) {
 	p.rpc = rpc
 }

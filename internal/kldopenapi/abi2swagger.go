@@ -59,7 +59,7 @@ func (c *ABI2Swagger) Gen4Instance(basePath, name string, abi *abi.ABI, devdocsJ
 	return c.convert(basePath, name, abi, devdocsJSON, true, false, false)
 }
 
-// Gen4Factory generates OpenAPI for a contract factory, with a constructor, and child methods on any addres
+// Gen4Factory generates OpenAPI for a contract factory, with a constructor, and child methods on any address
 func (c *ABI2Swagger) Gen4Factory(basePath, name string, factoryOnly, externalRegistry bool, abi *abi.ABI, devdocsJSON string) *spec.Swagger {
 	return c.convert(basePath, name, abi, devdocsJSON, false, factoryOnly, externalRegistry)
 }
@@ -731,6 +731,9 @@ func (c *ABI2Swagger) mapTypeToSchema(s *spec.Schema, t abi.Type) {
 		s.Items = &spec.SchemaOrArray{}
 		s.Items.Schema = &spec.Schema{}
 		c.mapTypeToSchema(s.Items.Schema, *t.Elem)
+		break
+	case abi.TupleTy:
+		s.Type = []string{"object"}
 		break
 	}
 

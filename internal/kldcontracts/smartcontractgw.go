@@ -164,7 +164,7 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *kldtx.TxnP
 			return nil, klderrors.Errorf(klderrors.RESTGatewayEventManagerInitFailed, err)
 		}
 	}
-	gw.r2e = newREST2eth(gw, rpc, gw.sm, gw.rr, asyncDispatcher, syncDispatcher)
+	gw.r2e = newREST2eth(gw, rpc, gw.sm, gw.rr, processor, asyncDispatcher, syncDispatcher)
 	gw.buildIndex()
 	return gw, nil
 }
@@ -1278,7 +1278,7 @@ func (g *smartContractGW) writeHTMLForUI(prefix, id, from string, isGateway, fac
 <html>
 <head>
   <meta charset="utf-8"> <!-- Important: rapi-doc uses utf8 characters -->
-  <script src="https://unpkg.com/rapidoc@7.1.0/dist/rapidoc-min.js"></script>
+  <script src="https://unpkg.com/rapidoc@8.1.2/dist/rapidoc-min.js"></script>
 </head>
 <body>
   <rapi-doc 

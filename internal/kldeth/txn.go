@@ -304,14 +304,10 @@ func NewSendTxn(msg *kldmessages.SendTransaction, signer TXSigner) (tx *Txn, err
 			return
 		}
 		var abiInputs abi.Arguments
-		jsonABI := &kldbind.ABIElementMarshaling{
-			Name:    msg.MethodName,
-			Inputs:  []kldbind.ABIArgumentMarshaling{},
-			Outputs: []kldbind.ABIArgumentMarshaling{},
-		}
 		msg.Parameters, err = flattenParams(msg.Parameters, &abiInputs, true)
 		if err == nil {
-			methodABI, err = genMethodABI(jsonABI, abiInputs)
+			abiMethod := abi.NewMethod(msg.MethodName, msg.MethodName, abi.Function, "payable", false, true, abiInputs, abi.Arguments{})
+			methodABI = &abiMethod
 		}
 		if err != nil {
 			return
@@ -375,49 +371,6 @@ func buildTX(signer TXSigner, msgFrom, msgTo string, msgNonce, msgValue, msgGas,
 	// Generate the ethereum transaction
 	err = tx.genEthTransaction(from, msgTo, msgNonce, msgValue, msgGas, msgGasPrice, packedCall)
 	return
-}
-
-func genMethodABI(jsonABI *kldbind.ABIElementMarshaling, predeterminedInputs abi.Arguments) (method *abi.Method, err error) {
-	var inputs abi.Arguments
-	if predeterminedInputs != nil {
-		inputs = predeterminedInputs
-	} else {
-		inputs = make(abi.Arguments, len(jsonABI.Inputs))
-		for i := 0; i < len(jsonABI.Inputs); i++ {
-			jsonInput := jsonABI.Inputs[i]
-			var arg abi.Argument
-			arg.Name = jsonInput.Name
-			if arg.Type, err = abi.NewType(jsonInput.Type, "", []abi.ArgumentMarshaling{}); err != nil {
-				err = klderrors.Errorf(klderrors.TransactionSendInputTypeUnknown, i, jsonInput.Name, err)
-				return
-			}
-			inputs[i] = arg
-		}
-	}
-
-	outputs := make(abi.Arguments, len(jsonABI.Outputs))
-	for i := 0; i < len(jsonABI.Outputs); i++ {
-		jsonOutput := jsonABI.Outputs[i]
-		var arg abi.Argument
-		arg.Name = jsonOutput.Name
-		if arg.Type, err = abi.NewType(jsonOutput.Type, "", []abi.ArgumentMarshaling{}); err != nil {
-			err = klderrors.Errorf(klderrors.TransactionSendOutputTypeUnknown, i, jsonOutput.Name, err)
-			return
-		}
-		outputs[i] = arg
-	}
-
-	var abiMethod abi.Method
-	// Note we only support "normal" functions here - constructors do not follow this code path, and we don't have support
-	// of Fallback or Receive yet
-	switch jsonABI.Type {
-	case "function":
-	case "":
-		abiMethod = abi.NewMethod(jsonABI.Name, jsonABI.Name, abi.Function, jsonABI.StateMutability, jsonABI.Constant, jsonABI.Payable, inputs, outputs)
-	default:
-		return nil, klderrors.Errorf(klderrors.RESTGatewayMethodTypeInvalid, jsonABI.Type)
-	}
-	return &abiMethod, nil
 }
 
 func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json.Number, data []byte) (err error) {

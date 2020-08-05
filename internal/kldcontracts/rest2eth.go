@@ -64,6 +64,7 @@ type rest2EthReplyProcessor interface {
 type rest2eth struct {
 	gw              smartContractGatewayInt
 	rpc             kldeth.RPCClient
+	processor       kldtx.TxnProcessor
 	asyncDispatcher REST2EthAsyncDispatcher
 	syncDispatcher  rest2EthSyncDispatcher
 	subMgr          kldevents.SubscriptionManager
@@ -138,9 +139,10 @@ func (i *rest2EthSyncResponder) ReplyWithReceipt(receipt kldmessages.ReplyWithHe
 	return
 }
 
-func newREST2eth(gw smartContractGatewayInt, rpc kldeth.RPCClient, subMgr kldevents.SubscriptionManager, rr RemoteRegistry, asyncDispatcher REST2EthAsyncDispatcher, syncDispatcher rest2EthSyncDispatcher) *rest2eth {
+func newREST2eth(gw smartContractGatewayInt, rpc kldeth.RPCClient, subMgr kldevents.SubscriptionManager, rr RemoteRegistry, processor kldtx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher, syncDispatcher rest2EthSyncDispatcher) *rest2eth {
 	return &rest2eth{
 		gw:              gw,
+		processor:       processor,
 		syncDispatcher:  syncDispatcher,
 		asyncDispatcher: asyncDispatcher,
 		rpc:             rpc,
@@ -625,6 +627,12 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 }
 
 func (r *rest2eth) callContract(res http.ResponseWriter, req *http.Request, from, addr string, value json.Number, abiMethod *abi.Method, msgParams []interface{}, blocknumber string) {
+	var err error
+	if from, err = r.processor.ResolveAddress(from); err != nil {
+		r.restErrReply(res, req, err, 500)
+		return
+	}
+
 	resBody, err := kldeth.CallMethod(req.Context(), r.rpc, nil, from, addr, value, abiMethod, msgParams, blocknumber)
 	if err != nil {
 		r.restErrReply(res, req, err, 500)

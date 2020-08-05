@@ -164,7 +164,7 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *kldtx.TxnP
 			return nil, klderrors.Errorf(klderrors.RESTGatewayEventManagerInitFailed, err)
 		}
 	}
-	gw.r2e = newREST2eth(gw, rpc, gw.sm, gw.rr, asyncDispatcher, syncDispatcher)
+	gw.r2e = newREST2eth(gw, rpc, gw.sm, gw.rr, processor, asyncDispatcher, syncDispatcher)
 	gw.buildIndex()
 	return gw, nil
 }

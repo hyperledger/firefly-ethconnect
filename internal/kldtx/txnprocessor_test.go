@@ -1191,6 +1191,20 @@ func TestOnDeployContractMessageFailHDWalletFail(t *testing.T) {
 
 }
 
+func TestResolveAddressNonHDWallet(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+	testRPC := goodMessageRPC()
+	txnProcessor.Init(testRPC)
+
+	from, err := txnProcessor.ResolveAddress(testFromAddr)
+	assert.NoError(err)
+	assert.Equal(testFromAddr, from)
+}
+
 func TestResolveAddressHDWalletSuccess(t *testing.T) {
 	assert := assert.New(t)
 

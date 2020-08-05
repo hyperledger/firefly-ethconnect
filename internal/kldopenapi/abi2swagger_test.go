@@ -32,10 +32,16 @@ const (
 	lotsOfTypesDevDocs = "{\"details\":\"Challenges the swagger generator to use lots of types\",\"methods\":{\"echoTypes1(uint8,bytes,uint256[],bytes1[],bytes32,bool[],address[])\":{\"details\":\"Echo back some types\",\"params\":{\"param1\":\"Parameter 1\",\"param2\":\"Parameter 2\",\"param3\":\"Parameter 3\",\"param4\":\"Parameter 4\",\"param5\":\"Parameter 5\",\"param6\":\"Parameter 6\",\"param7\":\"Parameter 7\"},\"return\":\"all of the individual input parameters\"},\"echoTypes2(string,int256[],bool,bytes1,address,bytes4,uint256)\":{\"details\":\"Echo back some more types\",\"params\":{\"param1\":\"Parameter 1\",\"param2\":\"Parameter 2\",\"param3\":\"Parameter 3\",\"param4\":\"Parameter 4\",\"param5\":\"Parameter 5\",\"param6\":\"Parameter 6\"},\"return\":\"all of the individual input parameters\"}},\"title\":\"LotsOfTypes\"}"
 )
 
-func TestABI2SwaggerERC20Generic(t *testing.T) {
+func TestABI2SwaggerERC20(t *testing.T) {
 	assert := assert.New(t)
 
-	c := NewABI2Swagger("localhost:80", "/contracts", []string{"http"}, true)
+	c := NewABI2Swagger(&ABI2SwaggerConf{
+		ExternalHost:     "localhost:80",
+		ExternalRootPath: "/contracts",
+		ExternalSchemes:  []string{"http"},
+		OrionPrivateAPI:  true,
+		BasicAuth:        true,
+	})
 	abi, err := abi.JSON(strings.NewReader(erc20ABI))
 	assert.NoError(err)
 	swagger := c.Gen4Factory("/erc20", "erc20", false, false, &abi, erc20DevDocs)
@@ -46,25 +52,41 @@ func TestABI2SwaggerERC20Generic(t *testing.T) {
 
 	expectedJSON, _ := ioutil.ReadFile("../../test/erc20.swagger.json")
 	assert.Equal(string(expectedJSON), string(swaggerBytes))
+	assert.NotNil(swagger.Paths.Paths["/"].Post.Security)
+	assert.NotNil(swagger.SecurityDefinitions)
 	return
 }
 
-func TestABI2SwaggerERC20GenericFactoryOnly(t *testing.T) {
+func TestABI2SwaggerERC20actoryOnlyNoAuthCustomScheme(t *testing.T) {
 	assert := assert.New(t)
 
-	c := NewABI2Swagger("localhost:80", "/contracts", []string{"http"}, false)
+	c := NewABI2Swagger(&ABI2SwaggerConf{
+		ExternalHost:     "localhost:80",
+		ExternalRootPath: "/contracts",
+		ExternalSchemes:  []string{"http"},
+		OrionPrivateAPI:  false,
+		BasicAuth:        false,
+	})
 	abi, err := abi.JSON(strings.NewReader(erc20ABI))
 	assert.NoError(err)
 	swagger := c.Gen4Factory("/erc20", "erc20", true, false, &abi, erc20DevDocs)
 
 	assert.Equal(1, len(swagger.Paths.Paths))
+	assert.Nil(swagger.Paths.Paths["/"].Post.Security)
+	assert.Nil(swagger.SecurityDefinitions)
 	return
 }
 
 func TestABI2SwaggerLotsOfTypesInstance(t *testing.T) {
 	assert := assert.New(t)
 
-	c := NewABI2Swagger("localhost", "/contracts", nil, true)
+	c := NewABI2Swagger(&ABI2SwaggerConf{
+		ExternalHost:     "localhost",
+		ExternalRootPath: "/contracts",
+		ExternalSchemes:  nil,
+		OrionPrivateAPI:  true,
+		BasicAuth:        true,
+	})
 	abi, err := abi.JSON(strings.NewReader(lotsOfTypesABI))
 	assert.NoError(err)
 	swagger := c.Gen4Instance("/0x0123456789abcdef0123456789abcdef0123456", "lotsOfTypes", &abi, lotsOfTypesDevDocs)

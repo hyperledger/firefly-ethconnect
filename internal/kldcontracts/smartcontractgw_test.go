@@ -202,7 +202,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	assert.Equal("0123456789abcdef0123456789abcdef01234567", info.Address)
 
 	// Check we can get the full ABI swagger back over REST
-	req = httptest.NewRequest("GET", "/abis/message1?swagger", bytes.NewReader([]byte{}))
+	req = httptest.NewRequest("GET", "/abis/message1?swagger&noauth&schemes=http,https,wss", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(200, res.Result().StatusCode)
@@ -210,6 +210,8 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	err = json.NewDecoder(res.Body).Decode(&swagger)
 	assert.NoError(err)
 	assert.Equal("SimpleEvents", swagger.Info.Title)
+	assert.Equal([]string{"http", "https"}, swagger.Schemes)
+	assert.Nil(swagger.SecurityDefinitions)
 
 	// Check we can get the full ABI back over REST
 	req = httptest.NewRequest("GET", "/abis/message1?abi", bytes.NewReader([]byte{}))

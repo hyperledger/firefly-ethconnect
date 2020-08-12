@@ -16,6 +16,7 @@ package kldeth
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -155,11 +156,19 @@ func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr 
 	if err != nil || retBytes == nil {
 		return nil, err
 	}
-	return ProcessRLPBytes(methodABI.Outputs, retBytes)
+	return ProcessRLPBytes(methodABI.Outputs, retBytes), nil
 }
 
-// ProcessRLPBytes converts binary packed set of bytes into a map
-func ProcessRLPBytes(args abi.Arguments, retBytes []byte) (map[string]interface{}, error) {
+func addErrorToRetval(retval map[string]interface{}, retBytes []byte, rawRetval interface{}, err error) {
+	log.Warnf(err.Error())
+	retval["rlp"] = hex.EncodeToString(retBytes)
+	retval["raw"] = rawRetval
+	retval["error"] = err.Error()
+}
+
+// ProcessRLPBytes converts binary packed set of bytes into a map. Does not throw errors,
+// rather embeds them into the result set to send back to the caller.
+func ProcessRLPBytes(args abi.Arguments, retBytes []byte) map[string]interface{} {
 	retval := make(map[string]interface{})
 	rawRetval, unpackErr := args.UnpackValues(retBytes)
 	var err error
@@ -169,9 +178,9 @@ func ProcessRLPBytes(args abi.Arguments, retBytes []byte) (map[string]interface{
 		err = processOutputs(args, rawRetval, retval)
 	}
 	if err != nil {
-		log.Errorf("Unable to process bytes '%s': %s", rawRetval, err)
+		addErrorToRetval(retval, retBytes, rawRetval, err)
 	}
-	return retval, err
+	return retval
 }
 
 func processOutputs(args abi.Arguments, rawRetval []interface{}, retval map[string]interface{}) error {

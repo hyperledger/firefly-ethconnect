@@ -146,10 +146,7 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 
 	// Retrieve the data args from the RLP and merge the results
 	if len(dataArgs) > 0 {
-		dataMap, err := kldeth.ProcessRLPBytes(dataArgs, data)
-		if err != nil {
-			return klderrors.Errorf(klderrors.EventStreamsLogDecodeData, subInfo, err)
-		}
+		dataMap := kldeth.ProcessRLPBytes(dataArgs, data)
 		for k, v := range dataMap {
 			result.Data[k] = v
 		}

@@ -127,7 +127,8 @@ func TestProcessLogBadRLPData(t *testing.T) {
 		Timestamps: false,
 	}
 	stream := &eventStream{
-		spec: spec,
+		spec:        spec,
+		eventStream: make(chan *eventData, 1),
 	}
 	eventABI := `{
     "name": "event1",
@@ -148,7 +149,9 @@ func TestProcessLogBadRLPData(t *testing.T) {
 		Data: "0x00",
 	}, 0)
 
-	assert.Regexp("Failed to parse RLP data from event", err.Error())
+	assert.NoError(err)
+	ev := <-stream.eventStream
+	assert.Regexp("Failed to unpack values", ev.Data["error"])
 }
 
 func TestProcessLogSampleEvent(t *testing.T) {

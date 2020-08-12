@@ -1507,8 +1507,7 @@ func TestProcessRLPBytesValidTypes(t *testing.T) {
 	)
 	assert.NoError(err)
 
-	res, err := ProcessRLPBytes(methodABI.Outputs, rlp)
-	assert.NoError(err)
+	res := ProcessRLPBytes(methodABI.Outputs, rlp)
 	assert.Nil(res["error"])
 
 	assert.Equal("string 1", res["retval1"])
@@ -1567,8 +1566,7 @@ func TestProcessRLPV2ABIEncodedStructs(t *testing.T) {
 
 	rlp, err := abiMethod.Inputs.Pack(typedArgs...)
 	assert.NoError(err)
-	res, err := ProcessRLPBytes(abiMethod.Outputs, rlp)
-	assert.NoError(err)
+	res := ProcessRLPBytes(abiMethod.Outputs, rlp)
 	assert.Nil(res["error"])
 
 	assert.Equal(input1Map, res["out1"])
@@ -1760,8 +1758,8 @@ func TestProcessRLPBytesUnpackFailure(t *testing.T) {
 		},
 	}
 
-	_, err := ProcessRLPBytes(methodABI.Outputs, []byte("this is not the RLP you are looking for"))
-	assert.Regexp("cannot marshal", err.Error())
+	res := ProcessRLPBytes(methodABI.Outputs, []byte("this is not the RLP you are looking for"))
+	assert.Regexp("Failed to unpack values", res["error"])
 }
 
 func TestProcessOutputsTooFew(t *testing.T) {

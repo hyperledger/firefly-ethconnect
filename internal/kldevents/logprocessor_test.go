@@ -23,6 +23,40 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const sampleEventLogAllIndexedNoData = `{
+  "address": "0x19e75d0d337e17835dc5246f007a1fb17f0bac89",
+  "blockHash": "0xb6d8a38a89ac35a04ee6ebd5789a4a805dfa26c1b753c311db523ec9bf204384",
+  "blockNumber": "0x74082",
+  "data": "0x",
+  "logIndex": 1,
+  "removed": false,
+  "topics": ["0x35d3551f6fc757e3146f18d79fbbaf97d788f77b23b07f25f5a80621072d5c70", "0x51b201b016025d42c9a0718b75aacc12b1e9c7f16e4bd2c6618aa944ca399156", "0x00000000000000000000000000000000000000000000000000000000000003e8"],
+  "transactionHash": "0x23307094299f08a1041de9f1e7ecb67197a5a3c11ce5be775a8147de266b7524",
+  "transactionIndex": "0x0"
+}`
+
+const sampleEventABIAllIndexedNoData = `
+{
+  "anonymous": false,
+  "inputs": [
+    {
+      "indexed": true,
+      "internalType": "string",
+      "name": "data1",
+      "type": "string"
+    },
+    {
+      "indexed": true,
+      "internalType": "uint256",
+      "name": "data2",
+      "type": "uint256"
+    }
+  ],
+  "name": "SampleEvent",
+  "type": "event"
+}
+`
+
 func TestTopicToValue(t *testing.T) {
 	assert := assert.New(t)
 
@@ -99,19 +133,50 @@ func TestProcessLogBadRLPData(t *testing.T) {
     "name": "event1",
     "inputs": [
       {"name": "one", "type": "uint256"},
-      {"name": "two", "type": "uint256"},
+      {"name": "two", "type": "uint256"}
     ]
   }`
 	var marshaling kldbind.ABIElementMarshaling
-	json.Unmarshal([]byte(eventABI), &marshaling)
+	err := json.Unmarshal([]byte(eventABI), &marshaling)
+	assert.NoError(err)
 	event, _ := kldbind.ABIElementMarshalingToABIEvent(&marshaling)
 	lp := &logProcessor{
 		event:  event,
 		stream: stream,
 	}
-	err := lp.processLogEntry(t.Name(), &logEntry{
+	err = lp.processLogEntry(t.Name(), &logEntry{
 		Data: "0x00",
 	}, 0)
 
 	assert.Regexp("Failed to parse RLP data from event", err.Error())
+}
+
+func TestProcessLogSampleEvent(t *testing.T) {
+	assert := assert.New(t)
+
+	spec := &StreamInfo{
+		Timestamps: false,
+	}
+	stream := &eventStream{
+		spec:        spec,
+		eventStream: make(chan *eventData, 1),
+	}
+	var marshaling kldbind.ABIElementMarshaling
+	json.Unmarshal([]byte(sampleEventABIAllIndexedNoData), &marshaling)
+	event, _ := kldbind.ABIElementMarshalingToABIEvent(&marshaling)
+	lp := &logProcessor{
+		event:  event,
+		stream: stream,
+	}
+	var l logEntry
+	err := json.Unmarshal([]byte(sampleEventLogAllIndexedNoData), &l)
+	assert.NoError(err)
+	err = lp.processLogEntry(t.Name(), &l, 0)
+
+	assert.NoError(err)
+	ev := <-stream.eventStream
+	assert.Equal(map[string]interface{}{
+		"data1": "0x51b201b016025d42c9a0718b75aacc12b1e9c7f16e4bd2c6618aa944ca399156",
+		"data2": "1000",
+	}, ev.Data)
 }

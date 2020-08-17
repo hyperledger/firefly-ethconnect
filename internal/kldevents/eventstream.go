@@ -329,7 +329,16 @@ func (a *eventStream) eventPoller() {
 		subs := a.sm.subscriptionsForStream(a.spec.ID)
 		if err == nil && !a.isBlocked() {
 			for _, sub := range subs {
-				if sub.filterStale {
+				// We do the reset on the event processing thread, to avoid any concurrency issue.
+				// It's just an unsubscribe, which clears the resetRequested flag and sets us stale.
+				if sub.resetRequested {
+					sub.unsubscribe(ctx, false)
+					// Clear any checkpoint
+					if _, exists := checkpoint[sub.info.ID]; exists {
+						delete(checkpoint, sub.info.ID)
+					}
+				}
+				if sub.filterStale && !sub.deleting {
 					blockHeight, exists := checkpoint[sub.info.ID]
 					if !exists || blockHeight.Cmp(big.NewInt(0)) <= 0 {
 						blockHeight, err = sub.setInitialBlockHeight(ctx)

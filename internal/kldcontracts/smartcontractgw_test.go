@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"mime/multipart"
 	"net/http"
@@ -1606,7 +1607,11 @@ func TestAddFileToABIIndexBadFileSwallowsError(t *testing.T) {
 }
 
 func testGWPath(method, path string, results interface{}, sm *mockSubMgr) (res *httptest.ResponseRecorder) {
-	req := httptest.NewRequest(method, path, nil)
+	return testGWPathBody(method, path, results, sm, nil)
+}
+
+func testGWPathBody(method, path string, results interface{}, sm *mockSubMgr, body io.Reader) (res *httptest.ResponseRecorder) {
+	req := httptest.NewRequest(method, path, body)
 	res = httptest.NewRecorder()
 	s := &smartContractGW{}
 	if sm != nil {
@@ -1877,6 +1882,38 @@ func TestDeleteSub(t *testing.T) {
 	mockSubMgr := &mockSubMgr{}
 	res := testGWPath("DELETE", kldevents.SubPathPrefix+"/123", nil, mockSubMgr)
 	assert.Equal(204, res.Result().StatusCode)
+}
+
+func TestResetSub(t *testing.T) {
+	assert := assert.New(t)
+
+	reqData := map[string]interface{}{
+		"fromBlock": "0",
+	}
+	b, _ := json.Marshal(&reqData)
+	mockSubMgr := &mockSubMgr{}
+	res := testGWPathBody("POST", kldevents.SubPathPrefix+"/123/reset", nil, mockSubMgr, bytes.NewReader(b))
+	assert.Equal(204, res.Result().StatusCode)
+}
+
+func TestResetSubFail(t *testing.T) {
+	assert := assert.New(t)
+
+	reqData := map[string]interface{}{
+		"fromBlock": "0",
+	}
+	b, _ := json.Marshal(&reqData)
+	mockSubMgr := &mockSubMgr{
+		err: fmt.Errorf("pop"),
+	}
+	res := testGWPathBody("POST", kldevents.SubPathPrefix+"/123/reset", nil, mockSubMgr, bytes.NewReader(b))
+	assert.Equal(500, res.Result().StatusCode)
+}
+
+func TestResetSubNoManager(t *testing.T) {
+	assert := assert.New(t)
+	res := testGWPath("POST", kldevents.SubPathPrefix+"/123/reset", nil, nil)
+	assert.Equal(405, res.Result().StatusCode)
 }
 
 func TestDeleteStream(t *testing.T) {

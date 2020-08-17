@@ -55,13 +55,15 @@ type SubscriptionInfo struct {
 
 // subscription is the runtime that manages the subscription
 type subscription struct {
-	info         *SubscriptionInfo
-	rpc          kldeth.RPCClient
-	lp           *logProcessor
-	logName      string
-	filterID     kldbind.HexBigInt
-	filteredOnce bool
-	filterStale  bool
+	info           *SubscriptionInfo
+	rpc            kldeth.RPCClient
+	lp             *logProcessor
+	logName        string
+	filterID       kldbind.HexBigInt
+	filteredOnce   bool
+	filterStale    bool
+	deleting       bool
+	resetRequested bool
 }
 
 func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind.Address, i *SubscriptionInfo) (*subscription, error) {
@@ -229,14 +231,27 @@ func (s *subscription) processNewEvents(ctx context.Context) error {
 	return nil
 }
 
-func (s *subscription) unsubscribe(ctx context.Context) error {
+func (s *subscription) unsubscribe(ctx context.Context, deleting bool) (err error) {
 	var retval string
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	s.filterStale = true
-	err := s.rpc.CallContext(ctx, &retval, "eth_uninstallFilter", s.filterID)
-	log.Infof("%s: Uninstalled filter (retval=%s)", s.logName, retval)
+	log.Infof("%s: Unsubscribing existing filter (deleting=%t)", s.logName, deleting)
+	s.deleting = deleting
+	s.resetRequested = false
+	// If unsubscribe is called multiple times, we might not have a filter
+	if !s.filterStale {
+		s.filterStale = true
+		err = s.rpc.CallContext(ctx, &retval, "eth_uninstallFilter", s.filterID)
+		log.Infof("%s: Uninstalled filter (retval=%s)", s.logName, retval)
+	}
 	return err
+}
+
+func (s *subscription) requestReset() {
+	// We simply set a flag, which is picked up by the event stream thread on the next polling cycle
+	// and results in an unsubscribe/subscribe cycle.
+	log.Infof("%s: Requested reset from block '%s'", s.logName, s.info.FromBlock)
+	s.resetRequested = true
 }
 
 func (s *subscription) blockHWM() big.Int {

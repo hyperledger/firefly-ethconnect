@@ -122,6 +122,7 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	router.GET(kldevents.SubPathPrefix+"/:id", g.withEventsAuth(g.getStreamOrSub))
 	router.DELETE(kldevents.StreamPathPrefix+"/:id", g.withEventsAuth(g.deleteStreamOrSub))
 	router.DELETE(kldevents.SubPathPrefix+"/:id", g.withEventsAuth(g.deleteStreamOrSub))
+	router.POST(kldevents.SubPathPrefix+"/:id/reset", g.withEventsAuth(g.resetSub))
 	router.POST(kldevents.StreamPathPrefix+"/:id/suspend", g.withEventsAuth(g.suspendOrResumeStream))
 	router.POST(kldevents.StreamPathPrefix+"/:id/resume", g.withEventsAuth(g.suspendOrResumeStream))
 }
@@ -780,6 +781,33 @@ func (g *smartContractGW) deleteStreamOrSub(res http.ResponseWriter, req *http.R
 		err = g.sm.DeleteSubscription(req.Context(), params.ByName("id"))
 	} else {
 		err = g.sm.DeleteStream(req.Context(), params.ByName("id"))
+	}
+	if err != nil {
+		g.gatewayErrReply(res, req, err, 500)
+		return
+	}
+
+	status := 204
+	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(status)
+}
+
+// resetSub resets subscription over REST
+func (g *smartContractGW) resetSub(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	log.Infof("--> %s %s", req.Method, req.URL)
+
+	if g.sm == nil {
+		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		return
+	}
+
+	var body struct {
+		FromBlock string `json:"fromBlock"`
+	}
+	err := json.NewDecoder(req.Body).Decode(&body)
+	if err == nil {
+		err = g.sm.ResetSubscription(req.Context(), params.ByName("id"), body.FromBlock)
 	}
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 500)

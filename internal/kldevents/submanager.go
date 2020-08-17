@@ -56,6 +56,7 @@ type SubscriptionManager interface {
 	AddSubscription(ctx context.Context, addr *kldbind.Address, event *kldbind.ABIElementMarshaling, streamID, initialBlock, name string) (*SubscriptionInfo, error)
 	Subscriptions(ctx context.Context) []*SubscriptionInfo
 	SubscriptionByID(ctx context.Context, id string) (*SubscriptionInfo, error)
+	ResetSubscription(ctx context.Context, id, initialBlock string) error
 	DeleteSubscription(ctx context.Context, id string) error
 	Close()
 }
@@ -125,6 +126,20 @@ func (s *subscriptionMGR) Subscriptions(ctx context.Context) []*SubscriptionInfo
 	return l
 }
 
+func (s *subscriptionMGR) setInitialBlock(i *SubscriptionInfo, initialBlock string) error {
+	// Check initial block number to subscribe from
+	if initialBlock == "" || initialBlock == FromBlockLatest {
+		i.FromBlock = FromBlockLatest
+	} else {
+		var bi big.Int
+		if _, ok := bi.SetString(initialBlock, 0); !ok {
+			return klderrors.Errorf(klderrors.EventStreamsSubscribeBadBlock)
+		}
+		i.FromBlock = bi.Text(10)
+	}
+	return nil
+}
+
 // AddSubscription adds a new subscription
 func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *kldbind.Address, event *kldbind.ABIElementMarshaling, streamID, initialBlock, name string) (*SubscriptionInfo, error) {
 	i := &SubscriptionInfo{
@@ -141,14 +156,8 @@ func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *kldbind.Add
 		i.Name = name
 	}
 	// Check initial block number to subscribe from
-	if initialBlock == "" || initialBlock == FromBlockLatest {
-		i.FromBlock = FromBlockLatest
-	} else {
-		var bi big.Int
-		if _, ok := bi.SetString(initialBlock, 0); !ok {
-			return nil, klderrors.Errorf(klderrors.EventStreamsSubscribeBadBlock)
-		}
-		i.FromBlock = bi.Text(10)
+	if err := s.setInitialBlock(i, initialBlock); err != nil {
+		return nil, err
 	}
 	// Create it
 	sub, err := newSubscription(s, s.rpc, addr, i)
@@ -163,7 +172,29 @@ func (s *subscriptionMGR) config() *SubscriptionManagerConf {
 	return s.conf
 }
 
-// DeleteSubscription deletes a streamm
+// ResetSubscription restarts the steam from the specified block
+func (s *subscriptionMGR) ResetSubscription(ctx context.Context, id, initialBlock string) error {
+	sub, err := s.subscriptionByID(id)
+	if err != nil {
+		return err
+	}
+	return s.resetSubscription(ctx, sub, initialBlock)
+}
+
+func (s *subscriptionMGR) resetSubscription(ctx context.Context, sub *subscription, initialBlock string) error {
+	// Re-set the inital block on the subscription and save it
+	if err := s.setInitialBlock(sub.info, initialBlock); err != nil {
+		return err
+	}
+	if _, err := s.storeSubscription(sub.info); err != nil {
+		return err
+	}
+	// Request a reset on the next poling cycle
+	sub.requestReset()
+	return nil
+}
+
+// DeleteSubscription deletes a subscription
 func (s *subscriptionMGR) DeleteSubscription(ctx context.Context, id string) error {
 	sub, err := s.subscriptionByID(id)
 	if err != nil {
@@ -174,7 +205,7 @@ func (s *subscriptionMGR) DeleteSubscription(ctx context.Context, id string) err
 
 func (s *subscriptionMGR) deleteSubscription(ctx context.Context, sub *subscription) error {
 	delete(s.subscriptions, sub.info.ID)
-	sub.unsubscribe(ctx)
+	sub.unsubscribe(ctx, true)
 	if err := s.db.Delete(sub.info.ID); err != nil {
 		return err
 	}

@@ -171,6 +171,9 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	assert.Equal(1, len(sm.streams))
 	assert.Equal(1, len(sm.subscriptions))
 
+	err = sm.ResetSubscription(ctx, sub.ID, "0")
+	assert.NoError(err)
+
 	err = sm.DeleteSubscription(ctx, sub.ID)
 	assert.NoError(err)
 
@@ -208,6 +211,39 @@ func TestActionChildCleanup(t *testing.T) {
 func TestStreamAndSubscriptionErrors(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)
+	subscriptionName := "testSub"
+	defer cleanup(t, dir)
+	sm := newTestSubscriptionManager()
+	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
+	sm.db, _ = kldkvstore.NewLDBKeyValueStore(path.Join(dir, "db"))
+	defer sm.db.Close()
+
+	ctx := context.Background()
+	assert.Equal([]*SubscriptionInfo{}, sm.Subscriptions(ctx))
+	assert.Equal([]*StreamInfo{}, sm.Streams(ctx))
+
+	stream, err := sm.AddStream(ctx, &StreamInfo{
+		Type:    "webhook",
+		Webhook: &webhookAction{URL: "http://test.invalid"},
+	})
+	assert.NoError(err)
+
+	sub, err := sm.AddSubscription(ctx, nil, &kldbind.ABIElementMarshaling{Name: "ping"}, stream.ID, "", subscriptionName)
+	assert.NoError(err)
+
+	err = sm.ResetSubscription(ctx, sub.ID, "badness")
+	assert.EqualError(err, "FromBlock cannot be parsed as a BigInt")
+
+	sm.db.Close()
+	err = sm.ResetSubscription(ctx, sub.ID, "0")
+	assert.EqualError(err, "Failed to store subscription: leveldb: closed")
+
+	sm.Close()
+}
+
+func TestResetSubscriptionErrors(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
 	defer cleanup(t, dir)
 	sm := newTestSubscriptionManager()
 	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
@@ -239,6 +275,8 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	_, err = sm.AddSubscription(ctx, nil, &kldbind.ABIElementMarshaling{Name: "any"}, "teststream", "!bad integer", "")
 	assert.EqualError(err, "FromBlock cannot be parsed as a BigInt")
 	sm.subscriptions["testsub"] = &subscription{info: &SubscriptionInfo{}, rpc: sm.rpc}
+	err = sm.ResetSubscription(ctx, "nope", "0")
+	assert.EqualError(err, "Subscription with ID 'nope' not found")
 	err = sm.DeleteSubscription(ctx, "nope")
 	assert.EqualError(err, "Subscription with ID 'nope' not found")
 	err = sm.DeleteSubscription(ctx, "testsub")

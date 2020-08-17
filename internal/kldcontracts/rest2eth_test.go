@@ -167,7 +167,10 @@ func (m *mockSubMgr) SubscriptionByID(ctx context.Context, id string) (*kldevent
 	return m.sub, m.err
 }
 func (m *mockSubMgr) DeleteSubscription(ctx context.Context, id string) error { return m.err }
-func (m *mockSubMgr) Close()                                                  {}
+func (m *mockSubMgr) ResetSubscription(ctx context.Context, id, initialBlock string) error {
+	return m.err
+}
+func (m *mockSubMgr) Close() {}
 
 func newTestDeployMsg(addr string) *deployContractWithAddress {
 	compiled, _ := kldeth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")

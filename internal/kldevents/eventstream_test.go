@@ -537,6 +537,77 @@ func TestProcessEventsEnd2EndWithTimestamps(t *testing.T) {
 	assert.NoError(err)
 	sm.Close()
 }
+
+func TestProcessEventsEnd2EndWithReset(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	db, _ := kldkvstore.NewLDBKeyValueStore(dir)
+	sm, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			BatchSize:  1,
+			Webhook:    &webhookAction{},
+			Timestamps: false,
+		}, db, 200)
+	defer svr.Close()
+
+	s := setupTestSubscription(assert, sm, stream, "mySubName")
+	assert.Equal("mySubName", s.Name)
+
+	// We expect three events to be sent to the webhook
+	// With the default batch size of 1, that means three separate requests
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		e1s := <-eventStream
+		assert.Equal(1, len(e1s))
+		assert.Equal("42", e1s[0].Data["i"])
+		assert.Equal("But what is the question?", e1s[0].Data["m"])
+		assert.Equal("150665", e1s[0].BlockNumber)
+		e2s := <-eventStream
+		assert.Equal(1, len(e2s))
+		assert.Equal("1977", e2s[0].Data["i"])
+		assert.Equal("A long time ago in a galaxy far, far away....", e2s[0].Data["m"])
+		assert.Equal("150665", e2s[0].BlockNumber)
+		e3s := <-eventStream
+		assert.Equal(1, len(e3s))
+		assert.Equal("20151021", e3s[0].Data["i"])
+		assert.Equal("1.21 Gigawatts!", e3s[0].Data["m"])
+		assert.Equal("150721", e3s[0].BlockNumber)
+		wg.Done()
+	}()
+	wg.Wait()
+
+	ctx := context.Background()
+	err := sm.ResetSubscription(ctx, s.ID, "0")
+	assert.NoError(err)
+
+	wg = &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		e1s := <-eventStream
+		assert.Equal(1, len(e1s))
+		assert.Equal("42", e1s[0].Data["i"])
+		assert.Equal("But what is the question?", e1s[0].Data["m"])
+		assert.Equal("150665", e1s[0].BlockNumber)
+		e2s := <-eventStream
+		assert.Equal(1, len(e2s))
+		assert.Equal("1977", e2s[0].Data["i"])
+		assert.Equal("A long time ago in a galaxy far, far away....", e2s[0].Data["m"])
+		assert.Equal("150665", e2s[0].BlockNumber)
+		// Note no third event this time round, as eth_getFilterChanges test data is only set to fire on exactly one call
+		wg.Done()
+	}()
+	wg.Wait()
+
+	err = sm.DeleteSubscription(ctx, s.ID)
+	assert.NoError(err)
+	err = sm.DeleteStream(ctx, stream.spec.ID)
+	assert.NoError(err)
+	sm.Close()
+}
+
 func TestCheckpointRecovery(t *testing.T) {
 	assert := assert.New(t)
 	sm, stream, svr, eventStream := newTestStreamForBatching(

@@ -553,7 +553,7 @@ func (g *smartContractGW) addFileToABIIndex(id, fileName string, createdTime tim
 
 func (g *smartContractGW) checkNameAvailable(registerAs string, isRemote bool) error {
 	if isRemote {
-		msg, err := g.rr.loadFactoryForInstance(registerAs)
+		msg, err := g.rr.loadFactoryForInstance(registerAs, false)
 		if err != nil {
 			return err
 		} else if msg != nil {
@@ -862,7 +862,7 @@ func (g *smartContractGW) resolveAddressOrName(id string) (deployMsg *kldmessage
 	return deployMsg, registeredName, info, err
 }
 
-func (g *smartContractGW) isSwaggerRequest(req *http.Request) (swaggerGen *kldopenapi.ABI2Swagger, uiRequest, factoryOnly, abiRequest bool, from string) {
+func (g *smartContractGW) isSwaggerRequest(req *http.Request) (swaggerGen *kldopenapi.ABI2Swagger, uiRequest, factoryOnly, abiRequest, refreshABI bool, from string) {
 	req.ParseForm()
 	var swaggerRequest bool
 	if vs := req.Form["swagger"]; len(vs) > 0 {
@@ -879,6 +879,9 @@ func (g *smartContractGW) isSwaggerRequest(req *http.Request) (swaggerGen *kldop
 	}
 	if vs := req.Form["abi"]; len(vs) > 0 {
 		abiRequest = strings.ToLower(vs[0]) != "false"
+	}
+	if vs := req.Form["refresh"]; len(vs) > 0 {
+		refreshABI = strings.ToLower(vs[0]) != "false"
 	}
 	from = req.FormValue("from")
 	if swaggerRequest {
@@ -925,7 +928,7 @@ func (g *smartContractGW) replyWithSwagger(res http.ResponseWriter, req *http.Re
 
 func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
-	swaggerGen, uiRequest, factoryOnly, abiRequest, from := g.isSwaggerRequest(req)
+	swaggerGen, uiRequest, factoryOnly, abiRequest, _, from := g.isSwaggerRequest(req)
 	id := strings.TrimPrefix(strings.ToLower(params.ByName("address")), "0x")
 	prefix := "contract"
 	if id == "" {
@@ -982,7 +985,7 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
 
-	swaggerGen, uiRequest, factoryOnly, abiRequest, from := g.isSwaggerRequest(req)
+	swaggerGen, uiRequest, factoryOnly, abiRequest, refreshABI, from := g.isSwaggerRequest(req)
 
 	var deployMsg *kldmessages.DeployContract
 	var err error
@@ -992,7 +995,7 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 		isGateway = true
 		prefix = "gateway"
 		id = params.ByName("gateway_lookup")
-		deployMsg, err = g.rr.loadFactoryForGateway(id)
+		deployMsg, err = g.rr.loadFactoryForGateway(id, refreshABI)
 		if err != nil {
 			g.gatewayErrReply(res, req, err, 500)
 			return
@@ -1005,7 +1008,7 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 		prefix = "instance"
 		id = params.ByName("instance_lookup")
 		var msg *deployContractWithAddress
-		msg, err = g.rr.loadFactoryForInstance(id)
+		msg, err = g.rr.loadFactoryForInstance(id, refreshABI)
 		if err != nil {
 			g.gatewayErrReply(res, req, err, 500)
 			return
@@ -1023,7 +1026,7 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 	} else if swaggerGen != nil {
 		runtimeABI, err := kldbind.ABIMarshalingToABIRuntime(deployMsg.ABI)
 		if err != nil {
-			g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayInvalidABI, err), 404)
+			g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayInvalidABI, err), 400)
 			return
 		}
 		swagger := g.swaggerForRemoteRegistry(swaggerGen, id, addr, factoryOnly, runtimeABI, deployMsg.DevDoc, req.URL.Path)

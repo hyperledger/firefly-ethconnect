@@ -197,7 +197,7 @@ type restCmd struct {
 	blocknumber   string
 }
 
-func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params httprouter.Params, c *restCmd, addrParam string) (a kldbind.ABIMarshaling, validAddress bool, err error) {
+func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params httprouter.Params, c *restCmd, addrParam string, refresh bool) (a kldbind.ABIMarshaling, validAddress bool, err error) {
 	c.addr = strings.ToLower(strings.TrimPrefix(addrParam, "0x"))
 	validAddress = addrCheck.MatchString(c.addr)
 
@@ -209,7 +209,7 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 	//    - /abis      is for factory interfaces installed into ethconnect by uploading the Solidity
 	//    - /contracts is for individual instances deployed via ethconnect factory interfaces
 	if strings.HasPrefix(req.URL.Path, "/gateways/") || strings.HasPrefix(req.URL.Path, "/g/") {
-		c.deployMsg, err = r.rr.loadFactoryForGateway(params.ByName("gateway_lookup"))
+		c.deployMsg, err = r.rr.loadFactoryForGateway(params.ByName("gateway_lookup"), refresh)
 		if err != nil {
 			r.restErrReply(res, req, err, 500)
 			return
@@ -220,7 +220,7 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 		}
 	} else if strings.HasPrefix(req.URL.Path, "/instances/") || strings.HasPrefix(req.URL.Path, "/i/") {
 		var msg *deployContractWithAddress
-		msg, err = r.rr.loadFactoryForInstance(params.ByName("instance_lookup"))
+		msg, err = r.rr.loadFactoryForInstance(params.ByName("instance_lookup"), refresh)
 		if err != nil {
 			r.restErrReply(res, req, err, 500)
 			return
@@ -327,10 +327,10 @@ func (r *rest2eth) resolveEvent(res http.ResponseWriter, req *http.Request, c *r
 	return
 }
 
-func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, params httprouter.Params) (c restCmd, err error) {
+func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, params httprouter.Params, refreshABI bool) (c restCmd, err error) {
 	// Check if we have a valid address in :address (verified later if required)
 	addrParam := params.ByName("address")
-	a, validAddress, err := r.resolveABI(res, req, params, &c, addrParam)
+	a, validAddress, err := r.resolveABI(res, req, params, &c, addrParam, refreshABI)
 	if err != nil {
 		return c, err
 	}
@@ -438,7 +438,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
 
-	c, err := r.resolveParams(res, req, params)
+	c, err := r.resolveParams(res, req, params, false) // We never refresh the ABI on an execution call - you have to use ?abi or ?swagger
 	if err != nil {
 		return
 	}

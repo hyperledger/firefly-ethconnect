@@ -46,8 +46,8 @@ type deployContractWithAddress struct {
 
 // RemoteRegistry lookup of ABI, ByteCode and DevDocs against a conformant REST API
 type RemoteRegistry interface {
-	loadFactoryForGateway(lookupStr string) (*kldmessages.DeployContract, error)
-	loadFactoryForInstance(lookupStr string) (*deployContractWithAddress, error)
+	loadFactoryForGateway(lookupStr string, refresh bool) (*kldmessages.DeployContract, error)
+	loadFactoryForInstance(lookupStr string, refresh bool) (*deployContractWithAddress, error)
 	registerInstance(lookupStr, address string) error
 	init() error
 	close()
@@ -125,11 +125,13 @@ func (rr *remoteRegistry) init() (err error) {
 	return nil
 }
 
-func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string) (*deployContractWithAddress, error) {
+func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string, refresh bool) (msg *deployContractWithAddress, err error) {
 	safeLookupStr := url.QueryEscape(lookupStr)
-	msg := rr.loadFactoryFromCacheDB(ns + "/" + safeLookupStr)
-	if msg != nil {
-		return msg, nil
+	if !refresh {
+		msg = rr.loadFactoryFromCacheDB(ns + "/" + safeLookupStr)
+		if msg != nil {
+			return msg, nil
+		}
 	}
 	queryURL := baseURL + safeLookupStr
 	jsonRes, err := rr.hr.DoRequest("GET", queryURL, nil)
@@ -216,11 +218,11 @@ func (rr *remoteRegistry) storeFactoryToCacheDB(cacheKey string, msg *deployCont
 	}
 }
 
-func (rr *remoteRegistry) loadFactoryForGateway(lookupStr string) (*kldmessages.DeployContract, error) {
+func (rr *remoteRegistry) loadFactoryForGateway(lookupStr string, refresh bool) (*kldmessages.DeployContract, error) {
 	if rr.conf.GatewayURLPrefix == "" {
 		return nil, nil
 	}
-	msg, err := rr.loadFactoryFromURL(rr.conf.GatewayURLPrefix, "gateways", lookupStr)
+	msg, err := rr.loadFactoryFromURL(rr.conf.GatewayURLPrefix, "gateways", lookupStr, refresh)
 	if msg != nil {
 		// There is no address on a gateway, so we just return the DeployMsg
 		return &msg.DeployContract, err
@@ -228,11 +230,11 @@ func (rr *remoteRegistry) loadFactoryForGateway(lookupStr string) (*kldmessages.
 	return nil, err
 }
 
-func (rr *remoteRegistry) loadFactoryForInstance(lookupStr string) (*deployContractWithAddress, error) {
+func (rr *remoteRegistry) loadFactoryForInstance(lookupStr string, refresh bool) (*deployContractWithAddress, error) {
 	if rr.conf.InstanceURLPrefix == "" {
 		return nil, nil
 	}
-	return rr.loadFactoryFromURL(rr.conf.InstanceURLPrefix, "instances", lookupStr)
+	return rr.loadFactoryFromURL(rr.conf.InstanceURLPrefix, "instances", lookupStr, refresh)
 }
 
 func (rr *remoteRegistry) registerInstance(lookupStr, address string) error {

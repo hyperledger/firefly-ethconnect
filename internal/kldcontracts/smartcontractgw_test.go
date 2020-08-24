@@ -369,14 +369,16 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	assert.Equal(200, res.Code)
 	json.NewDecoder(res.Body).Decode(&returnedABI)
 	assert.Equal("set", returnedABI.Methods["set"].Name)
+	assert.False(rr.refreshCapture)
 
-	req = httptest.NewRequest("GET", "/i/test?openapi", bytes.NewReader([]byte{}))
+	req = httptest.NewRequest("GET", "/i/test?openapi&refresh", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	returnedSwagger = spec.Swagger{}
 	assert.Equal(200, res.Code)
 	json.NewDecoder(res.Body).Decode(&returnedSwagger)
 	assert.Equal("/api/v1/i/test", returnedSwagger.BasePath)
+	assert.True(rr.refreshCapture)
 
 	req = httptest.NewRequest("GET", "/instances/test", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
@@ -437,6 +439,48 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 
 	scgw.Shutdown()
 }
+
+func TestRemoteRegistryBadBI(t *testing.T) {
+	assert := assert.New(t)
+
+	scgw, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			BaseURL: "http://localhost/api/v1",
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
+		nil, nil, nil,
+	)
+	iMsg := newTestDeployMsg("0123456789abcdef0123456789abcdef01234567")
+	iMsg.Headers.ID = "xyz12345"
+	// Append two fallback methods - that is invalid
+	iMsg.ABI = append(iMsg.ABI, kldbind.ABIElementMarshaling{
+		Type: "fallback",
+	})
+	iMsg.ABI = append(iMsg.ABI, kldbind.ABIElementMarshaling{
+		Type: "fallback",
+	})
+	rr := &mockRR{
+		deployMsg: iMsg,
+	}
+
+	scgw.(*smartContractGW).rr = rr
+
+	router := &httprouter.Router{}
+	scgw.AddRoutes(router)
+
+	req := httptest.NewRequest("GET", "/g/test?swagger", bytes.NewReader([]byte{}))
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	var msg map[string]interface{}
+	assert.Equal(400, res.Code)
+	json.NewDecoder(res.Body).Decode(&msg)
+	assert.Regexp("Invalid ABI", msg["error"])
+
+	scgw.Shutdown()
+}
+
 func TestRegisterContractBadAddress(t *testing.T) {
 	// writes real files and tests end to end
 	assert := assert.New(t)

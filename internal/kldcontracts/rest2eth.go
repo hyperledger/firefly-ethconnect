@@ -421,6 +421,8 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 	queryParams := req.Form
 	for i, abiParam := range c.abiMethod.Inputs {
 		argName := abiParam.Name
+		// If the ABI input has one or more un-named parameters, look for default names that are passed in.
+		// Unnamed Input params should be named: input, input1, input2...
 		if argName == "" {
 			argName = "input"
 			if i != 0 {

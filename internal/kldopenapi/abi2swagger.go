@@ -490,6 +490,8 @@ func (c *ABI2Swagger) buildGETPath(outputSchema string, inst bool, name string, 
 		if varDetails != "" {
 			varDetails = ": " + desc
 		}
+		// If the ABI input has one or more un-named parameters, assign default names for each function parameter.
+		// Unnamed Input params should be named: input, input1, input2...
 		if input.Name == "" {
 			input.Name = "input"
 			if idx != 0 {
@@ -683,6 +685,8 @@ func (c *ABI2Swagger) buildArgumentsDefinition(defs map[string]spec.Schema, name
 
 	for idx, arg := range args {
 		argName := arg.Name
+		// If the ABI input has one or more un-named parameters, set default names for such function parameters.
+		// Unnamed Input params should be named: input, input1, input2...
 		if argName == "" {
 			argName = argType
 			if idx != 0 {

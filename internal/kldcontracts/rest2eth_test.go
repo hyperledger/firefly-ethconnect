@@ -982,7 +982,7 @@ func TestSendTransactionUnnamedParamsABI(t *testing.T) {
 						{Name: "", Type: "uint256", InternalType: "uint256"},
 					},
 				},
-			}, // completely empty ABI is ok
+			},
 		},
 	}
 	_, _, router := newTestREST2EthCustomAbiLoader(dispatcher, abiLoader)

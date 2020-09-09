@@ -40,7 +40,9 @@ type ABI2Swagger struct {
 }
 
 const (
-	kaleidoAppCredential = "KaleidoAppCredential"
+	kaleidoAppCredential   = "KaleidoAppCredential"
+	inputSchemaNameSuffix  = "_inputs"
+	outputSchemaNameSuffix = "_outputs"
 )
 
 // NewABI2Swagger constructor
@@ -173,8 +175,8 @@ func (c *ABI2Swagger) buildMethodDefinitionsAndPath(inst bool, defs map[string]s
 		methodSig += " [read only]"
 	}
 
-	inputSchema := url.QueryEscape(name) + "_inputs"
-	outputSchema := url.QueryEscape(name) + "_outputs"
+	inputSchema := url.QueryEscape(name) + inputSchemaNameSuffix
+	outputSchema := url.QueryEscape(name) + outputSchemaNameSuffix
 	c.buildArgumentsDefinition(defs, outputSchema, method.Outputs, methodDocs)
 	pathItem := spec.PathItem{}
 	if !constructor {
@@ -482,11 +484,17 @@ func (c *ABI2Swagger) buildGETPath(outputSchema string, inst bool, name string, 
 	if !inst {
 		parameters = append(parameters, c.getAddressParam())
 	}
-	for _, input := range method.Inputs {
+	for idx, input := range method.Inputs {
 		desc := devdocs.Get("params." + input.Name).String()
 		varDetails := desc
 		if varDetails != "" {
 			varDetails = ": " + desc
+		}
+		if input.Name == "" {
+			input.Name = "input"
+			if idx != 0 {
+				input.Name += strconv.Itoa(idx)
+			}
 		}
 		parameters = append(parameters, spec.Parameter{
 			ParamProps: spec.ParamProps{
@@ -666,11 +674,17 @@ func (c *ABI2Swagger) buildArgumentsDefinition(defs map[string]spec.Schema, name
 		},
 	}
 	defs[name] = s
+	argType := ""
+	if strings.HasSuffix(name, inputSchemaNameSuffix) {
+		argType = "input"
+	} else if strings.HasSuffix(name, outputSchemaNameSuffix) {
+		argType = "output"
+	}
 
 	for idx, arg := range args {
 		argName := arg.Name
 		if argName == "" {
-			argName = "output"
+			argName = argType
 			if idx != 0 {
 				argName += strconv.Itoa(idx)
 			}

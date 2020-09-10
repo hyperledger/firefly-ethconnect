@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -419,12 +420,21 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 	c.msgParams = make([]interface{}, len(c.abiMethod.Inputs))
 	queryParams := req.Form
 	for i, abiParam := range c.abiMethod.Inputs {
-		if bv, exists := c.body[abiParam.Name]; exists {
+		argName := abiParam.Name
+		// If the ABI input has one or more un-named parameters, look for default names that are passed in.
+		// Unnamed Input params should be named: input, input1, input2...
+		if argName == "" {
+			argName = "input"
+			if i != 0 {
+				argName += strconv.Itoa(i)
+			}
+		}
+		if bv, exists := c.body[argName]; exists {
 			c.msgParams[i] = bv
-		} else if vs := queryParams[abiParam.Name]; len(vs) > 0 {
+		} else if vs := queryParams[argName]; len(vs) > 0 {
 			c.msgParams[i] = vs[0]
 		} else {
-			err = klderrors.Errorf(klderrors.RESTGatewayMissingParameter, abiParam.Name, c.abiMethod.Name)
+			err = klderrors.Errorf(klderrors.RESTGatewayMissingParameter, argName, c.abiMethod.Name)
 			r.restErrReply(res, req, err, 400)
 			return
 		}

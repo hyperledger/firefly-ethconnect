@@ -963,6 +963,40 @@ func TestSendTransactionDefaultConstructorABI(t *testing.T) {
 	assert.Equal(202, res.Result().StatusCode)
 }
 
+func TestSendTransactionUnnamedParamsABI(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+	dispatcher := &mockREST2EthDispatcher{
+		asyncDispatchReply: &kldmessages.AsyncSentMsg{
+			Sent:    true,
+			Request: "request1",
+		},
+	}
+	abiLoader := &mockABILoader{
+		deployMsg: &kldmessages.DeployContract{
+			ABI: kldbind.ABIMarshaling{
+				{
+					Name: "unnamedparamsmethod", Type: "function", Inputs: []kldbind.ABIArgumentMarshaling{
+						{Name: "", Type: "uint256", InternalType: "uint256"},
+						{Name: "", Type: "uint256", InternalType: "uint256"},
+					},
+				},
+			},
+		},
+	}
+	_, _, router := newTestREST2EthCustomAbiLoader(dispatcher, abiLoader)
+	req := httptest.NewRequest("POST", "/abis/testabi/0x29fb3f4f7cc82a1456903a506e88cdd63b1d74e8/unnamedparamsmethod", bytes.NewReader([]byte{}))
+	req.Header.Add("x-kaleido-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
+	q := req.URL.Query()
+	q.Add("input", "105")
+	q.Add("input1", "106")
+	req.URL.RawQuery = q.Encode()
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(202, res.Result().StatusCode)
+}
+
 func TestSendTransactionBadFrom(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()

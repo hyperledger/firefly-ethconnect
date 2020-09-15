@@ -556,6 +556,9 @@ func TestSolidityBytesParamConversion(t *testing.T) {
 	testComplexParam(t, "bytes memory", []string{"ff"}, "Invalid entry in number array")
 	testComplexParam(t, "bytes1", "", "cannot use \\[0\\]uint8 as type \\[1\\]uint8 as argument")
 	testComplexParam(t, "bytes16", "0xAA983AD2a0", "cannot use \\[5\\]uint8 as type \\[16\\]uint8 as argument")
+	// Below test fails since ethconnect expects bytes32 to be a hex string, should be enhanced to accept plain strings as well
+	testComplexParam(t, "bytes32", "john", "cannot use \\[0\\]uint8 as type \\[32\\]uint8 as argument")
+	testComplexParam(t, "bytes32", "0x223df1450ad1f2fe995df3df25df18fc7e58b86c87f3b799b8911da1b06d4cef", "")
 }
 
 func TestSolidityArrayOfByteArraysParamConversion(t *testing.T) {

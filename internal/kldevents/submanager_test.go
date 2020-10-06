@@ -47,6 +47,17 @@ func (m *mockRPC) CallContext(ctx context.Context, result interface{}, method st
 	return m.mockError
 }
 
+type mockSocketIo struct {
+	capturedNamespace string
+	sender            chan interface{}
+	receiver          chan error
+}
+
+func (m *mockSocketIo) GetChannels(namespace string) (chan<- interface{}, <-chan error) {
+	m.capturedNamespace = namespace
+	return m.sender, m.receiver
+}
+
 func tempdir(t *testing.T) string {
 	dir, _ := ioutil.TempDir("", "kld")
 	t.Logf("tmpdir/create: %s", dir)
@@ -60,7 +71,10 @@ func cleanup(t *testing.T, dir string) {
 
 func newTestSubscriptionManager() *subscriptionMGR {
 	smconf := &SubscriptionManagerConf{}
-	sm := NewSubscriptionManager(smconf, nil).(*subscriptionMGR)
+	sm := NewSubscriptionManager(smconf, nil, &mockSocketIo{
+		sender:   make(chan interface{}),
+		receiver: make(chan error),
+	}).(*subscriptionMGR)
 	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
 	sm.db = kldkvstore.NewMockKV(nil)
 	sm.config().WebhooksAllowPrivateIPs = true
@@ -120,7 +134,7 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 
 	stream, err := sm.AddStream(ctx, &StreamInfo{
 		Type:    "webhook",
-		Webhook: &webhookAction{URL: "http://test.invalid"},
+		Webhook: &webhookActionInfo{URL: "http://test.invalid"},
 	})
 	assert.NoError(err)
 
@@ -195,7 +209,7 @@ func TestActionChildCleanup(t *testing.T) {
 	ctx := context.Background()
 	stream, err := sm.AddStream(ctx, &StreamInfo{
 		Type:    "webhook",
-		Webhook: &webhookAction{URL: "http://test.invalid"},
+		Webhook: &webhookActionInfo{URL: "http://test.invalid"},
 	})
 	assert.NoError(err)
 
@@ -224,7 +238,7 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 
 	stream, err := sm.AddStream(ctx, &StreamInfo{
 		Type:    "webhook",
-		Webhook: &webhookAction{URL: "http://test.invalid"},
+		Webhook: &webhookActionInfo{URL: "http://test.invalid"},
 	})
 	assert.NoError(err)
 
@@ -255,7 +269,7 @@ func TestResetSubscriptionErrors(t *testing.T) {
 	assert.EqualError(err, "Unknown action type 'random'")
 	_, err = sm.AddStream(ctx, &StreamInfo{
 		Type:    "webhook",
-		Webhook: &webhookAction{URL: "http://test.invalid"},
+		Webhook: &webhookActionInfo{URL: "http://test.invalid"},
 	})
 	assert.EqualError(err, "Failed to store stream: pop")
 	sm.streams["teststream"] = newTestStream()

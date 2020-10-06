@@ -121,6 +121,12 @@ const (
 	EventStreamsLogDecodeInsufficientTopics = "%s: Ran out of topics for indexed fields at field %d of %s"
 	// EventStreamsLogDecodeData RLP decoding of the data section of the logs failed
 	EventStreamsLogDecodeData = "%s: Failed to parse RLP data from event: %s"
+	// EventStreamsSocketIoNotConfigured Socket.io not configured
+	EventStreamsSocketIoNotConfigured = "Socket.io listener not configured"
+	// EventStreamsSocketIoInterruptedSend When we are interrupted waiting for a viable connection to send down
+	EventStreamsSocketIoInterruptedSend = "Interrupted waiting for socket.io connection to send event"
+	// EventStreamsSocketIoInterruptedReceive When we are interrupted waiting for a viable connection to send down
+	EventStreamsSocketIoInterruptedReceive = "Interrupted waiting for socket.io acknowledgment"
 
 	// KakfaProducerConfirmMsgUnknown we received a confirmation callback, but we aren't expecting it
 	KakfaProducerConfirmMsgUnknown = "Received confirmation for message not in in-flight map: %s"

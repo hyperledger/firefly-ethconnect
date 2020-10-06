@@ -32,9 +32,9 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
-	"github.com/kaleido-io/ethconnect/internal/kldsio"
 	"github.com/kaleido-io/ethconnect/internal/kldtx"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
+	"github.com/kaleido-io/ethconnect/internal/kldws"
 
 	"github.com/Shopify/sarama"
 	"github.com/julienschmidt/httprouter"
@@ -89,7 +89,7 @@ type RESTGateway struct {
 	receipts        *receiptStore
 	webhooks        *webhooks
 	smartContractGW kldcontracts.SmartContractGateway
-	webSocketServer  klswebsockets.WebSocketChannels
+	ws              kldws.WebSocketServer
 }
 
 // Conf gets the config for this bridge
@@ -121,12 +121,12 @@ func (g *RESTGateway) ValidateConf() (err error) {
 // NewRESTGateway constructor
 func NewRESTGateway(printYAML *bool) (g *RESTGateway) {
 	g = &RESTGateway{
-		printYAML:      printYAML,
-		sendCond:       sync.NewCond(&sync.Mutex{}),
-		pendingMsgs:    make(map[string]bool),
-		successMsgs:    make(map[string]*sarama.ProducerMessage),
-		failedMsgs:     make(map[string]error),
-		webSocketServer: kldsio.NewwebSocketServer(),
+		printYAML:   printYAML,
+		sendCond:    sync.NewCond(&sync.Mutex{}),
+		pendingMsgs: make(map[string]bool),
+		successMsgs: make(map[string]*sarama.ProducerMessage),
+		failedMsgs:  make(map[string]error),
+		ws:          kldws.NewWebSocketServer(),
 	}
 	return
 }
@@ -254,7 +254,7 @@ func (g *RESTGateway) Start() (err error) {
 	}
 
 	if g.conf.OpenAPI.StoragePath != "" {
-		g.smartContractGW, err = kldcontracts.NewSmartContractGateway(&g.conf.OpenAPI, &g.conf.TxnProcessorConf, rpcClient, processor, g, g.webSocketServer)
+		g.smartContractGW, err = kldcontracts.NewSmartContractGateway(&g.conf.OpenAPI, &g.conf.TxnProcessorConf, rpcClient, processor, g, g.ws)
 		if err != nil {
 			return err
 		}

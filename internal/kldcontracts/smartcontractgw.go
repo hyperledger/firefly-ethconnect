@@ -131,7 +131,7 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 }
 
 // NewSmartContractGateway construtor
-func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *kldtx.TxnProcessorConf, rpc kldeth.RPCClient, processor kldtx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher, wsChannels kldws.WebSocketChannels) (SmartContractGateway, error) {
+func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *kldtx.TxnProcessorConf, rpc kldeth.RPCClient, processor kldtx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher, ws kldws.WebSocketServer) (SmartContractGateway, error) {
 	var baseURL *url.URL
 	var err error
 	if conf.BaseURL != "" {
@@ -156,7 +156,7 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *kldtx.TxnP
 			OrionPrivateAPI:  txnConf.OrionPrivateAPIS,
 			BasicAuth:        true,
 		},
-		ws: kldws.NewWebSocketServer(),
+		ws: ws,
 	}
 	if err = gw.rr.init(); err != nil {
 		return nil, err

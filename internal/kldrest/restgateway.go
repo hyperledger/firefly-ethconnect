@@ -26,17 +26,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kaleido-io/ethconnect/internal/kldcontracts"
-	"github.com/kaleido-io/ethconnect/internal/kldtx"
-
-	"github.com/Shopify/sarama"
-	"github.com/julienschmidt/httprouter"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
+	"github.com/kaleido-io/ethconnect/internal/kldcontracts"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldkafka"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+	"github.com/kaleido-io/ethconnect/internal/kldsio"
+	"github.com/kaleido-io/ethconnect/internal/kldtx"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
+
+	"github.com/Shopify/sarama"
+	"github.com/julienschmidt/httprouter"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -88,6 +89,7 @@ type RESTGateway struct {
 	receipts        *receiptStore
 	webhooks        *webhooks
 	smartContractGW kldcontracts.SmartContractGateway
+	socketIoServer  kldsio.SocketIoServerListener
 }
 
 // Conf gets the config for this bridge
@@ -119,11 +121,12 @@ func (g *RESTGateway) ValidateConf() (err error) {
 // NewRESTGateway constructor
 func NewRESTGateway(printYAML *bool) (g *RESTGateway) {
 	g = &RESTGateway{
-		printYAML:   printYAML,
-		sendCond:    sync.NewCond(&sync.Mutex{}),
-		pendingMsgs: make(map[string]bool),
-		successMsgs: make(map[string]*sarama.ProducerMessage),
-		failedMsgs:  make(map[string]error),
+		printYAML:      printYAML,
+		sendCond:       sync.NewCond(&sync.Mutex{}),
+		pendingMsgs:    make(map[string]bool),
+		successMsgs:    make(map[string]*sarama.ProducerMessage),
+		failedMsgs:     make(map[string]error),
+		socketIoServer: kldsio.NewSocketIoServer(),
 	}
 	return
 }
@@ -251,7 +254,7 @@ func (g *RESTGateway) Start() (err error) {
 	}
 
 	if g.conf.OpenAPI.StoragePath != "" {
-		g.smartContractGW, err = kldcontracts.NewSmartContractGateway(&g.conf.OpenAPI, &g.conf.TxnProcessorConf, rpcClient, processor, g)
+		g.smartContractGW, err = kldcontracts.NewSmartContractGateway(&g.conf.OpenAPI, &g.conf.TxnProcessorConf, rpcClient, processor, g, g.socketIoServer)
 		if err != nil {
 			return err
 		}

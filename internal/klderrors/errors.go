@@ -127,6 +127,8 @@ const (
 	EventStreamsSocketIoInterruptedSend = "Interrupted waiting for socket.io connection to send event"
 	// EventStreamsSocketIoInterruptedReceive When we are interrupted waiting for a viable connection to send down
 	EventStreamsSocketIoInterruptedReceive = "Interrupted waiting for socket.io acknowledgment"
+	// EventStreamsSocketIoErrorFromClient Error message received from client
+	EventStreamsSocketIoErrorFromClient = "Error received from socket.io client: %s"
 
 	// KakfaProducerConfirmMsgUnknown we received a confirmation callback, but we aren't expecting it
 	KakfaProducerConfirmMsgUnknown = "Received confirmation for message not in in-flight map: %s"

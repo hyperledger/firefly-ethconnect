@@ -16,11 +16,6 @@ package kldevents
 
 import "github.com/kaleido-io/ethconnect/internal/klderrors"
 
-// SocketIoServerListener is provided to allow us to do a blocking send to a namespace that will complete once a client connects on it
-type SocketIoServerListener interface {
-	GetChannels(namespace string) (chan<- interface{}, <-chan error)
-}
-
 type socketIoAction struct {
 	es   *eventStream
 	spec *socketIoActionInfo
@@ -30,6 +25,7 @@ func newSocketIoAction(es *eventStream, spec *socketIoActionInfo) (*socketIoActi
 	if es.socketIoListener == nil {
 		return nil, klderrors.Errorf(klderrors.EventStreamsSocketIoNotConfigured)
 	}
+	es.socketIoListener.RegisterNamespace(spec.Namespace)
 	return &socketIoAction{
 		es:   es,
 		spec: spec,

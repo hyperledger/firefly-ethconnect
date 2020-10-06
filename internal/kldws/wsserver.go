@@ -75,6 +75,16 @@ func (s *webSocketServer) handler(w http.ResponseWriter, r *http.Request, p http
 	s.connections[c.id] = c
 }
 
+func (s *webSocketServer) cycleTopic(t *webSocketTopic) {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+
+	// When a connection that was listening on a topic closes, we need to wake anyone
+	// that was listening for a response
+	close(t.receiverChannel)
+	t.receiverChannel = make(chan error)
+}
+
 func (s *webSocketServer) connectionClosed(c *webSocketConnection) {
 	s.mux.Lock()
 	defer s.mux.Unlock()

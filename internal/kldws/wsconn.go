@@ -27,13 +27,14 @@ import (
 )
 
 type webSocketConnection struct {
-	id      string
-	server  *webSocketServer
-	conn    *ws.Conn
-	mux     sync.Mutex
-	closed  bool
-	topics  chan *webSocketTopic
-	receive chan error
+	id       string
+	server   *webSocketServer
+	conn     *ws.Conn
+	mux      sync.Mutex
+	closed   bool
+	topics   map[string]*webSocketTopic
+	newTopic chan bool
+	receive  chan error
 }
 
 type webSocketCommandMessage struct {
@@ -44,11 +45,12 @@ type webSocketCommandMessage struct {
 
 func newConnection(server *webSocketServer, conn *ws.Conn) *webSocketConnection {
 	wsc := &webSocketConnection{
-		id:      kldutils.UUIDv4(),
-		server:  server,
-		conn:    conn,
-		topics:  make(chan *webSocketTopic),
-		receive: make(chan error),
+		id:       kldutils.UUIDv4(),
+		server:   server,
+		conn:     conn,
+		newTopic: make(chan bool),
+		topics:   make(map[string]*webSocketTopic),
+		receive:  make(chan error),
 	}
 	go wsc.listen()
 	go wsc.sender()
@@ -57,28 +59,33 @@ func newConnection(server *webSocketServer, conn *ws.Conn) *webSocketConnection 
 
 func (c *webSocketConnection) close() {
 	c.mux.Lock()
-	defer c.mux.Unlock()
 	if !c.closed {
 		c.closed = true
 		c.conn.Close()
 		close(c.receive)
-		close(c.topics)
-		c.server.connectionClosed(c)
-		log.Infof("WS/%s: Disconnected", c.id)
+		close(c.newTopic)
 	}
+	c.mux.Unlock()
+
+	for _, t := range c.topics {
+		c.server.cycleTopic(t)
+	}
+	c.server.connectionClosed(c)
+	log.Infof("WS/%s: Disconnected", c.id)
 }
 
 func (c *webSocketConnection) sender() {
 	defer c.close()
-	topics := make(map[string]*webSocketTopic)
 	buildCases := func() []reflect.SelectCase {
-		cases := make([]reflect.SelectCase, len(topics)+1)
+		c.mux.Lock()
+		defer c.mux.Unlock()
+		cases := make([]reflect.SelectCase, len(c.topics)+1)
 		i := 0
-		for _, t := range topics {
+		for _, t := range c.topics {
 			cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(t.senderChannel)}
 			i++
 		}
-		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(c.topics)}
+		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(c.newTopic)}
 		return cases
 	}
 	cases := buildCases()
@@ -91,14 +98,19 @@ func (c *webSocketConnection) sender() {
 
 		if chosen == len(cases)-1 {
 			// Addition of a new topic
-			t := value.Interface().(*webSocketTopic)
-			topics[t.topic] = t
 			cases = buildCases()
 		} else {
 			// Message from one of the existing topics
 			c.conn.WriteJSON(value.Interface())
 		}
 	}
+}
+
+func (c *webSocketConnection) listenTopic(t *webSocketTopic) {
+	c.mux.Lock()
+	c.topics[t.topic] = t
+	c.mux.Unlock()
+	c.newTopic <- true
 }
 
 func (c *webSocketConnection) listen() {
@@ -116,7 +128,7 @@ func (c *webSocketConnection) listen() {
 		t := c.server.getTopic(msg.Topic)
 		switch msg.Type {
 		case "listen":
-			c.topics <- t
+			c.listenTopic(t)
 		case "ack":
 			c.handleAckOrError(t, nil)
 		case "error":

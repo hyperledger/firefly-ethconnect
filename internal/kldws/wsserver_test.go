@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
 	"time"
 
@@ -135,6 +136,39 @@ func TestConnectTopicIsolation(t *testing.T) {
 	err = <-r2
 	assert.NoError(err)
 
+	w.Close()
+
+}
+
+func TestConnectAbandonRequest(t *testing.T) {
+	assert := assert.New(t)
+
+	w, ts := newTestWebSocketServer()
+	defer ts.Close()
+
+	u, err := url.Parse(ts.URL)
+	u.Scheme = "ws"
+	u.Path = "/ws"
+	c, _, err := ws.DefaultDialer.Dial(u.String(), nil)
+	assert.NoError(err)
+
+	c.WriteJSON(&webSocketCommandMessage{
+		Type: "listen",
+	})
+	_, r := w.GetChannels("")
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		<-r
+		wg.Done()
+	}()
+
+	// Close the client while we've got an active read stream
+	c.Close()
+
+	// We whould find the read stream closes out
+	wg.Wait()
 	w.Close()
 
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+	"github.com/kaleido-io/ethconnect/internal/kldsio"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -85,7 +86,7 @@ type subscriptionMGR struct {
 	subscriptions    map[string]*subscription
 	streams          map[string]*eventStream
 	closed           bool
-	socketIoListener SocketIoServerListener
+	socketIoListener kldsio.SocketIoServerListener
 }
 
 // CobraInitSubscriptionManager standard naming for cobra command params
@@ -96,7 +97,7 @@ func CobraInitSubscriptionManager(cmd *cobra.Command, conf *SubscriptionManagerC
 }
 
 // NewSubscriptionManager construtor
-func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc kldeth.RPCClient, socketIoListener SocketIoServerListener) SubscriptionManager {
+func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc kldeth.RPCClient, socketIoListener kldsio.SocketIoServerListener) SubscriptionManager {
 	sm := &subscriptionMGR{
 		conf:             conf,
 		rpc:              rpc,

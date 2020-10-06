@@ -48,9 +48,14 @@ func (m *mockRPC) CallContext(ctx context.Context, result interface{}, method st
 }
 
 type mockSocketIo struct {
-	capturedNamespace string
-	sender            chan interface{}
-	receiver          chan error
+	registeredNamespace string
+	capturedNamespace   string
+	sender              chan interface{}
+	receiver            chan error
+}
+
+func (m *mockSocketIo) RegisterNamespace(namespace string) {
+	m.registeredNamespace = namespace
 }
 
 func (m *mockSocketIo) GetChannels(namespace string) (chan<- interface{}, <-chan error) {

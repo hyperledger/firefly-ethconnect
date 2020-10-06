@@ -27,6 +27,7 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
+	"github.com/kaleido-io/ethconnect/internal/kldsio"
 
 	lru "github.com/hashicorp/golang-lru"
 	log "github.com/sirupsen/logrus"
@@ -99,7 +100,7 @@ type eventStream struct {
 	updateWG            *sync.WaitGroup // Wait group for the go routines to reply back after they have stopped
 	blockTimestampCache *lru.Cache
 	action              eventStreamAction
-	socketIoListener    SocketIoServerListener
+	socketIoListener    kldsio.SocketIoServerListener
 }
 
 type eventStreamAction interface {
@@ -110,7 +111,7 @@ type eventStreamAction interface {
 // off the event batch processor, and blockHWM will be
 // initialied to that supplied (zero on initial, or the
 // value from the checkpoint)
-func newEventStream(sm subscriptionManager, spec *StreamInfo, socketIoListener SocketIoServerListener) (a *eventStream, err error) {
+func newEventStream(sm subscriptionManager, spec *StreamInfo, socketIoListener kldsio.SocketIoServerListener) (a *eventStream, err error) {
 	if spec == nil || spec.GetID() == "" {
 		return nil, klderrors.Errorf(klderrors.EventStreamsNoID)
 	}

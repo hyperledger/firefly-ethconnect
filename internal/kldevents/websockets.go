@@ -16,34 +16,33 @@ package kldevents
 
 import "github.com/kaleido-io/ethconnect/internal/klderrors"
 
-type socketIoAction struct {
+type webSocketAction struct {
 	es   *eventStream
-	spec *socketIoActionInfo
+	spec *webSocketActionInfo
 }
 
-func newSocketIoAction(es *eventStream, spec *socketIoActionInfo) (*socketIoAction, error) {
-	if es.socketIoListener == nil {
-		return nil, klderrors.Errorf(klderrors.EventStreamsSocketIoNotConfigured)
+func newWebSocketAction(es *eventStream, spec *webSocketActionInfo) (*webSocketAction, error) {
+	if es.wsChannels == nil {
+		return nil, klderrors.Errorf(klderrors.EventStreamsWebSocketNotConfigured)
 	}
-	es.socketIoListener.RegisterNamespace(spec.Namespace)
-	return &socketIoAction{
+	return &webSocketAction{
 		es:   es,
 		spec: spec,
 	}, nil
 }
 
 // attemptBatch attempts to deliver a batch over socket IO
-func (w *socketIoAction) attemptBatch(batchNumber, attempt uint64, events []*eventData) error {
+func (w *webSocketAction) attemptBatch(batchNumber, attempt uint64, events []*eventData) error {
 
 	// Get a blocking channel to send and receive on our chosen namespace
-	sender, receiver := w.es.socketIoListener.GetChannels(w.spec.Namespace)
+	sender, receiver := w.es.wsChannels.GetChannels(w.spec.Topic)
 
 	// Sent the batch of events
 	select {
 	case sender <- events:
 		break
 	case <-w.es.updateInterrupt:
-		return klderrors.Errorf(klderrors.EventStreamsSocketIoInterruptedSend)
+		return klderrors.Errorf(klderrors.EventStreamsWebSocketInterruptedSend)
 	}
 
 	// Wait for the next ack or exception
@@ -52,7 +51,7 @@ func (w *socketIoAction) attemptBatch(batchNumber, attempt uint64, events []*eve
 	case err = <-receiver:
 		break
 	case <-w.es.updateInterrupt:
-		return klderrors.Errorf(klderrors.EventStreamsSocketIoInterruptedReceive)
+		return klderrors.Errorf(klderrors.EventStreamsWebSocketInterruptedReceive)
 	}
 
 	// Pass back any exception from the client

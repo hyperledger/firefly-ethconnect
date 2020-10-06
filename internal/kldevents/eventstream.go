@@ -27,7 +27,7 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
-	"github.com/kaleido-io/ethconnect/internal/kldsio"
+	"github.com/kaleido-io/ethconnect/internal/kldws"
 
 	lru "github.com/hashicorp/golang-lru"
 	log "github.com/sirupsen/logrus"
@@ -53,20 +53,20 @@ const (
 // StreamInfo configures the stream to perform an action for each event
 type StreamInfo struct {
 	kldmessages.TimeSorted
-	ID                   string              `json:"id"`
-	Name                 string              `json:"name,omitempty"`
-	Path                 string              `json:"path"`
-	Suspended            bool                `json:"suspended"`
-	Type                 string              `json:"type,omitempty"`
-	BatchSize            uint64              `json:"batchSize,omitempty"`
-	BatchTimeoutMS       uint64              `json:"batchTimeoutMS,omitempty"`
-	ErrorHandling        string              `json:"errorHandling,omitempty"`
-	RetryTimeoutSec      uint64              `json:"retryTimeoutSec,omitempty"`
-	BlockedRetryDelaySec uint64              `json:"blockedReryDelaySec,omitempty"`
-	Webhook              *webhookActionInfo  `json:"webhook,omitempty"`
-	SocketIO             *socketIoActionInfo `json:"socketio,omitempty"`
-	Timestamps           bool                `json:"timestamps,omitempty"` // Include block timestamps in the events generated
-	TimestampCacheSize   int                 `json:"timestampCacheSize,omitempty"`
+	ID                   string               `json:"id"`
+	Name                 string               `json:"name,omitempty"`
+	Path                 string               `json:"path"`
+	Suspended            bool                 `json:"suspended"`
+	Type                 string               `json:"type,omitempty"`
+	BatchSize            uint64               `json:"batchSize,omitempty"`
+	BatchTimeoutMS       uint64               `json:"batchTimeoutMS,omitempty"`
+	ErrorHandling        string               `json:"errorHandling,omitempty"`
+	RetryTimeoutSec      uint64               `json:"retryTimeoutSec,omitempty"`
+	BlockedRetryDelaySec uint64               `json:"blockedReryDelaySec,omitempty"`
+	Webhook              *webhookActionInfo   `json:"webhook,omitempty"`
+	WebSocket            *webSocketActionInfo `json:"websocket,omitempty"`
+	Timestamps           bool                 `json:"timestamps,omitempty"` // Include block timestamps in the events generated
+	TimestampCacheSize   int                  `json:"timestampCacheSize,omitempty"`
 }
 
 type webhookActionInfo struct {
@@ -76,8 +76,8 @@ type webhookActionInfo struct {
 	RequestTimeoutSec uint32            `json:"requestTimeoutSec,omitempty"`
 }
 
-type socketIoActionInfo struct {
-	Namespace string `json:"namespace,omitempty"`
+type webSocketActionInfo struct {
+	Topic string `json:"topic,omitempty"`
 }
 
 type eventStream struct {
@@ -100,7 +100,7 @@ type eventStream struct {
 	updateWG            *sync.WaitGroup // Wait group for the go routines to reply back after they have stopped
 	blockTimestampCache *lru.Cache
 	action              eventStreamAction
-	socketIoListener    kldsio.SocketIoServerListener
+	wsChannels          kldws.WebSocketChannels
 }
 
 type eventStreamAction interface {
@@ -111,7 +111,7 @@ type eventStreamAction interface {
 // off the event batch processor, and blockHWM will be
 // initialied to that supplied (zero on initial, or the
 // value from the checkpoint)
-func newEventStream(sm subscriptionManager, spec *StreamInfo, socketIoListener kldsio.SocketIoServerListener) (a *eventStream, err error) {
+func newEventStream(sm subscriptionManager, spec *StreamInfo, wsChannels kldws.WebSocketChannels) (a *eventStream, err error) {
 	if spec == nil || spec.GetID() == "" {
 		return nil, klderrors.Errorf(klderrors.EventStreamsNoID)
 	}
@@ -146,7 +146,7 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo, socketIoListener k
 		initialRetryDelay: DefaultExponentialBackoffInitial,
 		backoffFactor:     DefaultExponentialBackoffFactor,
 		pollingInterval:   time.Duration(sm.config().EventPollingIntervalSec) * time.Second,
-		socketIoListener:  socketIoListener,
+		wsChannels:        wsChannels,
 	}
 
 	if a.blockTimestampCache, err = lru.New(spec.TimestampCacheSize); err != nil {
@@ -163,8 +163,8 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo, socketIoListener k
 		if a.action, err = newWebhookAction(a, spec.Webhook); err != nil {
 			return nil, err
 		}
-	case "socketio":
-		if a.action, err = newSocketIoAction(a, spec.SocketIO); err != nil {
+	case "websocket":
+		if a.action, err = newWebSocketAction(a, spec.WebSocket); err != nil {
 			return nil, err
 		}
 	default:

@@ -26,7 +26,7 @@ require (
 	github.com/go-openapi/swag v0.19.9 // indirect
 	github.com/golang/mock v1.4.3
 	github.com/googollee/go-socket.io v1.4.4
-	github.com/gorilla/websocket v1.4.2 // indirect
+	github.com/gorilla/websocket v1.4.2
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/icza/dyno v0.0.0-20200205103839-49cb13720835
 	github.com/julienschmidt/httprouter v1.3.0
@@ -71,6 +71,7 @@ require (
 	golang.org/x/net v0.0.0-20200707034311-ab3426394381 // indirect
 	golang.org/x/sys v0.0.0-20200728102440-3e129f6d46b1 // indirect
 	golang.org/x/text v0.3.3
+	google.golang.org/appengine v1.4.0
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	gopkg.in/yaml.v2 v2.3.0
 )

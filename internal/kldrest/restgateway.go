@@ -89,7 +89,7 @@ type RESTGateway struct {
 	receipts        *receiptStore
 	webhooks        *webhooks
 	smartContractGW kldcontracts.SmartContractGateway
-	socketIoServer  kldsio.SocketIoServerListener
+	webSocketServer  klswebsockets.WebSocketChannels
 }
 
 // Conf gets the config for this bridge
@@ -126,7 +126,7 @@ func NewRESTGateway(printYAML *bool) (g *RESTGateway) {
 		pendingMsgs:    make(map[string]bool),
 		successMsgs:    make(map[string]*sarama.ProducerMessage),
 		failedMsgs:     make(map[string]error),
-		socketIoServer: kldsio.NewSocketIoServer(),
+		webSocketServer: kldsio.NewwebSocketServer(),
 	}
 	return
 }
@@ -254,7 +254,7 @@ func (g *RESTGateway) Start() (err error) {
 	}
 
 	if g.conf.OpenAPI.StoragePath != "" {
-		g.smartContractGW, err = kldcontracts.NewSmartContractGateway(&g.conf.OpenAPI, &g.conf.TxnProcessorConf, rpcClient, processor, g, g.socketIoServer)
+		g.smartContractGW, err = kldcontracts.NewSmartContractGateway(&g.conf.OpenAPI, &g.conf.TxnProcessorConf, rpcClient, processor, g, g.webSocketServer)
 		if err != nil {
 			return err
 		}

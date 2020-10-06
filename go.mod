@@ -8,7 +8,6 @@ require (
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/allegro/bigcache v1.2.1 // indirect
-	github.com/ambelovsky/gosf-socketio v0.0.0-20200621194023-a8dfd749dd6f
 	github.com/aristanetworks/goarista v0.0.0-20200727234554-b19cb2abf66c // indirect
 	github.com/btcsuite/btcd v0.20.1-beta // indirect
 	github.com/coreos/go-etcd v2.0.0+incompatible // indirect
@@ -25,7 +24,6 @@ require (
 	github.com/go-openapi/spec v0.19.9
 	github.com/go-openapi/swag v0.19.9 // indirect
 	github.com/golang/mock v1.4.3
-	github.com/googollee/go-socket.io v1.4.4
 	github.com/gorilla/websocket v1.4.2
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/icza/dyno v0.0.0-20200205103839-49cb13720835

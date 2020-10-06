@@ -253,6 +253,8 @@ func (g *RESTGateway) Start() (err error) {
 		processor.Init(rpcClient)
 	}
 
+	g.ws.AddRoutes(router)
+
 	if g.conf.OpenAPI.StoragePath != "" {
 		g.smartContractGW, err = kldcontracts.NewSmartContractGateway(&g.conf.OpenAPI, &g.conf.TxnProcessorConf, rpcClient, processor, g, g.ws)
 		if err != nil {

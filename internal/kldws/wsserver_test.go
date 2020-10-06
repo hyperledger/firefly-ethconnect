@@ -156,10 +156,10 @@ func TestTimeoutProcessing(t *testing.T) {
 		Type: "ack",
 	})
 
-	time.Sleep(5 * time.Millisecond)
-
-	// Closed the connection
-	assert.Equal(0, len(w.connections))
+	// Confirm we close the connection after the timeout pops
+	for len(w.connections) > 0 {
+		time.Sleep(1 * time.Millisecond)
+	}
 
 	w.Close()
 

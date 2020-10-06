@@ -15,15 +15,10 @@
 package kldevents
 
 import (
-	"bytes"
 	"container/list"
 	"context"
-	"crypto/tls"
-	"encoding/json"
-	"io/ioutil"
 	"math/big"
 	"net"
-	"net/http"
 	"net/url"
 	"strings"
 	"sync"
@@ -57,25 +52,31 @@ const (
 // StreamInfo configures the stream to perform an action for each event
 type StreamInfo struct {
 	kldmessages.TimeSorted
-	ID                   string         `json:"id"`
-	Name                 string         `json:"name,omitempty"`
-	Path                 string         `json:"path"`
-	Suspended            bool           `json:"suspended"`
-	Type                 string         `json:"type,omitempty"`
-	BatchSize            uint64         `json:"batchSize,omitempty"`
-	BatchTimeoutMS       uint64         `json:"batchTimeoutMS,omitempty"`
-	ErrorHandling        string         `json:"errorHandling,omitempty"`
-	RetryTimeoutSec      uint64         `json:"retryTimeoutSec,omitempty"`
-	BlockedRetryDelaySec uint64         `json:"blockedReryDelaySec,omitempty"`
-	Webhook              *webhookAction `json:"webhook,omitempty"`
-	Timestamps           bool           `json:"timestamps,omitempty"` // Include block timestamps in the events generated
+	ID                   string              `json:"id"`
+	Name                 string              `json:"name,omitempty"`
+	Path                 string              `json:"path"`
+	Suspended            bool                `json:"suspended"`
+	Type                 string              `json:"type,omitempty"`
+	BatchSize            uint64              `json:"batchSize,omitempty"`
+	BatchTimeoutMS       uint64              `json:"batchTimeoutMS,omitempty"`
+	ErrorHandling        string              `json:"errorHandling,omitempty"`
+	RetryTimeoutSec      uint64              `json:"retryTimeoutSec,omitempty"`
+	BlockedRetryDelaySec uint64              `json:"blockedReryDelaySec,omitempty"`
+	Webhook              *webhookActionInfo  `json:"webhook,omitempty"`
+	SocketIO             *socketIoActionInfo `json:"socketio,omitempty"`
+	Timestamps           bool                `json:"timestamps,omitempty"` // Include block timestamps in the events generated
+	TimestampCacheSize   int                 `json:"timestampCacheSize,omitempty"`
 }
 
-type webhookAction struct {
+type webhookActionInfo struct {
 	URL               string            `json:"url,omitempty"`
 	Headers           map[string]string `json:"headers,omitempty"`
 	TLSkipHostVerify  bool              `json:"tlsSkipHostVerify,omitempty"`
 	RequestTimeoutSec uint32            `json:"requestTimeoutSec,omitempty"`
+}
+
+type socketIoActionInfo struct {
+	Namespace string `json:"namespace,omitempty"`
 }
 
 type eventStream struct {
@@ -97,13 +98,19 @@ type eventStream struct {
 	updateInterrupt     chan struct{}   // a zero-sized struct used only for signaling (hand rolled alternative to context)
 	updateWG            *sync.WaitGroup // Wait group for the go routines to reply back after they have stopped
 	blockTimestampCache *lru.Cache
+	action              eventStreamAction
+	socketIoListener    SocketIoServerListener
+}
+
+type eventStreamAction interface {
+	attemptBatch(batchNumber, attempt uint64, events []*eventData) error
 }
 
 // newEventStream constructor verfies the action is correct, kicks
 // off the event batch processor, and blockHWM will be
 // initialied to that supplied (zero on initial, or the
 // value from the checkpoint)
-func newEventStream(sm subscriptionManager, spec *StreamInfo) (a *eventStream, err error) {
+func newEventStream(sm subscriptionManager, spec *StreamInfo, socketIoListener SocketIoServerListener) (a *eventStream, err error) {
 	if spec == nil || spec.GetID() == "" {
 		return nil, klderrors.Errorf(klderrors.EventStreamsNoID)
 	}
@@ -119,27 +126,13 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo) (a *eventStream, e
 	if spec.BlockedRetryDelaySec == 0 {
 		spec.BlockedRetryDelaySec = 30
 	}
-
-	spec.Type = strings.ToLower(spec.Type)
-	switch spec.Type {
-	case "webhook":
-		if spec.Webhook == nil || spec.Webhook.URL == "" {
-			return nil, klderrors.Errorf(klderrors.EventStreamsWebhookNoURL)
-		}
-		if _, err = url.Parse(spec.Webhook.URL); err != nil {
-			return nil, klderrors.Errorf(klderrors.EventStreamsWebhookInvalidURL)
-		}
-		if spec.Webhook.RequestTimeoutSec == 0 {
-			spec.Webhook.RequestTimeoutSec = 30000
-		}
-	default:
-		return nil, klderrors.Errorf(klderrors.EventStreamsInvalidActionType, spec.Type)
-	}
-
 	if strings.ToLower(spec.ErrorHandling) == ErrorHandlingBlock {
 		spec.ErrorHandling = ErrorHandlingBlock
 	} else {
 		spec.ErrorHandling = ErrorHandlingSkip
+	}
+	if spec.TimestampCacheSize == 0 {
+		spec.TimestampCacheSize = DefaultTimestampCacheSize
 	}
 
 	a = &eventStream{
@@ -152,14 +145,31 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo) (a *eventStream, e
 		initialRetryDelay: DefaultExponentialBackoffInitial,
 		backoffFactor:     DefaultExponentialBackoffFactor,
 		pollingInterval:   time.Duration(sm.config().EventPollingIntervalSec) * time.Second,
+		socketIoListener:  socketIoListener,
 	}
-	if a.blockTimestampCache, err = lru.New(DefaultTimestampCacheSize); err != nil {
-		return nil, klderrors.Errorf(klderrors.EventStreamsCreateStreamResourceErr)
+
+	if a.blockTimestampCache, err = lru.New(spec.TimestampCacheSize); err != nil {
+		return nil, klderrors.Errorf(klderrors.EventStreamsCreateStreamResourceErr, err)
 	}
 	if a.pollingInterval == 0 {
 		// Let's us do this from UTs, without exposing it
 		a.pollingInterval = 10 * time.Millisecond
 	}
+
+	spec.Type = strings.ToLower(spec.Type)
+	switch spec.Type {
+	case "webhook":
+		if a.action, err = newWebhookAction(a, spec.Webhook); err != nil {
+			return nil, err
+		}
+	case "socketio":
+		if a.action, err = newSocketIoAction(a, spec.SocketIO); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, klderrors.Errorf(klderrors.EventStreamsInvalidActionType, spec.Type)
+	}
+
 	a.startEventHandlers(false)
 	return a, nil
 }
@@ -583,10 +593,7 @@ func (a *eventStream) performActionWithRetry(batchNumber uint64, events []*event
 			delay = time.Duration(float64(delay) * a.backoffFactor)
 		}
 		attempt++
-		switch a.spec.Type {
-		case "webhook":
-			err = a.attemptWebhookAction(batchNumber, attempt, events)
-		}
+		err = a.action.attemptBatch(batchNumber, attempt, events)
 		complete = err == nil || endTime.Sub(time.Now()) < 0
 	}
 	return err
@@ -602,68 +609,4 @@ func (a *eventStream) isAddressUnsafe(ip *net.IPAddr) bool {
 			ip4[0] == 10 ||
 			(ip4[0] == 172 && ip4[1] >= 16 && ip4[1] < 32) ||
 			(ip4[0] == 192 && ip4[1] == 168))
-}
-
-// attemptWebhookAction performs a single attempt of a webhook action
-func (a *eventStream) attemptWebhookAction(batchNumber, attempt uint64, events []*eventData) error {
-	// We perform DNS resolution before each attempt, to exclude private IP address ranges from the target
-	u, _ := url.Parse(a.spec.Webhook.URL)
-	addr, err := net.ResolveIPAddr("ip4", u.Hostname())
-	if err != nil {
-		return err
-	}
-	if a.isAddressUnsafe(addr) {
-		err := klderrors.Errorf(klderrors.EventStreamsWebhookProhibitedAddress, u.Hostname())
-		log.Errorf(err.Error())
-		return err
-	}
-	// Set the timeout
-	var transport = &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-			DualStack: true,
-		}).DialContext,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-	transport.TLSClientConfig = &tls.Config{
-		InsecureSkipVerify: a.spec.Webhook.TLSkipHostVerify,
-	}
-	netClient := &http.Client{
-		Timeout:   time.Duration(a.spec.Webhook.RequestTimeoutSec) * time.Second,
-		Transport: transport,
-	}
-	log.Infof("%s: POST --> %s [%s] (attempt=%d)", a.spec.ID, u.String(), addr.String(), attempt)
-	reqBytes, err := json.Marshal(&events)
-	var req *http.Request
-	if err == nil {
-		req, err = http.NewRequest("POST", u.String(), bytes.NewReader(reqBytes))
-	}
-	if err == nil {
-		var res *http.Response
-		req.Header.Set("Content-Type", "application/json")
-		for h, v := range a.spec.Webhook.Headers {
-			req.Header.Set(h, v)
-		}
-		res, err = netClient.Do(req)
-		if err == nil {
-			ok := (res.StatusCode >= 200 && res.StatusCode < 300)
-			log.Infof("%s: POST <-- %s [%d] ok=%t", a.spec.ID, u.String(), res.StatusCode, ok)
-			if !ok || log.IsLevelEnabled(log.DebugLevel) {
-				bodyBytes, _ := ioutil.ReadAll(res.Body)
-				log.Infof("%s: Response body: %s", a.spec.ID, string(bodyBytes))
-			}
-			if !ok {
-				err = klderrors.Errorf(klderrors.EventStreamsWebhookFailedHTTPStatus, a.spec.ID, res.StatusCode)
-			}
-		}
-	}
-	if err != nil {
-		log.Errorf("%s: POST %s failed (attempt=%d): %s", a.spec.ID, u.String(), attempt, err)
-	}
-	return err
 }

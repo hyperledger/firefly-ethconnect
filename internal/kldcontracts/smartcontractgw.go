@@ -104,9 +104,6 @@ func (g *smartContractGW) withEventsAuth(handler httprouter.Handle) httprouter.H
 
 func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	g.r2e.addRoutes(router)
-	if g.ws != nil {
-		g.ws.AddRoutes(router)
-	}
 	router.GET("/contracts", g.listContractsOrABIs)
 	router.GET("/contracts/:address", g.getContractOrABI)
 	router.POST("/abis", g.addABI)
@@ -131,7 +128,7 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 }
 
 // NewSmartContractGateway construtor
-func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *kldtx.TxnProcessorConf, rpc kldeth.RPCClient, processor kldtx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher, ws kldws.WebSocketServer) (SmartContractGateway, error) {
+func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *kldtx.TxnProcessorConf, rpc kldeth.RPCClient, processor kldtx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher, ws kldws.WebSocketChannels) (SmartContractGateway, error) {
 	var baseURL *url.URL
 	var err error
 	if conf.BaseURL != "" {
@@ -179,7 +176,7 @@ type smartContractGW struct {
 	sm                    kldevents.SubscriptionManager
 	rr                    RemoteRegistry
 	r2e                   *rest2eth
-	ws                    kldws.WebSocketServer
+	ws                    kldws.WebSocketChannels
 	contractIndex         map[string]kldmessages.TimeSortable
 	contractRegistrations map[string]*contractInfo
 	idxLock               sync.Mutex

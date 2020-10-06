@@ -107,7 +107,7 @@ func newTestStreamForBatching(spec *StreamInfo, db kldkvstore.KVStore, status ..
 	return sm, sm.streams[stream.ID], svr, eventStream
 }
 
-func newTestStreamForSocketIo(spec *StreamInfo, db kldkvstore.KVStore, status ...int) (*subscriptionMGR, *eventStream, *mockSocketIo) {
+func newTestStreamForWebSocket(spec *StreamInfo, db kldkvstore.KVStore, status ...int) (*subscriptionMGR, *eventStream, *mockWebSocket) {
 	sm := newTestSubscriptionManager()
 	sm.config().EventPollingIntervalSec = 0
 	if db != nil {
@@ -115,7 +115,7 @@ func newTestStreamForSocketIo(spec *StreamInfo, db kldkvstore.KVStore, status ..
 	}
 	ctx := context.Background()
 	stream, _ := sm.AddStream(ctx, spec)
-	return sm, sm.streams[stream.ID], sm.socketIoListener.(*mockSocketIo)
+	return sm, sm.streams[stream.ID], sm.wsChannels.(*mockWebSocket)
 }
 
 func TestBatchTimeout(t *testing.T) {
@@ -383,11 +383,11 @@ func TestBuildup(t *testing.T) {
 
 }
 
-func TestSocketIoUnconfigured(t *testing.T) {
+func TestWebSocketUnconfigured(t *testing.T) {
 	assert := assert.New(t)
 	sm := NewSubscriptionManager(&SubscriptionManagerConf{}, nil, nil).(*subscriptionMGR)
-	_, err := sm.AddStream(context.Background(), &StreamInfo{Type: "socketio"})
-	assert.EqualError(err, "Socket.io listener not configured")
+	_, err := sm.AddStream(context.Background(), &StreamInfo{Type: "websocket"})
+	assert.EqualError(err, "WebSocket listener not configured")
 }
 
 func TestBadTimestampCacheSize(t *testing.T) {
@@ -513,17 +513,17 @@ func TestProcessEventsEnd2EndWebhook(t *testing.T) {
 	sm.Close()
 }
 
-func TestProcessEventsEnd2EndSocketIo(t *testing.T) {
+func TestProcessEventsEnd2EndWebSocket(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)
 	defer cleanup(t, dir)
 
 	db, _ := kldkvstore.NewLDBKeyValueStore(dir)
-	sm, stream, mockSocketIo := newTestStreamForSocketIo(
+	sm, stream, mockWebSocket := newTestStreamForWebSocket(
 		&StreamInfo{
 			BatchSize:  1,
-			Type:       "socketio",
-			SocketIO:   &socketIoActionInfo{},
+			Type:       "websocket",
+			WebSocket:  &webSocketActionInfo{},
 			Timestamps: false,
 		}, db, 200)
 
@@ -535,24 +535,24 @@ func TestProcessEventsEnd2EndSocketIo(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		e1s := (<-mockSocketIo.sender).([]*eventData)
+		e1s := (<-mockWebSocket.sender).([]*eventData)
 		assert.Equal(1, len(e1s))
 		assert.Equal("42", e1s[0].Data["i"])
 		assert.Equal("But what is the question?", e1s[0].Data["m"])
 		assert.Equal("150665", e1s[0].BlockNumber)
-		mockSocketIo.receiver <- nil
-		e2s := (<-mockSocketIo.sender).([]*eventData)
+		mockWebSocket.receiver <- nil
+		e2s := (<-mockWebSocket.sender).([]*eventData)
 		assert.Equal(1, len(e2s))
 		assert.Equal("1977", e2s[0].Data["i"])
 		assert.Equal("A long time ago in a galaxy far, far away....", e2s[0].Data["m"])
 		assert.Equal("150665", e2s[0].BlockNumber)
-		mockSocketIo.receiver <- nil
-		e3s := (<-mockSocketIo.sender).([]*eventData)
+		mockWebSocket.receiver <- nil
+		e3s := (<-mockWebSocket.sender).([]*eventData)
 		assert.Equal(1, len(e3s))
 		assert.Equal("20151021", e3s[0].Data["i"])
 		assert.Equal("1.21 Gigawatts!", e3s[0].Data["m"])
 		assert.Equal("150721", e3s[0].BlockNumber)
-		mockSocketIo.receiver <- nil
+		mockWebSocket.receiver <- nil
 		wg.Done()
 	}()
 	wg.Wait()
@@ -687,16 +687,16 @@ func TestProcessEventsEnd2EndWithReset(t *testing.T) {
 	sm.Close()
 }
 
-func TestInterruptSocketIoSend(t *testing.T) {
-	socketIoListener := &mockSocketIo{
+func TestInterruptWebSocketSend(t *testing.T) {
+	wsChannels := &mockWebSocket{
 		sender:   make(chan interface{}),
 		receiver: make(chan error),
 	}
 	es := &eventStream{
-		socketIoListener: socketIoListener,
-		updateInterrupt:  make(chan struct{}),
+		wsChannels:      wsChannels,
+		updateInterrupt: make(chan struct{}),
 	}
-	sio, _ := newSocketIoAction(es, &socketIoActionInfo{})
+	sio, _ := newWebSocketAction(es, &webSocketActionInfo{})
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
@@ -707,20 +707,20 @@ func TestInterruptSocketIoSend(t *testing.T) {
 	wg.Wait()
 }
 
-func TestInterruptSocketIoReceive(t *testing.T) {
-	socketIoListener := &mockSocketIo{
+func TestInterruptWebSocketReceive(t *testing.T) {
+	wsChannels := &mockWebSocket{
 		sender:   make(chan interface{}),
 		receiver: make(chan error),
 	}
 	es := &eventStream{
-		socketIoListener: socketIoListener,
-		updateInterrupt:  make(chan struct{}),
+		wsChannels:      wsChannels,
+		updateInterrupt: make(chan struct{}),
 	}
-	sio, _ := newSocketIoAction(es, &socketIoActionInfo{})
+	sio, _ := newWebSocketAction(es, &webSocketActionInfo{})
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
-		<-socketIoListener.sender
+		<-wsChannels.sender
 		close(es.updateInterrupt)
 		wg.Done()
 	}()

@@ -40,6 +40,7 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/kldopenapi"
 	"github.com/kaleido-io/ethconnect/internal/kldtx"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
+	"github.com/kaleido-io/ethconnect/internal/kldws"
 	"github.com/spf13/cobra"
 
 	"github.com/ethereum/go-ethereum/common/compiler"
@@ -48,7 +49,6 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldevents"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
-	"github.com/kaleido-io/ethconnect/internal/kldsio"
 	"github.com/mholt/archiver"
 
 	log "github.com/sirupsen/logrus"
@@ -129,7 +129,7 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 }
 
 // NewSmartContractGateway construtor
-func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *kldtx.TxnProcessorConf, rpc kldeth.RPCClient, processor kldtx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher, socketIoListener kldsio.SocketIoServerListener) (SmartContractGateway, error) {
+func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *kldtx.TxnProcessorConf, rpc kldeth.RPCClient, processor kldtx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher, wsChannels kldws.WebSocketChannels) (SmartContractGateway, error) {
 	var baseURL *url.URL
 	var err error
 	if conf.BaseURL != "" {
@@ -160,7 +160,7 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *kldtx.TxnP
 	}
 	syncDispatcher := newSyncDispatcher(processor)
 	if conf.EventLevelDBPath != "" {
-		gw.sm = kldevents.NewSubscriptionManager(&conf.SubscriptionManagerConf, rpc, socketIoListener)
+		gw.sm = kldevents.NewSubscriptionManager(&conf.SubscriptionManagerConf, rpc, wsChannels)
 		err = gw.sm.Init()
 		if err != nil {
 			return nil, klderrors.Errorf(klderrors.RESTGatewayEventManagerInitFailed, err)

@@ -47,18 +47,14 @@ func (m *mockRPC) CallContext(ctx context.Context, result interface{}, method st
 	return m.mockError
 }
 
-type mockSocketIo struct {
+type mockWebSocket struct {
 	registeredNamespace string
 	capturedNamespace   string
 	sender              chan interface{}
 	receiver            chan error
 }
 
-func (m *mockSocketIo) RegisterNamespace(namespace string) {
-	m.registeredNamespace = namespace
-}
-
-func (m *mockSocketIo) GetChannels(namespace string) (chan<- interface{}, <-chan error) {
+func (m *mockWebSocket) GetChannels(namespace string) (chan<- interface{}, <-chan error) {
 	m.capturedNamespace = namespace
 	return m.sender, m.receiver
 }
@@ -76,7 +72,7 @@ func cleanup(t *testing.T, dir string) {
 
 func newTestSubscriptionManager() *subscriptionMGR {
 	smconf := &SubscriptionManagerConf{}
-	sm := NewSubscriptionManager(smconf, nil, &mockSocketIo{
+	sm := NewSubscriptionManager(smconf, nil, &mockWebSocket{
 		sender:   make(chan interface{}),
 		receiver: make(chan error),
 	}).(*subscriptionMGR)

@@ -93,9 +93,11 @@ func newTestStreamForBatching(spec *StreamInfo, db kldkvstore.KVStore, status ..
 		count++
 	})
 	svr := httptest.NewServer(mux)
-	spec.Type = "WEBHOOK"
-	spec.Webhook.URL = svr.URL
-	spec.Webhook.Headers = map[string]string{"x-my-header": "my-value"}
+	if spec.Type == "" {
+		spec.Type = "WEBHOOK"
+		spec.Webhook.URL = svr.URL
+		spec.Webhook.Headers = map[string]string{"x-my-header": "my-value"}
+	}
 	sm := newTestSubscriptionManager()
 	sm.config().WebhooksAllowPrivateIPs = true
 	sm.config().EventPollingIntervalSec = 0
@@ -983,6 +985,63 @@ func TestUpdateStream(t *testing.T) {
 	assert.Equal(updatedStream.Webhook.URL, "http://foo.url")
 	assert.Equal(updatedStream.Webhook.Headers["test-h1"], "val1")
 
+	assert.NoError(err)
+}
+
+func TestUpdateStreamSwapType(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	db, _ := kldkvstore.NewLDBKeyValueStore(dir)
+	sm, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingBlock,
+			BatchSize:     5,
+			Webhook:       &webhookActionInfo{},
+		}, db, 200)
+	defer svr.Close()
+	defer close(eventStream)
+	defer stream.stop()
+
+	ctx := context.Background()
+	updateSpec := &StreamInfo{
+		Type: "websocket",
+		WebSocket: &webSocketActionInfo{
+			Topic: "test1",
+		},
+	}
+	_, err := sm.UpdateStream(ctx, stream.spec.ID, updateSpec)
+	assert.EqualError(err, "The type of an event stream cannot be changed")
+}
+
+func TestUpdateWebSocket(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	db, _ := kldkvstore.NewLDBKeyValueStore(dir)
+	sm, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingBlock,
+			BatchSize:     5,
+			Type:          "websocket",
+			WebSocket: &webSocketActionInfo{
+				Topic: "test1",
+			},
+		}, db, 200)
+	defer svr.Close()
+	defer close(eventStream)
+	defer stream.stop()
+
+	ctx := context.Background()
+	updateSpec := &StreamInfo{
+		WebSocket: &webSocketActionInfo{
+			Topic: "test2",
+		},
+	}
+	updatedStream, err := sm.UpdateStream(ctx, stream.spec.ID, updateSpec)
+	assert.Equal("test2", updatedStream.WebSocket.Topic)
 	assert.NoError(err)
 }
 

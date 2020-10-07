@@ -58,10 +58,10 @@ func newTestStream() *eventStream {
 	a, _ := newEventStream(newTestSubscriptionManager(), &StreamInfo{
 		ID:   "123",
 		Type: "WebHook",
-		Webhook: &webhookAction{
+		Webhook: &webhookActionInfo{
 			URL: "http://hello.example.com/world",
 		},
-	})
+	}, nil)
 	return a
 }
 

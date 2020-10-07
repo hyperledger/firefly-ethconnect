@@ -72,7 +72,7 @@ func TestNewSmartContractGatewayBadURL(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: true,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 }
 
@@ -90,7 +90,7 @@ func TestNewSmartContractGatewayWithEvents(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: true,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	assert.NoError(err)
 	assert.NotNil(s.(*smartContractGW).sm)
@@ -112,7 +112,7 @@ func TestNewSmartContractGatewayWithEventsFail(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: true,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	assert.Regexp("Event-stream subscription manager", err.Error())
 }
@@ -136,7 +136,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: true,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 
 	err := scgw.PreDeploy(&msg)
@@ -284,7 +284,7 @@ func TestRegisterExistingContract(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: true,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 
 	body := &bytes.Buffer{}
@@ -342,7 +342,7 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	iMsg := newTestDeployMsg("0123456789abcdef0123456789abcdef01234567")
 	iMsg.Headers.ID = "xyz12345"
@@ -450,7 +450,7 @@ func TestRemoteRegistryBadBI(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	iMsg := newTestDeployMsg("0123456789abcdef0123456789abcdef01234567")
 	iMsg.Headers.ID = "xyz12345"
@@ -495,7 +495,7 @@ func TestRegisterContractBadAddress(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	router := &httprouter.Router{}
 	scgw.AddRoutes(router)
@@ -523,7 +523,7 @@ func TestRegisterContractNoRegisteredName(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	router := &httprouter.Router{}
 	scgw.AddRoutes(router)
@@ -568,7 +568,7 @@ func TestRegisterContractBadABI(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	router := &httprouter.Router{}
 	scgw.AddRoutes(router)
@@ -593,7 +593,7 @@ func TestLoadDeployMsgOKNoABIInIndex(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 	goodMsg := &kldmessages.DeployContract{}
@@ -615,7 +615,7 @@ func TestLoadDeployMsgMissing(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 	_, _, err := scgw.loadDeployMsgByID("abi1")
@@ -633,7 +633,7 @@ func TestLoadDeployMsgFailure(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 	scgw.abiIndex["abi1"] = &abiInfo{}
@@ -653,7 +653,7 @@ func TestLoadDeployMsgRemoteLookupNotFound(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 	rr := &mockRR{}
@@ -671,7 +671,7 @@ func TestPreDeployCompileFailure(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 	msg := &kldmessages.DeployContract{
@@ -692,7 +692,7 @@ func TestPreDeployMsgWrite(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 	msg := &kldmessages.DeployContract{
@@ -715,7 +715,7 @@ func TestPostDeployNoRegisteredName(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	contractAddr := common.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	scgw := s.(*smartContractGW)
@@ -755,7 +755,7 @@ func TestPostDeployRemoteRegisteredName(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	rr := &mockRR{}
 	s.(*smartContractGW).rr = rr
@@ -801,7 +801,7 @@ func TestPostDeployRemoteRegisteredNameNotSuccess(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	rr := &mockRR{}
 	s.(*smartContractGW).rr = rr
@@ -846,7 +846,7 @@ func TestPostDeployMissingContractAddress(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 	replyMsg := &kldmessages.TransactionReceipt{
@@ -873,7 +873,7 @@ func TestStoreABIWriteFail(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -895,7 +895,7 @@ func TestLoadABIForInstanceUnknown(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -914,7 +914,7 @@ func TestLoadABIBadData(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1004,7 +1004,7 @@ func TestBuildIndex(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1059,7 +1059,7 @@ func TestGetContractOrABIFail(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: true,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1113,7 +1113,7 @@ func TestGetContractUI(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: true,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1147,7 +1147,7 @@ func TestAddABISingleSolidity(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1184,7 +1184,7 @@ func TestAddABISingleSolidityBadContractName(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1216,7 +1216,7 @@ func TestAddABIZipNested(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1257,7 +1257,7 @@ func TestAddABIZipNestedListSolidity(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1299,7 +1299,7 @@ func TestAddABIZipNestedListContracts(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1341,7 +1341,7 @@ func TestAddABIBadZip(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1378,7 +1378,7 @@ func TestAddABIZipNestedNoSource(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1418,7 +1418,7 @@ func TestAddABIZiNotMultipart(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1448,7 +1448,7 @@ func TestCompileMultipartFormSolidityBadDir(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1469,7 +1469,7 @@ func TestCompileMultipartFormSolidityBadSolc(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 	os.Setenv("KLD_SOLC_0_99", "badness")
@@ -1494,7 +1494,7 @@ func TestCompileMultipartFormSolidityBadCompilerVerReq(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1517,7 +1517,7 @@ func TestCompileMultipartFormSolidityBadSolidity(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: true,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1540,7 +1540,7 @@ func TestExtractMultiPartFileBadFile(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: true,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1563,7 +1563,7 @@ func TestExtractMultiPartFileBadInput(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: true,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1586,7 +1586,7 @@ func TestStoreDeployableABIMissingABI(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: true,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1605,7 +1605,7 @@ func TestAddFileToContractIndexBadFileSwallowsError(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: true,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1623,7 +1623,7 @@ func TestAddFileToContractIndexBadDataSwallowsError(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: true,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -1643,7 +1643,7 @@ func TestAddFileToABIIndexBadFileSwallowsError(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: true,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	scgw := s.(*smartContractGW)
 
@@ -2030,7 +2030,7 @@ func TestCheckNameAvailableRRDuplicate(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	rr := &mockRR{
 		deployMsg: newTestDeployMsg("12345"),
@@ -2052,7 +2052,7 @@ func TestCheckNameAvailableRRFail(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 	rr := &mockRR{
 		err: fmt.Errorf("pop"),
@@ -2076,7 +2076,7 @@ func TestWithEventsAuthRequiresAuth(t *testing.T) {
 		&kldtx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
 		},
-		nil, nil, nil,
+		nil, nil, nil, nil,
 	)
 
 	router := &httprouter.Router{}

@@ -24,7 +24,7 @@ require (
 	github.com/go-openapi/spec v0.19.9
 	github.com/go-openapi/swag v0.19.9 // indirect
 	github.com/golang/mock v1.4.3
-	github.com/gorilla/websocket v1.4.2 // indirect
+	github.com/gorilla/websocket v1.4.2
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/icza/dyno v0.0.0-20200205103839-49cb13720835
 	github.com/julienschmidt/httprouter v1.3.0

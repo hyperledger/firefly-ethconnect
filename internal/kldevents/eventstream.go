@@ -225,6 +225,27 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 	// wait for the poked goroutines to finish up
 	a.updateWG.Wait()
 
+	if newSpec.Type != "" && newSpec.Type != a.spec.Type {
+		return nil, klderrors.Errorf(klderrors.EventStreamsCannotUpdateType)
+	}
+	if a.spec.Type == "webhook" && newSpec.Webhook != nil {
+		if newSpec.Webhook.URL == "" {
+			return nil, klderrors.Errorf(klderrors.EventStreamsWebhookNoURL)
+		}
+		if _, err = url.Parse(newSpec.Webhook.URL); err != nil {
+			return nil, klderrors.Errorf(klderrors.EventStreamsWebhookInvalidURL)
+		}
+		if newSpec.Webhook.RequestTimeoutSec == 0 {
+			newSpec.Webhook.RequestTimeoutSec = 120
+		}
+		a.spec.Webhook.URL = newSpec.Webhook.URL
+		a.spec.Webhook.RequestTimeoutSec = newSpec.Webhook.RequestTimeoutSec
+		a.spec.Webhook.TLSkipHostVerify = newSpec.Webhook.TLSkipHostVerify
+		a.spec.Webhook.Headers = newSpec.Webhook.Headers
+	}
+	if a.spec.Type == "websocket" && newSpec.WebSocket != nil {
+		a.spec.WebSocket.Topic = newSpec.WebSocket.Topic
+	}
 	if a.spec.BatchSize != newSpec.BatchSize && newSpec.BatchSize != 0 && newSpec.BatchSize < MaxBatchSize {
 		a.spec.BatchSize = newSpec.BatchSize
 	}
@@ -244,21 +265,6 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 	}
 	if a.spec.Timestamps != newSpec.Timestamps {
 		a.spec.Timestamps = newSpec.Timestamps
-	}
-	if newSpec.Webhook != nil {
-		if newSpec.Webhook.URL == "" {
-			return nil, klderrors.Errorf(klderrors.EventStreamsWebhookNoURL)
-		}
-		if _, err = url.Parse(newSpec.Webhook.URL); err != nil {
-			return nil, klderrors.Errorf(klderrors.EventStreamsWebhookInvalidURL)
-		}
-		if newSpec.Webhook.RequestTimeoutSec == 0 {
-			newSpec.Webhook.RequestTimeoutSec = 30000
-		}
-		a.spec.Webhook.URL = newSpec.Webhook.URL
-		a.spec.Webhook.RequestTimeoutSec = newSpec.Webhook.RequestTimeoutSec
-		a.spec.Webhook.TLSkipHostVerify = newSpec.Webhook.TLSkipHostVerify
-		a.spec.Webhook.Headers = newSpec.Webhook.Headers
 	}
 	a.postUpdateStream()
 	return a.spec, nil

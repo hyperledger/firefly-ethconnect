@@ -42,7 +42,7 @@ func newWebhookAction(es *eventStream, spec *webhookActionInfo) (*webhookAction,
 		return nil, klderrors.Errorf(klderrors.EventStreamsWebhookInvalidURL)
 	}
 	if spec.RequestTimeoutSec == 0 {
-		spec.RequestTimeoutSec = 30000
+		spec.RequestTimeoutSec = 120
 	}
 	return &webhookAction{
 		es:   es,

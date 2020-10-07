@@ -105,8 +105,7 @@ func newTestStreamForBatching(spec *StreamInfo, db kldkvstore.KVStore, status ..
 		sm.db = db
 	}
 	ctx := context.Background()
-	stream, err := sm.AddStream(ctx, spec)
-	fmt.Printf("err: %s", err)
+	stream, _ := sm.AddStream(ctx, spec)
 	return sm, sm.streams[stream.ID], svr, eventStream
 }
 

@@ -29,6 +29,7 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
+	"github.com/kaleido-io/ethconnect/internal/kldws"
 	log "github.com/sirupsen/logrus"
 	"github.com/syndtr/goleveldb/leveldb"
 )
@@ -85,6 +86,7 @@ type subscriptionMGR struct {
 	subscriptions map[string]*subscription
 	streams       map[string]*eventStream
 	closed        bool
+	wsChannels    kldws.WebSocketChannels
 }
 
 // CobraInitSubscriptionManager standard naming for cobra command params
@@ -95,12 +97,13 @@ func CobraInitSubscriptionManager(cmd *cobra.Command, conf *SubscriptionManagerC
 }
 
 // NewSubscriptionManager construtor
-func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc kldeth.RPCClient) SubscriptionManager {
+func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc kldeth.RPCClient, wsChannels kldws.WebSocketChannels) SubscriptionManager {
 	sm := &subscriptionMGR{
 		conf:          conf,
 		rpc:           rpc,
 		subscriptions: make(map[string]*subscription),
 		streams:       make(map[string]*eventStream),
+		wsChannels:    wsChannels,
 	}
 	if conf.EventPollingIntervalSec <= 0 {
 		conf.EventPollingIntervalSec = 1
@@ -243,7 +246,7 @@ func (s *subscriptionMGR) AddStream(ctx context.Context, spec *StreamInfo) (*Str
 	spec.ID = streamIDPrefix + kldutils.UUIDv4()
 	spec.CreatedISO8601 = time.Now().UTC().Format(time.RFC3339)
 	spec.Path = StreamPathPrefix + "/" + spec.ID
-	stream, err := newEventStream(s, spec)
+	stream, err := newEventStream(s, spec, s.wsChannels)
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +401,7 @@ func (s *subscriptionMGR) recoverStreams() {
 				log.Errorf("Failed to recover stream '%s': %s", string(iStream.Value()), err)
 				continue
 			}
-			stream, err := newEventStream(s, &streamInfo)
+			stream, err := newEventStream(s, &streamInfo, s.wsChannels)
 			if err != nil {
 				log.Errorf("Failed to recover stream '%s': %s", streamInfo.ID, err)
 			} else {

@@ -36,7 +36,7 @@ import (
 
 func TestConstructorNoSpec(t *testing.T) {
 	assert := assert.New(t)
-	_, err := newEventStream(newTestSubscriptionManager(), nil)
+	_, err := newEventStream(newTestSubscriptionManager(), nil, nil)
 	assert.EqualError(err, "No ID")
 }
 
@@ -45,7 +45,7 @@ func TestConstructorBadType(t *testing.T) {
 	_, err := newEventStream(newTestSubscriptionManager(), &StreamInfo{
 		ID:   "123",
 		Type: "random",
-	})
+	}, nil)
 	assert.EqualError(err, "Unknown action type 'random'")
 }
 
@@ -54,7 +54,7 @@ func TestConstructorMissingWebhook(t *testing.T) {
 	_, err := newEventStream(newTestSubscriptionManager(), &StreamInfo{
 		ID:   "123",
 		Type: "webhook",
-	})
+	}, nil)
 	assert.EqualError(err, "Must specify webhook.url for action type 'webhook'")
 }
 
@@ -63,10 +63,10 @@ func TestConstructorBadWebhookURL(t *testing.T) {
 	_, err := newEventStream(newTestSubscriptionManager(), &StreamInfo{
 		ID:   "123",
 		Type: "webhook",
-		Webhook: &webhookAction{
+		Webhook: &webhookActionInfo{
 			URL: ":badurl",
 		},
-	})
+	}, nil)
 	assert.EqualError(err, "Invalid URL in webhook action")
 }
 
@@ -107,13 +107,24 @@ func newTestStreamForBatching(spec *StreamInfo, db kldkvstore.KVStore, status ..
 	return sm, sm.streams[stream.ID], svr, eventStream
 }
 
+func newTestStreamForWebSocket(spec *StreamInfo, db kldkvstore.KVStore, status ...int) (*subscriptionMGR, *eventStream, *mockWebSocket) {
+	sm := newTestSubscriptionManager()
+	sm.config().EventPollingIntervalSec = 0
+	if db != nil {
+		sm.db = db
+	}
+	ctx := context.Background()
+	stream, _ := sm.AddStream(ctx, spec)
+	return sm, sm.streams[stream.ID], sm.wsChannels.(*mockWebSocket)
+}
+
 func TestBatchTimeout(t *testing.T) {
 	assert := assert.New(t)
 	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize:      10,
 			BatchTimeoutMS: 50,
-			Webhook:        &webhookAction{},
+			Webhook:        &webhookActionInfo{},
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
@@ -159,7 +170,7 @@ func TestStopDuringTimeout(t *testing.T) {
 		&StreamInfo{
 			BatchSize:      10,
 			BatchTimeoutMS: 2000,
-			Webhook:        &webhookAction{},
+			Webhook:        &webhookActionInfo{},
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
@@ -176,7 +187,7 @@ func TestBatchSizeCap(t *testing.T) {
 	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize: 10000000,
-			Webhook:   &webhookAction{},
+			Webhook:   &webhookActionInfo{},
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
@@ -191,7 +202,7 @@ func TestStreamName(t *testing.T) {
 	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			Name:    "testStream",
-			Webhook: &webhookAction{},
+			Webhook: &webhookActionInfo{},
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
@@ -205,7 +216,7 @@ func TestBlockingBehavior(t *testing.T) {
 	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize:            1,
-			Webhook:              &webhookAction{},
+			Webhook:              &webhookActionInfo{},
 			ErrorHandling:        ErrorHandlingBlock,
 			BlockedRetryDelaySec: 1,
 		}, nil, 404)
@@ -230,7 +241,7 @@ func TestSkippingBehavior(t *testing.T) {
 	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize:            1,
-			Webhook:              &webhookAction{},
+			Webhook:              &webhookActionInfo{},
 			ErrorHandling:        ErrorHandlingSkip,
 			BlockedRetryDelaySec: 1,
 		}, nil, 404 /* fail the requests */)
@@ -258,7 +269,7 @@ func TestBackoffRetry(t *testing.T) {
 	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize:            1,
-			Webhook:              &webhookAction{},
+			Webhook:              &webhookActionInfo{},
 			ErrorHandling:        ErrorHandlingBlock,
 			RetryTimeoutSec:      1,
 			BlockedRetryDelaySec: 1,
@@ -296,7 +307,7 @@ func TestBlockedAddresses(t *testing.T) {
 	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
-			Webhook:       &webhookAction{},
+			Webhook:       &webhookActionInfo{},
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
@@ -319,7 +330,7 @@ func TestBadDNSName(t *testing.T) {
 	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingSkip,
-			Webhook:       &webhookAction{},
+			Webhook:       &webhookActionInfo{},
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
@@ -344,7 +355,7 @@ func TestBuildup(t *testing.T) {
 	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
-			Webhook:       &webhookAction{},
+			Webhook:       &webhookActionInfo{},
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
@@ -370,6 +381,22 @@ func TestBuildup(t *testing.T) {
 	}
 	assert.Equal(uint64(0), stream.inFlight)
 
+}
+
+func TestWebSocketUnconfigured(t *testing.T) {
+	assert := assert.New(t)
+	sm := NewSubscriptionManager(&SubscriptionManagerConf{}, nil, nil).(*subscriptionMGR)
+	_, err := sm.AddStream(context.Background(), &StreamInfo{Type: "websocket"})
+	assert.EqualError(err, "WebSocket listener not configured")
+}
+
+func TestBadTimestampCacheSize(t *testing.T) {
+	assert := assert.New(t)
+	sm := NewSubscriptionManager(&SubscriptionManagerConf{}, nil, nil).(*subscriptionMGR)
+	_, err := sm.AddStream(context.Background(), &StreamInfo{
+		TimestampCacheSize: -1,
+	})
+	assert.EqualError(err, "Failed to create a resource for the stream: Must provide a positive size")
 }
 
 func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, stream *eventStream, subscriptionName string) *SubscriptionInfo {
@@ -437,7 +464,7 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 	return s
 }
 
-func TestProcessEventsEnd2End(t *testing.T) {
+func TestProcessEventsEnd2EndWebhook(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)
 	defer cleanup(t, dir)
@@ -446,7 +473,7 @@ func TestProcessEventsEnd2End(t *testing.T) {
 	sm, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize:  1,
-			Webhook:    &webhookAction{},
+			Webhook:    &webhookActionInfo{},
 			Timestamps: false,
 		}, db, 200)
 	defer svr.Close()
@@ -486,6 +513,58 @@ func TestProcessEventsEnd2End(t *testing.T) {
 	sm.Close()
 }
 
+func TestProcessEventsEnd2EndWebSocket(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	db, _ := kldkvstore.NewLDBKeyValueStore(dir)
+	sm, stream, mockWebSocket := newTestStreamForWebSocket(
+		&StreamInfo{
+			BatchSize:  1,
+			Type:       "websocket",
+			WebSocket:  &webSocketActionInfo{},
+			Timestamps: false,
+		}, db, 200)
+
+	s := setupTestSubscription(assert, sm, stream, "mySubName")
+	assert.Equal("mySubName", s.Name)
+
+	// We expect three events to be sent to the webhook
+	// With the default batch size of 1, that means three separate requests
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		e1s := (<-mockWebSocket.sender).([]*eventData)
+		assert.Equal(1, len(e1s))
+		assert.Equal("42", e1s[0].Data["i"])
+		assert.Equal("But what is the question?", e1s[0].Data["m"])
+		assert.Equal("150665", e1s[0].BlockNumber)
+		mockWebSocket.receiver <- nil
+		e2s := (<-mockWebSocket.sender).([]*eventData)
+		assert.Equal(1, len(e2s))
+		assert.Equal("1977", e2s[0].Data["i"])
+		assert.Equal("A long time ago in a galaxy far, far away....", e2s[0].Data["m"])
+		assert.Equal("150665", e2s[0].BlockNumber)
+		mockWebSocket.receiver <- nil
+		e3s := (<-mockWebSocket.sender).([]*eventData)
+		assert.Equal(1, len(e3s))
+		assert.Equal("20151021", e3s[0].Data["i"])
+		assert.Equal("1.21 Gigawatts!", e3s[0].Data["m"])
+		assert.Equal("150721", e3s[0].BlockNumber)
+		mockWebSocket.receiver <- nil
+		wg.Done()
+	}()
+	wg.Wait()
+
+	ctx := context.Background()
+	err := sm.DeleteSubscription(ctx, s.ID)
+	assert.NoError(err)
+	err = sm.DeleteStream(ctx, stream.spec.ID)
+	assert.NoError(err)
+	sm.Close()
+}
+
 func TestProcessEventsEnd2EndWithTimestamps(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)
@@ -495,7 +574,7 @@ func TestProcessEventsEnd2EndWithTimestamps(t *testing.T) {
 	sm, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize:  1,
-			Webhook:    &webhookAction{},
+			Webhook:    &webhookActionInfo{},
 			Timestamps: true,
 		}, db, 200)
 	defer svr.Close()
@@ -547,7 +626,7 @@ func TestProcessEventsEnd2EndWithReset(t *testing.T) {
 	sm, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize:  1,
-			Webhook:    &webhookAction{},
+			Webhook:    &webhookActionInfo{},
 			Timestamps: false,
 		}, db, 200)
 	defer svr.Close()
@@ -608,12 +687,53 @@ func TestProcessEventsEnd2EndWithReset(t *testing.T) {
 	sm.Close()
 }
 
+func TestInterruptWebSocketSend(t *testing.T) {
+	wsChannels := &mockWebSocket{
+		sender:   make(chan interface{}),
+		receiver: make(chan error),
+	}
+	es := &eventStream{
+		wsChannels:      wsChannels,
+		updateInterrupt: make(chan struct{}),
+	}
+	sio, _ := newWebSocketAction(es, &webSocketActionInfo{})
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		close(es.updateInterrupt)
+		wg.Done()
+	}()
+	sio.attemptBatch(0, 1, []*eventData{})
+	wg.Wait()
+}
+
+func TestInterruptWebSocketReceive(t *testing.T) {
+	wsChannels := &mockWebSocket{
+		sender:   make(chan interface{}),
+		receiver: make(chan error),
+	}
+	es := &eventStream{
+		wsChannels:      wsChannels,
+		updateInterrupt: make(chan struct{}),
+	}
+	sio, _ := newWebSocketAction(es, &webSocketActionInfo{})
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		<-wsChannels.sender
+		close(es.updateInterrupt)
+		wg.Done()
+	}()
+	sio.attemptBatch(0, 1, []*eventData{})
+	wg.Wait()
+}
+
 func TestCheckpointRecovery(t *testing.T) {
 	assert := assert.New(t)
 	sm, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
-			Webhook:       &webhookAction{},
+			Webhook:       &webhookActionInfo{},
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
@@ -676,7 +796,7 @@ func TestWithoutCheckpointRecovery(t *testing.T) {
 	sm, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
-			Webhook:       &webhookAction{},
+			Webhook:       &webhookActionInfo{},
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
@@ -717,7 +837,7 @@ func TestMarkStaleOnError(t *testing.T) {
 	sm, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
-			Webhook:       &webhookAction{},
+			Webhook:       &webhookActionInfo{},
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
@@ -748,7 +868,7 @@ func TestStoreCheckpointLoadError(t *testing.T) {
 	sm, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
-			Webhook:       &webhookAction{},
+			Webhook:       &webhookActionInfo{},
 		}, nil, 200)
 	mockKV := kldkvstore.NewMockKV(fmt.Errorf("pop"))
 	sm.db = mockKV
@@ -771,7 +891,7 @@ func TestStoreCheckpointStoreError(t *testing.T) {
 	sm, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
-			Webhook:       &webhookAction{},
+			Webhook:       &webhookActionInfo{},
 		}, nil, 200)
 	mockKV := kldkvstore.NewMockKV(nil)
 	mockKV.StoreErr = fmt.Errorf("pop")
@@ -800,7 +920,7 @@ func TestProcessBatchEmptyArray(t *testing.T) {
 	sm, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
-			Webhook:       &webhookAction{},
+			Webhook:       &webhookActionInfo{},
 		}, nil, 200)
 	mockKV := kldkvstore.NewMockKV(nil)
 	mockKV.StoreErr = fmt.Errorf("pop")
@@ -827,7 +947,7 @@ func TestUpdateStream(t *testing.T) {
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
 			BatchSize:     5,
-			Webhook:       &webhookAction{},
+			Webhook:       &webhookActionInfo{},
 		}, db, 200)
 	defer svr.Close()
 	defer close(eventStream)
@@ -845,7 +965,7 @@ func TestUpdateStream(t *testing.T) {
 		BlockedRetryDelaySec: 5,
 		ErrorHandling:        ErrorHandlingBlock,
 		Name:                 "new-name",
-		Webhook: &webhookAction{
+		Webhook: &webhookActionInfo{
 			URL:               "http://foo.url",
 			Headers:           headers,
 			TLSkipHostVerify:  true,
@@ -875,7 +995,7 @@ func TestUpdateStreamMissingWebhookURL(t *testing.T) {
 	sm, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
-			Webhook:       &webhookAction{},
+			Webhook:       &webhookActionInfo{},
 		}, db, 200)
 	defer svr.Close()
 
@@ -896,7 +1016,7 @@ func TestUpdateStreamMissingWebhookURL(t *testing.T) {
 
 	ctx := context.Background()
 	updateSpec := &StreamInfo{
-		Webhook: &webhookAction{
+		Webhook: &webhookActionInfo{
 			URL:               "",
 			TLSkipHostVerify:  true,
 			RequestTimeoutSec: 5,
@@ -920,7 +1040,7 @@ func TestUpdateStreamInvalidWebhookURL(t *testing.T) {
 	sm, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
-			Webhook:       &webhookAction{},
+			Webhook:       &webhookActionInfo{},
 		}, db, 200)
 	defer svr.Close()
 
@@ -941,7 +1061,7 @@ func TestUpdateStreamInvalidWebhookURL(t *testing.T) {
 
 	ctx := context.Background()
 	updateSpec := &StreamInfo{
-		Webhook: &webhookAction{
+		Webhook: &webhookActionInfo{
 			URL:               ":badurl",
 			TLSkipHostVerify:  true,
 			RequestTimeoutSec: 5,

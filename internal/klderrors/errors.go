@@ -121,6 +121,14 @@ const (
 	EventStreamsLogDecodeInsufficientTopics = "%s: Ran out of topics for indexed fields at field %d of %s"
 	// EventStreamsLogDecodeData RLP decoding of the data section of the logs failed
 	EventStreamsLogDecodeData = "%s: Failed to parse RLP data from event: %s"
+	// EventStreamsWebSocketNotConfigured WebSocket not configured
+	EventStreamsWebSocketNotConfigured = "WebSocket listener not configured"
+	// EventStreamsWebSocketInterruptedSend When we are interrupted waiting for a viable connection to send down
+	EventStreamsWebSocketInterruptedSend = "Interrupted waiting for WebSocket connection to send event"
+	// EventStreamsWebSocketInterruptedReceive When we are interrupted waiting for a viable connection to send down
+	EventStreamsWebSocketInterruptedReceive = "Interrupted waiting for WebSocket acknowledgment"
+	// EventStreamsWebSocketErrorFromClient Error message received from client
+	EventStreamsWebSocketErrorFromClient = "Error received from WebSocket client: %s"
 
 	// KakfaProducerConfirmMsgUnknown we received a confirmation callback, but we aren't expecting it
 	KakfaProducerConfirmMsgUnknown = "Received confirmation for message not in in-flight map: %s"

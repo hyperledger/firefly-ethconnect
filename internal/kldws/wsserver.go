@@ -25,8 +25,9 @@ import (
 )
 
 // WebSocketChannels is provided to allow us to do a blocking send to a namespace that will complete once a client connects on it
+// We also provide a channel to listen on for closing of the connection, to allow a select to wake on a blocking send
 type WebSocketChannels interface {
-	GetChannels(topic string) (chan<- interface{}, <-chan error)
+	GetChannels(topic string) (chan<- interface{}, <-chan error, <-chan struct{})
 }
 
 // WebSocketServer is the full server interface with the init call
@@ -48,6 +49,7 @@ type webSocketTopic struct {
 	topic           string
 	senderChannel   chan interface{}
 	receiverChannel chan error
+	closingChannel  chan struct{}
 }
 
 // NewWebSocketServer create a new server with a simplified interface
@@ -81,8 +83,8 @@ func (s *webSocketServer) cycleTopic(t *webSocketTopic) {
 
 	// When a connection that was listening on a topic closes, we need to wake anyone
 	// that was listening for a response
-	close(t.receiverChannel)
-	t.receiverChannel = make(chan error)
+	close(t.closingChannel)
+	t.closingChannel = make(chan struct{})
 }
 
 func (s *webSocketServer) connectionClosed(c *webSocketConnection) {
@@ -110,13 +112,14 @@ func (s *webSocketServer) getTopic(topic string) *webSocketTopic {
 			topic:           topic,
 			senderChannel:   make(chan interface{}),
 			receiverChannel: make(chan error),
+			closingChannel:  make(chan struct{}),
 		}
 		s.topics[topic] = t
 	}
 	return t
 }
 
-func (s *webSocketServer) GetChannels(topic string) (chan<- interface{}, <-chan error) {
+func (s *webSocketServer) GetChannels(topic string) (chan<- interface{}, <-chan error, <-chan struct{}) {
 	t := s.getTopic(topic)
-	return t.senderChannel, t.receiverChannel
+	return t.senderChannel, t.receiverChannel, t.closingChannel
 }

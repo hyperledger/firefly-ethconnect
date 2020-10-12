@@ -35,6 +35,7 @@ type webSocketConnection struct {
 	topics   map[string]*webSocketTopic
 	newTopic chan bool
 	receive  chan error
+	closing  chan struct{}
 }
 
 type webSocketCommandMessage struct {
@@ -51,6 +52,7 @@ func newConnection(server *webSocketServer, conn *ws.Conn) *webSocketConnection 
 		newTopic: make(chan bool),
 		topics:   make(map[string]*webSocketTopic),
 		receive:  make(chan error),
+		closing:  make(chan struct{}),
 	}
 	go wsc.listen()
 	go wsc.sender()
@@ -62,8 +64,7 @@ func (c *webSocketConnection) close() {
 	if !c.closed {
 		c.closed = true
 		c.conn.Close()
-		close(c.receive)
-		close(c.newTopic)
+		close(c.closing)
 	}
 	c.mux.Unlock()
 
@@ -79,12 +80,14 @@ func (c *webSocketConnection) sender() {
 	buildCases := func() []reflect.SelectCase {
 		c.mux.Lock()
 		defer c.mux.Unlock()
-		cases := make([]reflect.SelectCase, len(c.topics)+1)
+		cases := make([]reflect.SelectCase, len(c.topics)+2)
 		i := 0
 		for _, t := range c.topics {
 			cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(t.senderChannel)}
 			i++
 		}
+		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(c.closing)}
+		i++
 		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(c.newTopic)}
 		return cases
 	}
@@ -110,7 +113,10 @@ func (c *webSocketConnection) listenTopic(t *webSocketTopic) {
 	c.mux.Lock()
 	c.topics[t.topic] = t
 	c.mux.Unlock()
-	c.newTopic <- true
+	select {
+	case c.newTopic <- true:
+	case <-c.closing:
+	}
 }
 
 func (c *webSocketConnection) listen() {

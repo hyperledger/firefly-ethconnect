@@ -1045,6 +1045,74 @@ func TestUpdateWebSocket(t *testing.T) {
 	assert.NoError(err)
 }
 
+func TestWebSocketClientClosedOnSend(t *testing.T) {
+
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	db, _ := kldkvstore.NewLDBKeyValueStore(dir)
+	_, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingBlock,
+			BatchSize:     5,
+			Type:          "websocket",
+			WebSocket: &webSocketActionInfo{
+				Topic: "test1",
+			},
+		}, db, 200)
+	defer svr.Close()
+	defer close(eventStream)
+	defer stream.stop()
+
+	mws := stream.wsChannels.(*mockWebSocket)
+	wsa := stream.action.(*webSocketAction)
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		wsa.attemptBatch(0, 0, []*eventData{})
+		wg.Done()
+	}()
+
+	close(mws.closing)
+	wg.Wait()
+
+}
+
+func TestWebSocketClientClosedOnReceive(t *testing.T) {
+
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	db, _ := kldkvstore.NewLDBKeyValueStore(dir)
+	_, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingBlock,
+			BatchSize:     5,
+			Type:          "websocket",
+			WebSocket: &webSocketActionInfo{
+				Topic: "test1",
+			},
+		}, db, 200)
+	defer svr.Close()
+	defer close(eventStream)
+	defer stream.stop()
+
+	mws := stream.wsChannels.(*mockWebSocket)
+	wsa := stream.action.(*webSocketAction)
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		wsa.attemptBatch(0, 0, []*eventData{})
+		wg.Done()
+	}()
+
+	<-mws.sender
+
+	close(mws.closing)
+	wg.Wait()
+
+}
+
 func TestUpdateStreamMissingWebhookURL(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)

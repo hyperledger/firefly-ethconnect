@@ -52,11 +52,12 @@ type mockWebSocket struct {
 	capturedNamespace   string
 	sender              chan interface{}
 	receiver            chan error
+	closing             chan struct{}
 }
 
-func (m *mockWebSocket) GetChannels(namespace string) (chan<- interface{}, <-chan error) {
+func (m *mockWebSocket) GetChannels(namespace string) (chan<- interface{}, <-chan error, <-chan struct{}) {
 	m.capturedNamespace = namespace
-	return m.sender, m.receiver
+	return m.sender, m.receiver, m.closing
 }
 
 func tempdir(t *testing.T) string {
@@ -75,6 +76,7 @@ func newTestSubscriptionManager() *subscriptionMGR {
 	sm := NewSubscriptionManager(smconf, nil, &mockWebSocket{
 		sender:   make(chan interface{}),
 		receiver: make(chan error),
+		closing:  make(chan struct{}),
 	}).(*subscriptionMGR)
 	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
 	sm.db = kldkvstore.NewMockKV(nil)

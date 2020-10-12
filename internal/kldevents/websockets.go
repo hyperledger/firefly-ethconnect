@@ -35,13 +35,15 @@ func newWebSocketAction(es *eventStream, spec *webSocketActionInfo) (*webSocketA
 func (w *webSocketAction) attemptBatch(batchNumber, attempt uint64, events []*eventData) error {
 
 	// Get a blocking channel to send and receive on our chosen namespace
-	sender, receiver := w.es.wsChannels.GetChannels(w.spec.Topic)
+	sender, receiver, closing := w.es.wsChannels.GetChannels(w.spec.Topic)
 
 	// Sent the batch of events
 	select {
 	case sender <- events:
 		break
 	case <-w.es.updateInterrupt:
+		return klderrors.Errorf(klderrors.EventStreamsWebSocketInterruptedSend)
+	case <-closing:
 		return klderrors.Errorf(klderrors.EventStreamsWebSocketInterruptedSend)
 	}
 
@@ -51,6 +53,8 @@ func (w *webSocketAction) attemptBatch(batchNumber, attempt uint64, events []*ev
 	case err = <-receiver:
 		break
 	case <-w.es.updateInterrupt:
+		return klderrors.Errorf(klderrors.EventStreamsWebSocketInterruptedReceive)
+	case <-closing:
 		return klderrors.Errorf(klderrors.EventStreamsWebSocketInterruptedReceive)
 	}
 

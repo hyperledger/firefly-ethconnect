@@ -52,11 +52,12 @@ type mockWebSocket struct {
 	capturedNamespace   string
 	sender              chan interface{}
 	receiver            chan error
+	closing             chan struct{}
 }
 
-func (m *mockWebSocket) GetChannels(namespace string) (chan<- interface{}, <-chan error) {
+func (m *mockWebSocket) GetChannels(namespace string) (chan<- interface{}, <-chan error, <-chan struct{}) {
 	m.capturedNamespace = namespace
-	return m.sender, m.receiver
+	return m.sender, m.receiver, m.closing
 }
 
 func tempdir(t *testing.T) string {
@@ -70,12 +71,17 @@ func cleanup(t *testing.T, dir string) {
 	os.RemoveAll(dir)
 }
 
-func newTestSubscriptionManager() *subscriptionMGR {
-	smconf := &SubscriptionManagerConf{}
-	sm := NewSubscriptionManager(smconf, nil, &mockWebSocket{
+func newMockWebSocket() *mockWebSocket {
+	return &mockWebSocket{
 		sender:   make(chan interface{}),
 		receiver: make(chan error),
-	}).(*subscriptionMGR)
+		closing:  make(chan struct{}),
+	}
+}
+
+func newTestSubscriptionManager() *subscriptionMGR {
+	smconf := &SubscriptionManagerConf{}
+	sm := NewSubscriptionManager(smconf, nil, newMockWebSocket()).(*subscriptionMGR)
 	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
 	sm.db = kldkvstore.NewMockKV(nil)
 	sm.config().WebhooksAllowPrivateIPs = true

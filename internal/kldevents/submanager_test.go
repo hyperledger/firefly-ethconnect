@@ -71,13 +71,17 @@ func cleanup(t *testing.T, dir string) {
 	os.RemoveAll(dir)
 }
 
-func newTestSubscriptionManager() *subscriptionMGR {
-	smconf := &SubscriptionManagerConf{}
-	sm := NewSubscriptionManager(smconf, nil, &mockWebSocket{
+func newMockWebSocket() *mockWebSocket {
+	return &mockWebSocket{
 		sender:   make(chan interface{}),
 		receiver: make(chan error),
 		closing:  make(chan struct{}),
-	}).(*subscriptionMGR)
+	}
+}
+
+func newTestSubscriptionManager() *subscriptionMGR {
+	smconf := &SubscriptionManagerConf{}
+	sm := NewSubscriptionManager(smconf, nil, newMockWebSocket()).(*subscriptionMGR)
 	sm.rpc = kldeth.NewMockRPCClientForSync(nil, nil)
 	sm.db = kldkvstore.NewMockKV(nil)
 	sm.config().WebhooksAllowPrivateIPs = true

@@ -16,7 +16,7 @@ require (
 	github.com/docker/docker v1.13.1 // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
 	github.com/elastic/gosigar v0.11.0 // indirect
-	github.com/ethereum/go-ethereum v1.9.18
+	github.com/ethereum/go-ethereum v1.9.23
 	github.com/fjl/memsize v0.0.0-20180929194037-2a09253e352a // indirect
 	github.com/globalsign/mgo v0.0.0-20181015135952-eeefdecb41b8
 	github.com/go-ole/go-ole v1.2.4 // indirect
@@ -55,7 +55,7 @@ require (
 	github.com/sqs/goreturns v0.0.0-20181028201513-538ac6014518 // indirect
 	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/stretchr/testify v1.4.0
-	github.com/syndtr/goleveldb v1.0.1-0.20190923125748-758128399b1d
+	github.com/syndtr/goleveldb v1.0.1-0.20200815110645-5c35d600f0ca
 	github.com/tidwall/gjson v1.6.0
 	github.com/tidwall/pretty v1.0.1 // indirect
 	github.com/uber/jaeger-client-go v2.16.0+incompatible // indirect
@@ -66,8 +66,6 @@ require (
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	go.uber.org/atomic v1.4.0
 	golang.org/x/crypto v0.0.0-20200709230013-948cd5f35899 // indirect
-	golang.org/x/net v0.0.0-20200707034311-ab3426394381 // indirect
-	golang.org/x/sys v0.0.0-20200728102440-3e129f6d46b1 // indirect
 	golang.org/x/text v0.3.3
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	gopkg.in/yaml.v2 v2.3.0

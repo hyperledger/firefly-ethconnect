@@ -1118,7 +1118,7 @@ func TestOnSendTransactionAddressBook(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
-	assert.EqualError(testTxnContext.errorReplies[0].err, "500 Internal Server Error ")
+	assert.EqualError(testTxnContext.errorReplies[0].err, "500 Internal Server Error: ")
 }
 
 func TestOnDeployContractMessageFailAddressLookup(t *testing.T) {

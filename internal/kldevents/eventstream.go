@@ -260,7 +260,7 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 	} else {
 		a.spec.ErrorHandling = ErrorHandlingSkip
 	}
-	if a.spec.Name != newSpec.Name {
+	if newSpec.Name != "" && a.spec.Name != newSpec.Name {
 		a.spec.Name = newSpec.Name
 	}
 	if a.spec.Timestamps != newSpec.Timestamps {

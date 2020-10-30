@@ -1754,17 +1754,21 @@ func TestUpdateStreamNoSubMgr(t *testing.T) {
 
 func TestUpdateStreamOK(t *testing.T) {
 	assert := assert.New(t)
-	spec := &kldevents.StreamInfo{Type: "webhook", Name: "stream-new-name", ID: "123"}
-	b, _ := json.Marshal(spec)
+	updatedSpec := &kldevents.StreamInfo{Type: "webhook", Name: "stream-new-name", ID: "123", Timestamps: true}
+	modSpec := &kldevents.StreamInfo{Timestamps: true}
+	b, _ := json.Marshal(modSpec)
 	req := httptest.NewRequest("PATCH", kldevents.StreamPathPrefix+"/123", bytes.NewReader(b))
 	res := httptest.NewRecorder()
 	s := &smartContractGW{}
-	s.sm = &mockSubMgr{}
+	s.sm = &mockSubMgr{
+		stream: updatedSpec,
+	}
 	r := &httprouter.Router{}
 	s.AddRoutes(r)
 	r.ServeHTTP(res, req)
 	var newSpec kldevents.StreamInfo
 	json.NewDecoder(res.Body).Decode(&newSpec)
+	assert.Equal(true, newSpec.Timestamps)
 	assert.Equal(200, res.Result().StatusCode)
 	s.Shutdown()
 }
@@ -1804,11 +1808,13 @@ func TestUpdateStreamNotFoundError(t *testing.T) {
 func TestUpdateStreamSubMgrError(t *testing.T) {
 	assert := assert.New(t)
 	spec := &kldevents.StreamInfo{Type: "webhook", ID: "123"}
-	b, _ := json.Marshal(spec)
+	updatedSpec := &kldevents.StreamInfo{Timestamps: true}
+	b, _ := json.Marshal(updatedSpec)
 	req := httptest.NewRequest("PATCH", kldevents.StreamPathPrefix+"/123", bytes.NewReader(b))
 	res := httptest.NewRecorder()
 	s := &smartContractGW{}
 	s.sm = &mockSubMgr{
+		stream:          spec,
 		updateStreamErr: fmt.Errorf("pop"),
 		err:             nil,
 	}

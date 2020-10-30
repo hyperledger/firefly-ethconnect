@@ -1026,6 +1026,7 @@ func TestUpdateWebSocket(t *testing.T) {
 			ErrorHandling: ErrorHandlingBlock,
 			BatchSize:     5,
 			Type:          "websocket",
+			Name:          "websocket-stream",
 			WebSocket: &webSocketActionInfo{
 				Topic: "test1",
 			},
@@ -1042,6 +1043,7 @@ func TestUpdateWebSocket(t *testing.T) {
 	}
 	updatedStream, err := sm.UpdateStream(ctx, stream.spec.ID, updateSpec)
 	assert.Equal("test2", updatedStream.WebSocket.Topic)
+	assert.Equal("websocket-stream", updatedStream.Name)
 	assert.NoError(err)
 }
 

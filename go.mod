@@ -1,7 +1,7 @@
 module github.com/kaleido-io/ethconnect
 
 require (
-	github.com/Azure/go-autorest/autorest v0.9.7
+	github.com/Azure/go-autorest/autorest v0.11.10
 	github.com/DataDog/zstd v1.4.1 // indirect
 	github.com/OneOfOne/xxhash v1.2.5 // indirect
 	github.com/Shopify/sarama v1.27.2

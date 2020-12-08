@@ -305,10 +305,10 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 		// (or if gas price is being varied by the submitter the potential of
 		// overwriting a transaction)
 		if inflight.nonce, err = kldeth.GetTransactionCount(txnContext.Context(), p.rpc, &from, "pending"); err != nil {
-			inflightForAddr.highestNonce = inflight.nonce // store the nonce in our inflight txns state
 			p.inflightTxnsLock.Unlock()
 			return
 		}
+    inflightForAddr.highestNonce = inflight.nonce // store the nonce in our inflight txns state
 		fromNode = true
 	}
 

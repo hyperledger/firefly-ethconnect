@@ -251,7 +251,7 @@ func (s *subscription) blockHWM() big.Int {
 }
 
 func (s *subscription) markFilterStale(ctx context.Context, newFilterStale bool) {
-	log.Debugf("%s: Marking filter stale=%t", s.logName, newFilterStale)
+	log.Debugf("%s: Marking filter stale=%t, current sub filter stale=%t", s.logName, newFilterStale, s.filterStale)
 	// If unsubscribe is called multiple times, we might not have a filter
 	if newFilterStale && !s.filterStale {
 		var retval bool

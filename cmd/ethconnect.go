@@ -33,7 +33,7 @@ import (
 	"github.com/spf13/cobra"
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
 
-	_ "net/http/pprof"Ø
+	_ "net/http/pprof"
 )
 
 // ServerConfig is the parent YAML structure that configures ethconnect

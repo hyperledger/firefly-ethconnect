@@ -328,9 +328,16 @@ func (a *eventStream) isBlocked() bool {
 // eventPoller checks every few seconds against the ethereum node for any
 // new events on the subscriptions that are registered for this stream
 func (a *eventStream) eventPoller() {
-	defer a.updateWG.Done()
-
 	ctx := kldauth.NewSystemAuthContext()
+
+	defer func() {
+		a.updateWG.Done()
+		// Mark all subscriptions stale, so they will re-start from the checkpoint if/when we re-run the poller
+		subs := a.sm.subscriptionsForStream(a.spec.ID)
+		for _, sub := range subs {
+			sub.markFilterStale(ctx, true)
+		}
+	}()
 
 	defer func() { a.pollerDone = true }()
 	var checkpoint map[string]*big.Int
@@ -401,6 +408,7 @@ func (a *eventStream) eventPoller() {
 		case <-time.After(a.pollingInterval): //fall through and continue to the next iteration
 		}
 	}
+
 }
 
 // batchDispatcher is the goroutine that is always available to read new

@@ -14,8 +14,6 @@
 
 package main
 
-import _ "net/http/pprof"
-
 import (
 	"fmt"
 	"os"

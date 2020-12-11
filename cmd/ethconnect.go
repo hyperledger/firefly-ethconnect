@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"strings"
 
@@ -31,6 +32,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
+
+	_ "net/http/pprof"
 )
 
 // ServerConfig is the parent YAML structure that configures ethconnect
@@ -72,6 +75,7 @@ func initLogging(debugLevel int) {
 
 var rootConfig struct {
 	DebugLevel int
+	DebugPort  int
 	PrintYAML  bool
 }
 
@@ -85,6 +89,12 @@ var rootCmd = &cobra.Command{
 	Short: "Connectivity Bridge for Ethereum permissioned chains",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		initLogging(rootConfig.DebugLevel)
+
+		if rootConfig.DebugPort > 0 {
+			go func() {
+				log.Debugf("Debug HTTP endpoint listening on localhost:%d: %s", rootConfig.DebugPort, http.ListenAndServe(fmt.Sprintf("localhost:%d", rootConfig.DebugPort), nil))
+			}()
+		}
 	},
 }
 
@@ -144,6 +154,7 @@ func readServerConfig() (serverConfig *ServerConfig, err error) {
 }
 
 func startServer() (err error) {
+
 	serverConfig, err := readServerConfig()
 	if err != nil {
 		return
@@ -156,7 +167,6 @@ func startServer() (err error) {
 	}
 
 	anyRoutineFinished := make(chan bool)
-
 	var dontPrintYaml = false
 	for name, conf := range serverConfig.KafkaBridges {
 		kafkaBridge := kldkafka.NewKafkaBridge(&dontPrintYaml)
@@ -202,6 +212,7 @@ func startServer() (err error) {
 
 func init() {
 	rootCmd.PersistentFlags().IntVarP(&rootConfig.DebugLevel, "debug", "d", 1, "0=error, 1=info, 2=debug")
+	rootCmd.PersistentFlags().IntVarP(&rootConfig.DebugPort, "debugPort", "Z", 6060, "Port for pprof HTTP endpoints (localhost only)")
 	rootCmd.PersistentFlags().BoolVarP(&rootConfig.PrintYAML, "print-yaml-confg", "Y", false, "Print YAML config snippet and exit")
 
 	serverCmd := initServer()

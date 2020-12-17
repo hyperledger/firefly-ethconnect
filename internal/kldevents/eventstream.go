@@ -325,7 +325,7 @@ func (a *eventStream) isBlocked() bool {
 	return v
 }
 
-func (a *eventStream) markAllSubscripitonsStale(ctx context.Context) {
+func (a *eventStream) markAllSubscriptionsStale(ctx context.Context) {
 	// Mark all subscriptions stale, so they will re-start from the checkpoint if/when we re-run the poller
 	subs := a.sm.subscriptionsForStream(a.spec.ID)
 	for _, sub := range subs {

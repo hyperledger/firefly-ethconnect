@@ -405,7 +405,7 @@ func (a *eventStream) eventPoller() {
 		case <-a.updateInterrupt:
 			// we were notified by the caller about an ongoing update, no need to continue
 			log.Infof("%s: Notified of an ongoing stream update, exiting event poller", a.spec.ID)
-			a.markAllSubscripitonsStale(ctx)
+			a.markAllSubscriptionsStale(ctx)
 			return
 		case <-time.After(a.pollingInterval): //fall through and continue to the next iteration
 		}

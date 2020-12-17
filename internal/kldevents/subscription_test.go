@@ -267,19 +267,11 @@ func TestUnsubscribe(t *testing.T) {
 	assert := assert.New(t)
 	s := &subscription{
 		rpc: kldeth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
-			*(res.(*string)) = "true"
+			*(res.(*bool)) = true
 		}),
 	}
 	err := s.unsubscribe(context.Background(), true)
 	assert.NoError(err)
-	assert.True(s.filterStale)
-}
-
-func TestUnsubscribeFail(t *testing.T) {
-	assert := assert.New(t)
-	s := &subscription{rpc: kldeth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil)}
-	err := s.unsubscribe(context.Background(), true)
-	assert.EqualError(err, "pop")
 	assert.True(s.filterStale)
 }
 

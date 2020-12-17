@@ -325,6 +325,14 @@ func (a *eventStream) isBlocked() bool {
 	return v
 }
 
+func (a *eventStream) markAllSubscriptionsStale(ctx context.Context) {
+	// Mark all subscriptions stale, so they will re-start from the checkpoint if/when we re-run the poller
+	subs := a.sm.subscriptionsForStream(a.spec.ID)
+	for _, sub := range subs {
+		sub.markFilterStale(ctx, true)
+	}
+}
+
 // eventPoller checks every few seconds against the ethereum node for any
 // new events on the subscriptions that are registered for this stream
 func (a *eventStream) eventPoller() {
@@ -397,10 +405,14 @@ func (a *eventStream) eventPoller() {
 		case <-a.updateInterrupt:
 			// we were notified by the caller about an ongoing update, no need to continue
 			log.Infof("%s: Notified of an ongoing stream update, exiting event poller", a.spec.ID)
+			a.markAllSubscriptionsStale(ctx)
 			return
 		case <-time.After(a.pollingInterval): //fall through and continue to the next iteration
 		}
 	}
+
+	a.markAllSubscriptionsStale(ctx)
+
 }
 
 // batchDispatcher is the goroutine that is always available to read new

@@ -411,7 +411,7 @@ func (a *eventStream) eventPoller() {
 		}
 	}
 
-	a.markAllSubscripitonsStale(ctx)
+	a.markAllSubscriptionsStale(ctx)
 
 }
 

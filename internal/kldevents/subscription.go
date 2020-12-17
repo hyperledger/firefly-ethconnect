@@ -168,7 +168,7 @@ func (s *subscription) restartFilter(ctx context.Context, since *big.Int) error 
 		return klderrors.Errorf(klderrors.RPCCallReturnedError, "eth_newFilter", err)
 	}
 	s.filteredOnce = false
-	s.filterStale = false
+	s.markFilterStale(ctx, false)
 	log.Infof("%s: created filter from block %s: %s - %+v", s.logName, since.String(), s.filterID.String(), s.info.Filter)
 	return err
 }
@@ -211,7 +211,7 @@ func (s *subscription) processNewEvents(ctx context.Context) error {
 	}
 	if err := s.rpc.CallContext(ctx, &logs, rpcMethod, s.filterID); err != nil {
 		if strings.Contains(err.Error(), "filter not found") {
-			s.filterStale = true
+			s.markFilterStale(ctx, true)
 		}
 		return err
 	}
@@ -232,18 +232,10 @@ func (s *subscription) processNewEvents(ctx context.Context) error {
 }
 
 func (s *subscription) unsubscribe(ctx context.Context, deleting bool) (err error) {
-	var retval string
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
 	log.Infof("%s: Unsubscribing existing filter (deleting=%t)", s.logName, deleting)
 	s.deleting = deleting
 	s.resetRequested = false
-	// If unsubscribe is called multiple times, we might not have a filter
-	if !s.filterStale {
-		s.filterStale = true
-		err = s.rpc.CallContext(ctx, &retval, "eth_uninstallFilter", s.filterID)
-		log.Infof("%s: Uninstalled filter (retval=%s)", s.logName, retval)
-	}
+	s.markFilterStale(ctx, true)
 	return err
 }
 
@@ -256,4 +248,19 @@ func (s *subscription) requestReset() {
 
 func (s *subscription) blockHWM() big.Int {
 	return s.lp.getBlockHWM()
+}
+
+func (s *subscription) markFilterStale(ctx context.Context, newFilterStale bool) {
+	log.Debugf("%s: Marking filter stale=%t, current sub filter stale=%t", s.logName, newFilterStale, s.filterStale)
+	// If unsubscribe is called multiple times, we might not have a filter
+	if newFilterStale && !s.filterStale {
+		var retval bool
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		err := s.rpc.CallContext(ctx, &retval, "eth_uninstallFilter", s.filterID)
+		// We treat error as informational here - the filter might already not be valid (if the node restarted)
+		log.Infof("%s: Uninstalled filter. ok=%t (%s)", s.logName, retval, err)
+	}
+	s.filterStale = newFilterStale
+	return
 }

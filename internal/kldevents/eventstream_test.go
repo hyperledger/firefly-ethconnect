@@ -777,8 +777,10 @@ func TestCheckpointRecovery(t *testing.T) {
 		if method == "eth_newFilter" {
 			newFilterBlock = args[0].(*ethFilter).FromBlock.ToInt().Uint64()
 			t.Logf("New filter block after checkpoint recovery: %d", newFilterBlock)
-		} else {
+		} else if method == "eth_getFilterChanges" {
 			*(res.(*[]*logEntry)) = []*logEntry{}
+		} else if method == "eth_uninstallFilter" {
+			*(res.(*bool)) = true
 		}
 	})
 
@@ -819,8 +821,10 @@ func TestWithoutCheckpointRecovery(t *testing.T) {
 		} else if method == "eth_newFilter" {
 			initialEndBlock = args[0].(*ethFilter).ToBlock
 			t.Logf("New filter block after recovery with no checkpoint: %s", initialEndBlock)
-		} else {
+		} else if method == "eth_getFilterChanges" {
 			*(res.(*[]*logEntry)) = []*logEntry{}
+		} else if method == "eth_uninstallFilter" {
+			*(res.(*bool)) = true
 		}
 	})
 

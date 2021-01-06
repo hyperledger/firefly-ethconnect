@@ -308,7 +308,7 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 			p.inflightTxnsLock.Unlock()
 			return
 		}
-    inflightForAddr.highestNonce = inflight.nonce // store the nonce in our inflight txns state
+		inflightForAddr.highestNonce = inflight.nonce // store the nonce in our inflight txns state
 		fromNode = true
 	}
 
@@ -354,10 +354,17 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, gapPotential bool) 
 
 	log.Infof("In-flight %d complete. nonce=%d addr=%s before=%d after=%d", inflight.id, inflight.nonce, inflight.from, before, after)
 
-	// If we've got a gap potential, we need to submit a gap-fill TX
-	if higherNonceInflight > 0 {
-		log.Warnf("Potential nonce gap. Nonce %d failed to send. Nonce %d in-flight", inflight.nonce, higherNonceInflight)
-		p.submitGapFillTX(inflight)
+	if gapPotential {
+		// If we've got a gap potential, we need to submit a gap-fill TX
+		if higherNonceInflight > 0 {
+			log.Warnf("Potential nonce gap. Nonce %d failed to send. Nonce %d in-flight", inflight.nonce, higherNonceInflight)
+			p.submitGapFillTX(inflight)
+		} else {
+			// We did not find a higher nonce in-flight, so there's no gap to fill. However, we need to make sure
+			// that this nonce is re-used by the next incoming transaction for this address
+			log.Infof("Did not find a Transaction with higher nonce in-flight, setting highest nonce for %s to %d", inflight.from, inflight.nonce-1)
+			p.inflightTxns[inflight.from].highestNonce = inflight.nonce - 1
+		}
 	}
 
 }

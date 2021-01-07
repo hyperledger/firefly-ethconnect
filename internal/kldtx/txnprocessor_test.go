@@ -69,6 +69,8 @@ type testRPC struct {
 	ethGetTransactionReceiptErr    error
 	privFindPrivacyGroupResult     []kldeth.OrionPrivacyGroup
 	privFindPrivacyGroupErr        error
+	ethEstimateGasResult           hexutil.Uint64
+	ethEstimateGasErr              error
 	condLock                       sync.Mutex
 	calls                          []string
 	params                         [][]interface{}
@@ -96,6 +98,12 @@ var goodSendTxnJSON = "{" +
 	"  \"headers\":{\"type\": \"SendTransaction\"}," +
 	"  \"from\":\"" + testFromAddr + "\"," +
 	"  \"gas\":\"123\"," +
+	"  \"method\":{\"name\":\"test\"}" +
+	"}"
+
+var goodSendTxnJSONWithoutGas = "{" +
+	"  \"headers\":{\"type\": \"SendTransaction\"}," +
+	"  \"from\":\"" + testFromAddr + "\"," +
 	"  \"method\":{\"name\":\"test\"}" +
 	"}"
 
@@ -143,6 +151,11 @@ func (r *testRPC) CallContext(ctx context.Context, result interface{}, method st
 	} else if method == "eth_getTransactionReceipt" {
 		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(r.ethGetTransactionReceiptResult))
 		return r.ethGetTransactionReceiptErr
+	} else if method == "eth_estimateGas" {
+		reflect.ValueOf(result).Elem().Set(reflect.ValueOf(&r.ethEstimateGasResult))
+		return r.ethEstimateGasErr
+	} else if method == "eth_call" {
+		return nil
 	}
 	panic(fmt.Errorf("method unknown to test: %s", method))
 }
@@ -896,6 +909,50 @@ func TestOnSendTransactionMessageInflightNonce(t *testing.T) {
 	assert.Empty(testTxnContext.errorReplies)
 	assert.Equal(txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].highestNonce, int64(102))
 	assert.EqualValues([]string{"eth_sendTransaction"}, testRPC.calls)
+}
+
+func TestOnSendTransactionMessageFailedToEstimateGas(t *testing.T) {
+	assert := assert.New(t)
+
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+	}, &kldeth.RPCConf{}).(*txnProcessor)
+	txnProcessor.conf.AlwaysManageNonce = true
+	testRPC := goodMessageRPC()
+	testRPC.ethSendTransactionFirstCond = sync.NewCond(&testRPC.condLock)
+	testRPC.ethEstimateGasErr = fmt.Errorf("out-of-gas")
+	testRPC.ethGetTransactionCountResult = 10
+	txnProcessor.Init(testRPC)
+
+	testTxnContext1 := &testTxnContext{}
+	testTxnContext1.jsonMsg = goodSendTxnJSON
+	testTxnContext2 := &testTxnContext{}
+	testTxnContext2.jsonMsg = goodSendTxnJSONWithoutGas
+
+	// Send both
+	txnProcessor.OnMessage(testTxnContext1)
+	txnProcessor.OnMessage(testTxnContext2)
+	// txnProcessor.inflightTxns[testFromAddr].highestNonce = 10
+
+	// Wait for first to be inflight
+	from := strings.ToLower(testFromAddr)
+	for len(txnProcessor.inflightTxns) == 0 || len(txnProcessor.inflightTxns[from].txnsInFlight) < 1 {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	// Let number 1 go first
+	testRPC.ethSendTransactionFirstCond.L.Lock()
+	testRPC.ethSendTransactionFirstReady = true
+	testRPC.ethSendTransactionFirstCond.Broadcast()
+	testRPC.ethSendTransactionFirstCond.L.Unlock()
+
+	// Wait for the first txn to go through and the 2nd one to fail on gas estimation
+	for len(testRPC.calls) < 4 {
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	assert.Equal(int64(10), txnProcessor.inflightTxns[from].highestNonce)
+	assert.EqualValues([]string{"eth_getTransactionCount", "eth_sendTransaction", "eth_estimateGas", "eth_call"}, testRPC.calls)
 }
 
 func TestOnSendTransactionMessageOrionNoPrivacyGroup(t *testing.T) {

@@ -118,7 +118,7 @@ func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
 	}
 	if uint64(gas) == uint64(0) {
 		if err = tx.calculateGas(ctx, rpc, txArgs, &gas); err != nil {
-			return
+			return err
 		}
 		// Re-encode the EthTX (for external HD Wallet signing)
 		if to != nil {

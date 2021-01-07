@@ -308,7 +308,7 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 			p.inflightTxnsLock.Unlock()
 			return
 		}
-    inflightForAddr.highestNonce = inflight.nonce // store the nonce in our inflight txns state
+		inflightForAddr.highestNonce = inflight.nonce // store the nonce in our inflight txns state
 		fromNode = true
 	}
 
@@ -349,6 +349,15 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, gapPotential bool) 
 				}
 			}
 		}
+		if higherNonceInflight < 0 {
+			// We did not find a higher nonce in-flight, so there's no gap to fill. However, we need to make sure
+			// that this nonce is re-used by the next incoming transaction for this address, if this is not the first transaction for the address.
+			// If this is the first txn, we would have cleared the key from the map - so there's nothing to update.
+			if gapPotential && p.inflightTxns[inflight.from] != nil {
+				log.Infof("Did not find a Transaction with higher nonce in-flight, setting highest nonce for %s to %d", inflight.from, inflight.nonce-1)
+				p.inflightTxns[inflight.from].highestNonce = inflight.nonce - 1
+			}
+		}
 	}
 	p.inflightTxnsLock.Unlock()
 
@@ -359,7 +368,6 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, gapPotential bool) 
 		log.Warnf("Potential nonce gap. Nonce %d failed to send. Nonce %d in-flight", inflight.nonce, higherNonceInflight)
 		p.submitGapFillTX(inflight)
 	}
-
 }
 
 // submitGapFillTX attempts to send a zero gas, no data, transfer of zero ether transaction

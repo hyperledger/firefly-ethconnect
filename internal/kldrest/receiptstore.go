@@ -144,6 +144,7 @@ func (r *receiptStore) getReplies(res http.ResponseWriter, req *http.Request, pa
 
 	err := kldauth.AuthListAsyncReplies(req.Context())
 	if err != nil {
+		log.Errorf("Error querying replies: %s", err)
 		sendRESTError(res, req, klderrors.Errorf(klderrors.Unauthorized), 401)
 		return
 	}
@@ -235,6 +236,7 @@ func (r *receiptStore) getReply(res http.ResponseWriter, req *http.Request, para
 
 	err := kldauth.AuthReadAsyncReplyByUUID(req.Context())
 	if err != nil {
+		log.Errorf("Error querying reply: %s", err)
 		sendRESTError(res, req, klderrors.Errorf(klderrors.Unauthorized), 401)
 		return
 	}

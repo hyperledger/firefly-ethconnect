@@ -218,6 +218,7 @@ func (g *RESTGateway) newAccessTokenContextHandler(parent http.Handler) http.Han
 		}
 		authCtx, err := kldauth.WithAuthContext(req.Context(), accessToken)
 		if err != nil {
+			log.Errorf("Error getting auth context: %s", err)
 			g.sendError(res, "Unauthorized", 401)
 			return
 		}

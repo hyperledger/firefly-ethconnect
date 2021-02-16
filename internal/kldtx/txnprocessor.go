@@ -342,7 +342,7 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, submitted bool) {
 		if after == 0 {
 			// Remove the whole in-flight list (no gap potential)
 			delete(p.inflightTxns, inflight.from)
-		} else if !submitted {
+		} else {
 			// Check the transactions that are left, to see if any nonce is higher
 			for _, alreadyInflight := range inflightForAddr.txnsInFlight {
 				if alreadyInflight.nonce > highestNonce {
@@ -352,7 +352,7 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, submitted bool) {
 
 			// If we did not find a higher nonce in-flight, there's no gap to fill.
 			// However, we need to update the highest nonce so this nonce will re-used
-			if highestNonce < inflight.nonce {
+			if !submitted && highestNonce < inflight.nonce {
 				log.Infof("Cancelled highest nonce in-fight for %s (new highest: %d)", inflight.from, highestNonce)
 				inflightForAddr.highestNonce = highestNonce
 			}
@@ -363,7 +363,7 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, submitted bool) {
 	log.Infof("In-flight %d complete. nonce=%d addr=%s nan=%t sub=%t before=%d after=%d highest=%d", inflight.id, inflight.nonce, inflight.from, inflight.nodeAssignNonce, submitted, before, after, highestNonce)
 
 	// If we've got a gap potential, we need to submit a gap-fill TX
-	if highestNonce > inflight.nonce && !inflight.nodeAssignNonce {
+	if !submitted && highestNonce > inflight.nonce && !inflight.nodeAssignNonce {
 		log.Warnf("Potential nonce gap. Nonce %d failed to send. Nonce %d in-flight", inflight.nonce, highestNonce)
 		p.submitGapFillTX(inflight)
 	}

@@ -360,7 +360,7 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, submitted bool) {
 	}
 	p.inflightTxnsLock.Unlock()
 
-	log.Infof("In-flight %d complete. nonce=%d addr=%s sub=%t before=%d after=%d highest=%d", inflight.id, inflight.nonce, inflight.from, submitted, before, after, highestNonce)
+	log.Infof("In-flight %d complete. nonce=%d addr=%s nan=%t sub=%t before=%d after=%d highest=%d", inflight.id, inflight.nonce, inflight.from, inflight.nodeAssignNonce, submitted, before, after, highestNonce)
 
 	// If we've got a gap potential, we need to submit a gap-fill TX
 	if highestNonce > inflight.nonce && !inflight.nodeAssignNonce {

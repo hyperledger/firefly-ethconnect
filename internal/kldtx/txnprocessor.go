@@ -324,48 +324,47 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *kldmessage
 	return
 }
 
-func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, gapPotential bool) {
+func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, submitted bool) {
 	var before, after int
-	var higherNonceInflight = int64(-1)
+	var highestNonce int64 = -1
 	p.inflightTxnsLock.Lock()
 	if inflightForAddr, exists := p.inflightTxns[inflight.from]; exists {
+		// Remove from the in-flight list
 		before = len(inflightForAddr.txnsInFlight)
 		for idx, alreadyInflight := range inflightForAddr.txnsInFlight {
 			if alreadyInflight.id == inflight.id {
-				p.inflightTxns[inflight.from].txnsInFlight = append(inflightForAddr.txnsInFlight[0:idx], inflightForAddr.txnsInFlight[idx+1:]...)
+				inflightForAddr.txnsInFlight = append(inflightForAddr.txnsInFlight[0:idx], inflightForAddr.txnsInFlight[idx+1:]...)
 				break
 			}
 		}
 		after = len(inflightForAddr.txnsInFlight)
 		// clear the entry for inflight.from when there are no in-flight txns
 		if after == 0 {
+			// Remove the whole in-flight list (no gap potential)
 			delete(p.inflightTxns, inflight.from)
-		}
-		// Check the transactions that are left, to see if any nonce is higher
-		if gapPotential && !inflight.nodeAssignNonce {
+		} else {
+			// Check the transactions that are left, to see if any nonce is higher
 			for _, alreadyInflight := range inflightForAddr.txnsInFlight {
-				if alreadyInflight.nonce > inflight.nonce && alreadyInflight.nonce > higherNonceInflight {
-					higherNonceInflight = alreadyInflight.nonce
+				if alreadyInflight.nonce > highestNonce {
+					highestNonce = alreadyInflight.nonce
 				}
 			}
-		}
-		if higherNonceInflight < 0 {
-			// We did not find a higher nonce in-flight, so there's no gap to fill. However, we need to make sure
-			// that this nonce is re-used by the next incoming transaction for this address, if this is not the first transaction for the address.
-			// If this is the first txn, we would have cleared the key from the map - so there's nothing to update.
-			if gapPotential && p.inflightTxns[inflight.from] != nil {
-				log.Infof("Did not find a Transaction with higher nonce in-flight, setting highest nonce for %s to %d", inflight.from, inflight.nonce-1)
-				p.inflightTxns[inflight.from].highestNonce = inflight.nonce - 1
+
+			// If we did not find a higher nonce in-flight, there's no gap to fill.
+			// However, we need to update the highest nonce so this nonce will re-used
+			if !submitted && highestNonce < inflight.nonce {
+				log.Infof("Cancelled highest nonce in-fight for %s (new highest: %d)", inflight.from, highestNonce)
+				inflightForAddr.highestNonce = highestNonce
 			}
 		}
 	}
 	p.inflightTxnsLock.Unlock()
 
-	log.Infof("In-flight %d complete. nonce=%d addr=%s before=%d after=%d", inflight.id, inflight.nonce, inflight.from, before, after)
+	log.Infof("In-flight %d complete. nonce=%d addr=%s nan=%t sub=%t before=%d after=%d highest=%d", inflight.id, inflight.nonce, inflight.from, inflight.nodeAssignNonce, submitted, before, after, highestNonce)
 
 	// If we've got a gap potential, we need to submit a gap-fill TX
-	if higherNonceInflight > 0 {
-		log.Warnf("Potential nonce gap. Nonce %d failed to send. Nonce %d in-flight", inflight.nonce, higherNonceInflight)
+	if !submitted && highestNonce > inflight.nonce && !inflight.nodeAssignNonce {
+		log.Warnf("Potential nonce gap. Nonce %d failed to send. Nonce %d in-flight", inflight.nonce, highestNonce)
 		p.submitGapFillTX(inflight)
 	}
 }
@@ -496,9 +495,8 @@ func (p *txnProcessor) waitForCompletion(inflight *inflightTxn, initialWaitDelay
 		inflight.txnContext.Reply(&reply)
 	}
 
-	// We've submitted the transaction (even if we didn't get a receipt within our timeout)
-	// it is not a gap potential.
-	p.cancelInFlight(inflight, false)
+	// We've submitted the transaction, even if we didn't get a receipt within our timeout.
+	p.cancelInFlight(inflight, true)
 	inflight.wg.Done()
 }
 
@@ -525,7 +523,7 @@ func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *kldme
 
 	tx, err := kldeth.NewContractDeployTxn(msg, inflight.signer)
 	if err != nil {
-		p.cancelInFlight(inflight, false) // No gap potential, we haven't submitted
+		p.cancelInFlight(inflight, false /* not yet submitted */)
 		txnContext.SendErrorReply(400, err)
 		return
 	}
@@ -544,7 +542,7 @@ func (p *txnProcessor) OnSendTransactionMessage(txnContext TxnContext, msg *kldm
 
 	tx, err := kldeth.NewSendTxn(msg, inflight.signer)
 	if err != nil {
-		p.cancelInFlight(inflight, false) // No gap potential, we haven't submitted
+		p.cancelInFlight(inflight, false /* not yet submitted */)
 		txnContext.SendErrorReply(400, err)
 		return
 	}
@@ -574,8 +572,7 @@ func (p *txnProcessor) sendAndTrackMining(txnContext TxnContext, inflight *infli
 		<-p.concurrencySlots // return our slot as soon as send is complete, to let an awaiting send go
 	}
 	if err != nil {
-		// Now we potentially have a gap - if we allocated the nonce, but failed to send
-		p.cancelInFlight(inflight, true)
+		p.cancelInFlight(inflight, false /* not confirmed as submitted, as send failed */)
 		txnContext.SendErrorReplyWithGapFill(400, err, inflight.gapFillTxHash, inflight.gapFillSucceeded)
 		return
 	}

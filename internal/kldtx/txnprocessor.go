@@ -345,6 +345,7 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, submitted bool) {
 		} else {
 			// Check the transactions that are left, to see if any nonce is higher
 			for _, alreadyInflight := range inflightForAddr.txnsInFlight {
+				log.Infof("Nonce in-flight: %d (highestNonce=%d)", inflight.nonce, highestNonce)
 				if alreadyInflight.nonce > highestNonce {
 					highestNonce = alreadyInflight.nonce
 				}

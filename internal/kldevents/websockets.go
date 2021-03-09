@@ -14,7 +14,10 @@
 
 package kldevents
 
-import "github.com/kaleido-io/ethconnect/internal/klderrors"
+import (
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
+	log "github.com/sirupsen/logrus"
+)
 
 type webSocketAction struct {
 	es   *eventStream
@@ -40,6 +43,7 @@ func (w *webSocketAction) attemptBatch(batchNumber, attempt uint64, events []*ev
 	// Sent the batch of events
 	select {
 	case sender <- events:
+		log.Infof("%s: Websocket pushing batch %d with %d events. FirstBlock=%s LastBlock=%s", w.es.spec.ID, batchNumber, len(events), events[0].BlockNumber, events[len(events)-1].BlockNumber)
 		break
 	case <-w.es.updateInterrupt:
 		return klderrors.Errorf(klderrors.EventStreamsWebSocketInterruptedSend)
@@ -51,6 +55,7 @@ func (w *webSocketAction) attemptBatch(batchNumber, attempt uint64, events []*ev
 	var err error
 	select {
 	case err = <-receiver:
+		log.Infof("%s: Websocket received ack, err %s", w.es.spec.ID, err)
 		break
 	case <-w.es.updateInterrupt:
 		return klderrors.Errorf(klderrors.EventStreamsWebSocketInterruptedReceive)

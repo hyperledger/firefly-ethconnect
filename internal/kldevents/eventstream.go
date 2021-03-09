@@ -614,6 +614,7 @@ func (a *eventStream) performActionWithRetry(batchNumber uint64, events []*event
 		attempt++
 		err = a.action.attemptBatch(batchNumber, attempt, events)
 		complete = err == nil || endTime.Sub(time.Now()) < 0
+		log.Infof("%s: attemptBatch done, complete: %s, err: %s, retryTimeout: %d", a.spec.ID, complete, err, a.spec.RetryTimeoutSec)
 	}
 	return err
 }

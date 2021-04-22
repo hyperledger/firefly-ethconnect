@@ -15,6 +15,7 @@
 package kldtx
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -406,7 +407,7 @@ func (p *txnProcessor) waitForCompletion(inflight *inflightTxn, initialWaitDelay
 	var elapsed time.Duration
 	for !isMined && !timedOut {
 
-		if isMined, err = inflight.tx.GetTXReceipt(inflight.txnContext.Context(), p.rpc); err != nil {
+		if isMined, err = inflight.tx.GetTXReceipt(context.Background(), p.rpc); err != nil {
 			// We wait even on connectivity errors, as we've submitted the transaction and
 			// we want to provide a receipt if connectivity resumes within the timeout
 			log.Infof("Failed to get receipt for %s (retries=%d): %s", inflight, retries, err)
@@ -421,7 +422,7 @@ func (p *txnProcessor) waitForCompletion(inflight *inflightTxn, initialWaitDelay
 			delayBeforeRetry := p.inflightTxnDelayer.GetRetryDelay(initialWaitDelay, retries+1)
 			p.inflightTxnsLock.Unlock()
 
-			log.Debugf("Recept not available after %.2fs (retries=%d): %s", elapsed.Seconds(), retries, inflight)
+			log.Debugf("Receipt not available after %.2fs (retries=%d): %s", elapsed.Seconds(), retries, inflight)
 			time.Sleep(delayBeforeRetry)
 			retries++
 		}
@@ -500,7 +501,7 @@ func (p *txnProcessor) waitForCompletion(inflight *inflightTxn, initialWaitDelay
 	inflight.wg.Done()
 }
 
-// addInflight adds a transction to the inflight list, and kick off
+// addInflight adds a transaction to the inflight list, and kick off
 // a goroutine to check for its completion and send the result
 func (p *txnProcessor) trackMining(inflight *inflightTxn, tx *kldeth.Txn) {
 

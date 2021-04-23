@@ -15,7 +15,6 @@
 package kldtx
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -407,7 +406,7 @@ func (p *txnProcessor) waitForCompletion(inflight *inflightTxn, initialWaitDelay
 	var elapsed time.Duration
 	for !isMined && !timedOut {
 
-		if isMined, err = inflight.tx.GetTXReceipt(context.Background(), p.rpc); err != nil {
+		if isMined, err = inflight.tx.GetTXReceipt(inflight.txnContext.Context(), p.rpc); err != nil {
 			// We wait even on connectivity errors, as we've submitted the transaction and
 			// we want to provide a receipt if connectivity resumes within the timeout
 			log.Infof("Failed to get receipt for %s (retries=%d): %s", inflight, retries, err)

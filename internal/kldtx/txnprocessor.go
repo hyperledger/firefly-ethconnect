@@ -421,7 +421,7 @@ func (p *txnProcessor) waitForCompletion(inflight *inflightTxn, initialWaitDelay
 			delayBeforeRetry := p.inflightTxnDelayer.GetRetryDelay(initialWaitDelay, retries+1)
 			p.inflightTxnsLock.Unlock()
 
-			log.Debugf("Recept not available after %.2fs (retries=%d): %s", elapsed.Seconds(), retries, inflight)
+			log.Debugf("Receipt not available after %.2fs (retries=%d): %s", elapsed.Seconds(), retries, inflight)
 			time.Sleep(delayBeforeRetry)
 			retries++
 		}
@@ -500,7 +500,7 @@ func (p *txnProcessor) waitForCompletion(inflight *inflightTxn, initialWaitDelay
 	inflight.wg.Done()
 }
 
-// addInflight adds a transction to the inflight list, and kick off
+// addInflight adds a transaction to the inflight list, and kick off
 // a goroutine to check for its completion and send the result
 func (p *txnProcessor) trackMining(inflight *inflightTxn, tx *kldeth.Txn) {
 

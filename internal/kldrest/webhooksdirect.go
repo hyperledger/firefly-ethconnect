@@ -142,7 +142,7 @@ func (w *webhooksDirect) sendWebhookMsg(ctx context.Context, key, msgID string, 
 		return "", 400, klderrors.Errorf(klderrors.WebhooksDirectBadHeaders)
 	}
 	msgContext := &msgContext{
-		ctx:          ctx,
+		ctx:          context.Background(),
 		w:            w,
 		timeReceived: time.Now().UTC(),
 		key:          key,

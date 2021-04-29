@@ -182,7 +182,9 @@ func TestReplyProcessorWithPeristenceErrorSwallows(t *testing.T) {
 	replyMsg.TransactionHash = &txHash
 	replyMsgBytes, _ := json.Marshal(&replyMsg)
 
-	r.processReply(replyMsgBytes)
+	assert.Panics(t, func() {
+		r.processReply(replyMsgBytes)
+	})
 }
 
 func TestReplyProcessorWithErrorReply(t *testing.T) {

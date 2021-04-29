@@ -116,7 +116,7 @@ func (r *receiptStore) processReply(msgBytes []byte) {
 	// Insert the receipt into MongoDB - captures errors
 	if requestID != "" && r.persistence != nil {
 		if err := r.persistence.AddReceipt(requestID, &parsedMsg); err != nil {
-			log.Errorf("%s: Failed to insert '%s' into receipt store: %+v", requestID, parsedMsg, err)
+			log.Panicf("%s: Failed to insert '%s' into receipt store: %+v", requestID, parsedMsg, err)
 		} else {
 			log.Infof("%s: Inserted receipt into receipt store", parsedMsg["_id"])
 		}

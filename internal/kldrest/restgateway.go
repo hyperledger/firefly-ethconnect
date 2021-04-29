@@ -60,6 +60,7 @@ type MongoDBReceiptStoreConf struct {
 	Database         string `json:"database"`
 	Collection       string `json:"collection"`
 	ConnectTimeoutMS int    `json:"connectTimeout"`
+	RetryTimeoutMS   int    `json:"retryTimeout"`
 }
 
 // RESTGatewayConf defines the YAML config structure for a webhooks bridge instance

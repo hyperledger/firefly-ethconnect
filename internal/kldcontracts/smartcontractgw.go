@@ -650,7 +650,6 @@ func (g *smartContractGW) createStream(res http.ResponseWriter, req *http.Reques
 		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayEventStreamInvalid, err), 400)
 		return
 	}
-	log.Warn(spec.WebSocket)
 
 	newSpec, err := g.sm.AddStream(req.Context(), &spec)
 	if err != nil {

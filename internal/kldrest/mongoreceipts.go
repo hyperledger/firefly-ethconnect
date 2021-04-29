@@ -74,12 +74,29 @@ func (m *mongoReceipts) connect() (err error) {
 }
 
 // AddReceipt processes an individual reply message, and contains all errors
-func (m *mongoReceipts) AddReceipt(receipt *map[string]interface{}) error {
-	if err := m.collection.Insert(*receipt); err != nil {
-		log.Errorf("Insert failed for object '%.v': %s", *receipt, err)
-		return err
+// To account for any transitory failures writing to mongoDB, it retries adding receipt with a backoff
+func (m *mongoReceipts) AddReceipt(requestID string, receipt *map[string]interface{}) (err error) {
+	retryTimeout := 10 * time.Second
+	backoffFactor := 1.1
+	startTime := time.Now()
+	delay := 500 * time.Millisecond
+	attempt := 0
+	complete := false
+
+	for !complete {
+		if attempt > 0 {
+			log.Infof("%s: Waiting %.2fs before re-attempt:%d mongo write", requestID, delay.Seconds(), attempt)
+			time.Sleep(delay)
+			delay = time.Duration(float64(delay) * backoffFactor)
+		}
+		attempt++
+		err = m.collection.Insert(*receipt)
+		complete = err == nil || time.Since(startTime) > retryTimeout
+		if !complete {
+			log.Errorf("%s: addReceipt attempt: %d failed, err: %s, retryTimeout: %d", requestID, attempt, err, retryTimeout)
+		}
 	}
-	return nil
+	return err
 }
 
 // GetReceipts Returns recent receipts with skip & limit

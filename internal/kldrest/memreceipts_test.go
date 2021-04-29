@@ -32,7 +32,7 @@ func TestMemReceiptsWrapping(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		receipt := make(map[string]interface{})
 		receipt["key"] = fmt.Sprintf("receipt_%d", i)
-		r.AddReceipt(&receipt)
+		r.AddReceipt("key", &receipt)
 	}
 
 	assert.Equal(50, r.receipts.Len())

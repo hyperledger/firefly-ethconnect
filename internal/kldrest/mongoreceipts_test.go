@@ -198,9 +198,8 @@ func TestMongoReceiptsAddReceiptOK(t *testing.T) {
 
 	r.connect()
 	receipt := make(map[string]interface{})
-	err := r.AddReceipt(&receipt)
+	err := r.AddReceipt("key", &receipt)
 	assert.NoError(err)
-	return
 }
 
 func TestMongoReceiptsAddReceiptFailed(t *testing.T) {
@@ -215,9 +214,8 @@ func TestMongoReceiptsAddReceiptFailed(t *testing.T) {
 
 	r.connect()
 	receipt := make(map[string]interface{})
-	err := r.AddReceipt(&receipt)
+	err := r.AddReceipt("key", &receipt)
 	assert.EqualError(err, "pop")
-	return
 }
 
 func TestMongoReceiptsGetReceiptsOK(t *testing.T) {

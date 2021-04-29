@@ -73,7 +73,7 @@ func (m *memoryReceipts) GetReceipt(requestID string) (*map[string]interface{}, 
 	return nil, nil
 }
 
-func (m *memoryReceipts) AddReceipt(receipt *map[string]interface{}) error {
+func (m *memoryReceipts) AddReceipt(requestID string, receipt *map[string]interface{}) error {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 

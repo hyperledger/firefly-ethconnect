@@ -42,7 +42,7 @@ func (m *mockReceiptErrs) GetReceipt(requestID string) (*map[string]interface{},
 	return nil, m.err
 }
 
-func (m *mockReceiptErrs) AddReceipt(receipt *map[string]interface{}) error {
+func (m *mockReceiptErrs) AddReceipt(requestID string, receipt *map[string]interface{}) error {
 	return m.err
 }
 
@@ -302,11 +302,11 @@ func TestGetReplyOK(t *testing.T) {
 	fakeReply1 := make(map[string]interface{})
 	fakeReply1["_id"] = "ABCDEFG"
 	fakeReply1["field1"] = "value1"
-	p.AddReceipt(&fakeReply1)
+	p.AddReceipt("_id", &fakeReply1)
 	fakeReply2 := make(map[string]interface{})
 	fakeReply2["_id"] = "BCDEFG"
 	fakeReply2["field1"] = "value2"
-	p.AddReceipt(&fakeReply2)
+	p.AddReceipt("_id", &fakeReply2)
 	status, respJSON, httpErr := testGETObject(ts, "/reply/ABCDEFG")
 	assert.NoError(httpErr)
 	assert.Equal(200, status)
@@ -323,7 +323,7 @@ func TestGetReplyBadData(t *testing.T) {
 	unserializable := make(map[interface{}]interface{})
 	unserializable[true] = "not for json"
 	fakeReply["badness"] = unserializable
-	p.AddReceipt(&fakeReply)
+	p.AddReceipt("_id", &fakeReply)
 	status, respJSON, httpErr := testGETObject(ts, "/reply/ABCDEFG")
 	assert.NoError(httpErr)
 	assert.Equal(500, status)
@@ -383,7 +383,7 @@ func TestGetRepliesDefaultLimit(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		fakeReply := make(map[string]interface{})
 		fakeReply["_id"] = fmt.Sprintf("reply%d", i)
-		p.AddReceipt(&fakeReply)
+		p.AddReceipt("_id", &fakeReply)
 	}
 
 	status, respArr, httpErr := testGETArray(ts, "/replies")
@@ -403,7 +403,7 @@ func TestGetRepliesCustomSkipLimit(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		fakeReply := make(map[string]interface{})
 		fakeReply["_id"] = fmt.Sprintf("reply%d", i)
-		p.AddReceipt(&fakeReply)
+		p.AddReceipt("_id", &fakeReply)
 	}
 
 	status, respArr, httpErr := testGETArray(ts, "/replies?skip=5&limit=20")
@@ -423,7 +423,7 @@ func TestGetRepliesCustomFiltersISO(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		fakeReply := make(map[string]interface{})
 		fakeReply["_id"] = fmt.Sprintf("reply%d", i)
-		p.AddReceipt(&fakeReply)
+		p.AddReceipt("_id", &fakeReply)
 	}
 
 	status, resObj, httpErr := testGETObject(ts, "/replies?from=abc&to=bcd&since=2019-01-01T00:00:00Z")
@@ -440,7 +440,7 @@ func TestGetRepliesCustomFiltersTS(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		fakeReply := make(map[string]interface{})
 		fakeReply["_id"] = fmt.Sprintf("reply%d", i)
-		p.AddReceipt(&fakeReply)
+		p.AddReceipt("_id", &fakeReply)
 	}
 
 	status, resObj, httpErr := testGETObject(ts, "/replies?from=abc&to=bcd&since=1580435959")
@@ -457,7 +457,7 @@ func TestGetRepliesBadSinceTS(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		fakeReply := make(map[string]interface{})
 		fakeReply["_id"] = fmt.Sprintf("reply%d", i)
-		p.AddReceipt(&fakeReply)
+		p.AddReceipt("_id", &fakeReply)
 	}
 
 	status, resObj, httpErr := testGETObject(ts, "/replies?from=abc&to=bcd&since=badness")

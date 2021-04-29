@@ -41,7 +41,7 @@ var uuidCharsVerifier, _ = regexp.Compile("^[0-9a-zA-Z-]+$")
 type ReceiptStorePersistence interface {
 	GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to string) (*[]map[string]interface{}, error)
 	GetReceipt(requestID string) (*map[string]interface{}, error)
-	AddReceipt(receipt *map[string]interface{}) error
+	AddReceipt(requestID string, receipt *map[string]interface{}) error
 }
 
 type receiptStore struct {
@@ -115,10 +115,10 @@ func (r *receiptStore) processReply(msgBytes []byte) {
 
 	// Insert the receipt into MongoDB - captures errors
 	if requestID != "" && r.persistence != nil {
-		if err := r.persistence.AddReceipt(&parsedMsg); err != nil {
-			log.Errorf("Failed to insert '%s' into receipt store: %+v", parsedMsg, err)
+		if err := r.persistence.AddReceipt(requestID, &parsedMsg); err != nil {
+			log.Errorf("%s: Failed to insert '%s' into receipt store: %+v", parsedMsg["_id"], parsedMsg, err)
 		} else {
-			log.Infof("Inserted receipt %s into receipt store", parsedMsg["_id"])
+			log.Infof("%s: Inserted receipt into receipt store", parsedMsg["_id"])
 		}
 	}
 }

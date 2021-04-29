@@ -32,7 +32,7 @@ func TestMemReceiptsWrapping(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		receipt := make(map[string]interface{})
 		receipt["key"] = fmt.Sprintf("receipt_%d", i)
-		r.AddReceipt(&receipt)
+		r.AddReceipt("key", &receipt)
 	}
 
 	assert.Equal(50, r.receipts.Len())
@@ -43,8 +43,6 @@ func TestMemReceiptsWrapping(t *testing.T) {
 		assert.Equal(val["key"], expectedKey)
 		currItem = currItem.Next()
 	}
-
-	return
 }
 
 func TestMemReceiptsNoIDFilterImpl(t *testing.T) {
@@ -57,6 +55,4 @@ func TestMemReceiptsNoIDFilterImpl(t *testing.T) {
 
 	_, err := r.GetReceipts(0, 0, []string{"test"}, 0, "t", "t")
 	assert.EqualError(err, "Memory receipts do not support filtering")
-
-	return
 }

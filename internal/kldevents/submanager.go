@@ -96,7 +96,7 @@ func CobraInitSubscriptionManager(cmd *cobra.Command, conf *SubscriptionManagerC
 	cmd.Flags().BoolVarP(&conf.WebhooksAllowPrivateIPs, "events-privips", "J", false, "Allow private IPs in Webhooks")
 }
 
-// NewSubscriptionManager construtor
+// NewSubscriptionManager constructor
 func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc kldeth.RPCClient, wsChannels kldws.WebSocketChannels) SubscriptionManager {
 	sm := &subscriptionMGR{
 		conf:          conf,

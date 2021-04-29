@@ -127,7 +127,7 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	router.POST(kldevents.StreamPathPrefix+"/:id/resume", g.withEventsAuth(g.suspendOrResumeStream))
 }
 
-// NewSmartContractGateway construtor
+// NewSmartContractGateway constructor
 func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *kldtx.TxnProcessorConf, rpc kldeth.RPCClient, processor kldtx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher, ws kldws.WebSocketChannels) (SmartContractGateway, error) {
 	var baseURL *url.URL
 	var err error
@@ -650,6 +650,7 @@ func (g *smartContractGW) createStream(res http.ResponseWriter, req *http.Reques
 		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayEventStreamInvalid, err), 400)
 		return
 	}
+	log.Warn(spec.WebSocket)
 
 	newSpec, err := g.sm.AddStream(req.Context(), &spec)
 	if err != nil {

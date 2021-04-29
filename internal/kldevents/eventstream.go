@@ -107,7 +107,7 @@ type eventStreamAction interface {
 	attemptBatch(batchNumber, attempt uint64, events []*eventData) error
 }
 
-// newEventStream constructor verfies the action is correct, kicks
+// newEventStream constructor verifies the action is correct, kicks
 // off the event batch processor, and blockHWM will be
 // initialied to that supplied (zero on initial, or the
 // value from the checkpoint)

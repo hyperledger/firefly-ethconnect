@@ -115,7 +115,6 @@ func TestNewMongoReceipts(t *testing.T) {
 	conf := &MongoDBReceiptStoreConf{}
 	r := newMongoReceipts(conf)
 	assert.Equal(conf, r.conf)
-	return
 }
 
 func TestMongoReceiptsConnectOK(t *testing.T) {
@@ -139,8 +138,6 @@ func TestMongoReceiptsConnectOK(t *testing.T) {
 	assert.Equal("testcoll", mgoMock.collectionName)
 	assert.Equal(true, mgoMock.collection.collInfo.Capped)
 	assert.Equal(123, mgoMock.collection.collInfo.MaxDocs)
-
-	return
 }
 
 func TestMongoReceiptsConnectConnErr(t *testing.T) {
@@ -154,7 +151,6 @@ func TestMongoReceiptsConnectConnErr(t *testing.T) {
 
 	err := r.connect()
 	assert.EqualError(err, "Unable to connect to MongoDB: pop")
-	return
 }
 
 func TestMongoReceiptsConnectCollErr(t *testing.T) {
@@ -169,7 +165,6 @@ func TestMongoReceiptsConnectCollErr(t *testing.T) {
 
 	err := r.connect()
 	assert.NoError(err)
-	return
 }
 
 func TestMongoReceiptsConnectIdxErr(t *testing.T) {
@@ -184,7 +179,6 @@ func TestMongoReceiptsConnectIdxErr(t *testing.T) {
 
 	err := r.connect()
 	assert.EqualError(err, "Unable to create index: pop")
-	return
 }
 
 func TestMongoReceiptsAddReceiptOK(t *testing.T) {
@@ -198,9 +192,8 @@ func TestMongoReceiptsAddReceiptOK(t *testing.T) {
 
 	r.connect()
 	receipt := make(map[string]interface{})
-	err := r.AddReceipt(&receipt)
+	err := r.AddReceipt("key", &receipt)
 	assert.NoError(err)
-	return
 }
 
 func TestMongoReceiptsAddReceiptFailed(t *testing.T) {
@@ -209,15 +202,14 @@ func TestMongoReceiptsAddReceiptFailed(t *testing.T) {
 	mgoMock := &mockMongo{}
 	mgoMock.collection.insertErr = fmt.Errorf("pop")
 	r := &mongoReceipts{
-		conf: &MongoDBReceiptStoreConf{},
+		conf: &MongoDBReceiptStoreConf{RetryTimeoutMS: 2 * 1000},
 		mgo:  mgoMock,
 	}
 
 	r.connect()
 	receipt := make(map[string]interface{})
-	err := r.AddReceipt(&receipt)
+	err := r.AddReceipt("key", &receipt)
 	assert.EqualError(err, "pop")
-	return
 }
 
 func TestMongoReceiptsGetReceiptsOK(t *testing.T) {
@@ -237,7 +229,6 @@ func TestMongoReceiptsGetReceiptsOK(t *testing.T) {
 		res2 := make(map[string]interface{})
 		res2["key2"] = "value2"
 		*resArray = append(*resArray, res2)
-		return
 	}
 
 	r.connect()
@@ -247,7 +238,6 @@ func TestMongoReceiptsGetReceiptsOK(t *testing.T) {
 	assert.Equal(2, mgoMock.collection.mockQuery.limit)
 	assert.Equal("value1", (*results)[0]["key1"])
 	assert.Equal("value2", (*results)[1]["key2"])
-	return
 }
 
 func TestMongoReceiptsFilter(t *testing.T) {
@@ -267,7 +257,6 @@ func TestMongoReceiptsFilter(t *testing.T) {
 		res2 := make(map[string]interface{})
 		res2["key2"] = "value2"
 		*resArray = append(*resArray, res2)
-		return
 	}
 
 	r.connect()
@@ -283,7 +272,6 @@ func TestMongoReceiptsFilter(t *testing.T) {
 	assert.Equal(0, mgoMock.collection.mockQuery.limit)
 	assert.Equal("value1", (*results)[0]["key1"])
 	assert.Equal("value2", (*results)[1]["key2"])
-	return
 }
 
 func TestMongoReceiptsGetReceiptsNotFound(t *testing.T) {
@@ -301,7 +289,6 @@ func TestMongoReceiptsGetReceiptsNotFound(t *testing.T) {
 	results, err := r.GetReceipts(5, 2, nil, 0, "", "")
 	assert.NoError(err)
 	assert.Len(*results, 0)
-	return
 }
 
 func TestMongoReceiptsGetReceiptsError(t *testing.T) {
@@ -318,7 +305,6 @@ func TestMongoReceiptsGetReceiptsError(t *testing.T) {
 	r.connect()
 	_, err := r.GetReceipts(5, 2, nil, 0, "", "")
 	assert.EqualError(err, "pop")
-	return
 }
 
 func TestMongoReceiptsGetReceiptOK(t *testing.T) {
@@ -336,7 +322,6 @@ func TestMongoReceiptsGetReceiptOK(t *testing.T) {
 		res1["_id"] = "receipt1"
 		res1["key1"] = "value1"
 		*resMap = res1
-		return
 	}
 
 	r.connect()
@@ -344,7 +329,6 @@ func TestMongoReceiptsGetReceiptOK(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal("receipt1", (*result)["_id"])
 	assert.Equal("value1", (*result)["key1"])
-	return
 }
 
 func TestMongoReceiptsGetReceiptNotFound(t *testing.T) {
@@ -362,7 +346,6 @@ func TestMongoReceiptsGetReceiptNotFound(t *testing.T) {
 	result, err := r.GetReceipt("receipt1")
 	assert.NoError(err)
 	assert.Nil(result)
-	return
 }
 
 func TestMongoReceiptsGetReceiptError(t *testing.T) {
@@ -379,5 +362,4 @@ func TestMongoReceiptsGetReceiptError(t *testing.T) {
 	r.connect()
 	_, err := r.GetReceipt("receipt1")
 	assert.EqualError(err, "pop")
-	return
 }

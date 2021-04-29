@@ -33,9 +33,13 @@ func newWebSocketAction(es *eventStream, spec *webSocketActionInfo) (*webSocketA
 
 // attemptBatch attempts to deliver a batch over socket IO
 func (w *webSocketAction) attemptBatch(batchNumber, attempt uint64, events []*eventData) error {
-
+	// Implicitly use a topic of "" if no topic has been set
+	topic := ""
+	if w.spec != nil {
+		topic = w.spec.Topic
+	}
 	// Get a blocking channel to send and receive on our chosen namespace
-	sender, receiver, closing := w.es.wsChannels.GetChannels(w.spec.Topic)
+	sender, receiver, closing := w.es.wsChannels.GetChannels(topic)
 
 	// Sent the batch of events
 	select {

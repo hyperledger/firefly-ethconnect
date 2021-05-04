@@ -52,7 +52,7 @@ func TestConnectSendReceiveCycle(t *testing.T) {
 		Type: "listen",
 	})
 
-	s, r, _ := w.GetChannels("")
+	s, _, r, _ := w.GetChannels("")
 
 	s <- "Hello World"
 
@@ -111,8 +111,8 @@ func TestConnectTopicIsolation(t *testing.T) {
 		Topic: "topic2",
 	})
 
-	s1, r1, _ := w.GetChannels("topic1")
-	s2, r2, _ := w.GetChannels("topic2")
+	s1, _, r1, _ := w.GetChannels("topic1")
+	s2, _, r2, _ := w.GetChannels("topic2")
 
 	s1 <- "Hello Number 1"
 	s2 <- "Hello Number 2"
@@ -155,7 +155,7 @@ func TestConnectAbandonRequest(t *testing.T) {
 	c.WriteJSON(&webSocketCommandMessage{
 		Type: "listen",
 	})
-	_, r, closing := w.GetChannels("")
+	_, _, r, closing := w.GetChannels("")
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)

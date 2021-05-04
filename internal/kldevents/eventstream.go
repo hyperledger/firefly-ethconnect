@@ -77,7 +77,8 @@ type webhookActionInfo struct {
 }
 
 type webSocketActionInfo struct {
-	Topic string `json:"topic,omitempty"`
+	Topic            string `json:"topic,omitempty"`
+	DistributionMode string `json:"distributionMode,omitempty"`
 }
 
 type eventStream struct {
@@ -164,6 +165,12 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo, wsChannels kldws.W
 			return nil, err
 		}
 	case "websocket":
+		distributionMode := strings.ToLower(spec.WebSocket.DistributionMode)
+		if distributionMode != "" && distributionMode != "broadcast" && distributionMode != "workloaddistribution" {
+			return nil, klderrors.Errorf(klderrors.EventStreamsInvalidDistributionMode, spec.WebSocket.DistributionMode)
+		}
+		spec.WebSocket.DistributionMode = distributionMode
+
 		if a.action, err = newWebSocketAction(a, spec.WebSocket); err != nil {
 			return nil, err
 		}
@@ -245,7 +252,13 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 	}
 	if a.spec.Type == "websocket" && newSpec.WebSocket != nil {
 		a.spec.WebSocket.Topic = newSpec.WebSocket.Topic
+		distributionMode := strings.ToLower(newSpec.WebSocket.DistributionMode)
+		if distributionMode != "" && distributionMode != "broadcast" && distributionMode != "workloaddistribution" {
+			return nil, klderrors.Errorf(klderrors.EventStreamsInvalidDistributionMode, spec.WebSocket.DistributionMode)
+		}
+		spec.WebSocket.DistributionMode = distributionMode
 	}
+
 	if a.spec.BatchSize != newSpec.BatchSize && newSpec.BatchSize != 0 && newSpec.BatchSize < MaxBatchSize {
 		a.spec.BatchSize = newSpec.BatchSize
 	}

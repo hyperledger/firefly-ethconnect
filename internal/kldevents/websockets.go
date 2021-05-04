@@ -14,7 +14,9 @@
 
 package kldevents
 
-import "github.com/kaleido-io/ethconnect/internal/klderrors"
+import (
+	"github.com/kaleido-io/ethconnect/internal/klderrors"
+)
 
 type webSocketAction struct {
 	es   *eventStream
@@ -33,17 +35,28 @@ func newWebSocketAction(es *eventStream, spec *webSocketActionInfo) (*webSocketA
 
 // attemptBatch attempts to deliver a batch over socket IO
 func (w *webSocketAction) attemptBatch(batchNumber, attempt uint64, events []*eventData) error {
+	var err error
+
 	// Implicitly use a topic of "" if no topic has been set
 	topic := ""
 	if w.spec != nil {
 		topic = w.spec.Topic
 	}
+
 	// Get a blocking channel to send and receive on our chosen namespace
-	sender, receiver, closing := w.es.wsChannels.GetChannels(topic)
+	sender, broadcaster, receiver, closing := w.es.wsChannels.GetChannels(topic)
+
+	var channel chan<- interface{}
+	switch w.spec.DistributionMode {
+	case "broadcast":
+		channel = broadcaster
+	default:
+		channel = sender
+	}
 
 	// Sent the batch of events
 	select {
-	case sender <- events:
+	case channel <- events:
 		break
 	case <-w.es.updateInterrupt:
 		return klderrors.Errorf(klderrors.EventStreamsWebSocketInterruptedSend)
@@ -51,17 +64,18 @@ func (w *webSocketAction) attemptBatch(batchNumber, attempt uint64, events []*ev
 		return klderrors.Errorf(klderrors.EventStreamsWebSocketInterruptedSend)
 	}
 
-	// Wait for the next ack or exception
-	var err error
-	select {
-	case err = <-receiver:
-		break
-	case <-w.es.updateInterrupt:
-		return klderrors.Errorf(klderrors.EventStreamsWebSocketInterruptedReceive)
-	case <-closing:
-		return klderrors.Errorf(klderrors.EventStreamsWebSocketInterruptedReceive)
+	// If we ever add more distribution modes, we may want to change this logic from a simple if statement
+	if w.spec.DistributionMode != "broadcast" {
+		// Wait for the next ack or exception
+		select {
+		case err = <-receiver:
+			break
+		case <-w.es.updateInterrupt:
+			return klderrors.Errorf(klderrors.EventStreamsWebSocketInterruptedReceive)
+		case <-closing:
+			return klderrors.Errorf(klderrors.EventStreamsWebSocketInterruptedReceive)
+		}
+		// Pass back any exception from the client
 	}
-
-	// Pass back any exception from the client
 	return err
 }

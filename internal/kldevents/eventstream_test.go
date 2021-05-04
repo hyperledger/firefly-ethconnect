@@ -711,8 +711,10 @@ func TestInterruptWebSocketSend(t *testing.T) {
 
 func TestInterruptWebSocketReceive(t *testing.T) {
 	wsChannels := &mockWebSocket{
-		sender:   make(chan interface{}),
-		receiver: make(chan error),
+		sender:    make(chan interface{}),
+		broadcast: make(chan interface{}),
+		receiver:  make(chan error),
+		closing:   make(chan struct{})
 	}
 	es := &eventStream{
 		wsChannels:      wsChannels,

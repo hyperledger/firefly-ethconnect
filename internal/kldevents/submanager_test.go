@@ -51,6 +51,7 @@ type mockWebSocket struct {
 	registeredNamespace string
 	capturedNamespace   string
 	sender              chan interface{}
+	broadcast           chan interface{}
 	receiver            chan error
 	closing             chan struct{}
 }
@@ -73,9 +74,10 @@ func cleanup(t *testing.T, dir string) {
 
 func newMockWebSocket() *mockWebSocket {
 	return &mockWebSocket{
-		sender:   make(chan interface{}),
-		receiver: make(chan error),
-		closing:  make(chan struct{}),
+		sender:    make(chan interface{}),
+		broadcast: make(chan interface{}),
+		receiver:  make(chan error),
+		closing:   make(chan struct{}),
 	}
 }
 

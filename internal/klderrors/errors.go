@@ -131,6 +131,8 @@ const (
 	EventStreamsWebSocketErrorFromClient = "Error received from WebSocket client: %s"
 	// EventStreamsCannotUpdateType cannot change tyep
 	EventStreamsCannotUpdateType = "The type of an event stream cannot be changed"
+	// EventStreamsInvalidDistributionMode unknown distribution mode
+	EventStreamsInvalidDistributionMode = "Invalid distribution mode '%s'. Valid distribution modes are: 'workloadDistribution' and 'broadcast'."
 
 	// KakfaProducerConfirmMsgUnknown we received a confirmation callback, but we aren't expecting it
 	KakfaProducerConfirmMsgUnknown = "Received confirmation for message not in in-flight map: %s"

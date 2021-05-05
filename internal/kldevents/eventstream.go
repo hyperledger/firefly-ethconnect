@@ -165,11 +165,14 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo, wsChannels kldws.W
 			return nil, err
 		}
 	case "websocket":
-		distributionMode := strings.ToLower(spec.WebSocket.DistributionMode)
-		if distributionMode != "" && distributionMode != "broadcast" && distributionMode != "workloaddistribution" {
-			return nil, klderrors.Errorf(klderrors.EventStreamsInvalidDistributionMode, spec.WebSocket.DistributionMode)
+
+		if spec.WebSocket != nil {
+			distributionMode := strings.ToLower(spec.WebSocket.DistributionMode)
+			if distributionMode != "" && distributionMode != "broadcast" && distributionMode != "workloaddistribution" {
+				return nil, klderrors.Errorf(klderrors.EventStreamsInvalidDistributionMode, spec.WebSocket.DistributionMode)
+			}
+			spec.WebSocket.DistributionMode = distributionMode
 		}
-		spec.WebSocket.DistributionMode = distributionMode
 
 		if a.action, err = newWebSocketAction(a, spec.WebSocket); err != nil {
 			return nil, err
@@ -256,7 +259,7 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 		if distributionMode != "" && distributionMode != "broadcast" && distributionMode != "workloaddistribution" {
 			return nil, klderrors.Errorf(klderrors.EventStreamsInvalidDistributionMode, spec.WebSocket.DistributionMode)
 		}
-		spec.WebSocket.DistributionMode = distributionMode
+		a.spec.WebSocket.DistributionMode = distributionMode
 	}
 
 	if a.spec.BatchSize != newSpec.BatchSize && newSpec.BatchSize != 0 && newSpec.BatchSize < MaxBatchSize {

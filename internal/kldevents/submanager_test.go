@@ -56,9 +56,9 @@ type mockWebSocket struct {
 	closing             chan struct{}
 }
 
-func (m *mockWebSocket) GetChannels(namespace string) (chan<- interface{}, <-chan error, <-chan struct{}) {
+func (m *mockWebSocket) GetChannels(namespace string) (chan<- interface{}, chan<- interface{}, <-chan error, <-chan struct{}) {
 	m.capturedNamespace = namespace
-	return m.sender, m.receiver, m.closing
+	return m.sender, m.broadcast, m.receiver, m.closing
 }
 
 func tempdir(t *testing.T) string {

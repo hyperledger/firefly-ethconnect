@@ -714,7 +714,7 @@ func TestInterruptWebSocketReceive(t *testing.T) {
 		sender:    make(chan interface{}),
 		broadcast: make(chan interface{}),
 		receiver:  make(chan error),
-		closing:   make(chan struct{})
+		closing:   make(chan struct{}),
 	}
 	es := &eventStream{
 		wsChannels:      wsChannels,

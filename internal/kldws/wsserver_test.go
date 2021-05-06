@@ -220,3 +220,105 @@ func TestConnectBadWebsocketHandshake(t *testing.T) {
 	w.Close()
 
 }
+
+func TestBroadcast(t *testing.T) {
+	assert := assert.New(t)
+
+	w, ts := newTestWebSocketServer()
+	defer ts.Close()
+
+	u, _ := url.Parse(ts.URL)
+	u.Scheme = "ws"
+	u.Path = "/ws"
+	topic := "banana"
+	c, _, err := ws.DefaultDialer.Dial(u.String(), nil)
+	assert.NoError(err)
+
+	c.WriteJSON(&webSocketCommandMessage{
+		Type:  "listen",
+		Topic: topic,
+	})
+
+	// Wait until the client has subscribed to the topic before proceeding
+	for len(w.topicMap[topic]) == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	_, b, _, _ := w.GetChannels(topic)
+	b <- "Hello World"
+
+	var val string
+	c.ReadJSON(&val)
+	assert.Equal("Hello World", val)
+
+	b <- "Hello World Again"
+
+	c.ReadJSON(&val)
+	assert.Equal("Hello World Again", val)
+
+	w.Close()
+}
+
+func TestBroadcastDefaultTopic(t *testing.T) {
+	assert := assert.New(t)
+
+	w, ts := newTestWebSocketServer()
+	defer ts.Close()
+
+	u, _ := url.Parse(ts.URL)
+	u.Scheme = "ws"
+	u.Path = "/ws"
+	topic := ""
+	c, _, err := ws.DefaultDialer.Dial(u.String(), nil)
+	assert.NoError(err)
+
+	c.WriteJSON(&webSocketCommandMessage{
+		Type: "listen",
+	})
+
+	// Wait until the client has subscribed to the topic before proceeding
+	for len(w.topicMap[topic]) == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	_, b, _, _ := w.GetChannels(topic)
+	b <- "Hello World"
+
+	var val string
+	c.ReadJSON(&val)
+	assert.Equal("Hello World", val)
+
+	b <- "Hello World Again"
+
+	c.ReadJSON(&val)
+	assert.Equal("Hello World Again", val)
+
+	w.Close()
+}
+
+func TestRecvNotOk(t *testing.T) {
+	assert := assert.New(t)
+
+	w, ts := newTestWebSocketServer()
+	defer ts.Close()
+
+	u, _ := url.Parse(ts.URL)
+	u.Scheme = "ws"
+	u.Path = "/ws"
+	topic := ""
+	c, _, err := ws.DefaultDialer.Dial(u.String(), nil)
+	assert.NoError(err)
+
+	c.WriteJSON(&webSocketCommandMessage{
+		Type: "listen",
+	})
+
+	// Wait until the client has subscribed to the topic before proceeding
+	for len(w.topicMap[topic]) == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	_, b, _, _ := w.GetChannels(topic)
+	close(b)
+	w.Close()
+}

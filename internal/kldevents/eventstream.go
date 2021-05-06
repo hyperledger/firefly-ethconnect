@@ -257,7 +257,7 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 		a.spec.WebSocket.Topic = newSpec.WebSocket.Topic
 		distributionMode := strings.ToLower(newSpec.WebSocket.DistributionMode)
 		if distributionMode != "" && distributionMode != "broadcast" && distributionMode != "workloaddistribution" {
-			return nil, klderrors.Errorf(klderrors.EventStreamsInvalidDistributionMode, spec.WebSocket.DistributionMode)
+			return nil, klderrors.Errorf(klderrors.EventStreamsInvalidDistributionMode, newSpec.WebSocket.DistributionMode)
 		}
 		a.spec.WebSocket.DistributionMode = distributionMode
 	}

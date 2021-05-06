@@ -702,6 +702,28 @@ func TestProcessEventsEnd2EndWithReset(t *testing.T) {
 	sm.Close()
 }
 
+func TestInterruptWebSocketBroadcast(t *testing.T) {
+	wsChannels := &mockWebSocket{
+		sender:   make(chan interface{}),
+		receiver: make(chan error),
+	}
+	es := &eventStream{
+		wsChannels:      wsChannels,
+		updateInterrupt: make(chan struct{}),
+	}
+	sio, _ := newWebSocketAction(es, &webSocketActionInfo{
+		DistributionMode: "broadcast",
+	})
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		close(es.updateInterrupt)
+		wg.Done()
+	}()
+	sio.attemptBatch(0, 1, []*eventData{})
+	wg.Wait()
+}
+
 func TestInterruptWebSocketSend(t *testing.T) {
 	wsChannels := &mockWebSocket{
 		sender:   make(chan interface{}),

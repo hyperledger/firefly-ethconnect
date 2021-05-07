@@ -58,10 +58,9 @@ func newReceiptsErrTestServer(err error) (*receiptStore, *httptest.Server) {
 	return r, httptest.NewServer(router)
 }
 
-func newReceiptsTestStore() (*receiptStore, *memoryReceipts, chan interface{}) {
-	c := make(chan interface{})
+func newReceiptsTestStore(replyCallback func(message interface{})) (*receiptStore, *memoryReceipts) {
 	gw := &mockContractGW{
-		testChan: c,
+		replyCallback: replyCallback,
 	}
 	conf := &ReceiptStoreConf{
 		MaxDocs:    50,
@@ -69,11 +68,11 @@ func newReceiptsTestStore() (*receiptStore, *memoryReceipts, chan interface{}) {
 	}
 	p := newMemoryReceipts(conf)
 	r := newReceiptStore(conf, p, gw)
-	return r, p, c
+	return r, p
 }
 
 func newReceiptsTestServer() (*receiptStore, *memoryReceipts, *httptest.Server) {
-	r, p, _ := newReceiptsTestStore()
+	r, p := newReceiptsTestStore(nil)
 	router := &httprouter.Router{}
 	r.addRoutes(router)
 	return r, p, httptest.NewServer(router)
@@ -82,7 +81,7 @@ func newReceiptsTestServer() (*receiptStore, *memoryReceipts, *httptest.Server) 
 func TestReplyProcessorWithValidReply(t *testing.T) {
 	assert := assert.New(t)
 
-	r, p, _ := newReceiptsTestStore()
+	r, p := newReceiptsTestStore(nil)
 
 	replyMsg := &kldmessages.TransactionReceipt{}
 	replyMsg.Headers.MsgType = kldmessages.MsgTypeTransactionSuccess
@@ -104,7 +103,7 @@ func TestReplyProcessorWithValidReply(t *testing.T) {
 func TestReplyProcessorWithContractGWSuccess(t *testing.T) {
 	assert := assert.New(t)
 
-	r, p, _ := newReceiptsTestStore()
+	r, p := newReceiptsTestStore(nil)
 	r.smartContractGW = &mockContractGW{}
 
 	replyMsg := &kldmessages.TransactionReceipt{}
@@ -129,7 +128,7 @@ func TestReplyProcessorWithContractGWSuccess(t *testing.T) {
 func TestReplyProcessorWithContractGWFailure(t *testing.T) {
 	assert := assert.New(t)
 
-	r, p, _ := newReceiptsTestStore()
+	r, p := newReceiptsTestStore(nil)
 	r.smartContractGW = &mockContractGW{
 		postDeployErr: fmt.Errorf("pop"),
 	}
@@ -154,7 +153,7 @@ func TestReplyProcessorWithContractGWFailure(t *testing.T) {
 }
 
 func TestReplyProcessorWithContractGWBadReceipt(t *testing.T) {
-	r, _, _ := newReceiptsTestStore()
+	r, _ := newReceiptsTestStore(nil)
 	r.smartContractGW = &mockContractGW{}
 
 	replyMsg := map[string]interface{}{
@@ -170,7 +169,7 @@ func TestReplyProcessorWithContractGWBadReceipt(t *testing.T) {
 }
 
 func TestReplyProcessorWithInvalidReplySwallowsErr(t *testing.T) {
-	r, _, _ := newReceiptsTestStore()
+	r, _ := newReceiptsTestStore(nil)
 	r.processReply([]byte("!json"))
 }
 
@@ -194,7 +193,7 @@ func TestReplyProcessorWithPeristenceErrorSwallows(t *testing.T) {
 func TestReplyProcessorWithErrorReply(t *testing.T) {
 	assert := assert.New(t)
 
-	r, p, _ := newReceiptsTestStore()
+	r, p := newReceiptsTestStore(nil)
 
 	replyMsg := &kldmessages.ErrorReply{}
 	replyMsg.Headers.MsgType = kldmessages.MsgTypeError
@@ -217,7 +216,7 @@ func TestReplyProcessorWithErrorReply(t *testing.T) {
 func TestReplyProcessorMissingHeaders(t *testing.T) {
 	assert := assert.New(t)
 
-	r, p, _ := newReceiptsTestStore()
+	r, p := newReceiptsTestStore(nil)
 
 	emptyMsg := make(map[string]interface{})
 	msgBytes, _ := json.Marshal(&emptyMsg)
@@ -229,7 +228,7 @@ func TestReplyProcessorMissingHeaders(t *testing.T) {
 func TestReplyProcessorMissingRequestId(t *testing.T) {
 	assert := assert.New(t)
 
-	r, p, _ := newReceiptsTestStore()
+	r, p := newReceiptsTestStore(nil)
 
 	replyMsg := &kldmessages.ErrorReply{}
 	replyMsgBytes, _ := json.Marshal(&replyMsg)
@@ -242,7 +241,7 @@ func TestReplyProcessorMissingRequestId(t *testing.T) {
 func TestReplyProcessorInsertError(t *testing.T) {
 	assert := assert.New(t)
 
-	r, p, _ := newReceiptsTestStore()
+	r, p := newReceiptsTestStore(nil)
 
 	replyMsg := &kldmessages.ErrorReply{}
 	replyMsg.Headers.ReqID = kldutils.UUIDv4()
@@ -537,7 +536,9 @@ func TestGetReplyUnauthorized(t *testing.T) {
 
 func TestSendReplyBroadcast(t *testing.T) {
 	assert := assert.New(t)
-	r, _, c := newReceiptsTestStore()
+	r, _ := newReceiptsTestStore(func(message interface{}) {
+		assert.NotNil(message)
+	})
 
 	replyMsg := &kldmessages.TransactionReceipt{}
 	replyMsg.Headers.MsgType = kldmessages.MsgTypeTransactionSuccess
@@ -548,9 +549,5 @@ func TestSendReplyBroadcast(t *testing.T) {
 	replyMsg.TransactionHash = &txHash
 	replyMsgBytes, _ := json.Marshal(&replyMsg)
 
-	go r.processReply(replyMsgBytes)
-
-	receivedReply := <-c
-
-	assert.NotNil(receivedReply)
+	r.processReply(replyMsgBytes)
 }

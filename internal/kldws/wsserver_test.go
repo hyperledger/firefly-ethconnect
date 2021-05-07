@@ -322,3 +322,31 @@ func TestRecvNotOk(t *testing.T) {
 	close(b)
 	w.Close()
 }
+
+func TestSendReply(t *testing.T) {
+	assert := assert.New(t)
+
+	w, ts := newTestWebSocketServer()
+	defer ts.Close()
+
+	u, _ := url.Parse(ts.URL)
+	u.Scheme = "ws"
+	u.Path = "/ws"
+	c, _, err := ws.DefaultDialer.Dial(u.String(), nil)
+	assert.NoError(err)
+
+	c.WriteJSON(&webSocketCommandMessage{
+		Type: "listenReplies",
+	})
+
+	// Wait until the client has subscribed to the topic before proceeding
+	for len(w.replyMap) == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	w.SendReply("Hello World")
+
+	var val string
+	c.ReadJSON(&val)
+	assert.Equal("Hello World", val)
+}

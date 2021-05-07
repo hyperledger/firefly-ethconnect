@@ -61,6 +61,8 @@ func (m *mockWebSocket) GetChannels(namespace string) (chan<- interface{}, chan<
 	return m.sender, m.broadcast, m.receiver, m.closing
 }
 
+func (m *mockWebSocket) SendReply(message interface{}) {}
+
 func tempdir(t *testing.T) string {
 	dir, _ := ioutil.TempDir("", "kld")
 	t.Logf("tmpdir/create: %s", dir)

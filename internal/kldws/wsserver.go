@@ -29,6 +29,7 @@ import (
 // We also provide a channel to listen on for closing of the connection, to allow a select to wake on a blocking send
 type WebSocketChannels interface {
 	GetChannels(topic string) (chan<- interface{}, chan<- interface{}, <-chan error, <-chan struct{})
+	SendReply(message interface{})
 }
 
 // WebSocketServer is the full server interface with the init call
@@ -43,7 +44,9 @@ type webSocketServer struct {
 	mux               sync.Mutex
 	topics            map[string]*webSocketTopic
 	topicMap          map[string]map[string]*webSocketConnection
+	replyMap          map[string]*webSocketConnection
 	newTopic          chan bool
+	replyChannel      chan interface{}
 	upgrader          *websocket.Upgrader
 	connections       map[string]*webSocketConnection
 }
@@ -62,14 +65,17 @@ func NewWebSocketServer() WebSocketServer {
 		connections:       make(map[string]*webSocketConnection),
 		topics:            make(map[string]*webSocketTopic),
 		topicMap:          make(map[string]map[string]*webSocketConnection),
+		replyMap:          make(map[string]*webSocketConnection),
 		newTopic:          make(chan bool),
+		replyChannel:      make(chan interface{}),
 		processingTimeout: 30 * time.Second,
 		upgrader: &websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
 		},
 	}
-	go s.listenForBroadcasts()
+	go s.processBroadcasts()
+	go s.processReplies()
 	return s
 }
 
@@ -99,6 +105,7 @@ func (s *webSocketServer) connectionClosed(c *webSocketConnection) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 	delete(s.connections, c.id)
+	delete(s.replyMap, c.id)
 	for _, topic := range c.topics {
 		delete(s.topicMap[topic.topic], c.id)
 	}
@@ -139,12 +146,20 @@ func (s *webSocketServer) GetChannels(topic string) (chan<- interface{}, chan<- 
 	return t.senderChannel, t.broadcastChannel, t.receiverChannel, t.closingChannel
 }
 
-func (s *webSocketServer) ListenTopic(c *webSocketConnection, topic string) {
+func (s *webSocketServer) ListenOnTopic(c *webSocketConnection, topic string) {
 	// Track that this connection is interested in this topic
 	s.topicMap[topic][c.id] = c
 }
 
-func (s *webSocketServer) listenForBroadcasts() {
+func (s *webSocketServer) ListenForReplies(c *webSocketConnection) {
+	s.replyMap[c.id] = c
+}
+
+func (s *webSocketServer) SendReply(message interface{}) {
+	s.replyChannel <- message
+}
+
+func (s *webSocketServer) processBroadcasts() {
 	var topics []string
 	buildCases := func() []reflect.SelectCase {
 		topics = make([]string, len(s.topics))
@@ -173,9 +188,20 @@ func (s *webSocketServer) listenForBroadcasts() {
 			// Message on one of the existing topics
 			// Gather all connections interested in this topic and send to them
 			topic := topics[chosen]
-			for _, c := range s.topicMap[topic] {
-				c.broadcast <- value.Interface()
-			}
+			s.broadcastToConnections(s.topicMap[topic], value.Interface())
 		}
+	}
+}
+
+func (s *webSocketServer) processReplies() {
+	for {
+		message := <-s.replyChannel
+		s.broadcastToConnections(s.replyMap, message)
+	}
+}
+
+func (s *webSocketServer) broadcastToConnections(connections map[string]*webSocketConnection, message interface{}) {
+	for _, c := range connections {
+		c.broadcast <- message
 	}
 }

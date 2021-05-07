@@ -16,6 +16,7 @@ package kldws
 
 import (
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -116,12 +117,16 @@ func (c *webSocketConnection) sender() {
 func (c *webSocketConnection) listenTopic(t *webSocketTopic) {
 	c.mux.Lock()
 	c.topics[t.topic] = t
-	c.server.ListenTopic(c, t.topic)
+	c.server.ListenOnTopic(c, t.topic)
 	c.mux.Unlock()
 	select {
 	case c.newTopic <- true:
 	case <-c.closing:
 	}
+}
+
+func (c *webSocketConnection) listenReplies() {
+	c.server.ListenForReplies(c)
 }
 
 func (c *webSocketConnection) listen() {
@@ -137,9 +142,11 @@ func (c *webSocketConnection) listen() {
 		log.Debugf("WS/%s: Received: %+v", c.id, msg)
 
 		t := c.server.getTopic(msg.Topic)
-		switch msg.Type {
+		switch strings.ToLower(msg.Type) {
 		case "listen":
 			c.listenTopic(t)
+		case "listenreplies":
+			c.listenReplies()
 		case "ack":
 			c.handleAckOrError(t, nil)
 		case "error":

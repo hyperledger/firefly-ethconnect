@@ -121,6 +121,10 @@ func (r *receiptStore) processReply(msgBytes []byte) {
 			log.Infof("%s: Inserted receipt into receipt store", parsedMsg["_id"])
 		}
 	}
+
+	if r.smartContractGW != nil {
+		r.smartContractGW.SendReply(parsedMsg)
+	}
 }
 
 func (r *receiptStore) marshalAndReply(res http.ResponseWriter, req *http.Request, result interface{}) {

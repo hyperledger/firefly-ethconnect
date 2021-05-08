@@ -32,27 +32,34 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 )
 
-type mockReceiptErrs struct{ err error }
+type mockReceiptErrs struct {
+	getReceiptsErr error
+	getReceiptVal  *map[string]interface{}
+	getReceiptErr  error
+	addReceiptErr  error
+}
 
 func (m *mockReceiptErrs) GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to string) (*[]map[string]interface{}, error) {
-	return nil, m.err
+	return nil, m.getReceiptsErr
 }
 
 func (m *mockReceiptErrs) GetReceipt(requestID string) (*map[string]interface{}, error) {
-	return nil, m.err
+	return m.getReceiptVal, m.getReceiptErr
 }
 
 func (m *mockReceiptErrs) AddReceipt(requestID string, receipt *map[string]interface{}) error {
-	return m.err
-}
-
-func newReceiptsErrTestStore(err error) *receiptStore {
-	r := newReceiptStore(&ReceiptStoreConf{}, &mockReceiptErrs{err: err}, nil)
-	return r
+	return m.addReceiptErr
 }
 
 func newReceiptsErrTestServer(err error) (*receiptStore, *httptest.Server) {
-	r := newReceiptsErrTestStore(err)
+	r := newReceiptStore(&ReceiptStoreConf{
+		RetryTimeoutMS:      1,
+		RetryInitialDelayMS: 1,
+	}, &mockReceiptErrs{
+		getReceiptErr:  fmt.Errorf("pop"),
+		getReceiptsErr: fmt.Errorf("pop"),
+		addReceiptErr:  fmt.Errorf("pop"),
+	}, nil)
 	router := &httprouter.Router{}
 	r.addRoutes(router)
 	return r, httptest.NewServer(router)
@@ -170,8 +177,13 @@ func TestReplyProcessorWithInvalidReplySwallowsErr(t *testing.T) {
 	r.processReply([]byte("!json"))
 }
 
-func TestReplyProcessorWithPeristenceErrorSwallows(t *testing.T) {
-	r := newReceiptsErrTestStore(fmt.Errorf("pop"))
+func TestReplyProcessorWithPeristenceErrorPanics(t *testing.T) {
+	r := newReceiptStore(&ReceiptStoreConf{
+		RetryTimeoutMS:      1,
+		RetryInitialDelayMS: 1,
+	}, &mockReceiptErrs{
+		addReceiptErr: fmt.Errorf("pop"),
+	}, nil)
 
 	replyMsg := &kldmessages.TransactionReceipt{}
 	replyMsg.Headers.MsgType = kldmessages.MsgTypeTransactionSuccess
@@ -185,6 +197,29 @@ func TestReplyProcessorWithPeristenceErrorSwallows(t *testing.T) {
 	assert.Panics(t, func() {
 		r.processReply(replyMsgBytes)
 	})
+}
+
+func TestReplyProcessorWithPeristenceErrorDuplicateSwallows(t *testing.T) {
+	existing := map[string]interface{}{"some": "existing"}
+	r := newReceiptStore(&ReceiptStoreConf{
+		RetryTimeoutMS:      1,
+		RetryInitialDelayMS: 1,
+	}, &mockReceiptErrs{
+		addReceiptErr: fmt.Errorf("pop"),
+		getReceiptErr: nil,
+		getReceiptVal: &existing,
+	}, nil)
+
+	replyMsg := &kldmessages.TransactionReceipt{}
+	replyMsg.Headers.MsgType = kldmessages.MsgTypeTransactionSuccess
+	replyMsg.Headers.ID = kldutils.UUIDv4()
+	replyMsg.Headers.ReqID = kldutils.UUIDv4()
+	replyMsg.Headers.ReqOffset = "topic:1:2"
+	txHash := common.HexToHash("0x02587104e9879911bea3d5bf6ccd7e1a6cb9a03145b8a1141804cebd6aa67c5c")
+	replyMsg.TransactionHash = &txHash
+	replyMsgBytes, _ := json.Marshal(&replyMsg)
+
+	r.processReply(replyMsgBytes)
 }
 
 func TestReplyProcessorWithErrorReply(t *testing.T) {

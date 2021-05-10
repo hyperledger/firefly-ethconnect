@@ -33,10 +33,11 @@ import (
 )
 
 type mockReceiptErrs struct {
-	getReceiptsErr error
-	getReceiptVal  *map[string]interface{}
-	getReceiptErr  error
-	addReceiptErr  error
+	getReceiptsErr   error
+	getReceiptVal    *map[string]interface{}
+	getReceiptErr    error
+	addReceiptCalled bool
+	addReceiptErr    error
 }
 
 func (m *mockReceiptErrs) GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to string) (*[]map[string]interface{}, error) {
@@ -48,6 +49,7 @@ func (m *mockReceiptErrs) GetReceipt(requestID string) (*map[string]interface{},
 }
 
 func (m *mockReceiptErrs) AddReceipt(requestID string, receipt *map[string]interface{}) error {
+	m.addReceiptCalled = true
 	return m.addReceiptErr
 }
 
@@ -201,14 +203,15 @@ func TestReplyProcessorWithPeristenceErrorPanics(t *testing.T) {
 
 func TestReplyProcessorWithPeristenceErrorDuplicateSwallows(t *testing.T) {
 	existing := map[string]interface{}{"some": "existing"}
-	r := newReceiptStore(&ReceiptStoreConf{
-		RetryTimeoutMS:      1,
-		RetryInitialDelayMS: 1,
-	}, &mockReceiptErrs{
+	mr := &mockReceiptErrs{
 		addReceiptErr: fmt.Errorf("pop"),
 		getReceiptErr: nil,
 		getReceiptVal: &existing,
-	}, nil)
+	}
+	r := newReceiptStore(&ReceiptStoreConf{
+		RetryTimeoutMS:      1,
+		RetryInitialDelayMS: 1,
+	}, mr, nil)
 
 	replyMsg := &kldmessages.TransactionReceipt{}
 	replyMsg.Headers.MsgType = kldmessages.MsgTypeTransactionSuccess
@@ -220,6 +223,9 @@ func TestReplyProcessorWithPeristenceErrorDuplicateSwallows(t *testing.T) {
 	replyMsgBytes, _ := json.Marshal(&replyMsg)
 
 	r.processReply(replyMsgBytes)
+
+	assert.True(t, mr.addReceiptCalled)
+
 }
 
 func TestReplyProcessorWithErrorReply(t *testing.T) {

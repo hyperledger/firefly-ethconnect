@@ -25,7 +25,6 @@ import (
 
 const (
 	mongoConnectTimeout = 10 * 1000
-	retryTimeout        = 120 * 1000
 	backoffFactor       = 1.1
 )
 
@@ -78,28 +77,7 @@ func (m *mongoReceipts) connect() (err error) {
 // AddReceipt processes an individual reply message, and contains all errors
 // To account for any transitory failures writing to mongoDB, it retries adding receipt with a backoff
 func (m *mongoReceipts) AddReceipt(requestID string, receipt *map[string]interface{}) (err error) {
-	startTime := time.Now()
-	delay := 500 * time.Millisecond
-	attempt := 0
-	complete := false
-	if m.conf.RetryTimeoutMS <= 0 {
-		m.conf.RetryTimeoutMS = retryTimeout
-	}
-
-	for !complete {
-		if attempt > 0 {
-			log.Infof("%s: Waiting %.2fs before re-attempt:%d mongo write", requestID, delay.Seconds(), attempt)
-			time.Sleep(delay)
-			delay = time.Duration(float64(delay) * backoffFactor)
-		}
-		attempt++
-		err = m.collection.Insert(*receipt)
-		complete = err == nil || time.Since(startTime) > time.Duration(m.conf.RetryTimeoutMS)*time.Millisecond
-		if !complete {
-			log.Errorf("%s: addReceipt attempt: %d failed, err: %s, retryTimeout: %d", requestID, attempt, err, retryTimeout/1000)
-		}
-	}
-	return err
+	return m.collection.Insert(*receipt)
 }
 
 // GetReceipts Returns recent receipts with skip & limit

@@ -202,7 +202,7 @@ func TestMongoReceiptsAddReceiptFailed(t *testing.T) {
 	mgoMock := &mockMongo{}
 	mgoMock.collection.insertErr = fmt.Errorf("pop")
 	r := &mongoReceipts{
-		conf: &MongoDBReceiptStoreConf{RetryTimeoutMS: 2 * 1000},
+		conf: &MongoDBReceiptStoreConf{},
 		mgo:  mgoMock,
 	}
 

@@ -48,7 +48,7 @@ func (w *webSocketAction) attemptBatch(batchNumber, attempt uint64, events []*ev
 
 	var channel chan<- interface{}
 	switch w.spec.DistributionMode {
-	case "broadcast":
+	case DistributionModeBroadcast:
 		channel = broadcaster
 	default:
 		channel = sender
@@ -65,7 +65,7 @@ func (w *webSocketAction) attemptBatch(batchNumber, attempt uint64, events []*ev
 	}
 
 	// If we ever add more distribution modes, we may want to change this logic from a simple if statement
-	if w.spec.DistributionMode != "broadcast" {
+	if w.spec.DistributionMode != DistributionModeBroadcast {
 		// Wait for the next ack or exception
 		select {
 		case err = <-receiver:

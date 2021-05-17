@@ -33,6 +33,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type DistributionMode string
+
+const (
+	DistributionModeBroadcast DistributionMode = "broadcast"
+	DistributionModeWLD       DistributionMode = "workloadDistribution"
+)
+
 const (
 	// FromBlockLatest is the special string that means subscribe from the current block
 	FromBlockLatest = "latest"
@@ -77,8 +84,8 @@ type webhookActionInfo struct {
 }
 
 type webSocketActionInfo struct {
-	Topic            string `json:"topic,omitempty"`
-	DistributionMode string `json:"distributionMode,omitempty"`
+	Topic            string           `json:"topic,omitempty"`
+	DistributionMode DistributionMode `json:"distributionMode,omitempty"`
 }
 
 type eventStream struct {
@@ -167,8 +174,8 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo, wsChannels kldws.W
 	case "websocket":
 
 		if spec.WebSocket != nil {
-			distributionMode := strings.ToLower(spec.WebSocket.DistributionMode)
-			if distributionMode != "" && distributionMode != "broadcast" && distributionMode != "workloaddistribution" {
+			distributionMode := spec.WebSocket.DistributionMode
+			if distributionMode != "" && distributionMode != DistributionModeBroadcast && distributionMode != DistributionModeWLD {
 				return nil, klderrors.Errorf(klderrors.EventStreamsInvalidDistributionMode, spec.WebSocket.DistributionMode)
 			}
 			spec.WebSocket.DistributionMode = distributionMode
@@ -255,7 +262,7 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 	}
 	if a.spec.Type == "websocket" && newSpec.WebSocket != nil {
 		a.spec.WebSocket.Topic = newSpec.WebSocket.Topic
-		distributionMode := strings.ToLower(newSpec.WebSocket.DistributionMode)
+		distributionMode := newSpec.WebSocket.DistributionMode
 		if distributionMode != "" && distributionMode != "broadcast" && distributionMode != "workloaddistribution" {
 			return nil, klderrors.Errorf(klderrors.EventStreamsInvalidDistributionMode, newSpec.WebSocket.DistributionMode)
 		}

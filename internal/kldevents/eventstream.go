@@ -115,6 +115,13 @@ type eventStreamAction interface {
 	attemptBatch(batchNumber, attempt uint64, events []*eventData) error
 }
 
+func validateWebSocket(w *webSocketActionInfo) error {
+	if w.DistributionMode != "" && w.DistributionMode != DistributionModeBroadcast && w.DistributionMode != DistributionModeWLD {
+		return klderrors.Errorf(klderrors.EventStreamsInvalidDistributionMode, w.DistributionMode)
+	}
+	return nil
+}
+
 // newEventStream constructor verifies the action is correct, kicks
 // off the event batch processor, and blockHWM will be
 // initialied to that supplied (zero on initial, or the
@@ -174,11 +181,9 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo, wsChannels kldws.W
 	case "websocket":
 
 		if spec.WebSocket != nil {
-			distributionMode := spec.WebSocket.DistributionMode
-			if distributionMode != "" && distributionMode != DistributionModeBroadcast && distributionMode != DistributionModeWLD {
-				return nil, klderrors.Errorf(klderrors.EventStreamsInvalidDistributionMode, spec.WebSocket.DistributionMode)
+			if err := validateWebSocket(spec.WebSocket); err != nil {
+				return nil, err
 			}
-			spec.WebSocket.DistributionMode = distributionMode
 		}
 
 		if a.action, err = newWebSocketAction(a, spec.WebSocket); err != nil {
@@ -262,11 +267,10 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 	}
 	if a.spec.Type == "websocket" && newSpec.WebSocket != nil {
 		a.spec.WebSocket.Topic = newSpec.WebSocket.Topic
-		distributionMode := newSpec.WebSocket.DistributionMode
-		if distributionMode != "" && distributionMode != "broadcast" && distributionMode != "workloaddistribution" {
-			return nil, klderrors.Errorf(klderrors.EventStreamsInvalidDistributionMode, newSpec.WebSocket.DistributionMode)
+		if err := validateWebSocket(newSpec.WebSocket); err != nil {
+			return nil, err
 		}
-		a.spec.WebSocket.DistributionMode = distributionMode
+		a.spec.WebSocket.DistributionMode = newSpec.WebSocket.DistributionMode
 	}
 
 	if a.spec.BatchSize != newSpec.BatchSize && newSpec.BatchSize != 0 && newSpec.BatchSize < MaxBatchSize {

@@ -49,8 +49,10 @@ const (
 
 // ReceiptStoreConf is the common configuration for all receipt stores
 type ReceiptStoreConf struct {
-	MaxDocs    int `json:"maxDocs"`
-	QueryLimit int `json:"queryLimit"`
+	MaxDocs             int `json:"maxDocs"`
+	QueryLimit          int `json:"queryLimit"`
+	RetryInitialDelayMS int `json:"retryInitialDelay"`
+	RetryTimeoutMS      int `json:"retryTimeout"`
 }
 
 // MongoDBReceiptStoreConf is the configuration for a MongoDB receipt store
@@ -60,7 +62,6 @@ type MongoDBReceiptStoreConf struct {
 	Database         string `json:"database"`
 	Collection       string `json:"collection"`
 	ConnectTimeoutMS int    `json:"connectTimeout"`
-	RetryTimeoutMS   int    `json:"retryTimeout"`
 }
 
 // RESTGatewayConf defines the YAML config structure for a webhooks bridge instance

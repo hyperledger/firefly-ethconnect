@@ -17,7 +17,6 @@ package kldrest
 import (
 	"encoding/json"
 	"net/http"
-	"reflect"
 	"regexp"
 	"strconv"
 	"time"
@@ -32,7 +31,9 @@ import (
 )
 
 const (
-	defaultReceiptLimit = 10
+	defaultReceiptLimit      = 10
+	defaultRetryTimeout      = 120 * 1000
+	defaultRetryInitialDelay = 500
 )
 
 var uuidCharsVerifier, _ = regexp.Compile("^[0-9a-zA-Z-]+$")
@@ -51,6 +52,12 @@ type receiptStore struct {
 }
 
 func newReceiptStore(conf *ReceiptStoreConf, persistence ReceiptStorePersistence, smartContractGW kldcontracts.SmartContractGateway) *receiptStore {
+	if conf.RetryTimeoutMS <= 0 {
+		conf.RetryTimeoutMS = defaultRetryTimeout
+	}
+	if conf.RetryInitialDelayMS <= 0 {
+		conf.RetryInitialDelayMS = defaultRetryInitialDelay
+	}
 	return &receiptStore{
 		conf:            conf,
 		persistence:     persistence,
@@ -64,6 +71,15 @@ func (r *receiptStore) addRoutes(router *httprouter.Router) {
 	router.GET("/reply/:id", r.getReply)
 }
 
+func (r *receiptStore) extractHeaders(parsedMsg map[string]interface{}) map[string]interface{} {
+	if iHeaders, exists := parsedMsg["headers"]; exists {
+		if headers, ok := iHeaders.(map[string]interface{}); ok {
+			return headers
+		}
+	}
+	return nil
+}
+
 func (r *receiptStore) processReply(msgBytes []byte) {
 
 	// Parse the reply as JSON
@@ -74,10 +90,8 @@ func (r *receiptStore) processReply(msgBytes []byte) {
 	}
 
 	// Extract the headers
-	var headers map[string]interface{}
-	if iHeaders, exists := parsedMsg["headers"]; exists && reflect.TypeOf(headers).Kind() == reflect.Map {
-		headers = iHeaders.(map[string]interface{})
-	} else {
+	headers := r.extractHeaders(parsedMsg)
+	if headers == nil {
 		log.Errorf("Failed to extract request headers from '%+v'", parsedMsg)
 		return
 	}
@@ -113,12 +127,46 @@ func (r *receiptStore) processReply(msgBytes []byte) {
 	parsedMsg["receivedAt"] = time.Now().UnixNano() / int64(time.Millisecond)
 	parsedMsg["_id"] = requestID
 
-	// Insert the receipt into MongoDB - captures errors
+	// Insert the receipt into persistence - captures errors
 	if requestID != "" && r.persistence != nil {
-		if err := r.persistence.AddReceipt(requestID, &parsedMsg); err != nil {
-			log.Panicf("%s: Failed to insert '%s' into receipt store: %+v", requestID, parsedMsg, err)
-		} else {
-			log.Infof("%s: Inserted receipt into receipt store", parsedMsg["_id"])
+		r.writeReceipt(requestID, parsedMsg)
+	}
+
+}
+
+func (r *receiptStore) writeReceipt(requestID string, receipt map[string]interface{}) {
+	startTime := time.Now()
+	delay := time.Duration(r.conf.RetryInitialDelayMS) * time.Millisecond
+	attempt := 0
+	retryTimeout := time.Duration(r.conf.RetryTimeoutMS) * time.Millisecond
+
+	for {
+		if attempt > 0 {
+			log.Infof("%s: Waiting %.2fs before re-attempt:%d mongo write", requestID, delay.Seconds(), attempt)
+			time.Sleep(delay)
+			delay = time.Duration(float64(delay) * backoffFactor)
+		}
+		attempt++
+		err := r.persistence.AddReceipt(requestID, &receipt)
+		if err == nil {
+			log.Infof("%s: Inserted receipt into receipt store", receipt["_id"])
+			return
+		}
+
+		log.Errorf("%s: addReceipt attempt: %d failed, err: %s", requestID, attempt, err)
+
+		// Check if the reason is that there is a receipt already
+		existing, qErr := r.persistence.GetReceipt(requestID)
+		if qErr == nil && existing != nil {
+			log.Warnf("%s: exiting   receipt: %+v", requestID, *existing)
+			log.Warnf("%s: duplicate receipt: %+v", requestID, receipt)
+			return
+		}
+
+		timeRetrying := time.Since(startTime)
+		if timeRetrying > retryTimeout {
+			log.Infof("%s: receipt: %+v", requestID, receipt)
+			log.Panicf("%s: Failed to insert into receipt store after %.2fs: %s", requestID, timeRetrying.Seconds(), err)
 		}
 	}
 

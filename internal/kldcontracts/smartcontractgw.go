@@ -34,7 +34,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common/compiler"
 	"github.com/go-openapi/spec"
 	"github.com/julienschmidt/httprouter"
 	"github.com/mholt/archiver"
@@ -1220,7 +1219,7 @@ func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Req
 		return nil, klderrors.Errorf(klderrors.RESTGatewayCompileContractCompileFailDetails, err, stderr.String())
 	}
 
-	compiled, err := compiler.ParseCombinedJSON(stdout.Bytes(), "", solcVer.Version, solcVer.Version, solOptionsString)
+	compiled, err := ethbinding.ParseCombinedJSON(stdout.Bytes(), "", solcVer.Version, solcVer.Version, solOptionsString)
 	if err != nil {
 		return nil, klderrors.Errorf(klderrors.RESTGatewayCompileContractSolcOutputProcessFail, err)
 	}

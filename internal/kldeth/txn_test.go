@@ -23,7 +23,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/kaleido-io/ethbinding"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
@@ -576,7 +575,7 @@ func TestTypeNotYetSupported(t *testing.T) {
 	var m ethbinding.ABIMethod
 	functionType, err := ethbinding.NewType("function", "uint256")
 	assert.NoError(err)
-	m.Inputs = append(m.Inputs, abi.Argument{Name: "functionType", Type: functionType})
+	m.Inputs = append(m.Inputs, ethbinding.ABIArgument{Name: "functionType", Type: functionType})
 	_, err = tx.generateTypedArgs([]interface{}{"abc"}, &m)
 	assert.Regexp("Type '.*' is not yet supported", err)
 }
@@ -759,17 +758,17 @@ func TestCallMethod(t *testing.T) {
 	param4["type"] = "address"
 	param4["value"] = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 
-	genMethod := func(params []interface{}) *abi.Method {
+	genMethod := func(params []interface{}) *ethbinding.ABIMethod {
 		uint256Type, _ := ethbinding.ABITypeFor("uint256")
-		inputs := make(abi.Arguments, len(params))
+		inputs := make(ethbinding.ABIArguments, len(params))
 		for i := range params {
-			abiType, _ := abi.NewType(params[i].(map[string]interface{})["type"].(string), "", []abi.ArgumentMarshaling{})
-			inputs[i] = abi.Argument{
+			abiType, _ := ethbinding.ABITypeFor(params[i].(map[string]interface{})["type"].(string))
+			inputs[i] = ethbinding.ABIArgument{
 				Type: abiType,
 			}
 		}
-		outputs := abi.Arguments{abi.Argument{Name: "retval1", Type: uint256Type}}
-		method := abi.NewMethod("testFunc", "testFunc", abi.Function, "payable", false, true, inputs, outputs)
+		outputs := ethbinding.ABIArguments{ethbinding.ABIArgument{Name: "retval1", Type: uint256Type}}
+		method := ethbinding.NewMethod("testFunc", "testFunc", ethbinding.Function, "payable", false, true, inputs, outputs)
 		return &method
 	}
 
@@ -847,7 +846,7 @@ func TestCallMethodFail(t *testing.T) {
 
 	params := []interface{}{}
 
-	method := &abi.Method{}
+	method := &ethbinding.ABIMethod{}
 	method.Name = "testFunc"
 
 	rpc := &testRPCClient{
@@ -874,7 +873,7 @@ func TestCallMethodRevert(t *testing.T) {
 
 	params := []interface{}{}
 
-	method := &abi.Method{}
+	method := &ethbinding.ABIMethod{}
 	method.Name = "testFunc"
 
 	rpc := &testRPCClient{
@@ -898,7 +897,7 @@ func TestCallMethodRevertBadStrLen(t *testing.T) {
 
 	params := []interface{}{}
 
-	method := &abi.Method{}
+	method := &ethbinding.ABIMethod{}
 	method.Name = "testFunc"
 
 	rpc := &testRPCClient{
@@ -923,7 +922,7 @@ func TestCallMethodRevertBadBytes(t *testing.T) {
 
 	params := []interface{}{}
 
-	method := &abi.Method{}
+	method := &ethbinding.ABIMethod{}
 	method.Name = "testFunc"
 
 	rpc := &testRPCClient{
@@ -949,7 +948,7 @@ func TestCallMethodBadArgs(t *testing.T) {
 		mockError: fmt.Errorf("pop"),
 	}
 
-	_, err := CallMethod(context.Background(), rpc, nil, "badness", "", json.Number(""), &abi.Method{}, []interface{}{}, "")
+	_, err := CallMethod(context.Background(), rpc, nil, "badness", "", json.Number(""), &ethbinding.ABIMethod{}, []interface{}{}, "")
 
 	assert.EqualError(err, "Supplied value for 'from' is not a valid hex address")
 }
@@ -1482,10 +1481,10 @@ func TestProcessRLPBytesValidTypes(t *testing.T) {
 	t7, _ := ethbinding.ABITypeFor("uint256")
 	t8, _ := ethbinding.ABITypeFor("int32[]")
 	t9, _ := ethbinding.ABITypeFor("uint32[]")
-	methodABI := &abi.Method{
+	methodABI := &ethbinding.ABIMethod{
 		Name:   "echoTypes2",
-		Inputs: []abi.Argument{},
-		Outputs: []abi.Argument{
+		Inputs: []ethbinding.ABIArgument{},
+		Outputs: []ethbinding.ABIArgument{
 			{Name: "retval1", Type: t1},
 			{Name: "retval2", Type: t2},
 			{Name: "retval3", Type: t3},
@@ -1530,13 +1529,13 @@ func TestProcessRLPBytesValidTypes(t *testing.T) {
 func TestProcessRLPV2ABIEncodedStructs(t *testing.T) {
 	assert := assert.New(t)
 
-	var v2abi abi.ABI
+	var v2abi ethbinding.ABI
 	testABIInput, err := ioutil.ReadFile("../../test/abicoderv2_example.abi.json")
 	assert.NoError(err)
 	err = json.Unmarshal(testABIInput, &v2abi)
 	assert.NoError(err)
 
-	var abiMethod abi.Method
+	var abiMethod ethbinding.ABIMethod
 	for _, m := range v2abi.Methods {
 		if m.Name == "inOutType1" {
 			abiMethod = m
@@ -1578,13 +1577,13 @@ func TestProcessRLPV2ABIEncodedStructs(t *testing.T) {
 func TestProcessRLPV2ABIEncodedStructsUnasignableVal(t *testing.T) {
 	assert := assert.New(t)
 
-	var v2abi abi.ABI
+	var v2abi ethbinding.ABI
 	testABIInput, err := ioutil.ReadFile("../../test/abicoderv2_example.abi.json")
 	assert.NoError(err)
 	err = json.Unmarshal(testABIInput, &v2abi)
 	assert.NoError(err)
 
-	var abiMethod abi.Method
+	var abiMethod ethbinding.ABIMethod
 	for _, m := range v2abi.Methods {
 		if m.Name == "inOutType1" {
 			abiMethod = m
@@ -1603,13 +1602,13 @@ func TestProcessRLPV2ABIEncodedStructsUnasignableVal(t *testing.T) {
 func TestProcessRLPV2ABIEncodedStructsBadInputType(t *testing.T) {
 	assert := assert.New(t)
 
-	var v2abi abi.ABI
+	var v2abi ethbinding.ABI
 	testABIInput, err := ioutil.ReadFile("../../test/abicoderv2_example.abi.json")
 	assert.NoError(err)
 	err = json.Unmarshal(testABIInput, &v2abi)
 	assert.NoError(err)
 
-	var abiMethod abi.Method
+	var abiMethod ethbinding.ABIMethod
 	for _, m := range v2abi.Methods {
 		if m.Name == "inOutType1" {
 			abiMethod = m
@@ -1630,13 +1629,13 @@ func TestProcessRLPV2ABIEncodedStructsBadInputType(t *testing.T) {
 func TestProcessRLPV2ABIEncodedStructsBadNilType(t *testing.T) {
 	assert := assert.New(t)
 
-	var v2abi abi.ABI
+	var v2abi ethbinding.ABI
 	testABIInput, err := ioutil.ReadFile("../../test/abicoderv2_example.abi.json")
 	assert.NoError(err)
 	err = json.Unmarshal(testABIInput, &v2abi)
 	assert.NoError(err)
 
-	var abiMethod abi.Method
+	var abiMethod ethbinding.ABIMethod
 	for _, m := range v2abi.Methods {
 		if m.Name == "inOutType1" {
 			abiMethod = m
@@ -1654,11 +1653,11 @@ func TestGenerateTupleFromMapBadStructType(t *testing.T) {
 	assert := assert.New(t)
 	tx := Txn{}
 	type random struct{ stuff string }
-	tUint, _ := abi.NewType("uint256", "", []abi.ArgumentMarshaling{})
-	_, err := tx.generateTupleFromMap("method1", "test", &abi.Type{
+	tUint, _ := ethbinding.ABITypeFor("uint256")
+	_, err := tx.generateTupleFromMap("method1", "test", &ethbinding.ABIType{
 		TupleType:     reflect.TypeOf((*random)(nil)).Elem(), // random type that should never happen
 		TupleRawNames: []string{"field1"},
-		TupleElems:    []*abi.Type{&tUint},
+		TupleElems:    []*ethbinding.ABIType{&tUint},
 	}, map[string]interface{}{"field1": float64(42)})
 	assert.EqualError(err, "Method method1 param test: supplied value '+42' could not be assigned to 'field1' field (uint256)")
 }
@@ -1666,14 +1665,14 @@ func TestGenerateTupleFromMapBadStructType(t *testing.T) {
 func TestGenTupleMapOutputBadTypeNonStruct(t *testing.T) {
 	assert := assert.New(t)
 	type random struct{ stuff string }
-	_, err := genTupleMapOutput("test", "random", &abi.Type{TupleType: reflect.TypeOf((*string)(nil)).Elem()}, 42)
+	_, err := genTupleMapOutput("test", "random", &ethbinding.ABIType{TupleType: reflect.TypeOf((*string)(nil)).Elem()}, 42)
 	assert.EqualError(err, "Unable to process type for test (random). Expected string. Received 42")
 }
 
 func TestGenTupleMapOutputBadTypeCountMismatch(t *testing.T) {
 	assert := assert.New(t)
 	type random struct{}
-	_, err := genTupleMapOutput("test", "random", &abi.Type{
+	_, err := genTupleMapOutput("test", "random", &ethbinding.ABIType{
 		TupleType:     reflect.TypeOf((*random)(nil)).Elem(),
 		TupleRawNames: []string{"field1", "field2"},
 	}, random{})
@@ -1683,11 +1682,11 @@ func TestGenTupleMapOutputBadTypeCountMismatch(t *testing.T) {
 func TestGenTupleMapOutputBadTypeValMismatch(t *testing.T) {
 	assert := assert.New(t)
 	type random struct{ Field1 string }
-	tUint, _ := abi.NewType("uint256", "", []abi.ArgumentMarshaling{})
-	_, err := genTupleMapOutput("test", "random", &abi.Type{
+	tUint, _ := ethbinding.ABITypeFor("uint256")
+	_, err := genTupleMapOutput("test", "random", &ethbinding.ABIType{
 		TupleType:     reflect.TypeOf((*random)(nil)).Elem(),
 		TupleRawNames: []string{"field1"},
-		TupleElems:    []*abi.Type{&tUint},
+		TupleElems:    []*ethbinding.ABIType{&tUint},
 	}, random{Field1: "stuff"})
 	assert.EqualError(err, "Expected number type in JSON/RPC response for test.field1 (uint256). Received string")
 }
@@ -1753,10 +1752,10 @@ func TestProcessRLPBytesUnpackFailure(t *testing.T) {
 	assert := assert.New(t)
 
 	t1, _ := ethbinding.ABITypeFor("string")
-	methodABI := &abi.Method{
+	methodABI := &ethbinding.ABIMethod{
 		Name:   "echoTypes2",
-		Inputs: []abi.Argument{},
-		Outputs: []abi.Argument{
+		Inputs: []ethbinding.ABIArgument{},
+		Outputs: []ethbinding.ABIArgument{
 			{Name: "retval1", Type: t1},
 		},
 	}
@@ -1769,10 +1768,10 @@ func TestProcessOutputsTooFew(t *testing.T) {
 	assert := assert.New(t)
 
 	t1, _ := ethbinding.ABITypeFor("string")
-	methodABI := &abi.Method{
+	methodABI := &ethbinding.ABIMethod{
 		Name:   "echoTypes2",
-		Inputs: []abi.Argument{},
-		Outputs: []abi.Argument{
+		Inputs: []ethbinding.ABIArgument{},
+		Outputs: []ethbinding.ABIArgument{
 			{Name: "retval1", Type: t1},
 		},
 	}
@@ -1784,10 +1783,10 @@ func TestProcessOutputsTooFew(t *testing.T) {
 func TestProcessOutputsTooMany(t *testing.T) {
 	assert := assert.New(t)
 
-	methodABI := &abi.Method{
+	methodABI := &ethbinding.ABIMethod{
 		Name:    "echoTypes2",
-		Inputs:  []abi.Argument{},
-		Outputs: []abi.Argument{},
+		Inputs:  []ethbinding.ABIArgument{},
+		Outputs: []ethbinding.ABIArgument{},
 	}
 
 	err := processOutputs(methodABI.Outputs, []interface{}{"arg1"}, make(map[string]interface{}))
@@ -1798,10 +1797,10 @@ func TestProcessOutputsDefaultName(t *testing.T) {
 	assert := assert.New(t)
 
 	t1, _ := ethbinding.ABITypeFor("string")
-	methodABI := &abi.Method{
+	methodABI := &ethbinding.ABIMethod{
 		Name:   "anonReturn",
-		Inputs: []abi.Argument{},
-		Outputs: []abi.Argument{
+		Inputs: []ethbinding.ABIArgument{},
+		Outputs: []ethbinding.ABIArgument{
 			{Name: "", Type: t1},
 			{Name: "", Type: t1},
 		},
@@ -1817,10 +1816,10 @@ func TestProcessOutputsBadArgs(t *testing.T) {
 	assert := assert.New(t)
 
 	t1, _ := ethbinding.ABITypeFor("int32[]")
-	methodABI := &abi.Method{
+	methodABI := &ethbinding.ABIMethod{
 		Name:   "echoTypes2",
-		Inputs: []abi.Argument{},
-		Outputs: []abi.Argument{
+		Inputs: []ethbinding.ABIArgument{},
+		Outputs: []ethbinding.ABIArgument{
 			{Name: "retval1", Type: t1},
 		},
 	}

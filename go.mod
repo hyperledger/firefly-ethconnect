@@ -7,7 +7,6 @@ require (
 	github.com/aristanetworks/goarista v0.0.0-20201012165903-2cb20defcd66 // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
-	github.com/ethereum/go-ethereum v1.9.23
 	github.com/globalsign/mgo v0.0.0-20181015135952-eeefdecb41b8
 	github.com/go-ole/go-ole v1.2.4 // indirect
 	github.com/go-openapi/jsonreference v0.19.4

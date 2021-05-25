@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"reflect"
 
-	"github.com/kaleido-io/ethconnect/internal/kldbind"
+	"github.com/kaleido-io/ethbind"
 )
 
 const (
@@ -117,7 +117,7 @@ type TransactionCommon struct {
 type SendTransaction struct {
 	TransactionCommon
 	To         string                        `json:"to"`
-	Method     *kldbind.ABIElementMarshaling `json:"method,omitempty"`
+	Method     *ethbind.ABIElementMarshaling `json:"method,omitempty"`
 	MethodName string                        `json:"methodName,omitempty"`
 }
 
@@ -127,7 +127,7 @@ type DeployContract struct {
 	Solidity        string                `json:"solidity,omitempty"`
 	CompilerVersion string                `json:"compilerVersion,omitempty"`
 	EVMVersion      string                `json:"evmVersion,omitempty"`
-	ABI             kldbind.ABIMarshaling `json:"abi,omitempty"`
+	ABI             ethbind.ABIMarshaling `json:"abi,omitempty"`
 	DevDoc          string                `json:"devDocs,omitempty"`
 	Compiled        []byte                `json:"compiled,omitempty"`
 	ContractName    string                `json:"contractName,omitempty"`
@@ -140,25 +140,25 @@ type DeployContract struct {
 // ethereum hex encoding version
 type TransactionReceipt struct {
 	ReplyCommon
-	BlockHash            *kldbind.Hash      `json:"blockHash"`
+	BlockHash            *ethbind.Hash      `json:"blockHash"`
 	BlockNumberStr       string             `json:"blockNumber"`
-	BlockNumberHex       *kldbind.HexBigInt `json:"blockNumberHex,omitempty"`
+	BlockNumberHex       *ethbind.HexBigInt `json:"blockNumberHex,omitempty"`
 	ContractSwagger      string             `json:"openapi,omitempty"`
 	ContractUI           string             `json:"apiexerciser,omitempty"`
-	ContractAddress      *kldbind.Address   `json:"contractAddress,omitempty"`
+	ContractAddress      *ethbind.Address   `json:"contractAddress,omitempty"`
 	CumulativeGasUsedStr string             `json:"cumulativeGasUsed"`
-	CumulativeGasUsedHex *kldbind.HexBigInt `json:"cumulativeGasUsedHex,omitempty"`
-	From                 *kldbind.Address   `json:"from"`
+	CumulativeGasUsedHex *ethbind.HexBigInt `json:"cumulativeGasUsedHex,omitempty"`
+	From                 *ethbind.Address   `json:"from"`
 	GasUsedStr           string             `json:"gasUsed"`
-	GasUsedHex           *kldbind.HexBigInt `json:"gasUsedHex,omitempty"`
+	GasUsedHex           *ethbind.HexBigInt `json:"gasUsedHex,omitempty"`
 	NonceStr             string             `json:"nonce"`
-	NonceHex             *kldbind.HexUint64 `json:"nonceHex,omitempty"`
+	NonceHex             *ethbind.HexUint64 `json:"nonceHex,omitempty"`
 	StatusStr            string             `json:"status"`
-	StatusHex            *kldbind.HexBigInt `json:"statusHex,omitempty"`
-	To                   *kldbind.Address   `json:"to"`
-	TransactionHash      *kldbind.Hash      `json:"transactionHash"`
+	StatusHex            *ethbind.HexBigInt `json:"statusHex,omitempty"`
+	To                   *ethbind.Address   `json:"to"`
+	TransactionHash      *ethbind.Hash      `json:"transactionHash"`
 	TransactionIndexStr  string             `json:"transactionIndex"`
-	TransactionIndexHex  *kldbind.HexUint   `json:"transactionIndexHex,omitempty"`
+	TransactionIndexHex  *ethbind.HexUint   `json:"transactionIndexHex,omitempty"`
 	RegisterAs           string             `json:"registerAs,omitempty"`
 }
 

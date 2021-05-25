@@ -31,7 +31,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/spf13/cobra"
 
-	"github.com/kaleido-io/ethconnect/internal/kldbind"
+	"github.com/kaleido-io/ethbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
@@ -61,13 +61,13 @@ type testRPC struct {
 	ethSendTransactionReady        bool
 	ethSendTransactionFirstCond    *sync.Cond
 	ethSendTransactionFirstReady   bool
-	ethGetTransactionCountResult   kldbind.HexUint64
+	ethGetTransactionCountResult   ethbind.HexUint64
 	ethGetTransactionCountErr      error
 	ethGetTransactionReceiptResult kldeth.TxnReceipt
 	ethGetTransactionReceiptErr    error
 	privFindPrivacyGroupResult     []kldeth.OrionPrivacyGroup
 	privFindPrivacyGroupErr        error
-	ethEstimateGasResult           kldbind.HexUint64
+	ethEstimateGasResult           ethbind.HexUint64
 	ethEstimateGasErr              error
 	condLock                       sync.Mutex
 	calls                          []string
@@ -289,16 +289,16 @@ func TestOnDeployContractMessageGoodTxnErrOnReceipt(t *testing.T) {
 }
 
 func goodMessageRPC() *testRPC {
-	blockHash := kldbind.HexToHash("0x6e710868fd2d0ac1f141ba3f0cd569e38ce1999d8f39518ee7633d2b9a7122af")
-	blockNumber := kldbind.HexBigInt(*big.NewInt(12345))
-	contractAddr := kldbind.HexToAddress("0x28a62Cb478a3c3d4DAAD84F1148ea16cd1A66F37")
-	cumulativeGasUsed := kldbind.HexBigInt(*big.NewInt(23456))
-	fromAddr := kldbind.HexToAddress("0xBa25be62a5C55d4ad1d5520268806A8730A4DE5E")
-	gasUsed := kldbind.HexBigInt(*big.NewInt(345678))
-	status := kldbind.HexBigInt(*big.NewInt(1))
-	toAddr := kldbind.HexToAddress("0xD7FAC2bCe408Ed7C6ded07a32038b1F79C2b27d3")
-	transactionHash := kldbind.HexToHash("0xe2215336b09f9b5b82e36e1144ed64f40a42e61b68fdaca82549fd98b8531a89")
-	transactionIndex := kldbind.HexUint(456789)
+	blockHash := ethbind.HexToHash("0x6e710868fd2d0ac1f141ba3f0cd569e38ce1999d8f39518ee7633d2b9a7122af")
+	blockNumber := ethbind.HexBigInt(*big.NewInt(12345))
+	contractAddr := ethbind.HexToAddress("0x28a62Cb478a3c3d4DAAD84F1148ea16cd1A66F37")
+	cumulativeGasUsed := ethbind.HexBigInt(*big.NewInt(23456))
+	fromAddr := ethbind.HexToAddress("0xBa25be62a5C55d4ad1d5520268806A8730A4DE5E")
+	gasUsed := ethbind.HexBigInt(*big.NewInt(345678))
+	status := ethbind.HexBigInt(*big.NewInt(1))
+	toAddr := ethbind.HexToAddress("0xD7FAC2bCe408Ed7C6ded07a32038b1F79C2b27d3")
+	transactionHash := ethbind.HexToHash("0xe2215336b09f9b5b82e36e1144ed64f40a42e61b68fdaca82549fd98b8531a89")
+	transactionIndex := ethbind.HexUint(456789)
 	testRPC := &testRPC{
 		ethSendTransactionResult: transactionHash.String(),
 		ethGetTransactionReceiptResult: kldeth.TxnReceipt{
@@ -368,14 +368,14 @@ func TestOnDeployContractMessageGoodTxnMined(t *testing.T) {
 func TestOnDeployContractMessageGoodTxnMinedHDWallet(t *testing.T) {
 	assert := assert.New(t)
 
-	key, _ := kldbind.GenerateKey()
-	addr := kldbind.PubkeyToAddress(key.PublicKey)
+	key, _ := ethbind.GenerateKey()
+	addr := ethbind.PubkeyToAddress(key.PublicKey)
 	svr := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		res.WriteHeader(200)
 		res.Write([]byte(`
     {
       "address": "` + addr.String() + `",
-      "privateKey": "` + hex.EncodeToString(kldbind.FromECDSA(key)) + `"
+      "privateKey": "` + hex.EncodeToString(ethbind.FromECDSA(key)) + `"
     }`))
 	}))
 	defer svr.Close()
@@ -532,7 +532,7 @@ func TestOnDeployContractMessageFailedTxnMined(t *testing.T) {
 	testTxnContext.jsonMsg = goodDeployTxnJSON
 
 	testRPC := goodMessageRPC()
-	failStatus := kldbind.HexBigInt(*big.NewInt(0))
+	failStatus := ethbind.HexBigInt(*big.NewInt(0))
 	testRPC.ethGetTransactionReceiptResult.Status = &failStatus
 	txnProcessor.Init(testRPC)                          // configured in seconds for real world
 	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
@@ -1263,14 +1263,14 @@ func TestResolveAddressNonHDWallet(t *testing.T) {
 func TestResolveAddressHDWalletSuccess(t *testing.T) {
 	assert := assert.New(t)
 
-	key, _ := kldbind.GenerateKey()
-	addr := kldbind.PubkeyToAddress(key.PublicKey)
+	key, _ := ethbind.GenerateKey()
+	addr := ethbind.PubkeyToAddress(key.PublicKey)
 	svr := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		res.WriteHeader(200)
 		res.Write([]byte(`
     {
       "address": "` + addr.String() + `",
-      "privateKey": "` + hex.EncodeToString(kldbind.FromECDSA(key)) + `"
+      "privateKey": "` + hex.EncodeToString(ethbind.FromECDSA(key)) + `"
     }`))
 	}))
 	defer svr.Close()

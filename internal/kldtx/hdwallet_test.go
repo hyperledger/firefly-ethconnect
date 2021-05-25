@@ -22,7 +22,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/kaleido-io/ethconnect/internal/kldbind"
+	"github.com/kaleido-io/ethbind"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -38,8 +38,8 @@ func TestHDWalletDefaults(t *testing.T) {
 func TestHDWalletSignOK(t *testing.T) {
 	assert := assert.New(t)
 
-	key, _ := kldbind.GenerateKey()
-	addr := kldbind.PubkeyToAddress(key.PublicKey)
+	key, _ := ethbind.GenerateKey()
+	addr := ethbind.PubkeyToAddress(key.PublicKey)
 
 	svr := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		assert.Equal("/testinst/api/v1/testwallet/1234", req.URL.Path)
@@ -48,7 +48,7 @@ func TestHDWalletSignOK(t *testing.T) {
 		res.Write([]byte(`
     {
       "addr": "` + addr.String() + `",
-      "key": "` + hex.EncodeToString(kldbind.FromECDSA(key)) + `"
+      "key": "` + hex.EncodeToString(ethbind.FromECDSA(key)) + `"
     }`))
 	}))
 	defer svr.Close()
@@ -71,14 +71,14 @@ func TestHDWalletSignOK(t *testing.T) {
 	assert.Equal(s.Type(), "HD Wallet")
 	assert.Equal(addr.String(), s.Address())
 
-	tx := kldbind.NewContractCreation(12345, big.NewInt(0), 0, big.NewInt(0), []byte("hello world"))
+	tx := ethbind.NewContractCreation(12345, big.NewInt(0), 0, big.NewInt(0), []byte("hello world"))
 
 	signed, err := s.Sign(tx)
 	assert.NoError(err)
 
-	eip155 := kldbind.NewEIP155Signer(big.NewInt(12345))
-	tx2 := &kldbind.Transaction{}
-	err = tx2.DecodeRLP(kldbind.NewStream(bytes.NewReader(signed), 0))
+	eip155 := ethbind.NewEIP155Signer(big.NewInt(12345))
+	tx2 := &ethbind.Transaction{}
+	err = tx2.DecodeRLP(ethbind.NewStream(bytes.NewReader(signed), 0))
 	assert.NoError(err)
 	sender, err := eip155.Sender(tx2)
 	assert.NoError(err)

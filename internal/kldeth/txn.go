@@ -25,7 +25,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kaleido-io/ethconnect/internal/kldbind"
+	"github.com/kaleido-io/ethbind"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
@@ -38,8 +38,8 @@ import (
 type Txn struct {
 	NodeAssignNonce  bool
 	OrionPrivateAPIS bool
-	From             kldbind.Address
-	EthTX            *kldbind.Transaction
+	From             ethbind.Address
+	EthTX            *ethbind.Transaction
 	Hash             string
 	Receipt          TxnReceipt
 	PrivateFrom      string
@@ -50,16 +50,16 @@ type Txn struct {
 
 // TxnReceipt is the receipt obtained over JSON/RPC from the ethereum client
 type TxnReceipt struct {
-	BlockHash         *kldbind.Hash      `json:"blockHash"`
-	BlockNumber       *kldbind.HexBigInt `json:"blockNumber"`
-	ContractAddress   *kldbind.Address   `json:"contractAddress"`
-	CumulativeGasUsed *kldbind.HexBigInt `json:"cumulativeGasUsed"`
-	TransactionHash   *kldbind.Hash      `json:"transactionHash"`
-	From              *kldbind.Address   `json:"from"`
-	GasUsed           *kldbind.HexBigInt `json:"gasUsed"`
-	Status            *kldbind.HexBigInt `json:"status"`
-	To                *kldbind.Address   `json:"to"`
-	TransactionIndex  *kldbind.HexUint   `json:"transactionIndex"`
+	BlockHash         *ethbind.Hash      `json:"blockHash"`
+	BlockNumber       *ethbind.HexBigInt `json:"blockNumber"`
+	ContractAddress   *ethbind.Address   `json:"contractAddress"`
+	CumulativeGasUsed *ethbind.HexBigInt `json:"cumulativeGasUsed"`
+	TransactionHash   *ethbind.Hash      `json:"transactionHash"`
+	From              *ethbind.Address   `json:"from"`
+	GasUsed           *ethbind.HexBigInt `json:"gasUsed"`
+	Status            *ethbind.HexBigInt `json:"status"`
+	To                *ethbind.Address   `json:"to"`
+	TransactionIndex  *ethbind.HexUint   `json:"transactionIndex"`
 }
 
 // NewContractDeployTxn builds a new ethereum transaction from the supplied
@@ -87,7 +87,7 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract, signer TXSigner) (tx 
 
 	// Build a runtime ABI from the serialized one
 	var typedArgs []interface{}
-	abi, err := kldbind.ABIMarshalingToABIRuntime(compiled.ABI)
+	abi, err := ethbind.ABIMarshalingToABIRuntime(compiled.ABI)
 	if err == nil {
 		// Build correctly typed args for the ethereum call
 		typedArgs, err = tx.generateTypedArgs(msg.Parameters, &abi.Constructor)
@@ -124,7 +124,7 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract, signer TXSigner) (tx 
 }
 
 // CallMethod performs eth_call to return data from the chain
-func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr string, value json.Number, methodABI *kldbind.ABIMethod, msgParams []interface{}, blocknumber string) (map[string]interface{}, error) {
+func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr string, value json.Number, methodABI *ethbind.ABIMethod, msgParams []interface{}, blocknumber string) (map[string]interface{}, error) {
 	log.Debugf("Calling method. ABI: %+v Params: %+v", methodABI, msgParams)
 	tx, err := buildTX(signer, from, addr, "", value, "", "", methodABI, msgParams)
 	if err != nil {
@@ -143,7 +143,7 @@ func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr 
 			if !ok {
 				return nil, klderrors.Errorf(klderrors.TransactionCallInvalidBlockNumber)
 			}
-			callOption = kldbind.EncodeBig(n)
+			callOption = ethbind.EncodeBig(n)
 		}
 	}
 
@@ -163,7 +163,7 @@ func addErrorToRetval(retval map[string]interface{}, retBytes []byte, rawRetval 
 
 // ProcessRLPBytes converts binary packed set of bytes into a map. Does not throw errors,
 // rather embeds them into the result set to send back to the caller.
-func ProcessRLPBytes(args kldbind.ABIArguments, retBytes []byte) map[string]interface{} {
+func ProcessRLPBytes(args ethbind.ABIArguments, retBytes []byte) map[string]interface{} {
 	retval := make(map[string]interface{})
 	rawRetval, unpackErr := args.UnpackValues(retBytes)
 	var err error
@@ -178,7 +178,7 @@ func ProcessRLPBytes(args kldbind.ABIArguments, retBytes []byte) map[string]inte
 	return retval
 }
 
-func processOutputs(args kldbind.ABIArguments, rawRetval []interface{}, retval map[string]interface{}) error {
+func processOutputs(args ethbind.ABIArguments, rawRetval []interface{}, retval map[string]interface{}) error {
 	numOutputs := len(args)
 	if numOutputs > 0 {
 		if len(rawRetval) != numOutputs {
@@ -195,7 +195,7 @@ func processOutputs(args kldbind.ABIArguments, rawRetval []interface{}, retval m
 	return nil
 }
 
-func genOutput(idx int, retval map[string]interface{}, output kldbind.ABIArgument, rawValue interface{}) (err error) {
+func genOutput(idx int, retval map[string]interface{}, output ethbind.ABIArgument, rawValue interface{}) (err error) {
 	// Match the swagger in how we name the outputs
 	argName := output.Name
 	if argName == "" {
@@ -208,10 +208,10 @@ func genOutput(idx int, retval map[string]interface{}, output kldbind.ABIArgumen
 	return
 }
 
-func mapOutput(argName, argType string, t *kldbind.ABIType, rawValue interface{}) (interface{}, error) {
+func mapOutput(argName, argType string, t *ethbind.ABIType, rawValue interface{}) (interface{}, error) {
 	rawType := reflect.TypeOf(rawValue)
 	switch t.T {
-	case kldbind.IntTy, kldbind.UintTy:
+	case ethbind.IntTy, ethbind.UintTy:
 		kind := rawType.Kind()
 		if kind == reflect.Ptr && rawType.String() == "*big.Int" {
 			return reflect.ValueOf(rawValue).Interface().(*big.Int).String(), nil
@@ -231,19 +231,19 @@ func mapOutput(argName, argType string, t *kldbind.ABIType, rawValue interface{}
 			return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchType, "number",
 				argName, argType, rawType.Kind())
 		}
-	case kldbind.BoolTy:
+	case ethbind.BoolTy:
 		if rawType.Kind() != reflect.Bool {
 			return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchType, "boolean",
 				argName, argType, rawType.Kind())
 		}
 		return rawValue, nil
-	case kldbind.StringTy:
+	case ethbind.StringTy:
 		if rawType.Kind() != reflect.String {
 			return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchType, "string array",
 				argName, argType, rawType.Kind())
 		}
 		return reflect.ValueOf(rawValue).Interface().(string), nil
-	case kldbind.BytesTy, kldbind.FixedBytesTy, kldbind.AddressTy:
+	case ethbind.BytesTy, ethbind.FixedBytesTy, ethbind.AddressTy:
 		if (rawType.Kind() != reflect.Array && rawType.Kind() != reflect.Slice) || rawType.Elem().Kind() != reflect.Uint8 {
 			return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchType, "[]byte",
 				argName, argType, rawType.Kind())
@@ -253,8 +253,8 @@ func mapOutput(argName, argType string, t *kldbind.ABIType, rawValue interface{}
 		for i := 0; i < s.Len(); i++ {
 			arrayVal[i] = byte(s.Index(i).Uint())
 		}
-		return kldbind.ToHex(arrayVal), nil
-	case kldbind.SliceTy, kldbind.ArrayTy:
+		return ethbind.ToHex(arrayVal), nil
+	case ethbind.SliceTy, ethbind.ArrayTy:
 		if rawType.Kind() != reflect.Slice {
 			return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchType, "slice",
 				argName, argType, rawType.Kind())
@@ -269,7 +269,7 @@ func mapOutput(argName, argType string, t *kldbind.ABIType, rawValue interface{}
 			arrayVal = append(arrayVal, mapped)
 		}
 		return arrayVal, nil
-	case kldbind.TupleTy:
+	case ethbind.TupleTy:
 		return genTupleMapOutput(argName, argType, t, rawValue)
 	default:
 		return nil, klderrors.Errorf(klderrors.UnpackOutputsUnknownType,
@@ -277,7 +277,7 @@ func mapOutput(argName, argType string, t *kldbind.ABIType, rawValue interface{}
 	}
 }
 
-func genTupleMapOutput(argName, argType string, t *kldbind.ABIType, rawValue interface{}) (r map[string]interface{}, err error) {
+func genTupleMapOutput(argName, argType string, t *ethbind.ABIType, rawValue interface{}) (r map[string]interface{}, err error) {
 	reflectValue := reflect.ValueOf(rawValue)
 	if reflectValue.Kind() != reflect.Struct || reflectValue.Type() != t.TupleType {
 		return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchTupleType,
@@ -301,23 +301,23 @@ func genTupleMapOutput(argName, argType string, t *kldbind.ABIType, rawValue int
 // SendTranasction message
 func NewSendTxn(msg *kldmessages.SendTransaction, signer TXSigner) (tx *Txn, err error) {
 
-	var methodABI *kldbind.ABIMethod
+	var methodABI *ethbind.ABIMethod
 	if msg.Method == nil || msg.Method.Name == "" {
 		if msg.MethodName == "" {
 			err = klderrors.Errorf(klderrors.TransactionSendMissingMethod)
 			return
 		}
-		var abiInputs kldbind.ABIArguments
+		var abiInputs ethbind.ABIArguments
 		msg.Parameters, err = flattenParams(msg.Parameters, &abiInputs, true)
 		if err == nil {
-			abiMethod := kldbind.NewMethod(msg.MethodName, msg.MethodName, kldbind.Function, "payable", false, true, abiInputs, kldbind.ABIArguments{})
+			abiMethod := ethbind.NewMethod(msg.MethodName, msg.MethodName, ethbind.Function, "payable", false, true, abiInputs, ethbind.ABIArguments{})
 			methodABI = &abiMethod
 		}
 		if err != nil {
 			return
 		}
 	} else {
-		methodABI, err = kldbind.ABIElementMarshalingToABIMethod(msg.Method)
+		methodABI, err = ethbind.ABIElementMarshalingToABIMethod(msg.Method)
 		if err != nil {
 			return
 		}
@@ -347,7 +347,7 @@ func NewNilTX(from string, nonce int64, signer TXSigner) (tx *Txn, err error) {
 	return
 }
 
-func buildTX(signer TXSigner, msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json.Number, methodABI *kldbind.ABIMethod, params []interface{}) (tx *Txn, err error) {
+func buildTX(signer TXSigner, msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json.Number, methodABI *ethbind.ABIMethod, params []interface{}) (tx *Txn, err error) {
 	tx = &Txn{Signer: signer}
 
 	// Build correctly typed args for the ethereum call
@@ -420,16 +420,16 @@ func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgG
 		}
 	}
 
-	var toAddr kldbind.Address
+	var toAddr ethbind.Address
 	var toStr string
 	if msgTo != "" {
 		if toAddr, err = kldutils.StrToAddress("to", msgTo); err != nil {
 			return
 		}
-		tx.EthTX = kldbind.NewTransaction(uint64(nonce), toAddr, value, uint64(gas), gasPrice, data)
+		tx.EthTX = ethbind.NewTransaction(uint64(nonce), toAddr, value, uint64(gas), gasPrice, data)
 		toStr = toAddr.Hex()
 	} else {
-		tx.EthTX = kldbind.NewContractCreation(uint64(nonce), value, uint64(gas), gasPrice, data)
+		tx.EthTX = ethbind.NewContractCreation(uint64(nonce), value, uint64(gas), gasPrice, data)
 		toStr = ""
 	}
 	etx := tx.EthTX
@@ -438,7 +438,7 @@ func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgG
 	return
 }
 
-func (tx *Txn) getInteger(methodName string, path string, requiredType *kldbind.ABIType, suppliedType reflect.Type, param interface{}) (val int64, err error) {
+func (tx *Txn) getInteger(methodName string, path string, requiredType *ethbind.ABIType, suppliedType reflect.Type, param interface{}) (val int64, err error) {
 	if suppliedType.Kind() == reflect.String {
 		if val, err = strconv.ParseInt(param.(string), 10, 64); err != nil {
 			err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadNumber, methodName, path)
@@ -452,7 +452,7 @@ func (tx *Txn) getInteger(methodName string, path string, requiredType *kldbind.
 	return
 }
 
-func (tx *Txn) getUnsignedInteger(methodName string, path string, requiredType *kldbind.ABIType, suppliedType reflect.Type, param interface{}) (val uint64, err error) {
+func (tx *Txn) getUnsignedInteger(methodName string, path string, requiredType *ethbind.ABIType, suppliedType reflect.Type, param interface{}) (val uint64, err error) {
 	if suppliedType.Kind() == reflect.String {
 		if val, err = strconv.ParseUint(param.(string), 10, 64); err != nil {
 			err = klderrors.Errorf(klderrors.TransactionSendInputTypeBadNumber, methodName, path)
@@ -466,7 +466,7 @@ func (tx *Txn) getUnsignedInteger(methodName string, path string, requiredType *
 	return
 }
 
-func (tx *Txn) getBigInteger(methodName string, path string, requiredType *kldbind.ABIType, suppliedType reflect.Type, param interface{}) (bigInt *big.Int, err error) {
+func (tx *Txn) getBigInteger(methodName string, path string, requiredType *ethbind.ABIType, suppliedType reflect.Type, param interface{}) (bigInt *big.Int, err error) {
 	bigInt = big.NewInt(0)
 	if suppliedType.Kind() == reflect.String {
 		if _, ok := bigInt.SetString(param.(string), 10); !ok {
@@ -480,7 +480,7 @@ func (tx *Txn) getBigInteger(methodName string, path string, requiredType *kldbi
 	return
 }
 
-func (tx *Txn) generateTypedArrayOrSlice(methodName string, path string, requiredType *kldbind.ABIType, suppliedType reflect.Type, param interface{}) (interface{}, error) {
+func (tx *Txn) generateTypedArrayOrSlice(methodName string, path string, requiredType *ethbind.ABIType, suppliedType reflect.Type, param interface{}) (interface{}, error) {
 	if suppliedType.Kind() != reflect.Slice {
 		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForArray, methodName, path, requiredType, suppliedType)
 	}
@@ -505,7 +505,7 @@ func (tx *Txn) generateTypedArrayOrSlice(methodName string, path string, require
 	return genericSlice.Interface(), nil
 }
 
-func (tx *Txn) generateTupleFromMap(methodName string, path string, requiredType *kldbind.ABIType, param map[string]interface{}) (v interface{}, err error) {
+func (tx *Txn) generateTupleFromMap(methodName string, path string, requiredType *ethbind.ABIType, param map[string]interface{}) (v interface{}, err error) {
 	tuple := reflect.New(requiredType.TupleType).Elem()
 	for i, inputElemName := range requiredType.TupleRawNames {
 		var typedVal interface{}
@@ -531,15 +531,15 @@ func (tx *Txn) generateTupleFromMap(methodName string, path string, requiredType
 	return tuple.Interface(), nil
 }
 
-func (tx *Txn) generateTypedArg(requiredType *kldbind.ABIType, param interface{}, methodName string, path string) (interface{}, error) {
+func (tx *Txn) generateTypedArg(requiredType *ethbind.ABIType, param interface{}, methodName string, path string) (interface{}, error) {
 	suppliedType := reflect.TypeOf(param)
 	if suppliedType == nil {
 		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadNull, methodName, path)
 	}
 	switch requiredType.T {
-	case kldbind.IntTy, kldbind.UintTy:
+	case ethbind.IntTy, ethbind.UintTy:
 		if requiredType.Size <= 64 {
-			if requiredType.T == kldbind.IntTy {
+			if requiredType.T == ethbind.IntTy {
 				intVal, err := tx.getInteger(methodName, path, requiredType, suppliedType, param)
 				if err != nil {
 					return nil, err
@@ -573,27 +573,27 @@ func (tx *Txn) generateTypedArg(requiredType *kldbind.ABIType, param interface{}
 		}
 		// Catch-all is a big.Int - anyting that isn't an exact match power of 2, or greater than 64 bit
 		return tx.getBigInteger(methodName, path, requiredType, suppliedType, param)
-	case kldbind.BoolTy:
+	case ethbind.BoolTy:
 		if suppliedType.Kind() == reflect.String {
 			return (strings.ToLower(param.(string)) == "true"), nil
 		} else if suppliedType.Kind() == reflect.Bool {
 			return param.(bool), nil
 		}
 		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForBoolean, methodName, path, requiredType, suppliedType)
-	case kldbind.StringTy:
+	case ethbind.StringTy:
 		if suppliedType.Kind() == reflect.String {
 			return param.(string), nil
 		}
 		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForString, methodName, path, suppliedType)
-	case kldbind.AddressTy:
+	case ethbind.AddressTy:
 		if suppliedType.Kind() == reflect.String {
-			if !kldbind.IsHexAddress(param.(string)) {
+			if !ethbind.IsHexAddress(param.(string)) {
 				return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeAddress, methodName, path, suppliedType)
 			}
-			return kldbind.HexToAddress(param.(string)), nil
+			return ethbind.HexToAddress(param.(string)), nil
 		}
 		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForAddress, methodName, path, requiredType, suppliedType)
-	case kldbind.BytesTy, kldbind.FixedBytesTy:
+	case ethbind.BytesTy, ethbind.FixedBytesTy:
 		var bSlice []byte
 		if suppliedType.Kind() == reflect.Slice {
 			paramV := reflect.ValueOf(param)
@@ -614,7 +614,7 @@ func (tx *Txn) generateTypedArg(requiredType *kldbind.ABIType, param interface{}
 				bSlice[i] = byte(floatVal)
 			}
 		} else if suppliedType.Kind() == reflect.String {
-			bSlice = kldbind.FromHex(param.(string))
+			bSlice = ethbind.FromHex(param.(string))
 		} else {
 			return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForBytes, methodName, path, requiredType, suppliedType)
 		}
@@ -628,9 +628,9 @@ func (tx *Txn) generateTypedArg(requiredType *kldbind.ABIType, param interface{}
 			return bNewArray.Interface(), nil
 		}
 		return bSlice, nil
-	case kldbind.SliceTy, kldbind.ArrayTy:
+	case ethbind.SliceTy, ethbind.ArrayTy:
 		return tx.generateTypedArrayOrSlice(methodName, path, requiredType, suppliedType, param)
-	case kldbind.TupleTy:
+	case ethbind.TupleTy:
 		if suppliedType.Kind() != reflect.Map || suppliedType.Key().Kind() != reflect.String {
 			return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForTuple, methodName, path, requiredType, suppliedType)
 		}
@@ -641,7 +641,7 @@ func (tx *Txn) generateTypedArg(requiredType *kldbind.ABIType, param interface{}
 }
 
 // GenerateTypedArgs parses string arguments into a range of types to pass to the ABI call
-func (tx *Txn) generateTypedArgs(origParams []interface{}, method *kldbind.ABIMethod) ([]interface{}, error) {
+func (tx *Txn) generateTypedArgs(origParams []interface{}, method *ethbind.ABIMethod) ([]interface{}, error) {
 
 	params, err := flattenParams(origParams, &method.Inputs, false)
 	if err != nil {
@@ -675,11 +675,11 @@ func (tx *Txn) generateTypedArgs(origParams []interface{}, method *kldbind.ABIMe
 
 // flattenParams flattens an array of parameters of the form
 // [{"value":"val1","type":"uint256"},{"value":"val2","type":"uint256"}]
-// into ["val1","val2"], and updates the kldbind.ABIMethod declaration with any
+// into ["val1","val2"], and updates the ethbind.ABIMethod declaration with any
 // types specified.
 // If a flat structure is passed in, then there are no changes.
 // A mix is tollerated by the code, but no usecase is known for that.
-func flattenParams(origParams []interface{}, inputs *kldbind.ABIArguments, lazyTyping bool) (params []interface{}, err error) {
+func flattenParams(origParams []interface{}, inputs *ethbind.ABIArguments, lazyTyping bool) (params []interface{}, err error) {
 	if !lazyTyping && len(origParams) > len(*inputs) {
 		err = klderrors.Errorf(klderrors.TransactionSendInputTooManyParams, len(origParams), len(*inputs))
 	}
@@ -691,7 +691,7 @@ func flattenParams(origParams []interface{}, inputs *kldbind.ABIArguments, lazyT
 		} else if reflect.TypeOf(unflattened).Kind() != reflect.Map {
 			// No change needed
 			params[i] = unflattened
-		} else if len(*inputs) > i && (*inputs)[i].Type.T == kldbind.TupleTy {
+		} else if len(*inputs) > i && (*inputs)[i].Type.T == ethbind.TupleTy {
 			// No change needed - structure input
 			params[i] = unflattened
 		} else {
@@ -712,13 +712,13 @@ func flattenParams(origParams []interface{}, inputs *kldbind.ABIArguments, lazyT
 			}
 			params[i] = value
 			// Set the type
-			var ethType kldbind.ABIType
-			if ethType, err = kldbind.ABITypeFor(typeStr.(string)); err != nil {
+			var ethType ethbind.ABIType
+			if ethType, err = ethbind.ABITypeFor(typeStr.(string)); err != nil {
 				err = klderrors.Errorf(klderrors.TransactionSendInputInLineTypeUnknown, i, typeStr, err)
 				return
 			}
 			for len(*inputs) <= i {
-				*inputs = append(*inputs, kldbind.ABIArgument{})
+				*inputs = append(*inputs, ethbind.ABIArgument{})
 			}
 			(*inputs)[i].Type = ethType
 		}

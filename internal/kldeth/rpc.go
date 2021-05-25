@@ -19,8 +19,8 @@ import (
 	"net/url"
 	"os"
 
+	"github.com/kaleido-io/ethbind"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
-	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -46,7 +46,7 @@ func RPCConnect(conf *RPCConnOpts) (RPCClientAll, error) {
 	if u.User != nil {
 		u.User = url.UserPassword(u.User.Username(), "xxxxxx")
 	}
-	rpcClient, err := kldbind.Dial(conf.URL)
+	rpcClient, err := ethbind.Dial(conf.URL)
 	if err != nil {
 		return nil, klderrors.Errorf(klderrors.RPCConnectFailed, u, err)
 	}
@@ -65,7 +65,7 @@ func CobraInitRPC(cmd *cobra.Command, rconf *RPCConf) {
 // Other packages use RPCClientAll
 type rcpClient interface {
 	CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error
-	Subscribe(ctx context.Context, namespace string, channel interface{}, args ...interface{}) (*kldbind.ClientSubscription, error)
+	Subscribe(ctx context.Context, namespace string, channel interface{}, args ...interface{}) (*ethbind.ClientSubscription, error)
 	Close()
 }
 

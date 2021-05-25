@@ -24,7 +24,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/kaleido-io/ethconnect/internal/kldbind"
+	"github.com/kaleido-io/ethbind"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
@@ -472,7 +472,7 @@ func (p *txnProcessor) waitForCompletion(inflight *inflightTxn, initialWaitDelay
 		if receipt.GasUsed != nil {
 			reply.GasUsedStr = receipt.GasUsed.ToInt().Text(10)
 		}
-		nonceHex := kldbind.HexUint64(inflight.nonce)
+		nonceHex := ethbind.HexUint64(inflight.nonce)
 		if p.conf.HexValuesInReceipt {
 			reply.NonceHex = &nonceHex
 		}

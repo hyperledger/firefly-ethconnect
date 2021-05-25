@@ -24,7 +24,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/kaleido-io/ethbind"
+	"github.com/kaleido-io/ethbinding"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -573,8 +573,8 @@ func TestSolidityArrayOfByteArraysParamConversion(t *testing.T) {
 func TestTypeNotYetSupported(t *testing.T) {
 	assert := assert.New(t)
 	var tx Txn
-	var m ethbind.ABIMethod
-	functionType, err := ethbind.NewType("function", "uint256")
+	var m ethbinding.ABIMethod
+	functionType, err := ethbinding.NewType("function", "uint256")
 	assert.NoError(err)
 	m.Inputs = append(m.Inputs, abi.Argument{Name: "functionType", Type: functionType})
 	_, err = tx.generateTypedArgs([]interface{}{"abc"}, &m)
@@ -586,9 +586,9 @@ func TestSendTxnABIParam(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"123", float64(123), "abc", "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c", "0xfeedbeef"}
-	msg.Method = &ethbind.ABIElementMarshaling{
+	msg.Method = &ethbinding.ABIElementMarshaling{
 		Name: "testFunc",
-		Inputs: []ethbind.ABIArgumentMarshaling{
+		Inputs: []ethbinding.ABIArgumentMarshaling{
 			{
 				Name: "param1",
 				Type: "uint8",
@@ -610,7 +610,7 @@ func TestSendTxnABIParam(t *testing.T) {
 				Type: "bytes",
 			},
 		},
-		Outputs: []ethbind.ABIArgumentMarshaling{
+		Outputs: []ethbinding.ABIArgumentMarshaling{
 			{
 				Name: "ret1",
 				Type: "uint256",
@@ -760,7 +760,7 @@ func TestCallMethod(t *testing.T) {
 	param4["value"] = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 
 	genMethod := func(params []interface{}) *abi.Method {
-		uint256Type, _ := ethbind.ABITypeFor("uint256")
+		uint256Type, _ := ethbinding.ABITypeFor("uint256")
 		inputs := make(abi.Arguments, len(params))
 		for i := range params {
 			abiType, _ := abi.NewType(params[i].(map[string]interface{})["type"].(string), "", []abi.ArgumentMarshaling{})
@@ -1219,7 +1219,7 @@ func TestSendTxnInlineBadParamType(t *testing.T) {
 	param1["type"] = "badness"
 	param1["value"] = "123"
 
-	msg.Method = &ethbind.ABIElementMarshaling{
+	msg.Method = &ethbinding.ABIElementMarshaling{
 		Name: "testFunc",
 	}
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
@@ -1242,7 +1242,7 @@ func TestSendTxnInlineMissingParamType(t *testing.T) {
 	msg.Parameters = append(msg.Parameters, param1)
 	param1["value"] = "123"
 
-	msg.Method = &ethbind.ABIElementMarshaling{
+	msg.Method = &ethbinding.ABIElementMarshaling{
 		Name: "testFunc",
 	}
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
@@ -1265,7 +1265,7 @@ func TestSendTxnInlineMissingParamValue(t *testing.T) {
 	msg.Parameters = append(msg.Parameters, param1)
 	param1["type"] = "uint256"
 
-	msg.Method = &ethbind.ABIElementMarshaling{
+	msg.Method = &ethbinding.ABIElementMarshaling{
 		Name: "testFunc",
 	}
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
@@ -1289,7 +1289,7 @@ func TestSendTxnInlineBadTypeType(t *testing.T) {
 	param1["type"] = false
 	param1["value"] = "abcde"
 
-	msg.Method = &ethbind.ABIElementMarshaling{
+	msg.Method = &ethbinding.ABIElementMarshaling{
 		Name: "testFunc",
 	}
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
@@ -1305,15 +1305,15 @@ func TestSendTxnBadInputType(t *testing.T) {
 	assert := assert.New(t)
 
 	var msg kldmessages.SendTransaction
-	msg.Method = &ethbind.ABIElementMarshaling{
+	msg.Method = &ethbinding.ABIElementMarshaling{
 		Name: "testFunc",
-		Inputs: []ethbind.ABIArgumentMarshaling{
+		Inputs: []ethbinding.ABIArgumentMarshaling{
 			{
 				Name: "param1",
 				Type: "badness",
 			},
 		},
-		Outputs: []ethbind.ABIArgumentMarshaling{
+		Outputs: []ethbinding.ABIArgumentMarshaling{
 			{
 				Name: "ret1",
 				Type: "uint256",
@@ -1329,7 +1329,7 @@ func TestSendTxnMissingMethod(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"123"}
-	msg.Method = &ethbind.ABIElementMarshaling{}
+	msg.Method = &ethbinding.ABIElementMarshaling{}
 	msg.To = "0x2b8c0ECc76d0759a8F50b2E14A6881367D805832"
 	msg.From = "abc"
 	msg.Nonce = "123"
@@ -1344,15 +1344,15 @@ func TestSendTxnBadFrom(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"123"}
-	msg.Method = &ethbind.ABIElementMarshaling{
+	msg.Method = &ethbinding.ABIElementMarshaling{
 		Name: "testFunc",
-		Inputs: []ethbind.ABIArgumentMarshaling{
+		Inputs: []ethbinding.ABIArgumentMarshaling{
 			{
 				Name: "param1",
 				Type: "uint8",
 			},
 		},
-		Outputs: []ethbind.ABIArgumentMarshaling{
+		Outputs: []ethbinding.ABIArgumentMarshaling{
 			{
 				Name: "ret1",
 				Type: "uint256",
@@ -1374,15 +1374,15 @@ func TestSendTxnBadTo(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"123"}
-	msg.Method = &ethbind.ABIElementMarshaling{
+	msg.Method = &ethbinding.ABIElementMarshaling{
 		Name: "testFunc",
-		Inputs: []ethbind.ABIArgumentMarshaling{
+		Inputs: []ethbinding.ABIArgumentMarshaling{
 			{
 				Name: "param1",
 				Type: "uint8",
 			},
 		},
-		Outputs: []ethbind.ABIArgumentMarshaling{
+		Outputs: []ethbinding.ABIArgumentMarshaling{
 			{
 				Name: "ret1",
 				Type: "uint256",
@@ -1403,15 +1403,15 @@ func TestSendTxnBadOutputType(t *testing.T) {
 	assert := assert.New(t)
 
 	var msg kldmessages.SendTransaction
-	msg.Method = &ethbind.ABIElementMarshaling{
+	msg.Method = &ethbinding.ABIElementMarshaling{
 		Name: "testFunc",
-		Inputs: []ethbind.ABIArgumentMarshaling{
+		Inputs: []ethbinding.ABIArgumentMarshaling{
 			{
 				Name: "param1",
 				Type: "uint256",
 			},
 		},
-		Outputs: []ethbind.ABIArgumentMarshaling{
+		Outputs: []ethbinding.ABIArgumentMarshaling{
 			{
 				Name: "ret1",
 				Type: "badness",
@@ -1427,15 +1427,15 @@ func TestSendBadParams(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{"abc"}
-	msg.Method = &ethbind.ABIElementMarshaling{
+	msg.Method = &ethbinding.ABIElementMarshaling{
 		Name: "testFunc",
-		Inputs: []ethbind.ABIArgumentMarshaling{
+		Inputs: []ethbinding.ABIArgumentMarshaling{
 			{
 				Name: "param1",
 				Type: "int8",
 			},
 		},
-		Outputs: []ethbind.ABIArgumentMarshaling{
+		Outputs: []ethbinding.ABIArgumentMarshaling{
 			{
 				Name: "ret1",
 				Type: "uint256",
@@ -1451,15 +1451,15 @@ func TestSendTxnPackError(t *testing.T) {
 
 	var msg kldmessages.SendTransaction
 	msg.Parameters = []interface{}{""}
-	msg.Method = &ethbind.ABIElementMarshaling{
+	msg.Method = &ethbinding.ABIElementMarshaling{
 		Name: "testFunc",
-		Inputs: []ethbind.ABIArgumentMarshaling{
+		Inputs: []ethbinding.ABIArgumentMarshaling{
 			{
 				Name: "param1",
 				Type: "bytes1",
 			},
 		},
-		Outputs: []ethbind.ABIArgumentMarshaling{
+		Outputs: []ethbinding.ABIArgumentMarshaling{
 			{
 				Name: "ret1",
 				Type: "uint256",
@@ -1473,15 +1473,15 @@ func TestSendTxnPackError(t *testing.T) {
 func TestProcessRLPBytesValidTypes(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := ethbind.ABITypeFor("string")
-	t2, _ := ethbind.ABITypeFor("int256[]")
-	t3, _ := ethbind.ABITypeFor("bool")
-	t4, _ := ethbind.ABITypeFor("bytes1")
-	t5, _ := ethbind.ABITypeFor("address")
-	t6, _ := ethbind.ABITypeFor("bytes4")
-	t7, _ := ethbind.ABITypeFor("uint256")
-	t8, _ := ethbind.ABITypeFor("int32[]")
-	t9, _ := ethbind.ABITypeFor("uint32[]")
+	t1, _ := ethbinding.ABITypeFor("string")
+	t2, _ := ethbinding.ABITypeFor("int256[]")
+	t3, _ := ethbinding.ABITypeFor("bool")
+	t4, _ := ethbinding.ABITypeFor("bytes1")
+	t5, _ := ethbinding.ABITypeFor("address")
+	t6, _ := ethbinding.ABITypeFor("bytes4")
+	t7, _ := ethbinding.ABITypeFor("uint256")
+	t8, _ := ethbinding.ABITypeFor("int32[]")
+	t9, _ := ethbinding.ABITypeFor("uint32[]")
 	methodABI := &abi.Method{
 		Name:   "echoTypes2",
 		Inputs: []abi.Argument{},
@@ -1695,7 +1695,7 @@ func TestGenTupleMapOutputBadTypeValMismatch(t *testing.T) {
 func TestProcessRLPBytesInvalidNumber(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := ethbind.ABITypeFor("int32")
+	t1, _ := ethbinding.ABITypeFor("int32")
 	_, err := mapOutput("test1", "int256", &t1, "not an int")
 	assert.EqualError(err, "Expected number type in JSON/RPC response for test1 (int256). Received string")
 }
@@ -1703,7 +1703,7 @@ func TestProcessRLPBytesInvalidNumber(t *testing.T) {
 func TestProcessRLPBytesInvalidBool(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := ethbind.ABITypeFor("bool")
+	t1, _ := ethbinding.ABITypeFor("bool")
 	_, err := mapOutput("test1", "bool", &t1, "not a bool")
 	assert.EqualError(err, "Expected boolean type in JSON/RPC response for test1 (bool). Received string")
 }
@@ -1711,7 +1711,7 @@ func TestProcessRLPBytesInvalidBool(t *testing.T) {
 func TestProcessRLPBytesInvalidString(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := ethbind.ABITypeFor("string")
+	t1, _ := ethbinding.ABITypeFor("string")
 	_, err := mapOutput("test1", "string", &t1, 42)
 	assert.EqualError(err, "Expected string array type in JSON/RPC response for test1 (string). Received int")
 }
@@ -1719,7 +1719,7 @@ func TestProcessRLPBytesInvalidString(t *testing.T) {
 func TestProcessRLPBytesInvalidByteArray(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := ethbind.ABITypeFor("address")
+	t1, _ := ethbinding.ABITypeFor("address")
 	_, err := mapOutput("test1", "address", &t1, 42)
 	assert.EqualError(err, "Expected []byte type in JSON/RPC response for test1 (address). Received int")
 }
@@ -1727,7 +1727,7 @@ func TestProcessRLPBytesInvalidByteArray(t *testing.T) {
 func TestProcessRLPBytesInvalidArray(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := ethbind.ABITypeFor("int32[]")
+	t1, _ := ethbinding.ABITypeFor("int32[]")
 	_, err := mapOutput("test1", "int32[]", &t1, 42)
 	assert.EqualError(err, "Expected slice type in JSON/RPC response for test1 (int32[]). Received int")
 }
@@ -1735,7 +1735,7 @@ func TestProcessRLPBytesInvalidArray(t *testing.T) {
 func TestProcessRLPBytesInvalidArrayType(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := ethbind.ABITypeFor("int32[]")
+	t1, _ := ethbinding.ABITypeFor("int32[]")
 	_, err := mapOutput("test1", "int32[]", &t1, []string{"wrong"})
 	assert.EqualError(err, "Expected number type in JSON/RPC response for test1[0] (int32[]). Received string")
 }
@@ -1743,7 +1743,7 @@ func TestProcessRLPBytesInvalidArrayType(t *testing.T) {
 func TestProcessRLPBytesInvalidTypeByte(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := ethbind.ABITypeFor("bool")
+	t1, _ := ethbinding.ABITypeFor("bool")
 	t1.T = 42
 	_, err := mapOutput("test1", "randomness", &t1, 42)
 	assert.EqualError(err, "Unable to process type for test1 (randomness). Received int")
@@ -1752,7 +1752,7 @@ func TestProcessRLPBytesInvalidTypeByte(t *testing.T) {
 func TestProcessRLPBytesUnpackFailure(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := ethbind.ABITypeFor("string")
+	t1, _ := ethbinding.ABITypeFor("string")
 	methodABI := &abi.Method{
 		Name:   "echoTypes2",
 		Inputs: []abi.Argument{},
@@ -1768,7 +1768,7 @@ func TestProcessRLPBytesUnpackFailure(t *testing.T) {
 func TestProcessOutputsTooFew(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := ethbind.ABITypeFor("string")
+	t1, _ := ethbinding.ABITypeFor("string")
 	methodABI := &abi.Method{
 		Name:   "echoTypes2",
 		Inputs: []abi.Argument{},
@@ -1797,7 +1797,7 @@ func TestProcessOutputsTooMany(t *testing.T) {
 func TestProcessOutputsDefaultName(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := ethbind.ABITypeFor("string")
+	t1, _ := ethbinding.ABITypeFor("string")
 	methodABI := &abi.Method{
 		Name:   "anonReturn",
 		Inputs: []abi.Argument{},
@@ -1816,7 +1816,7 @@ func TestProcessOutputsDefaultName(t *testing.T) {
 func TestProcessOutputsBadArgs(t *testing.T) {
 	assert := assert.New(t)
 
-	t1, _ := ethbind.ABITypeFor("int32[]")
+	t1, _ := ethbinding.ABITypeFor("int32[]")
 	methodABI := &abi.Method{
 		Name:   "echoTypes2",
 		Inputs: []abi.Argument{},

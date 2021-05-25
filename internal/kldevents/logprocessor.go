@@ -20,20 +20,20 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/kaleido-io/ethbind"
+	"github.com/kaleido-io/ethbinding"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	log "github.com/sirupsen/logrus"
 )
 
 type logEntry struct {
-	Address          ethbind.Address   `json:"address"`
-	BlockNumber      ethbind.HexBigInt `json:"blockNumber"`
-	TransactionIndex ethbind.HexUint   `json:"transactionIndex"`
-	TransactionHash  ethbind.Hash      `json:"transactionHash"`
-	Data             string            `json:"data"`
-	Topics           []*ethbind.Hash   `json:"topics"`
-	Timestamp        uint64            `json:"timestamp,omitempty"`
+	Address          ethbinding.Address   `json:"address"`
+	BlockNumber      ethbinding.HexBigInt `json:"blockNumber"`
+	TransactionIndex ethbinding.HexUint   `json:"transactionIndex"`
+	TransactionHash  ethbinding.Hash      `json:"transactionHash"`
+	Data             string               `json:"data"`
+	Topics           []*ethbinding.Hash   `json:"topics"`
+	Timestamp        uint64               `json:"timestamp,omitempty"`
 }
 
 type eventData struct {
@@ -52,13 +52,13 @@ type eventData struct {
 
 type logProcessor struct {
 	subID    string
-	event    *ethbind.ABIEvent
+	event    *ethbinding.ABIEvent
 	stream   *eventStream
 	blockHWM big.Int
 	hwnSync  sync.Mutex
 }
 
-func newLogProcessor(subID string, event *ethbind.ABIEvent, stream *eventStream) *logProcessor {
+func newLogProcessor(subID string, event *ethbinding.ABIEvent, stream *eventStream) *logProcessor {
 	return &logProcessor{
 		subID:  subID,
 		event:  event,
@@ -95,7 +95,7 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 
 	var data []byte
 	if strings.HasPrefix(entry.Data, "0x") {
-		data, err = ethbind.HexDecode(entry.Data)
+		data, err = ethbinding.HexDecode(entry.Data)
 		if err != nil {
 			return klderrors.Errorf(klderrors.EventStreamsLogDecode, subInfo, err)
 		}
@@ -106,7 +106,7 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 		BlockNumber:      entry.BlockNumber.ToInt().String(),
 		TransactionIndex: entry.TransactionIndex.String(),
 		TransactionHash:  entry.TransactionHash.String(),
-		Signature:        ethbind.ABIEventSignature(lp.event),
+		Signature:        ethbinding.ABIEventSignature(lp.event),
 		Data:             make(map[string]interface{}),
 		SubID:            lp.subID,
 		LogIndex:         strconv.Itoa(idx),
@@ -121,13 +121,13 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 	}
 
 	// We need split out the indexed args that we parse out of the topic, from the data args
-	var dataArgs ethbind.ABIArguments
-	dataArgs = make([]ethbind.ABIArgument, 0, len(lp.event.Inputs))
+	var dataArgs ethbinding.ABIArguments
+	dataArgs = make([]ethbinding.ABIArgument, 0, len(lp.event.Inputs))
 	for idx, input := range lp.event.Inputs {
 		var val interface{}
 		if input.Indexed {
 			if topicIdx >= len(entry.Topics) {
-				return klderrors.Errorf(klderrors.EventStreamsLogDecodeInsufficientTopics, subInfo, idx, ethbind.ABIEventSignature(lp.event))
+				return klderrors.Errorf(klderrors.EventStreamsLogDecodeInsufficientTopics, subInfo, idx, ethbinding.ABIEventSignature(lp.event))
 			}
 			topic := entry.Topics[topicIdx]
 			topicIdx++
@@ -156,24 +156,24 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 	return nil
 }
 
-func topicToValue(topic *ethbind.Hash, input *ethbind.ABIArgument) interface{} {
+func topicToValue(topic *ethbinding.Hash, input *ethbinding.ABIArgument) interface{} {
 	switch input.Type.T {
-	case ethbind.IntTy, ethbind.UintTy, ethbind.BoolTy:
-		h := ethbind.HexBigInt{}
+	case ethbinding.IntTy, ethbinding.UintTy, ethbinding.BoolTy:
+		h := ethbinding.HexBigInt{}
 		h.UnmarshalText([]byte(topic.Hex()))
-		bI, _ := ethbind.ParseBig256(topic.Hex())
-		if input.Type.T == ethbind.IntTy {
+		bI, _ := ethbinding.ParseBig256(topic.Hex())
+		if input.Type.T == ethbinding.IntTy {
 			// It will be a two's complement number, so needs to be interpretted
-			bI = ethbind.S256(bI)
+			bI = ethbinding.S256(bI)
 			return bI.String()
-		} else if input.Type.T == ethbind.BoolTy {
+		} else if input.Type.T == ethbinding.BoolTy {
 			return (bI.Uint64() != 0)
 		}
 		return bI.String()
-	case ethbind.AddressTy:
+	case ethbinding.AddressTy:
 		topicBytes := topic.Bytes()
 		addrBytes := topicBytes[len(topicBytes)-20:]
-		return ethbind.BytesToAddress(addrBytes)
+		return ethbinding.BytesToAddress(addrBytes)
 	default:
 		// For all other types it is just a hash of the output for indexing, so we can only
 		// logically return it as a hex string. The Solidity developer has to include

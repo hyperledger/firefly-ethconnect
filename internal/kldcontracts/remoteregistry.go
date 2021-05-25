@@ -20,7 +20,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/kaleido-io/ethbind"
+	"github.com/kaleido-io/ethbinding"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
@@ -146,7 +146,7 @@ func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string, refr
 	if err != nil {
 		return nil, err
 	}
-	var abi ethbind.ABIMarshaling
+	var abi ethbinding.ABIMarshaling
 	err = json.Unmarshal([]byte(abiString), &abi)
 	if err != nil {
 		log.Errorf("GET %s <-- !Failed to decode ABI: %s\n%s", queryURL, err, abiString)

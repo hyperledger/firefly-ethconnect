@@ -24,7 +24,7 @@ import (
 	"testing"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/kaleido-io/ethbind"
+	"github.com/kaleido-io/ethbinding"
 	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/stretchr/testify/assert"
@@ -165,7 +165,7 @@ func TestRemoteRegistryloadFactoryForGatewaySuccess(t *testing.T) {
 	res, err := rr.loadFactoryForGateway("testid", false)
 	assert.NoError(err)
 	assert.NotEmpty(res.Compiled)
-	runtimeABI, err := ethbind.ABIMarshalingToABIRuntime(res.ABI)
+	runtimeABI, err := ethbinding.ABIMarshalingToABIRuntime(res.ABI)
 	assert.NoError(err)
 	assert.Equal("set", runtimeABI.Methods["set"].Name)
 	assert.Contains(res.DevDoc, "set")

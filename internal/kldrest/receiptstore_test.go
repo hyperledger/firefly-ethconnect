@@ -25,7 +25,7 @@ import (
 	"net/http/httptest"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/kaleido-io/ethbind"
+	"github.com/kaleido-io/ethbinding"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
@@ -94,7 +94,7 @@ func TestReplyProcessorWithValidReply(t *testing.T) {
 	replyMsg.Headers.ID = kldutils.UUIDv4()
 	replyMsg.Headers.ReqID = kldutils.UUIDv4()
 	replyMsg.Headers.ReqOffset = "topic:1:2"
-	txHash := ethbind.HexToHash("0x02587104e9879911bea3d5bf6ccd7e1a6cb9a03145b8a1141804cebd6aa67c5c")
+	txHash := ethbinding.HexToHash("0x02587104e9879911bea3d5bf6ccd7e1a6cb9a03145b8a1141804cebd6aa67c5c")
 	replyMsg.TransactionHash = &txHash
 	replyMsgBytes, _ := json.Marshal(&replyMsg)
 
@@ -117,9 +117,9 @@ func TestReplyProcessorWithContractGWSuccess(t *testing.T) {
 	replyMsg.Headers.ID = kldutils.UUIDv4()
 	replyMsg.Headers.ReqID = kldutils.UUIDv4()
 	replyMsg.Headers.ReqOffset = "topic:1:2"
-	txHash := ethbind.HexToHash("0x02587104e9879911bea3d5bf6ccd7e1a6cb9a03145b8a1141804cebd6aa67c5c")
+	txHash := ethbinding.HexToHash("0x02587104e9879911bea3d5bf6ccd7e1a6cb9a03145b8a1141804cebd6aa67c5c")
 	replyMsg.TransactionHash = &txHash
-	addr := ethbind.HexToAddress("0x0123456789AbcdeF0123456789abCdef0123456")
+	addr := ethbinding.HexToAddress("0x0123456789AbcdeF0123456789abCdef0123456")
 	replyMsg.ContractAddress = &addr
 	replyMsgBytes, _ := json.Marshal(&replyMsg)
 
@@ -144,9 +144,9 @@ func TestReplyProcessorWithContractGWFailure(t *testing.T) {
 	replyMsg.Headers.ID = kldutils.UUIDv4()
 	replyMsg.Headers.ReqID = kldutils.UUIDv4()
 	replyMsg.Headers.ReqOffset = "topic:1:2"
-	txHash := ethbind.HexToHash("0x02587104e9879911bea3d5bf6ccd7e1a6cb9a03145b8a1141804cebd6aa67c5c")
+	txHash := ethbinding.HexToHash("0x02587104e9879911bea3d5bf6ccd7e1a6cb9a03145b8a1141804cebd6aa67c5c")
 	replyMsg.TransactionHash = &txHash
-	addr := ethbind.HexToAddress("0x0123456789AbcdeF0123456789abCdef0123456")
+	addr := ethbinding.HexToAddress("0x0123456789AbcdeF0123456789abCdef0123456")
 	replyMsg.ContractAddress = &addr
 	replyMsgBytes, _ := json.Marshal(&replyMsg)
 
@@ -192,7 +192,7 @@ func TestReplyProcessorWithPeristenceErrorPanics(t *testing.T) {
 	replyMsg.Headers.ID = kldutils.UUIDv4()
 	replyMsg.Headers.ReqID = kldutils.UUIDv4()
 	replyMsg.Headers.ReqOffset = "topic:1:2"
-	txHash := ethbind.HexToHash("0x02587104e9879911bea3d5bf6ccd7e1a6cb9a03145b8a1141804cebd6aa67c5c")
+	txHash := ethbinding.HexToHash("0x02587104e9879911bea3d5bf6ccd7e1a6cb9a03145b8a1141804cebd6aa67c5c")
 	replyMsg.TransactionHash = &txHash
 	replyMsgBytes, _ := json.Marshal(&replyMsg)
 
@@ -218,7 +218,7 @@ func TestReplyProcessorWithPeristenceErrorDuplicateSwallows(t *testing.T) {
 	replyMsg.Headers.ID = kldutils.UUIDv4()
 	replyMsg.Headers.ReqID = kldutils.UUIDv4()
 	replyMsg.Headers.ReqOffset = "topic:1:2"
-	txHash := ethbind.HexToHash("0x02587104e9879911bea3d5bf6ccd7e1a6cb9a03145b8a1141804cebd6aa67c5c")
+	txHash := ethbinding.HexToHash("0x02587104e9879911bea3d5bf6ccd7e1a6cb9a03145b8a1141804cebd6aa67c5c")
 	replyMsg.TransactionHash = &txHash
 	replyMsgBytes, _ := json.Marshal(&replyMsg)
 

@@ -23,7 +23,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/kaleido-io/ethbind"
+	"github.com/kaleido-io/ethbinding"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
@@ -54,7 +54,7 @@ type SubscriptionManager interface {
 	SuspendStream(ctx context.Context, id string) error
 	ResumeStream(ctx context.Context, id string) error
 	DeleteStream(ctx context.Context, id string) error
-	AddSubscription(ctx context.Context, addr *ethbind.Address, event *ethbind.ABIElementMarshaling, streamID, initialBlock, name string) (*SubscriptionInfo, error)
+	AddSubscription(ctx context.Context, addr *ethbinding.Address, event *ethbinding.ABIElementMarshaling, streamID, initialBlock, name string) (*SubscriptionInfo, error)
 	Subscriptions(ctx context.Context) []*SubscriptionInfo
 	SubscriptionByID(ctx context.Context, id string) (*SubscriptionInfo, error)
 	ResetSubscription(ctx context.Context, id, initialBlock string) error
@@ -144,7 +144,7 @@ func (s *subscriptionMGR) setInitialBlock(i *SubscriptionInfo, initialBlock stri
 }
 
 // AddSubscription adds a new subscription
-func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *ethbind.Address, event *ethbind.ABIElementMarshaling, streamID, initialBlock, name string) (*SubscriptionInfo, error) {
+func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *ethbinding.Address, event *ethbinding.ABIElementMarshaling, streamID, initialBlock, name string) (*SubscriptionInfo, error) {
 	i := &SubscriptionInfo{
 		TimeSorted: kldmessages.TimeSorted{
 			CreatedISO8601: time.Now().UTC().Format(time.RFC3339),

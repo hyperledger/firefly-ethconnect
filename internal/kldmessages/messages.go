@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"reflect"
 
-	"github.com/kaleido-io/ethbind"
+	"github.com/kaleido-io/ethbinding"
 )
 
 const (
@@ -116,23 +116,23 @@ type TransactionCommon struct {
 // SendTransaction message instructs the bridge to install a contract
 type SendTransaction struct {
 	TransactionCommon
-	To         string                        `json:"to"`
-	Method     *ethbind.ABIElementMarshaling `json:"method,omitempty"`
-	MethodName string                        `json:"methodName,omitempty"`
+	To         string                           `json:"to"`
+	Method     *ethbinding.ABIElementMarshaling `json:"method,omitempty"`
+	MethodName string                           `json:"methodName,omitempty"`
 }
 
 // DeployContract message instructs the bridge to install a contract
 type DeployContract struct {
 	TransactionCommon
-	Solidity        string                `json:"solidity,omitempty"`
-	CompilerVersion string                `json:"compilerVersion,omitempty"`
-	EVMVersion      string                `json:"evmVersion,omitempty"`
-	ABI             ethbind.ABIMarshaling `json:"abi,omitempty"`
-	DevDoc          string                `json:"devDocs,omitempty"`
-	Compiled        []byte                `json:"compiled,omitempty"`
-	ContractName    string                `json:"contractName,omitempty"`
-	Description     string                `json:"description,omitempty"`
-	RegisterAs      string                `json:"registerAs,omitempty"`
+	Solidity        string                   `json:"solidity,omitempty"`
+	CompilerVersion string                   `json:"compilerVersion,omitempty"`
+	EVMVersion      string                   `json:"evmVersion,omitempty"`
+	ABI             ethbinding.ABIMarshaling `json:"abi,omitempty"`
+	DevDoc          string                   `json:"devDocs,omitempty"`
+	Compiled        []byte                   `json:"compiled,omitempty"`
+	ContractName    string                   `json:"contractName,omitempty"`
+	Description     string                   `json:"description,omitempty"`
+	RegisterAs      string                   `json:"registerAs,omitempty"`
 }
 
 // TransactionReceipt is sent when a transaction has been successfully mined
@@ -140,26 +140,26 @@ type DeployContract struct {
 // ethereum hex encoding version
 type TransactionReceipt struct {
 	ReplyCommon
-	BlockHash            *ethbind.Hash      `json:"blockHash"`
-	BlockNumberStr       string             `json:"blockNumber"`
-	BlockNumberHex       *ethbind.HexBigInt `json:"blockNumberHex,omitempty"`
-	ContractSwagger      string             `json:"openapi,omitempty"`
-	ContractUI           string             `json:"apiexerciser,omitempty"`
-	ContractAddress      *ethbind.Address   `json:"contractAddress,omitempty"`
-	CumulativeGasUsedStr string             `json:"cumulativeGasUsed"`
-	CumulativeGasUsedHex *ethbind.HexBigInt `json:"cumulativeGasUsedHex,omitempty"`
-	From                 *ethbind.Address   `json:"from"`
-	GasUsedStr           string             `json:"gasUsed"`
-	GasUsedHex           *ethbind.HexBigInt `json:"gasUsedHex,omitempty"`
-	NonceStr             string             `json:"nonce"`
-	NonceHex             *ethbind.HexUint64 `json:"nonceHex,omitempty"`
-	StatusStr            string             `json:"status"`
-	StatusHex            *ethbind.HexBigInt `json:"statusHex,omitempty"`
-	To                   *ethbind.Address   `json:"to"`
-	TransactionHash      *ethbind.Hash      `json:"transactionHash"`
-	TransactionIndexStr  string             `json:"transactionIndex"`
-	TransactionIndexHex  *ethbind.HexUint   `json:"transactionIndexHex,omitempty"`
-	RegisterAs           string             `json:"registerAs,omitempty"`
+	BlockHash            *ethbinding.Hash      `json:"blockHash"`
+	BlockNumberStr       string                `json:"blockNumber"`
+	BlockNumberHex       *ethbinding.HexBigInt `json:"blockNumberHex,omitempty"`
+	ContractSwagger      string                `json:"openapi,omitempty"`
+	ContractUI           string                `json:"apiexerciser,omitempty"`
+	ContractAddress      *ethbinding.Address   `json:"contractAddress,omitempty"`
+	CumulativeGasUsedStr string                `json:"cumulativeGasUsed"`
+	CumulativeGasUsedHex *ethbinding.HexBigInt `json:"cumulativeGasUsedHex,omitempty"`
+	From                 *ethbinding.Address   `json:"from"`
+	GasUsedStr           string                `json:"gasUsed"`
+	GasUsedHex           *ethbinding.HexBigInt `json:"gasUsedHex,omitempty"`
+	NonceStr             string                `json:"nonce"`
+	NonceHex             *ethbinding.HexUint64 `json:"nonceHex,omitempty"`
+	StatusStr            string                `json:"status"`
+	StatusHex            *ethbinding.HexBigInt `json:"statusHex,omitempty"`
+	To                   *ethbinding.Address   `json:"to"`
+	TransactionHash      *ethbinding.Hash      `json:"transactionHash"`
+	TransactionIndexStr  string                `json:"transactionIndex"`
+	TransactionIndexHex  *ethbinding.HexUint   `json:"transactionIndexHex,omitempty"`
+	RegisterAs           string                `json:"registerAs,omitempty"`
 }
 
 // ErrorReply is

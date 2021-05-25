@@ -20,19 +20,19 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/kaleido-io/ethbind"
+	"github.com/kaleido-io/ethbinding"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 )
 
 // GetOrionTXCount uses the special Pantheon/Orion interface to check the
 // next nonce for the privacy group associated with the privateFrom/privateFor combination
-func GetOrionTXCount(ctx context.Context, rpc RPCClient, addr *ethbind.Address, privacyGroup string) (int64, error) {
+func GetOrionTXCount(ctx context.Context, rpc RPCClient, addr *ethbinding.Address, privacyGroup string) (int64, error) {
 	start := time.Now().UTC()
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	var txnCount ethbind.HexUint64
+	var txnCount ethbinding.HexUint64
 	if err := rpc.CallContext(ctx, &txnCount, "priv_getTransactionCount", addr, privacyGroup); err != nil {
 		return 0, klderrors.Errorf(klderrors.TransactionSendNonceFailWithPrivacyGroup, privacyGroup, err)
 	}
@@ -43,13 +43,13 @@ func GetOrionTXCount(ctx context.Context, rpc RPCClient, addr *ethbind.Address, 
 }
 
 // GetTransactionCount gets the transaction count for an address
-func GetTransactionCount(ctx context.Context, rpc RPCClient, addr *ethbind.Address, blockNumber string) (int64, error) {
+func GetTransactionCount(ctx context.Context, rpc RPCClient, addr *ethbinding.Address, blockNumber string) (int64, error) {
 	start := time.Now().UTC()
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	var txnCount ethbind.HexUint64
+	var txnCount ethbinding.HexUint64
 	if err := rpc.CallContext(ctx, &txnCount, "eth_getTransactionCount", addr, blockNumber); err != nil {
 		return 0, klderrors.Errorf(klderrors.RPCCallReturnedError, "eth_getTransactionCount", err)
 	}

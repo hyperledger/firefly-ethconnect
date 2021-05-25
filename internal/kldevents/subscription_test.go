@@ -20,7 +20,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/kaleido-io/ethbind"
+	"github.com/kaleido-io/ethbinding"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 
@@ -65,7 +65,7 @@ func newTestStream() *eventStream {
 	return a
 }
 
-func testSubInfo(event *ethbind.ABIElementMarshaling) *SubscriptionInfo {
+func testSubInfo(event *ethbinding.ABIElementMarshaling) *SubscriptionInfo {
 	return &SubscriptionInfo{ID: "test", Stream: "streamID", Event: event}
 }
 
@@ -73,9 +73,9 @@ func TestCreateWebhookSub(t *testing.T) {
 	assert := assert.New(t)
 
 	rpc := kldeth.NewMockRPCClientForSync(nil, nil)
-	event := &ethbind.ABIElementMarshaling{
+	event := &ethbinding.ABIElementMarshaling{
 		Name: "glastonbury",
-		Inputs: []ethbind.ABIArgumentMarshaling{
+		Inputs: []ethbinding.ABIArgumentMarshaling{
 			{
 				Name: "field",
 				Type: "address",
@@ -114,12 +114,12 @@ func TestCreateWebhookSubWithAddr(t *testing.T) {
 
 	rpc := kldeth.NewMockRPCClientForSync(nil, nil)
 	m := &mockSubMgr{stream: newTestStream()}
-	event := &ethbind.ABIElementMarshaling{
+	event := &ethbinding.ABIElementMarshaling{
 		Name:      "devcon",
 		Anonymous: true,
 	}
 
-	addr := ethbind.HexToAddress("0x0123456789abcDEF0123456789abCDef01234567")
+	addr := ethbinding.HexToAddress("0x0123456789abcDEF0123456789abCDef01234567")
 	subInfo := testSubInfo(event)
 	subInfo.Name = "mySubscription"
 	s, err := newSubscription(m, rpc, &addr, subInfo)
@@ -133,7 +133,7 @@ func TestCreateWebhookSubWithAddr(t *testing.T) {
 
 func TestCreateSubscriptionNoEvent(t *testing.T) {
 	assert := assert.New(t)
-	event := &ethbind.ABIElementMarshaling{}
+	event := &ethbinding.ABIElementMarshaling{}
 	m := &mockSubMgr{stream: newTestStream()}
 	_, err := newSubscription(m, nil, nil, testSubInfo(event))
 	assert.EqualError(err, "Solidity event name must be specified")
@@ -141,8 +141,8 @@ func TestCreateSubscriptionNoEvent(t *testing.T) {
 
 func TestCreateSubscriptionBadABI(t *testing.T) {
 	assert := assert.New(t)
-	event := &ethbind.ABIElementMarshaling{
-		Inputs: []ethbind.ABIArgumentMarshaling{
+	event := &ethbinding.ABIElementMarshaling{
+		Inputs: []ethbinding.ABIArgumentMarshaling{
 			{Name: "badness", Type: "-1"},
 		},
 	}
@@ -153,7 +153,7 @@ func TestCreateSubscriptionBadABI(t *testing.T) {
 
 func TestCreateSubscriptionMissingAction(t *testing.T) {
 	assert := assert.New(t)
-	event := &ethbind.ABIElementMarshaling{Name: "party"}
+	event := &ethbinding.ABIElementMarshaling{Name: "party"}
 	m := &mockSubMgr{err: fmt.Errorf("nope")}
 	_, err := newSubscription(m, nil, nil, testSubInfo(event))
 	assert.EqualError(err, "nope")
@@ -162,14 +162,14 @@ func TestCreateSubscriptionMissingAction(t *testing.T) {
 func TestRestoreSubscriptionMissingAction(t *testing.T) {
 	assert := assert.New(t)
 	m := &mockSubMgr{err: fmt.Errorf("nope")}
-	_, err := restoreSubscription(m, nil, testSubInfo(&ethbind.ABIElementMarshaling{}))
+	_, err := restoreSubscription(m, nil, testSubInfo(&ethbinding.ABIElementMarshaling{}))
 	assert.EqualError(err, "nope")
 }
 
 func TestRestoreSubscriptionBadType(t *testing.T) {
 	assert := assert.New(t)
-	event := &ethbind.ABIElementMarshaling{
-		Inputs: []ethbind.ABIArgumentMarshaling{
+	event := &ethbinding.ABIElementMarshaling{
+		Inputs: []ethbinding.ABIArgumentMarshaling{
 			{Name: "badness", Type: "-1"},
 		},
 	}
@@ -197,7 +197,7 @@ func TestProcessEventsCannotProcess(t *testing.T) {
 				Data: "0x no hex here sorry",
 			})
 		}),
-		lp: newLogProcessor("", &ethbind.ABIEvent{}, newTestStream()),
+		lp: newLogProcessor("", &ethbinding.ABIEvent{}, newTestStream()),
 	}
 	err := s.processNewEvents(context.Background())
 	// We swallow the error in this case - as we simply couldn't read the event

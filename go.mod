@@ -19,7 +19,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/icza/dyno v0.0.0-20200205103839-49cb13720835
 	github.com/julienschmidt/httprouter v1.3.0
-	github.com/kaleido-io/ethbind v0.0.0-20210525225729-e1a0ed3f65de // indirect
+	github.com/kaleido-io/ethbinding v0.0.0-20210525231147-38867138cde6
 	github.com/klauspost/compress v1.11.1 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect

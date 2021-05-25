@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kaleido-io/ethbind"
+	"github.com/kaleido-io/ethbinding"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
@@ -409,7 +409,7 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 	json.Unmarshal(testDataBytes, &testData)
 	testBlockDetailBytes, err := ioutil.ReadFile("../../test/block_details.json")
 	assert.NoError(err)
-	testBlock := &ethbind.Header{}
+	testBlock := &ethbinding.Header{}
 	var parsedBlock map[string]interface{}
 	json.Unmarshal(testBlockDetailBytes, &parsedBlock)
 	ts := parsedBlock["timestamp"].(float64)
@@ -427,14 +427,14 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 		} else if method == "eth_getFilterChanges" {
 			*(res.(*[]*logEntry)) = []*logEntry{}
 		} else if method == "eth_getBlockByNumber" {
-			*(res.(*ethbind.Header)) = *testBlock
+			*(res.(*ethbinding.Header)) = *testBlock
 		}
 	})
 	sm.rpc = rpc
 
-	event := &ethbind.ABIElementMarshaling{
+	event := &ethbinding.ABIElementMarshaling{
 		Name: "Changed",
-		Inputs: []ethbind.ABIArgumentMarshaling{
+		Inputs: []ethbinding.ABIArgumentMarshaling{
 			{
 				Name:    "from",
 				Type:    "address",
@@ -460,7 +460,7 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 			},
 		},
 	}
-	addr := ethbind.HexToAddress("0x167f57a13a9c35ff92f0649d2be0e52b4f8ac3ca")
+	addr := ethbinding.HexToAddress("0x167f57a13a9c35ff92f0649d2be0e52b4f8ac3ca")
 	ctx := context.Background()
 	s, _ := sm.AddSubscription(ctx, &addr, event, stream.spec.ID, "", subscriptionName)
 	return s

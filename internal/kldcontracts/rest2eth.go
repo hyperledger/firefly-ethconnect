@@ -26,7 +26,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/julienschmidt/httprouter"
 	"github.com/kaleido-io/ethbinding"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
@@ -635,7 +634,7 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 	return
 }
 
-func (r *rest2eth) callContract(res http.ResponseWriter, req *http.Request, from, addr string, value json.Number, abiMethod *abi.Method, msgParams []interface{}, blocknumber string) {
+func (r *rest2eth) callContract(res http.ResponseWriter, req *http.Request, from, addr string, value json.Number, abiMethod *ethbinding.ABIMethod, msgParams []interface{}, blocknumber string) {
 	var err error
 	if from, err = r.processor.ResolveAddress(from); err != nil {
 		r.restErrReply(res, req, err, 500)

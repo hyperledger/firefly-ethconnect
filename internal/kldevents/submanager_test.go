@@ -51,14 +51,17 @@ type mockWebSocket struct {
 	registeredNamespace string
 	capturedNamespace   string
 	sender              chan interface{}
+	broadcast           chan interface{}
 	receiver            chan error
 	closing             chan struct{}
 }
 
-func (m *mockWebSocket) GetChannels(namespace string) (chan<- interface{}, <-chan error, <-chan struct{}) {
+func (m *mockWebSocket) GetChannels(namespace string) (chan<- interface{}, chan<- interface{}, <-chan error, <-chan struct{}) {
 	m.capturedNamespace = namespace
-	return m.sender, m.receiver, m.closing
+	return m.sender, m.broadcast, m.receiver, m.closing
 }
+
+func (m *mockWebSocket) SendReply(message interface{}) {}
 
 func tempdir(t *testing.T) string {
 	dir, _ := ioutil.TempDir("", "kld")
@@ -73,9 +76,10 @@ func cleanup(t *testing.T, dir string) {
 
 func newMockWebSocket() *mockWebSocket {
 	return &mockWebSocket{
-		sender:   make(chan interface{}),
-		receiver: make(chan error),
-		closing:  make(chan struct{}),
+		sender:    make(chan interface{}),
+		broadcast: make(chan interface{}),
+		receiver:  make(chan error),
+		closing:   make(chan struct{}),
 	}
 }
 

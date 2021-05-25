@@ -16,6 +16,7 @@ package kldws
 
 import (
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,15 +28,16 @@ import (
 )
 
 type webSocketConnection struct {
-	id       string
-	server   *webSocketServer
-	conn     *ws.Conn
-	mux      sync.Mutex
-	closed   bool
-	topics   map[string]*webSocketTopic
-	newTopic chan bool
-	receive  chan error
-	closing  chan struct{}
+	id        string
+	server    *webSocketServer
+	conn      *ws.Conn
+	mux       sync.Mutex
+	closed    bool
+	topics    map[string]*webSocketTopic
+	broadcast chan interface{}
+	newTopic  chan bool
+	receive   chan error
+	closing   chan struct{}
 }
 
 type webSocketCommandMessage struct {
@@ -46,13 +48,14 @@ type webSocketCommandMessage struct {
 
 func newConnection(server *webSocketServer, conn *ws.Conn) *webSocketConnection {
 	wsc := &webSocketConnection{
-		id:       kldutils.UUIDv4(),
-		server:   server,
-		conn:     conn,
-		newTopic: make(chan bool),
-		topics:   make(map[string]*webSocketTopic),
-		receive:  make(chan error),
-		closing:  make(chan struct{}),
+		id:        kldutils.UUIDv4(),
+		server:    server,
+		conn:      conn,
+		newTopic:  make(chan bool),
+		topics:    make(map[string]*webSocketTopic),
+		broadcast: make(chan interface{}),
+		receive:   make(chan error),
+		closing:   make(chan struct{}),
 	}
 	go wsc.listen()
 	go wsc.sender()
@@ -80,12 +83,14 @@ func (c *webSocketConnection) sender() {
 	buildCases := func() []reflect.SelectCase {
 		c.mux.Lock()
 		defer c.mux.Unlock()
-		cases := make([]reflect.SelectCase, len(c.topics)+2)
+		cases := make([]reflect.SelectCase, len(c.topics)+3)
 		i := 0
 		for _, t := range c.topics {
 			cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(t.senderChannel)}
 			i++
 		}
+		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(c.broadcast)}
+		i++
 		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(c.closing)}
 		i++
 		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(c.newTopic)}
@@ -112,11 +117,16 @@ func (c *webSocketConnection) sender() {
 func (c *webSocketConnection) listenTopic(t *webSocketTopic) {
 	c.mux.Lock()
 	c.topics[t.topic] = t
+	c.server.ListenOnTopic(c, t.topic)
 	c.mux.Unlock()
 	select {
 	case c.newTopic <- true:
 	case <-c.closing:
 	}
+}
+
+func (c *webSocketConnection) listenReplies() {
+	c.server.ListenForReplies(c)
 }
 
 func (c *webSocketConnection) listen() {
@@ -132,9 +142,11 @@ func (c *webSocketConnection) listen() {
 		log.Debugf("WS/%s: Received: %+v", c.id, msg)
 
 		t := c.server.getTopic(msg.Topic)
-		switch msg.Type {
+		switch strings.ToLower(msg.Type) {
 		case "listen":
 			c.listenTopic(t)
+		case "listenreplies":
+			c.listenReplies()
 		case "ack":
 			c.handleAckOrError(t, nil)
 		case "error":

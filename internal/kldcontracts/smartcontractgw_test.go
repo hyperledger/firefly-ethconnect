@@ -47,6 +47,18 @@ import (
 
 var simpleEventsSol string
 
+type mockWebSocketServer struct {
+	testChan chan interface{}
+}
+
+func (m *mockWebSocketServer) GetChannels(topic string) (chan<- interface{}, chan<- interface{}, <-chan error, <-chan struct{}) {
+	return nil, nil, nil, nil
+}
+
+func (m *mockWebSocketServer) SendReply(message interface{}) {
+	m.testChan <- message
+}
+
 func simpleEventsSource() string {
 	if simpleEventsSol == "" {
 		simpleEventsBytes, _ := ioutil.ReadFile("../../test/simpleevents.sol")
@@ -2099,4 +2111,27 @@ func TestWithEventsAuthRequiresAuth(t *testing.T) {
 	assert.Equal(res.Code, 401)
 
 	kldauth.RegisterSecurityModule(nil)
+}
+
+func TestSendReplyBroadcast(t *testing.T) {
+	assert := assert.New(t)
+	testMessage := "hello world"
+
+	ws := &mockWebSocketServer{
+		testChan: make(chan interface{}),
+	}
+
+	scgw, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			BaseURL: "http://localhost/api/v1",
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
+		nil, nil, nil, ws,
+	)
+
+	go scgw.SendReply(testMessage)
+	receivedReply := <-ws.testChan
+	assert.Equal(testMessage, receivedReply)
 }

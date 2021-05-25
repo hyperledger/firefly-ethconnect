@@ -21,7 +21,7 @@ import (
 
 	"github.com/go-openapi/jsonreference"
 	"github.com/go-openapi/spec"
-	"github.com/kaleido-io/ethconnect/internal/kldbind"
+	"github.com/kaleido-io/ethbind"
 	"github.com/tidwall/gjson"
 )
 
@@ -57,17 +57,17 @@ func NewABI2Swagger(conf *ABI2SwaggerConf) *ABI2Swagger {
 }
 
 // Gen4Instance generates OpenAPI for a single contract instance with an address
-func (c *ABI2Swagger) Gen4Instance(basePath, name string, abi *kldbind.ABI, devdocsJSON string) *spec.Swagger {
+func (c *ABI2Swagger) Gen4Instance(basePath, name string, abi *ethbind.ABI, devdocsJSON string) *spec.Swagger {
 	return c.convert(basePath, name, abi, devdocsJSON, true, false, false)
 }
 
 // Gen4Factory generates OpenAPI for a contract factory, with a constructor, and child methods on any address
-func (c *ABI2Swagger) Gen4Factory(basePath, name string, factoryOnly, externalRegistry bool, abi *kldbind.ABI, devdocsJSON string) *spec.Swagger {
+func (c *ABI2Swagger) Gen4Factory(basePath, name string, factoryOnly, externalRegistry bool, abi *ethbind.ABI, devdocsJSON string) *spec.Swagger {
 	return c.convert(basePath, name, abi, devdocsJSON, false, factoryOnly, externalRegistry)
 }
 
 // convert does the conversion and fills in the details on the Swagger Schema
-func (c *ABI2Swagger) convert(basePath, name string, abi *kldbind.ABI, devdocsJSON string, inst, factoryOnly, externalRegistry bool) *spec.Swagger {
+func (c *ABI2Swagger) convert(basePath, name string, abi *ethbind.ABI, devdocsJSON string, inst, factoryOnly, externalRegistry bool) *spec.Swagger {
 
 	basePath = c.conf.ExternalRootPath + basePath
 
@@ -108,7 +108,7 @@ func (c *ABI2Swagger) convert(basePath, name string, abi *kldbind.ABI, devdocsJS
 	return swagger
 }
 
-func (c *ABI2Swagger) buildDefinitionsAndPaths(inst, factoryOnly, externalRegistry bool, abi *kldbind.ABI, defs map[string]spec.Schema, paths map[string]spec.PathItem, devdocs gjson.Result) {
+func (c *ABI2Swagger) buildDefinitionsAndPaths(inst, factoryOnly, externalRegistry bool, abi *ethbind.ABI, defs map[string]spec.Schema, paths map[string]spec.PathItem, devdocs gjson.Result) {
 	methodsDocs := devdocs.Get("methods")
 	if !inst {
 		c.buildMethodDefinitionsAndPath(inst, defs, paths, "constructor", abi.Constructor, methodsDocs)
@@ -143,7 +143,7 @@ func (c *ABI2Swagger) buildDefinitionsAndPaths(inst, factoryOnly, externalRegist
 	defs["error"] = errSchema
 }
 
-func (c *ABI2Swagger) getDeclaredIDDetails(inst bool, declaredID string, inputs kldbind.ABIArguments, devdocs gjson.Result) (bool, string, string, gjson.Result) {
+func (c *ABI2Swagger) getDeclaredIDDetails(inst bool, declaredID string, inputs ethbind.ABIArguments, devdocs gjson.Result) (bool, string, string, gjson.Result) {
 	sig := declaredID
 	constructor := (declaredID == "constructor")
 	path := "/"
@@ -168,7 +168,7 @@ func (c *ABI2Swagger) getDeclaredIDDetails(inst bool, declaredID string, inputs 
 	return constructor, sig, path, methodDocs
 }
 
-func (c *ABI2Swagger) buildMethodDefinitionsAndPath(inst bool, defs map[string]spec.Schema, paths map[string]spec.PathItem, name string, method kldbind.ABIMethod, devdocs gjson.Result) {
+func (c *ABI2Swagger) buildMethodDefinitionsAndPath(inst bool, defs map[string]spec.Schema, paths map[string]spec.PathItem, name string, method ethbind.ABIMethod, devdocs gjson.Result) {
 
 	constructor, methodSig, path, methodDocs := c.getDeclaredIDDetails(inst, name, method.Inputs, devdocs)
 	if method.IsConstant() {
@@ -237,7 +237,7 @@ func (c *ABI2Swagger) addRegisterPath(paths map[string]spec.PathItem) {
 	paths["/{address}"] = pathItem
 }
 
-func (c *ABI2Swagger) buildEventDefinitionsAndPath(inst bool, defs map[string]spec.Schema, paths map[string]spec.PathItem, name string, event kldbind.ABIEvent, devdocs gjson.Result) {
+func (c *ABI2Swagger) buildEventDefinitionsAndPath(inst bool, defs map[string]spec.Schema, paths map[string]spec.PathItem, name string, event ethbind.ABIEvent, devdocs gjson.Result) {
 	_, eventSig, path, eventDocs := c.getDeclaredIDDetails(inst, event.Name, event.Inputs, devdocs)
 	eventSig += " [event]"
 	pathItem := spec.PathItem{}
@@ -479,7 +479,7 @@ func (c *ABI2Swagger) getAddressParam() spec.Parameter {
 	}
 }
 
-func (c *ABI2Swagger) buildGETPath(outputSchema string, inst bool, name string, method kldbind.ABIMethod, methodSig string, devdocs gjson.Result) *spec.Operation {
+func (c *ABI2Swagger) buildGETPath(outputSchema string, inst bool, name string, method ethbind.ABIMethod, methodSig string, devdocs gjson.Result) *spec.Operation {
 	parameters := make([]spec.Parameter, 0, len(method.Inputs)+1)
 	if !inst {
 		parameters = append(parameters, c.getAddressParam())
@@ -524,7 +524,7 @@ func (c *ABI2Swagger) buildGETPath(outputSchema string, inst bool, name string, 
 	return op
 }
 
-func (c *ABI2Swagger) buildPOSTPath(inputSchema, outputSchema string, inst, constructor bool, name string, method kldbind.ABIMethod, methodSig string, devdocs gjson.Result) *spec.Operation {
+func (c *ABI2Swagger) buildPOSTPath(inputSchema, outputSchema string, inst, constructor bool, name string, method ethbind.ABIMethod, methodSig string, devdocs gjson.Result) *spec.Operation {
 	parameters := make([]spec.Parameter, 0, 2)
 	if !inst && !constructor {
 		parameters = append(parameters, spec.Parameter{
@@ -569,7 +569,7 @@ func (c *ABI2Swagger) buildPOSTPath(inputSchema, outputSchema string, inst, cons
 	return op
 }
 
-func (c *ABI2Swagger) buildEventPOSTPath(eventSchema string, inst bool, event kldbind.ABIEvent, eventSig string, devdocs gjson.Result) *spec.Operation {
+func (c *ABI2Swagger) buildEventPOSTPath(eventSchema string, inst bool, event ethbind.ABIEvent, eventSig string, devdocs gjson.Result) *spec.Operation {
 	parameters := make([]spec.Parameter, 0, 2)
 	id := event.Name + "_subscribe"
 	if !inst {
@@ -667,7 +667,7 @@ func (c *ABI2Swagger) buildResponses(outputSchema string, devdocs gjson.Result) 
 	}
 }
 
-func (c *ABI2Swagger) buildArgumentsDefinition(defs map[string]spec.Schema, name string, args kldbind.ABIArguments, devdocs gjson.Result) {
+func (c *ABI2Swagger) buildArgumentsDefinition(defs map[string]spec.Schema, name string, args ethbind.ABIArguments, devdocs gjson.Result) {
 
 	s := spec.Schema{
 		SchemaProps: spec.SchemaProps{
@@ -699,7 +699,7 @@ func (c *ABI2Swagger) buildArgumentsDefinition(defs map[string]spec.Schema, name
 
 }
 
-func (c *ABI2Swagger) mapArgToSchema(arg kldbind.ABIArgument, desc string) spec.Schema {
+func (c *ABI2Swagger) mapArgToSchema(arg ethbind.ABIArgument, desc string) spec.Schema {
 
 	varDetails := desc
 	if varDetails != "" {
@@ -717,40 +717,40 @@ func (c *ABI2Swagger) mapArgToSchema(arg kldbind.ABIArgument, desc string) spec.
 	return s
 }
 
-func (c *ABI2Swagger) mapTypeToSchema(s *spec.Schema, t kldbind.ABIType) {
+func (c *ABI2Swagger) mapTypeToSchema(s *spec.Schema, t ethbind.ABIType) {
 
 	switch t.T {
-	case kldbind.IntTy, kldbind.UintTy:
+	case ethbind.IntTy, ethbind.UintTy:
 		s.Type = []string{"string"}
 		s.Pattern = "^-?[0-9]+$"
 		// We would like to indicate we support numbers in this field, but neither
 		// type arrays or oneOf seem to work with the tooling
 		break
-	case kldbind.BoolTy:
+	case ethbind.BoolTy:
 		s.Type = []string{"boolean"}
 		break
-	case kldbind.AddressTy:
+	case ethbind.AddressTy:
 		s.Type = []string{"string"}
 		s.Pattern = "^(0x)?[a-fA-F0-9]{40}$"
 		break
-	case kldbind.StringTy:
+	case ethbind.StringTy:
 		s.Type = []string{"string"}
 		break
-	case kldbind.BytesTy:
+	case ethbind.BytesTy:
 		s.Type = []string{"string"}
 		s.Pattern = "^(0x)?[a-fA-F0-9]+$"
 		break
-	case kldbind.FixedBytesTy:
+	case ethbind.FixedBytesTy:
 		s.Type = []string{"string"}
 		s.Pattern = "^(0x)?[a-fA-F0-9]{" + strconv.Itoa(t.Size*2) + "}$"
 		break
-	case kldbind.SliceTy, kldbind.ArrayTy:
+	case ethbind.SliceTy, ethbind.ArrayTy:
 		s.Type = []string{"array"}
 		s.Items = &spec.SchemaOrArray{}
 		s.Items.Schema = &spec.Schema{}
 		c.mapTypeToSchema(s.Items.Schema, *t.Elem)
 		break
-	case kldbind.TupleTy:
+	case ethbind.TupleTy:
 		s.Type = []string{"object"}
 		break
 	}

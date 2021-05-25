@@ -29,7 +29,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kaleido-io/ethconnect/internal/kldbind"
+	"github.com/kaleido-io/ethbind"
 
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
@@ -154,7 +154,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	assert.NoError(err)
 	assert.NotEmpty(deployStash.CompilerVersion)
 
-	contractAddr := kldbind.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	contractAddr := ethbind.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	receipt := kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{
 			Headers: kldmessages.ReplyHeaders{
@@ -174,7 +174,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	deployMsg, abiID, err := scgw.(*smartContractGW).loadDeployMsgForInstance("0123456789abcdef0123456789abcdef01234567")
 	assert.NoError(err)
 	assert.NotEmpty(abiID)
-	runtimeABI, err := kldbind.ABIMarshalingToABIRuntime(deployMsg.ABI)
+	runtimeABI, err := ethbind.ABIMarshalingToABIRuntime(deployMsg.ABI)
 	assert.NoError(err)
 	assert.Equal("set", runtimeABI.Methods["set"].Name)
 
@@ -218,7 +218,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(200, res.Result().StatusCode)
-	var abi kldbind.RuntimeABI
+	var abi ethbind.RuntimeABI
 	err = json.NewDecoder(res.Body).Decode(&abi)
 	assert.NoError(err)
 	assert.Equal("set", abi.Methods["set"].Name)
@@ -364,7 +364,7 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	req = httptest.NewRequest("GET", "/g/test?abi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
-	var returnedABI kldbind.RuntimeABI
+	var returnedABI ethbind.RuntimeABI
 	assert.Equal(200, res.Code)
 	json.NewDecoder(res.Body).Decode(&returnedABI)
 	assert.Equal("set", returnedABI.Methods["set"].Name)
@@ -454,10 +454,10 @@ func TestRemoteRegistryBadBI(t *testing.T) {
 	iMsg := newTestDeployMsg("0123456789abcdef0123456789abcdef01234567")
 	iMsg.Headers.ID = "xyz12345"
 	// Append two fallback methods - that is invalid
-	iMsg.ABI = append(iMsg.ABI, kldbind.ABIElementMarshaling{
+	iMsg.ABI = append(iMsg.ABI, ethbind.ABIElementMarshaling{
 		Type: "fallback",
 	})
-	iMsg.ABI = append(iMsg.ABI, kldbind.ABIElementMarshaling{
+	iMsg.ABI = append(iMsg.ABI, ethbind.ABIElementMarshaling{
 		Type: "fallback",
 	})
 	rr := &mockRR{
@@ -716,7 +716,7 @@ func TestPostDeployNoRegisteredName(t *testing.T) {
 		},
 		nil, nil, nil, nil,
 	)
-	contractAddr := kldbind.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	contractAddr := ethbind.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	scgw := s.(*smartContractGW)
 	replyMsg := &kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{
@@ -759,7 +759,7 @@ func TestPostDeployRemoteRegisteredName(t *testing.T) {
 	rr := &mockRR{}
 	s.(*smartContractGW).rr = rr
 
-	contractAddr := kldbind.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	contractAddr := ethbind.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	scgw := s.(*smartContractGW)
 	replyMsg := &kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{
@@ -805,7 +805,7 @@ func TestPostDeployRemoteRegisteredNameNotSuccess(t *testing.T) {
 	rr := &mockRR{}
 	s.(*smartContractGW).rr = rr
 
-	contractAddr := kldbind.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	contractAddr := ethbind.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	scgw := s.(*smartContractGW)
 	replyMsg := &kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{

@@ -23,7 +23,7 @@ import (
 	"strings"
 
 	"github.com/alecthomas/template"
-	"github.com/kaleido-io/ethconnect/internal/kldbind"
+	"github.com/kaleido-io/ethbind"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
@@ -73,7 +73,7 @@ type HDWallet interface {
 }
 
 type hdwalletSigner struct {
-	address kldbind.Address
+	address ethbind.Address
 	key     *ecdsa.PrivateKey
 	chainID *big.Int
 }
@@ -129,14 +129,14 @@ func (hd *hdWallet) SignerFor(request *HDWalletRequest) (kldeth.TXSigner, error)
 		log.Errorf("Missing entry in response")
 		return nil, klderrors.Errorf(klderrors.HDWalletSigningBadData)
 	}
-	key, err := kldbind.HexToECDSA(strings.TrimPrefix(keyStr, "0x"))
+	key, err := ethbind.HexToECDSA(strings.TrimPrefix(keyStr, "0x"))
 	if err != nil {
 		log.Errorf("Bad hex value in response '%s': %s", keyStr, err)
 		return nil, klderrors.Errorf(klderrors.HDWalletSigningBadData)
 	}
 
 	return &hdwalletSigner{
-		address: kldbind.HexToAddress(address),
+		address: ethbind.HexToAddress(address),
 		key:     key,
 		chainID: &hd.chainID,
 	}, nil
@@ -151,9 +151,9 @@ func (s *hdwalletSigner) Address() string {
 	return s.address.String()
 }
 
-func (s *hdwalletSigner) Sign(tx *kldbind.Transaction) ([]byte, error) {
-	ethSigner := kldbind.NewEIP155Signer(s.chainID)
-	signedTX, _ := kldbind.SignTx(tx, ethSigner, s.key)
+func (s *hdwalletSigner) Sign(tx *ethbind.Transaction) ([]byte, error) {
+	ethSigner := ethbind.NewEIP155Signer(s.chainID)
+	signedTX, _ := ethbind.SignTx(tx, ethSigner, s.key)
 	signedRLP := new(bytes.Buffer)
 	signedTX.EncodeRLP(signedRLP)
 	return signedRLP.Bytes(), nil

@@ -21,9 +21,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	log "github.com/sirupsen/logrus"
 )
@@ -34,7 +32,7 @@ const (
 
 // calculateGas uses eth_estimateGas to estimate the gas required, providing a buffer
 // of 20% for variation as the chain changes between estimation and submission.
-func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXArgs, gas *hexutil.Uint64) (err error) {
+func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXArgs, gas *kldbind.HexUint64) (err error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -48,17 +46,17 @@ func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXAr
 		// If the call succeeds, after estimate completed - we still need to fail with the estimate error
 		return estError
 	}
-	*gas = hexutil.Uint64(float64(*gas) * 1.2)
+	*gas = kldbind.HexUint64(float64(*gas) * 1.2)
 	return nil
 }
 
 // Call synchronously calls the method, without mining a transaction, and returns the result as RLP encoded bytes or nil
 func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res []byte, err error) {
-	data := hexutil.Bytes(tx.EthTX.Data())
+	data := kldbind.HexBytes(tx.EthTX.Data())
 	txArgs := &SendTXArgs{
 		From:     tx.From.Hex(),
-		GasPrice: hexutil.Big(*tx.EthTX.GasPrice()),
-		Value:    hexutil.Big(*tx.EthTX.Value()),
+		GasPrice: kldbind.HexBigInt(*tx.EthTX.GasPrice()),
+		Value:    kldbind.HexBigInt(*tx.EthTX.Value()),
 		Data:     &data,
 	}
 	var to = tx.EthTX.To()
@@ -96,7 +94,7 @@ func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res
 		return nil, klderrors.Errorf(klderrors.TransactionSendCallFailedRevertMessage, errorStringBytes)
 	}
 	log.Debugf("eth_call response: %s", hexString)
-	res = common.FromHex(hexString)
+	res = kldbind.FromHex(hexString)
 	return
 }
 
@@ -104,12 +102,12 @@ func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res
 func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
 	start := time.Now().UTC()
 
-	gas := hexutil.Uint64(tx.EthTX.Gas())
-	data := hexutil.Bytes(tx.EthTX.Data())
+	gas := kldbind.HexUint64(tx.EthTX.Gas())
+	data := kldbind.HexBytes(tx.EthTX.Data())
 	txArgs := &SendTXArgs{
 		From:     tx.From.Hex(),
-		GasPrice: hexutil.Big(*tx.EthTX.GasPrice()),
-		Value:    hexutil.Big(*tx.EthTX.Value()),
+		GasPrice: kldbind.HexBigInt(*tx.EthTX.GasPrice()),
+		Value:    kldbind.HexBigInt(*tx.EthTX.Value()),
 		Data:     &data,
 	}
 	var to = tx.EthTX.To()
@@ -122,9 +120,9 @@ func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
 		}
 		// Re-encode the EthTX (for external HD Wallet signing)
 		if to != nil {
-			tx.EthTX = types.NewTransaction(tx.EthTX.Nonce(), *tx.EthTX.To(), tx.EthTX.Value(), uint64(gas), tx.EthTX.GasPrice(), tx.EthTX.Data())
+			tx.EthTX = kldbind.NewTransaction(tx.EthTX.Nonce(), *tx.EthTX.To(), tx.EthTX.Value(), uint64(gas), tx.EthTX.GasPrice(), tx.EthTX.Data())
 		} else {
-			tx.EthTX = types.NewContractCreation(tx.EthTX.Nonce(), tx.EthTX.Value(), uint64(gas), tx.EthTX.GasPrice(), tx.EthTX.Data())
+			tx.EthTX = kldbind.NewContractCreation(tx.EthTX.Nonce(), tx.EthTX.Value(), uint64(gas), tx.EthTX.GasPrice(), tx.EthTX.Data())
 		}
 	}
 	txArgs.Gas = &gas
@@ -146,13 +144,13 @@ func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
 // SendTXArgs is the JSON arguments that can be passed to an eth_sendTransaction call,
 // and also the interface passed to the signer in the case of pre-signing
 type SendTXArgs struct {
-	Nonce    *hexutil.Uint64 `json:"nonce,omitempty"`
-	From     string          `json:"from"`
-	To       string          `json:"to,omitempty"`
-	Gas      *hexutil.Uint64 `json:"gas,omitempty"`
-	GasPrice hexutil.Big     `json:"gasPrice,omitempty"`
-	Value    hexutil.Big     `json:"value,omitempty"`
-	Data     *hexutil.Bytes  `json:"data"`
+	Nonce    *kldbind.HexUint64 `json:"nonce,omitempty"`
+	From     string             `json:"from"`
+	To       string             `json:"to,omitempty"`
+	Gas      *kldbind.HexUint64 `json:"gas,omitempty"`
+	GasPrice kldbind.HexBigInt  `json:"gasPrice,omitempty"`
+	Value    kldbind.HexBigInt  `json:"value,omitempty"`
+	Data     *kldbind.HexBytes  `json:"data"`
 	// EEA spec extensions
 	PrivateFrom    string   `json:"privateFrom,omitempty"`
 	PrivateFor     []string `json:"privateFor,omitempty"`
@@ -164,9 +162,9 @@ type SendTXArgs struct {
 // - If no signer interface: For internal signing by the node
 // - If a signer interface is present: Pre-signed by this process
 func (tx *Txn) submitTXtoNode(ctx context.Context, rpc RPCClient, txArgs *SendTXArgs) (string, error) {
-	var nonce *hexutil.Uint64
+	var nonce *kldbind.HexUint64
 	if !tx.NodeAssignNonce {
-		hexNonce := hexutil.Uint64(tx.EthTX.Nonce())
+		hexNonce := kldbind.HexUint64(tx.EthTX.Nonce())
 		nonce = &hexNonce
 	}
 	txArgs.Nonce = nonce
@@ -202,7 +200,7 @@ func (tx *Txn) submitTXtoNode(ctx context.Context, rpc RPCClient, txArgs *SendTX
 		if err != nil {
 			return "", err
 		}
-		callParam0 = common.ToHex(signed)
+		callParam0 = kldbind.ToHex(signed)
 	}
 
 	var txHash string

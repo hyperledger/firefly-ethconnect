@@ -18,9 +18,6 @@ import (
 	"encoding/json"
 	"reflect"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
-
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
 )
 
@@ -143,26 +140,26 @@ type DeployContract struct {
 // ethereum hex encoding version
 type TransactionReceipt struct {
 	ReplyCommon
-	BlockHash            *common.Hash    `json:"blockHash"`
-	BlockNumberStr       string          `json:"blockNumber"`
-	BlockNumberHex       *hexutil.Big    `json:"blockNumberHex,omitempty"`
-	ContractSwagger      string          `json:"openapi,omitempty"`
-	ContractUI           string          `json:"apiexerciser,omitempty"`
-	ContractAddress      *common.Address `json:"contractAddress,omitempty"`
-	CumulativeGasUsedStr string          `json:"cumulativeGasUsed"`
-	CumulativeGasUsedHex *hexutil.Big    `json:"cumulativeGasUsedHex,omitempty"`
-	From                 *common.Address `json:"from"`
-	GasUsedStr           string          `json:"gasUsed"`
-	GasUsedHex           *hexutil.Big    `json:"gasUsedHex,omitempty"`
-	NonceStr             string          `json:"nonce"`
-	NonceHex             *hexutil.Uint64 `json:"nonceHex,omitempty"`
-	StatusStr            string          `json:"status"`
-	StatusHex            *hexutil.Big    `json:"statusHex,omitempty"`
-	To                   *common.Address `json:"to"`
-	TransactionHash      *common.Hash    `json:"transactionHash"`
-	TransactionIndexStr  string          `json:"transactionIndex"`
-	TransactionIndexHex  *hexutil.Uint   `json:"transactionIndexHex,omitempty"`
-	RegisterAs           string          `json:"registerAs,omitempty"`
+	BlockHash            *kldbind.Hash      `json:"blockHash"`
+	BlockNumberStr       string             `json:"blockNumber"`
+	BlockNumberHex       *kldbind.HexBigInt `json:"blockNumberHex,omitempty"`
+	ContractSwagger      string             `json:"openapi,omitempty"`
+	ContractUI           string             `json:"apiexerciser,omitempty"`
+	ContractAddress      *kldbind.Address   `json:"contractAddress,omitempty"`
+	CumulativeGasUsedStr string             `json:"cumulativeGasUsed"`
+	CumulativeGasUsedHex *kldbind.HexBigInt `json:"cumulativeGasUsedHex,omitempty"`
+	From                 *kldbind.Address   `json:"from"`
+	GasUsedStr           string             `json:"gasUsed"`
+	GasUsedHex           *kldbind.HexBigInt `json:"gasUsedHex,omitempty"`
+	NonceStr             string             `json:"nonce"`
+	NonceHex             *kldbind.HexUint64 `json:"nonceHex,omitempty"`
+	StatusStr            string             `json:"status"`
+	StatusHex            *kldbind.HexBigInt `json:"statusHex,omitempty"`
+	To                   *kldbind.Address   `json:"to"`
+	TransactionHash      *kldbind.Hash      `json:"transactionHash"`
+	TransactionIndexStr  string             `json:"transactionIndex"`
+	TransactionIndexHex  *kldbind.HexUint   `json:"transactionIndexHex,omitempty"`
+	RegisterAs           string             `json:"registerAs,omitempty"`
 }
 
 // ErrorReply is

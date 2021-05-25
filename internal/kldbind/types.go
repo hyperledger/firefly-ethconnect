@@ -17,8 +17,10 @@ package kldbind
 import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/compiler"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 // This module provides some basic types proxied through from ethereum, to avoid
@@ -39,11 +41,20 @@ type HexUint64 = hexutil.Uint64
 // HexUint models and serializes uint
 type HexUint = hexutil.Uint
 
+// HexBytes marshals/unmarshals as a JSON string with 0x prefix.
+type HexBytes = hexutil.Bytes
+
 // ABIArguments is an array of arguments with helper functions
 type ABIArguments = abi.Arguments
 
 // ABIArgument is an argument in the Inputs or Outputs of an ABI
 type ABIArgument = abi.Argument
+
+// ABIFunctionType represents different types of functions a contract might have
+type ABIFunctionType = abi.FunctionType
+
+// The ABI holds information about a contract's context and available invokable methods
+type ABI = abi.ABI
 
 // ABIType is a type
 type ABIType = abi.Type
@@ -53,6 +64,25 @@ type ABIMethod = abi.Method
 
 // ABIEvent is an event on the ABI
 type ABIEvent = abi.Event
+
+// Contract is a EVM compiled contract object
+type Contract = compiler.Contract
+
+// ContractInfo contains metadata about a EVM compiled contract
+type ContractInfo = compiler.ContractInfo
+
+// Solidity contains information about the Solidity compiler
+type Solidity = compiler.Solidity
+
+type ClientSubscription = rpc.ClientSubscription
+
+// Client is a connection to an RPC server
+type Client = rpc.Client
+
+type Transaction = types.Transaction
+
+// EIP155Transaction implements Signer using the EIP155 rules
+type EIP155Signer = types.EIP155Signer
 
 // ABIArgumentMarshaling is abi.ArgumentMarshaling
 type ABIArgumentMarshaling struct {
@@ -106,4 +136,12 @@ const (
 	SliceTy = abi.SliceTy
 	// ArrayTy - type
 	ArrayTy = abi.ArrayTy
+	// TupleTy - type
+	TupleTy = abi.TupleTy
+	// FunctionTy - type
+	FunctionTy
+)
+
+const (
+	Function = abi.Function
 )

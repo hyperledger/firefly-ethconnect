@@ -1180,7 +1180,7 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 	json.NewEncoder(res).Encode(info)
 }
 
-func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Request) (map[string]*compiler.Contract, error) {
+func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Request) (map[string]*kldbind.Contract, error) {
 	solFiles := []string{}
 	rootFiles, err := ioutil.ReadDir(dir)
 	if err != nil {

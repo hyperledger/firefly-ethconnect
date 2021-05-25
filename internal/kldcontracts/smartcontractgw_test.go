@@ -34,7 +34,6 @@ import (
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/go-openapi/spec"
 	"github.com/julienschmidt/httprouter"
 	"github.com/kaleido-io/ethconnect/internal/kldevents"
@@ -155,7 +154,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	assert.NoError(err)
 	assert.NotEmpty(deployStash.CompilerVersion)
 
-	contractAddr := common.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	contractAddr := kldbind.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	receipt := kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{
 			Headers: kldmessages.ReplyHeaders{
@@ -717,7 +716,7 @@ func TestPostDeployNoRegisteredName(t *testing.T) {
 		},
 		nil, nil, nil, nil,
 	)
-	contractAddr := common.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	contractAddr := kldbind.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	scgw := s.(*smartContractGW)
 	replyMsg := &kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{
@@ -760,7 +759,7 @@ func TestPostDeployRemoteRegisteredName(t *testing.T) {
 	rr := &mockRR{}
 	s.(*smartContractGW).rr = rr
 
-	contractAddr := common.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	contractAddr := kldbind.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	scgw := s.(*smartContractGW)
 	replyMsg := &kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{
@@ -806,7 +805,7 @@ func TestPostDeployRemoteRegisteredNameNotSuccess(t *testing.T) {
 	rr := &mockRR{}
 	s.(*smartContractGW).rr = rr
 
-	contractAddr := common.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	contractAddr := kldbind.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	scgw := s.(*smartContractGW)
 	replyMsg := &kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{

@@ -18,13 +18,13 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common/compiler"
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestPackContractRemovePrefix(t *testing.T) {
 	assert := assert.New(t)
-	contract := &compiler.Contract{
+	contract := &kldbind.Contract{
 		Code: "0x00",
 	}
 	compiled, err := packContract("<stdin>:stuff:watsit", contract)
@@ -34,7 +34,7 @@ func TestPackContractRemovePrefix(t *testing.T) {
 
 func TestPackContractNoPrefix(t *testing.T) {
 	assert := assert.New(t)
-	contract := &compiler.Contract{
+	contract := &kldbind.Contract{
 		Code: "0x00",
 	}
 	compiled, err := packContract("thingymobob", contract)
@@ -44,7 +44,7 @@ func TestPackContractNoPrefix(t *testing.T) {
 
 func TestPackContractFailBadHexCode(t *testing.T) {
 	assert := assert.New(t)
-	contract := &compiler.Contract{
+	contract := &kldbind.Contract{
 		Code: "Not Hex",
 	}
 	_, err := packContract("", contract)
@@ -53,7 +53,7 @@ func TestPackContractFailBadHexCode(t *testing.T) {
 
 func TestPackContractEmpty(t *testing.T) {
 	assert := assert.New(t)
-	contract := &compiler.Contract{
+	contract := &kldbind.Contract{
 		Code: "0x",
 	}
 	_, err := packContract("", contract)
@@ -62,9 +62,9 @@ func TestPackContractEmpty(t *testing.T) {
 
 func TestPackContractFailMarshalABI(t *testing.T) {
 	assert := assert.New(t)
-	contract := &compiler.Contract{
+	contract := &kldbind.Contract{
 		Code: "0x00",
-		Info: compiler.ContractInfo{
+		Info: kldbind.ContractInfo{
 			AbiDefinition: make(map[bool]bool),
 		},
 	}
@@ -74,9 +74,9 @@ func TestPackContractFailMarshalABI(t *testing.T) {
 
 func TestPackContractFailUnmarshalABIJSON(t *testing.T) {
 	assert := assert.New(t)
-	contract := &compiler.Contract{
+	contract := &kldbind.Contract{
 		Code: "0x00",
-		Info: compiler.ContractInfo{
+		Info: kldbind.ContractInfo{
 			AbiDefinition: map[string]string{
 				"not": "an ABI",
 			},
@@ -88,9 +88,9 @@ func TestPackContractFailUnmarshalABIJSON(t *testing.T) {
 
 func TestPackContractFailSerializingDevDoc(t *testing.T) {
 	assert := assert.New(t)
-	contract := &compiler.Contract{
+	contract := &kldbind.Contract{
 		Code: "0x00",
-		Info: compiler.ContractInfo{
+		Info: kldbind.ContractInfo{
 			DeveloperDoc: make(map[bool]bool),
 		},
 	}

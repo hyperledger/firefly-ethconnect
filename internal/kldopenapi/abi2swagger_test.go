@@ -23,7 +23,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
-
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -45,7 +45,7 @@ func TestABI2SwaggerERC20(t *testing.T) {
 		OrionPrivateAPI:  true,
 		BasicAuth:        true,
 	})
-	abi, err := abi.JSON(strings.NewReader(erc20ABI))
+	abi, err := kldbind.JSON(strings.NewReader(erc20ABI))
 	assert.NoError(err)
 	swagger := c.Gen4Factory("/erc20", "erc20", false, false, &abi, erc20DevDocs)
 

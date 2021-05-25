@@ -25,7 +25,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/kaleido-io/ethconnect/internal/kldevents"
 
 	"github.com/julienschmidt/httprouter"
@@ -444,7 +443,7 @@ func TestSendTransactionSyncPostDeployErr(t *testing.T) {
 	bodyMap["s"] = "testing"
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
-	contractAddr := common.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	contractAddr := kldbind.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	receipt := &kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{
 			Headers: kldmessages.ReplyHeaders{

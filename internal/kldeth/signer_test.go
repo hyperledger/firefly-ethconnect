@@ -2,10 +2,10 @@
 
 package kldeth
 
-import "github.com/ethereum/go-ethereum/core/types"
+import "github.com/kaleido-io/ethconnect/internal/kldbind"
 
 type mockTXSigner struct {
-	capturedTX *types.Transaction
+	capturedTX *kldbind.Transaction
 	from       string
 	signed     []byte
 	signErr    error
@@ -19,7 +19,7 @@ func (s *mockTXSigner) Address() string {
 	return s.from
 }
 
-func (s *mockTXSigner) Sign(tx *types.Transaction) ([]byte, error) {
+func (s *mockTXSigner) Sign(tx *kldbind.Transaction) ([]byte, error) {
 	s.capturedTX = tx
 	return s.signed, s.signErr
 }

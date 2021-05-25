@@ -20,12 +20,12 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/julienschmidt/httprouter"
 	"github.com/spf13/cobra"
 
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,7 +36,7 @@ type mockEthClient struct{}
 func (w *mockEthClient) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
 	return nil
 }
-func (w *mockEthClient) Subscribe(ctx context.Context, namespace string, channel interface{}, args ...interface{}) (*rpc.ClientSubscription, error) {
+func (w *mockEthClient) Subscribe(ctx context.Context, namespace string, channel interface{}, args ...interface{}) (*kldbind.ClientSubscription, error) {
 	return nil, nil
 }
 func (w *mockEthClient) Close() {}

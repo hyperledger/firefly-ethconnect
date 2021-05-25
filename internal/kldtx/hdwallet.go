@@ -23,9 +23,7 @@ import (
 	"strings"
 
 	"github.com/alecthomas/template"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
-	ecrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
@@ -75,7 +73,7 @@ type HDWallet interface {
 }
 
 type hdwalletSigner struct {
-	address common.Address
+	address kldbind.Address
 	key     *ecdsa.PrivateKey
 	chainID *big.Int
 }
@@ -131,14 +129,14 @@ func (hd *hdWallet) SignerFor(request *HDWalletRequest) (kldeth.TXSigner, error)
 		log.Errorf("Missing entry in response")
 		return nil, klderrors.Errorf(klderrors.HDWalletSigningBadData)
 	}
-	key, err := ecrypto.HexToECDSA(strings.TrimPrefix(keyStr, "0x"))
+	key, err := kldbind.HexToECDSA(strings.TrimPrefix(keyStr, "0x"))
 	if err != nil {
 		log.Errorf("Bad hex value in response '%s': %s", keyStr, err)
 		return nil, klderrors.Errorf(klderrors.HDWalletSigningBadData)
 	}
 
 	return &hdwalletSigner{
-		address: common.HexToAddress(address),
+		address: kldbind.HexToAddress(address),
 		key:     key,
 		chainID: &hd.chainID,
 	}, nil
@@ -153,9 +151,9 @@ func (s *hdwalletSigner) Address() string {
 	return s.address.String()
 }
 
-func (s *hdwalletSigner) Sign(tx *types.Transaction) ([]byte, error) {
-	ethSigner := types.NewEIP155Signer(s.chainID)
-	signedTX, _ := types.SignTx(tx, ethSigner, s.key)
+func (s *hdwalletSigner) Sign(tx *kldbind.Transaction) ([]byte, error) {
+	ethSigner := kldbind.NewEIP155Signer(s.chainID)
+	signedTX, _ := kldbind.SignTx(tx, ethSigner, s.key)
 	signedRLP := new(bytes.Buffer)
 	signedTX.EncodeRLP(signedRLP)
 	return signedRLP.Bytes(), nil

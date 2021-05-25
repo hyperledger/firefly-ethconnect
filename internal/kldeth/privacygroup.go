@@ -18,7 +18,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 )
 
@@ -28,7 +28,7 @@ type OrionPrivacyGroup struct {
 }
 
 // GetOrionPrivacyGroup resolves privateFrom/privateFor into a privacyGroupID
-func GetOrionPrivacyGroup(ctx context.Context, rpc RPCClient, addr *common.Address, privateFrom string, privateFor []string) (string, error) {
+func GetOrionPrivacyGroup(ctx context.Context, rpc RPCClient, addr *kldbind.Address, privateFrom string, privateFor []string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 

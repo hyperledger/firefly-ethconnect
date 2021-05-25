@@ -20,12 +20,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	log "github.com/sirupsen/logrus"
-
-	"github.com/ethereum/go-ethereum/common/math"
-	"github.com/kaleido-io/ethconnect/internal/kldbind"
 )
 
 type logEntry struct {
@@ -163,10 +161,10 @@ func topicToValue(topic *kldbind.Hash, input *kldbind.ABIArgument) interface{} {
 	case kldbind.IntTy, kldbind.UintTy, kldbind.BoolTy:
 		h := kldbind.HexBigInt{}
 		h.UnmarshalText([]byte(topic.Hex()))
-		bI, _ := math.ParseBig256(topic.Hex())
+		bI, _ := kldbind.ParseBig256(topic.Hex())
 		if input.Type.T == kldbind.IntTy {
 			// It will be a two's complement number, so needs to be interpretted
-			bI = math.S256(bI)
+			bI = kldbind.S256(bI)
 			return bI.String()
 		} else if input.Type.T == kldbind.BoolTy {
 			return (bI.Uint64() != 0)

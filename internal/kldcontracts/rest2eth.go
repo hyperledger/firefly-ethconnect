@@ -27,7 +27,6 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/julienschmidt/httprouter"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldbind"
@@ -497,9 +496,9 @@ func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, ad
 		return
 	}
 	fromBlock := r.fromBodyOrForm(req, body, "fromBlock")
-	var addr *common.Address
+	var addr *kldbind.Address
 	if addrStr != "" {
-		address := common.HexToAddress(addrStr)
+		address := kldbind.HexToAddress(addrStr)
 		addr = &address
 	}
 	// if the end user provided a name for the subscription, use it

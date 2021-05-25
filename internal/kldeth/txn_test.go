@@ -573,8 +573,8 @@ func TestSolidityArrayOfByteArraysParamConversion(t *testing.T) {
 func TestTypeNotYetSupported(t *testing.T) {
 	assert := assert.New(t)
 	var tx Txn
-	var m abi.Method
-	functionType, err := abi.NewType("function", "uint256", []abi.ArgumentMarshaling{})
+	var m kldbind.ABIMethod
+	functionType, err := kldbind.NewType("function", "uint256")
 	assert.NoError(err)
 	m.Inputs = append(m.Inputs, abi.Argument{Name: "functionType", Type: functionType})
 	_, err = tx.generateTypedArgs([]interface{}{"abc"}, &m)

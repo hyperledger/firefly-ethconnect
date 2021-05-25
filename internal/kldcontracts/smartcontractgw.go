@@ -1144,14 +1144,15 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 
 	abi, err := g.parseABI(req.Form)
 	if err != nil {
-		// TODO: do something with err
+		// TODO: Find appropriate error message
+		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractCompileFailed, err), 400)
 		return
 	}
 
 	bytecode, err := g.parseBytecode(req.Form)
 	if err != nil {
 		// TODO: Find appropriate error message
-		// g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractCompileFailed, err), 400)
+		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractCompileFailed, err), 400)
 		return
 	}
 
@@ -1206,18 +1207,28 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 }
 
 func (g *smartContractGW) parseBytecode(form url.Values) ([]byte, error) {
-	value := strings.TrimLeft(form["bytecode"][0], "0x")
-	return hex.DecodeString(value)
+	v := form["bytecode"]
+	if len(v) > 0 {
+		b := strings.TrimLeft(v[0], "0x")
+		return hex.DecodeString(b)
+	} else {
+		return nil, nil
+	}
 }
 
 func (g *smartContractGW) parseABI(form url.Values) (kldbind.ABIMarshaling, error) {
-	value := form["abi"][0]
-	var abi kldbind.ABIMarshaling
-	err := json.Unmarshal([]byte(value), &abi)
-	if err != nil {
-		log.Error(err.Error())
+	v := form["abi"]
+	if len(v) > 0 {
+		a := v[0]
+		var abi kldbind.ABIMarshaling
+		err := json.Unmarshal([]byte(a), &abi)
+		if err != nil {
+			log.Error(err.Error())
+		}
+		return abi, err
+	} else {
+		return nil, nil
 	}
-	return abi, err
 }
 
 func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Request) (map[string]*compiler.Contract, error) {

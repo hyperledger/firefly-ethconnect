@@ -2,7 +2,7 @@ FROM golang:1.16.4-alpine3.13 AS builder
 WORKDIR /ethconnect
 ADD . .
 RUN apk add make gcc build-base
-RUN go build # TEMP FIX
+RUN make
 
 FROM alpine:latest
 WORKDIR /ethconnect

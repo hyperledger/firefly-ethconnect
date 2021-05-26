@@ -7,6 +7,7 @@ RUN make
 FROM alpine:latest
 WORKDIR /ethconnect
 COPY --from=builder /ethconnect/ethconnect .
+COPY --from=builder /ethconnect/start.sh .
 RUN ln -s /ethconnect/ethconnect /usr/bin/ethconnect
 RUN mkdir abis
-ENTRYPOINT [ "ethconnect", "rest", "-U", "http://127.0.0.1:8080", "-I", "./abis", "-r", "http://127.0.0.1:8545", "-E", "./events" ]
+ENTRYPOINT [ "./start.sh" ]

@@ -37,6 +37,8 @@ func (r *popReader) Read(b []byte) (n int, err error) {
 type mockContractGW struct {
 	preDeployErr  error
 	postDeployErr error
+	testValue     interface{}
+	replyCallback func(message interface{})
 }
 
 func (m *mockContractGW) PreDeploy(*kldmessages.DeployContract) error { return m.preDeployErr }
@@ -44,6 +46,12 @@ func (m *mockContractGW) PreDeploy(*kldmessages.DeployContract) error { return m
 func (m *mockContractGW) PostDeploy(*kldmessages.TransactionReceipt) error { return m.postDeployErr }
 
 func (m *mockContractGW) AddRoutes(*httprouter.Router) {}
+
+func (m *mockContractGW) SendReply(message interface{}) {
+	if m.replyCallback != nil {
+		m.replyCallback(message)
+	}
+}
 
 func (m *mockContractGW) Shutdown() {}
 

@@ -87,6 +87,10 @@ type mockABILoader struct {
 	postDeployError        error
 }
 
+func (m *mockABILoader) SendReply(message interface{}) {
+
+}
+
 func (m *mockABILoader) loadDeployMsgForInstance(addrHexNo0x string) (*kldmessages.DeployContract, *contractInfo, error) {
 	m.capturedAddr = addrHexNo0x
 	return m.deployMsg, m.contractInfo, m.loadABIError

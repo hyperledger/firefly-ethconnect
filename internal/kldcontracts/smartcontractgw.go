@@ -65,6 +65,7 @@ type SmartContractGateway interface {
 	PreDeploy(msg *kldmessages.DeployContract) error
 	PostDeploy(msg *kldmessages.TransactionReceipt) error
 	AddRoutes(router *httprouter.Router)
+	SendReply(message interface{})
 	Shutdown()
 }
 
@@ -126,6 +127,10 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	router.POST(kldevents.SubPathPrefix+"/:id/reset", g.withEventsAuth(g.resetSub))
 	router.POST(kldevents.StreamPathPrefix+"/:id/suspend", g.withEventsAuth(g.suspendOrResumeStream))
 	router.POST(kldevents.StreamPathPrefix+"/:id/resume", g.withEventsAuth(g.suspendOrResumeStream))
+}
+
+func (g *smartContractGW) SendReply(message interface{}) {
+	g.ws.SendReply(message)
 }
 
 // NewSmartContractGateway constructor

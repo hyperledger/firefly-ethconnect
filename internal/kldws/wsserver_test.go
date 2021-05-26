@@ -52,7 +52,7 @@ func TestConnectSendReceiveCycle(t *testing.T) {
 		Type: "listen",
 	})
 
-	s, r, _ := w.GetChannels("")
+	s, _, r, _ := w.GetChannels("")
 
 	s <- "Hello World"
 
@@ -111,8 +111,8 @@ func TestConnectTopicIsolation(t *testing.T) {
 		Topic: "topic2",
 	})
 
-	s1, r1, _ := w.GetChannels("topic1")
-	s2, r2, _ := w.GetChannels("topic2")
+	s1, _, r1, _ := w.GetChannels("topic1")
+	s2, _, r2, _ := w.GetChannels("topic2")
 
 	s1 <- "Hello Number 1"
 	s2 <- "Hello Number 2"
@@ -155,7 +155,7 @@ func TestConnectAbandonRequest(t *testing.T) {
 	c.WriteJSON(&webSocketCommandMessage{
 		Type: "listen",
 	})
-	_, r, closing := w.GetChannels("")
+	_, _, r, closing := w.GetChannels("")
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
@@ -219,4 +219,134 @@ func TestConnectBadWebsocketHandshake(t *testing.T) {
 
 	w.Close()
 
+}
+
+func TestBroadcast(t *testing.T) {
+	assert := assert.New(t)
+
+	w, ts := newTestWebSocketServer()
+	defer ts.Close()
+
+	u, _ := url.Parse(ts.URL)
+	u.Scheme = "ws"
+	u.Path = "/ws"
+	topic := "banana"
+	c, _, err := ws.DefaultDialer.Dial(u.String(), nil)
+	assert.NoError(err)
+
+	c.WriteJSON(&webSocketCommandMessage{
+		Type:  "listen",
+		Topic: topic,
+	})
+
+	// Wait until the client has subscribed to the topic before proceeding
+	for len(w.topicMap[topic]) == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	_, b, _, _ := w.GetChannels(topic)
+	b <- "Hello World"
+
+	var val string
+	c.ReadJSON(&val)
+	assert.Equal("Hello World", val)
+
+	b <- "Hello World Again"
+
+	c.ReadJSON(&val)
+	assert.Equal("Hello World Again", val)
+
+	w.Close()
+}
+
+func TestBroadcastDefaultTopic(t *testing.T) {
+	assert := assert.New(t)
+
+	w, ts := newTestWebSocketServer()
+	defer ts.Close()
+
+	u, _ := url.Parse(ts.URL)
+	u.Scheme = "ws"
+	u.Path = "/ws"
+	topic := ""
+	c, _, err := ws.DefaultDialer.Dial(u.String(), nil)
+	assert.NoError(err)
+
+	c.WriteJSON(&webSocketCommandMessage{
+		Type: "listen",
+	})
+
+	// Wait until the client has subscribed to the topic before proceeding
+	for len(w.topicMap[topic]) == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	_, b, _, _ := w.GetChannels(topic)
+	b <- "Hello World"
+
+	var val string
+	c.ReadJSON(&val)
+	assert.Equal("Hello World", val)
+
+	b <- "Hello World Again"
+
+	c.ReadJSON(&val)
+	assert.Equal("Hello World Again", val)
+
+	w.Close()
+}
+
+func TestRecvNotOk(t *testing.T) {
+	assert := assert.New(t)
+
+	w, ts := newTestWebSocketServer()
+	defer ts.Close()
+
+	u, _ := url.Parse(ts.URL)
+	u.Scheme = "ws"
+	u.Path = "/ws"
+	topic := ""
+	c, _, err := ws.DefaultDialer.Dial(u.String(), nil)
+	assert.NoError(err)
+
+	c.WriteJSON(&webSocketCommandMessage{
+		Type: "listen",
+	})
+
+	// Wait until the client has subscribed to the topic before proceeding
+	for len(w.topicMap[topic]) == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	_, b, _, _ := w.GetChannels(topic)
+	close(b)
+	w.Close()
+}
+
+func TestSendReply(t *testing.T) {
+	assert := assert.New(t)
+
+	w, ts := newTestWebSocketServer()
+	defer ts.Close()
+
+	u, _ := url.Parse(ts.URL)
+	u.Scheme = "ws"
+	u.Path = "/ws"
+	c, _, err := ws.DefaultDialer.Dial(u.String(), nil)
+	assert.NoError(err)
+
+	c.WriteJSON(&webSocketCommandMessage{
+		Type: "listenReplies",
+	})
+
+	// Wait until the client has subscribed to the topic before proceeding
+	for len(w.replyMap) == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	w.SendReply("Hello World")
+
+	var val string
+	c.ReadJSON(&val)
+	assert.Equal("Hello World", val)
 }

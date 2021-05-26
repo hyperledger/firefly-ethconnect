@@ -45,6 +45,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type mockWebSocketServer struct {
+	testChan chan interface{}
+}
+
+func (m *mockWebSocketServer) GetChannels(topic string) (chan<- interface{}, chan<- interface{}, <-chan error, <-chan struct{}) {
+	return nil, nil, nil, nil
+}
+
+func (m *mockWebSocketServer) SendReply(message interface{}) {
+	m.testChan <- message
+}
+
 type SolcJson struct {
 	ABI string `json:"abi"`
 	Bin string `json:"bin"`
@@ -2104,6 +2116,29 @@ func TestWithEventsAuthRequiresAuth(t *testing.T) {
 	assert.Equal(res.Code, 401)
 
 	kldauth.RegisterSecurityModule(nil)
+}
+
+func TestSendReplyBroadcast(t *testing.T) {
+	assert := assert.New(t)
+	testMessage := "hello world"
+
+	ws := &mockWebSocketServer{
+		testChan: make(chan interface{}),
+	}
+
+	scgw, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			BaseURL: "http://localhost/api/v1",
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
+		nil, nil, nil, ws,
+	)
+
+	go scgw.SendReply(testMessage)
+	receivedReply := <-ws.testChan
+	assert.Equal(testMessage, receivedReply)
 }
 
 func TestPublishBadABI(t *testing.T) {

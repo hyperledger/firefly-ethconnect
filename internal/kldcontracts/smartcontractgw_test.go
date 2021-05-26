@@ -45,8 +45,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var simpleEventsSol string
-
 type mockWebSocketServer struct {
 	testChan chan interface{}
 }
@@ -58,6 +56,13 @@ func (m *mockWebSocketServer) GetChannels(topic string) (chan<- interface{}, cha
 func (m *mockWebSocketServer) SendReply(message interface{}) {
 	m.testChan <- message
 }
+
+type SolcJson struct {
+	ABI string `json:"abi"`
+	Bin string `json:"bin"`
+}
+
+var simpleEventsSol string
 
 func simpleEventsSource() string {
 	if simpleEventsSol == "" {
@@ -2134,4 +2139,122 @@ func TestSendReplyBroadcast(t *testing.T) {
 	go scgw.SendReply(testMessage)
 	receivedReply := <-ws.testChan
 	assert.Equal(testMessage, receivedReply)
+}
+
+func TestPublishBadABI(t *testing.T) {
+	// writes real files and tests end to end
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	scgw, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+			BaseURL:     "http://localhost/api/v1",
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
+		nil, nil, nil, nil,
+	)
+	router := &httprouter.Router{}
+	scgw.AddRoutes(router)
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	fw, _ := writer.CreateFormField("abi")
+	io.Copy(fw, bytes.NewReader([]byte("blah blah blah bad abi")))
+	writer.Close()
+	req, _ := http.NewRequest("POST", "/abis", bytes.NewReader(body.Bytes()))
+	req.Header.Add("Content-Type", writer.FormDataContentType())
+
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(400, res.Code)
+	var resBody map[string]interface{}
+	json.NewDecoder(res.Body).Decode(&resBody)
+	assert.Equal("Could not parse supplied multi-part form data: invalid character 'b' looking for beginning of value", resBody["error"])
+}
+
+func TestPublishBadBytecode(t *testing.T) {
+	// writes real files and tests end to end
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	scgw, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+			BaseURL:     "http://localhost/api/v1",
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
+		nil, nil, nil, nil,
+	)
+	router := &httprouter.Router{}
+	scgw.AddRoutes(router)
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	fw, _ := writer.CreateFormField("bytecode")
+	io.Copy(fw, bytes.NewReader([]byte("0xNOTHEX")))
+	writer.Close()
+	req, _ := http.NewRequest("POST", "/abis", bytes.NewReader(body.Bytes()))
+	req.Header.Add("Content-Type", writer.FormDataContentType())
+
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(400, res.Code)
+	var resBody map[string]interface{}
+	json.NewDecoder(res.Body).Decode(&resBody)
+	assert.Equal("Could not parse supplied multi-part form data: encoding/hex: invalid byte: U+004E 'N'", resBody["error"])
+}
+
+func TestPublishPreCompiled(t *testing.T) {
+	// writes real files and tests end to end
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	scgw, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+			BaseURL:     "http://localhost/api/v1",
+		},
+		&kldtx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
+		nil, nil, nil, nil,
+	)
+	router := &httprouter.Router{}
+	scgw.AddRoutes(router)
+
+	b, _ := ioutil.ReadFile(path.Join("..", "..", "test", "simpleevents.solc.output.json"))
+	var contract SolcJson
+	json.Unmarshal(b, &contract)
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	fw, _ := writer.CreateFormField("abi")
+	io.Copy(fw, bytes.NewReader([]byte(contract.ABI)))
+	fw, _ = writer.CreateFormField("bytecode")
+	io.Copy(fw, bytes.NewReader([]byte(contract.Bin)))
+	writer.Close()
+	req, _ := http.NewRequest("POST", "/abis", bytes.NewReader(body.Bytes()))
+	req.Header.Add("Content-Type", writer.FormDataContentType())
+
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(200, res.Code)
+
+	files, _ := ioutil.ReadDir(dir)
+
+	deployedJson, err := ioutil.ReadFile(path.Join(dir, files[0].Name()))
+	assert.NoError(err)
+	var deployStash kldmessages.DeployContract
+	err = json.Unmarshal(deployedJson, &deployStash)
+	assert.NoError(err)
+	assert.NotEmpty(deployStash.ABI)
+	assert.NotEmpty(deployStash.Compiled)
 }

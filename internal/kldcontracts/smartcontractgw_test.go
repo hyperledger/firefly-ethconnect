@@ -2162,7 +2162,6 @@ func TestPublishBadBytecode(t *testing.T) {
 
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
-	writer.Close()
 	fw, _ := writer.CreateFormField("bytecode")
 	io.Copy(fw, bytes.NewReader([]byte("0xNOTHEX")))
 	writer.Close()

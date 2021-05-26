@@ -1145,14 +1145,14 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 	abi, err := g.parseABI(req.Form)
 	if err != nil {
 		// TODO: Find appropriate error message
-		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractCompileFailed, err), 400)
+		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractInvalidFormData, err), 400)
 		return
 	}
 
 	bytecode, err := g.parseBytecode(req.Form)
 	if err != nil {
 		// TODO: Find appropriate error message
-		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractCompileFailed, err), 400)
+		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractInvalidFormData, err), 400)
 		return
 	}
 

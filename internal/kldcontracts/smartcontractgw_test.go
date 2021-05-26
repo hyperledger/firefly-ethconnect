@@ -2234,8 +2234,6 @@ func TestPublishPreCompiled(t *testing.T) {
 	var contract SolcJson
 	json.Unmarshal(b, &contract)
 
-	// TODO: parse ABI and bytecode out of the file
-
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 	fw, _ := writer.CreateFormField("abi")

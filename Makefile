@@ -11,7 +11,7 @@ all: deps build test
 build: 
 		$(VGO) build -ldflags "-X main.buildDate=`date -u +\"%Y-%m-%dT%H:%M:%SZ\"` -X main.buildVersion=$(BUILD_VERSION)" -tags=prod -o $(BINARY_NAME) -v
 coverage.txt: $(GOFILES)
-		$(VGO) test  ./... -cover -coverprofile=coverage.txt -covermode=atomic
+		$(VGO) test  ./... -cover -coverprofile=coverage.txt -covermode=atomic -timeout 30s
 coverage.html:
 	    $(VGO) tool cover -html=coverage.txt
 test: coverage.txt

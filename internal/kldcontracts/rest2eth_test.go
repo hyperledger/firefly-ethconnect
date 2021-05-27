@@ -86,6 +86,10 @@ type mockABILoader struct {
 	postDeployError        error
 }
 
+func (m *mockABILoader) SendReply(message interface{}) {
+
+}
+
 func (m *mockABILoader) loadDeployMsgForInstance(addrHexNo0x string) (*kldmessages.DeployContract, *contractInfo, error) {
 	m.capturedAddr = addrHexNo0x
 	return m.deployMsg, m.contractInfo, m.loadABIError
@@ -171,17 +175,18 @@ func (m *mockSubMgr) ResetSubscription(ctx context.Context, id, initialBlock str
 }
 func (m *mockSubMgr) Close() {}
 
-func newTestDeployMsg(addr string) *deployContractWithAddress {
-	compiled, _ := kldeth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")
+func newTestDeployMsg(t *testing.T, addr string) *deployContractWithAddress {
+	compiled, err := kldeth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")
+	assert.NoError(t, err)
 	return &deployContractWithAddress{
 		DeployContract: kldmessages.DeployContract{ABI: compiled.ABI},
 		Address:        addr,
 	}
 }
 
-func newTestREST2Eth(dispatcher *mockREST2EthDispatcher) (*rest2eth, *mockRPC, *httprouter.Router) {
+func newTestREST2Eth(t *testing.T, dispatcher *mockREST2EthDispatcher) (*rest2eth, *mockRPC, *httprouter.Router) {
 	mockRPC := &mockRPC{}
-	deployMsg := newTestDeployMsg("")
+	deployMsg := newTestDeployMsg(t, "")
 	abiLoader := &mockABILoader{
 		deployMsg: &deployMsg.DeployContract,
 	}
@@ -203,19 +208,19 @@ func newTestREST2EthCustomAbiLoader(dispatcher *mockREST2EthDispatcher, abiLoade
 	return r, mockRPC, router
 }
 
-func newTestREST2EthAndMsg(dispatcher *mockREST2EthDispatcher, from, to string, bodyMap map[string]interface{}) (*rest2eth, *mockRPC, *httprouter.Router, *httptest.ResponseRecorder, *http.Request) {
+func newTestREST2EthAndMsg(t *testing.T, dispatcher *mockREST2EthDispatcher, from, to string, bodyMap map[string]interface{}) (*rest2eth, *mockRPC, *httprouter.Router, *httptest.ResponseRecorder, *http.Request) {
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/set", bytes.NewReader(body))
 	req.Header.Add("x-kaleido-from", from)
 	res := httptest.NewRecorder()
 
-	r, mockRPC, router := newTestREST2Eth(dispatcher)
+	r, mockRPC, router := newTestREST2Eth(t, dispatcher)
 
 	return r, mockRPC, router, res, req
 }
 
-func newTestREST2EthAndMsgPostDeployError(dispatcher *mockREST2EthDispatcher, from, to string, bodyMap map[string]interface{}) (*rest2eth, *mockRPC, *httprouter.Router, *httptest.ResponseRecorder, *http.Request) {
-	deployMsg := newTestDeployMsg("")
+func newTestREST2EthAndMsgPostDeployError(t *testing.T, dispatcher *mockREST2EthDispatcher, from, to string, bodyMap map[string]interface{}) (*rest2eth, *mockRPC, *httprouter.Router, *httptest.ResponseRecorder, *http.Request) {
+	deployMsg := newTestDeployMsg(t, "")
 	abiLoader := &mockABILoader{
 		deployMsg:       &deployMsg.DeployContract,
 		postDeployError: fmt.Errorf("pop"),
@@ -246,7 +251,7 @@ func TestSendTransactionAsyncSuccess(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	_, _, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	req.Header.Set("X-Kaleido-PrivateFrom", "0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90")
 	req.Header.Set("X-Kaleido-PrivateFor", "0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745,0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C")
 	router.ServeHTTP(res, req)
@@ -281,7 +286,7 @@ func TestDeployContractAsyncSuccess(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/abis/abi1?kld-privateFrom=0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90&kld-privateFor=0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745&kld-privateFor=0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C", bytes.NewReader(body))
 	req.Header.Add("x-kaleido-from", from)
@@ -316,7 +321,7 @@ func TestDeployContractAsyncHDWallet(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/abis/abi1", bytes.NewReader(body))
 	req.Header.Add("x-kaleido-from", from)
@@ -348,7 +353,7 @@ func TestDeployContractAsyncDuplicate(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	r, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	r, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
 	abiLoader := r.gw.(*mockABILoader)
 	abiLoader.nameAvailableError = fmt.Errorf("spent already")
 	body, _ := json.Marshal(&bodyMap)
@@ -385,7 +390,7 @@ func TestSendTransactionSyncSuccess(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?kld-sync&kld-ethvalue=1234", bytes.NewReader(body))
 	req.Header.Add("x-kaleido-from", from)
@@ -420,7 +425,7 @@ func TestSendTransactionSyncFailure(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?kld-sync&kld-ethvalue=1234", bytes.NewReader(body))
 	req.Header.Add("x-kaleido-from", from)
@@ -457,7 +462,7 @@ func TestSendTransactionSyncPostDeployErr(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsgPostDeployError(dispatcher, from, to, bodyMap)
+	_, _, router, res, _ := newTestREST2EthAndMsgPostDeployError(t, dispatcher, from, to, bodyMap)
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?kld-sync&kld-ethvalue=1234", bytes.NewReader(body))
 	req.Header.Add("x-kaleido-from", from)
@@ -494,7 +499,7 @@ func TestSendTransactionSyncViaABISuccess(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/abis/"+abi+"/"+to+"/set?kld-sync&kld-ethvalue=1234", bytes.NewReader(body))
 	req.Header.Add("x-kaleido-from", from)
@@ -528,7 +533,7 @@ func TestDeployContractSyncSuccess(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		deployContractSyncReceipt: receipt,
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/abis/abi1?kld-sync", bytes.NewReader(body))
 	req.Header.Add("x-kaleido-from", from)
@@ -563,9 +568,9 @@ func TestDeployContractSyncRemoteRegitryInstance(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
 	}
-	r, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	r, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
 	r.rr = &mockRR{
-		deployMsg: newTestDeployMsg(strings.TrimPrefix(to, "0x")),
+		deployMsg: newTestDeployMsg(t, strings.TrimPrefix(to, "0x")),
 	}
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?kld-sync", bytes.NewReader(body))
@@ -583,7 +588,7 @@ func TestDeployContractSyncRemoteRegitryInstance500(t *testing.T) {
 	defer cleanup(dir)
 
 	bodyMap := make(map[string]interface{})
-	r, _, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
+	r, _, router, res, _ := newTestREST2EthAndMsg(t, &mockREST2EthDispatcher{}, "", "", bodyMap)
 	r.rr = &mockRR{
 		err: fmt.Errorf("pop"),
 	}
@@ -600,7 +605,7 @@ func TestDeployContractSyncRemoteRegitryInstance404(t *testing.T) {
 	defer cleanup(dir)
 
 	bodyMap := make(map[string]interface{})
-	r, _, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
+	r, _, router, res, _ := newTestREST2EthAndMsg(t, &mockREST2EthDispatcher{}, "", "", bodyMap)
 	r.rr = &mockRR{}
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?kld-sync", bytes.NewReader(body))
@@ -615,7 +620,7 @@ func TestDeployContractSyncRemoteRegitryGateway500(t *testing.T) {
 	defer cleanup(dir)
 
 	bodyMap := make(map[string]interface{})
-	r, _, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
+	r, _, router, res, _ := newTestREST2EthAndMsg(t, &mockREST2EthDispatcher{}, "", "", bodyMap)
 	r.rr = &mockRR{
 		err: fmt.Errorf("pop"),
 	}
@@ -632,7 +637,7 @@ func TestDeployContractSyncRemoteRegitryGateway404(t *testing.T) {
 	defer cleanup(dir)
 
 	bodyMap := make(map[string]interface{})
-	r, _, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
+	r, _, router, res, _ := newTestREST2EthAndMsg(t, &mockREST2EthDispatcher{}, "", "", bodyMap)
 	r.rr = &mockRR{}
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygw?kld-sync", bytes.NewReader(body))
@@ -663,9 +668,9 @@ func TestDeployContractSyncRemoteRegistryGateway(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
 	}
-	r, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	r, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
 	r.rr = &mockRR{
-		deployMsg: newTestDeployMsg(strings.TrimPrefix(to, "0x")),
+		deployMsg: newTestDeployMsg(t, strings.TrimPrefix(to, "0x")),
 	}
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygateway/567a417717cb6c59ddc1035705f02c0fd1ab1872/set?kld-sync", bytes.NewReader(body))
@@ -690,7 +695,7 @@ func TestSendTransactionSyncFail(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncError: fmt.Errorf("pop"),
 	}
-	_, _, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	req.Header.Set("x-kaleido-sync", "true")
 	router.ServeHTTP(res, req)
 
@@ -714,7 +719,7 @@ func TestSendTransactionAsyncFail(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		asyncDispatchError: fmt.Errorf("pop"),
 	}
-	_, _, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
@@ -736,7 +741,7 @@ func TestDeployContractAsyncFail(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		asyncDispatchError: fmt.Errorf("pop"),
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/abis/abi1", bytes.NewReader(body))
 	req.Header.Add("x-kaleido-from", from)
@@ -762,7 +767,7 @@ func TestSendTransactionAsyncBadMethod(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		asyncDispatchError: fmt.Errorf("pop"),
 	}
-	_, _, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
@@ -784,7 +789,7 @@ func TestSendTransactionBadContract(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		asyncDispatchError: fmt.Errorf("pop"),
 	}
-	_, _, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
@@ -805,7 +810,7 @@ func TestSendTransactionUnknownRegisteredName(t *testing.T) {
 	to := "random"
 	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
 	dispatcher := &mockREST2EthDispatcher{}
-	r, _, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	r, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	abiLoader := r.gw.(*mockABILoader)
 	abiLoader.resolveContractErr = fmt.Errorf("unregistered")
 	router.ServeHTTP(res, req)
@@ -830,7 +835,7 @@ func TestSendTransactionMissingContract(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		asyncDispatchError: fmt.Errorf("pop"),
 	}
-	_, _, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	router.ServeHTTP(res, req)
 
 	assert.Equal(400, res.Result().StatusCode)
@@ -1009,7 +1014,7 @@ func TestSendTransactionBadFrom(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		asyncDispatchError: fmt.Errorf("pop"),
 	}
-	_, _, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
@@ -1034,7 +1039,7 @@ func TestSendTransactionInvalidContract(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	r, _, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	r, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	abiLoader := r.gw.(*mockABILoader)
 	abiLoader.loadABIError = fmt.Errorf("pop")
 	router.ServeHTTP(res, req)
@@ -1061,7 +1066,7 @@ func TestDeployContractInvalidABI(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	r, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	r, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/abis/abi1?kld-sync", bytes.NewReader(body))
 	req.Header.Add("x-kaleido-from", from)
@@ -1091,7 +1096,7 @@ func TestSendTransactionInvalidMethod(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/shazaam", bytes.NewReader([]byte("{}")))
 	req.Header.Set("x-kaleido-from", from)
 	router.ServeHTTP(res, req)
@@ -1117,7 +1122,7 @@ func TestSendTransactionParamInQuery(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?i=999&s=msg&kld-ethvalue=12345", bytes.NewReader([]byte("{}")))
 	req.Header.Set("x-kaleido-from", from)
 	router.ServeHTTP(res, req)
@@ -1139,7 +1144,7 @@ func TestSendTransactionRegisteredName(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	r, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	r, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	abiLoader := r.gw.(*mockABILoader)
 	abiLoader.registeredContractAddr = "c6c572a18d31ff36d661d680c0060307e038dc47"
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?i=999&s=msg&kld-ethvalue=12345", bytes.NewReader([]byte("{}")))
@@ -1163,7 +1168,7 @@ func TestSendTransactionMissingParam(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	_, _, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	router.ServeHTTP(res, req)
 
 	assert.Equal(400, res.Result().StatusCode)
@@ -1187,7 +1192,7 @@ func TestSendTransactionBadBody(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?x=999", bytes.NewReader([]byte(":not json or yaml")))
 	req.Header.Set("x-kaleido-from", from)
 	router.ServeHTTP(res, req)
@@ -1207,7 +1212,7 @@ func TestCallMethodSuccess(t *testing.T) {
 
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	dispatcher := &mockREST2EthDispatcher{}
-	_, mockRPC, router, res, _ := newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	_, mockRPC, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
 	req := httptest.NewRequest("GET", "/contracts/"+to+"/get", bytes.NewReader([]byte{}))
 	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
 	router.ServeHTTP(res, req)
@@ -1233,7 +1238,7 @@ func TestCallMethodHDWalletSuccess(t *testing.T) {
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	dispatcher := &mockREST2EthDispatcher{}
 	from := "HD-u01234abcd-u01234abcd-12345"
-	r, mockRPC, router, res, _ := newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	r, mockRPC, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
 	r.processor.(*mockProcessor).resolvedFrom = "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
 	req := httptest.NewRequest("GET", "/contracts/"+to+"/get?kld-from="+from, bytes.NewReader([]byte{}))
 	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
@@ -1260,7 +1265,7 @@ func TestCallMethodHDWalletFail(t *testing.T) {
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	dispatcher := &mockREST2EthDispatcher{}
 	from := "HD-u01234abcd-u01234abcd-12345"
-	r, mockRPC, router, res, _ := newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	r, mockRPC, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
 	r.processor.(*mockProcessor).resolvedFrom = "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
 	r.processor.(*mockProcessor).err = fmt.Errorf("pop")
 	req := httptest.NewRequest("GET", "/contracts/"+to+"/get?kld-from="+from, bytes.NewReader([]byte{}))
@@ -1281,7 +1286,7 @@ func TestCallReadOnlyMethodViaPOSTSuccess(t *testing.T) {
 
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	dispatcher := &mockREST2EthDispatcher{}
-	_, mockRPC, router, res, _ := newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	_, mockRPC, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/get?kld-blocknumber=12345", bytes.NewReader([]byte{}))
 	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
 	router.ServeHTTP(res, req)
@@ -1299,7 +1304,7 @@ func TestCallReadOnlyMethodViaPOSTSuccess(t *testing.T) {
 
 	to = "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	dispatcher = &mockREST2EthDispatcher{}
-	_, mockRPC, router, res, _ = newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	_, mockRPC, router, res, _ = newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
 	req = httptest.NewRequest("POST", "/contracts/"+to+"/get?kld-blocknumber=0xab1234", bytes.NewReader([]byte{}))
 	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
 	router.ServeHTTP(res, req)
@@ -1309,7 +1314,7 @@ func TestCallReadOnlyMethodViaPOSTSuccess(t *testing.T) {
 
 	to = "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	dispatcher = &mockREST2EthDispatcher{}
-	_, mockRPC, router, res, _ = newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	_, mockRPC, router, res, _ = newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
 	req = httptest.NewRequest("POST", "/contracts/"+to+"/get?kld-blocknumber=pending", bytes.NewReader([]byte{}))
 	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
 	router.ServeHTTP(res, req)
@@ -1325,7 +1330,7 @@ func TestCallMethodFail(t *testing.T) {
 
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	dispatcher := &mockREST2EthDispatcher{}
-	_, mockRPC, router, res, _ := newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	_, mockRPC, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
 	mockRPC.result = ""
 	mockRPC.mockError = fmt.Errorf("pop")
 	req := httptest.NewRequest("GET", "/contracts/"+to+"/get", bytes.NewReader([]byte{}))
@@ -1339,7 +1344,7 @@ func TestCallMethodFail(t *testing.T) {
 
 	to = "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	dispatcher = &mockREST2EthDispatcher{}
-	_, mockRPC, router, res, _ = newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	_, mockRPC, router, res, _ = newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
 	req = httptest.NewRequest("POST", "/contracts/"+to+"/get?kld-blocknumber=ab1234", bytes.NewReader([]byte{}))
 	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
 	router.ServeHTTP(res, req)
@@ -1353,7 +1358,7 @@ func TestCallMethodViaABIBadAddress(t *testing.T) {
 
 	to := "badness"
 	dispatcher := &mockREST2EthDispatcher{}
-	_, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
 	req := httptest.NewRequest("GET", "/abis/ABI1/badaddress/get", bytes.NewReader([]byte{}))
 	router.ServeHTTP(res, req)
 
@@ -1370,7 +1375,7 @@ func TestSubscribeNoAddressNoSubMgr(t *testing.T) {
 	defer cleanup(dir)
 
 	dispatcher := &mockREST2EthDispatcher{}
-	_, _, router := newTestREST2Eth(dispatcher)
+	_, _, router := newTestREST2Eth(t, dispatcher)
 	bodyBytes, _ := json.Marshal(&map[string]string{
 		"stream": "stream1",
 	})
@@ -1391,7 +1396,7 @@ func TestSubscribeNoAddressUnknownEvent(t *testing.T) {
 	defer cleanup(dir)
 
 	dispatcher := &mockREST2EthDispatcher{}
-	_, _, router := newTestREST2Eth(dispatcher)
+	_, _, router := newTestREST2Eth(t, dispatcher)
 	bodyBytes, _ := json.Marshal(&map[string]string{
 		"stream": "stream1",
 	})
@@ -1414,7 +1419,7 @@ func TestSubscribeUnauthorized(t *testing.T) {
 	kldauth.RegisterSecurityModule(&kldauthtest.TestSecurityModule{})
 
 	dispatcher := &mockREST2EthDispatcher{}
-	_, _, router := newTestREST2Eth(dispatcher)
+	_, _, router := newTestREST2Eth(t, dispatcher)
 	bodyBytes, _ := json.Marshal(&map[string]string{
 		"stream": "stream1",
 	})
@@ -1437,7 +1442,7 @@ func TestSubscribeNoAddressMissingStream(t *testing.T) {
 	defer cleanup(dir)
 
 	dispatcher := &mockREST2EthDispatcher{}
-	r, _, router := newTestREST2Eth(dispatcher)
+	r, _, router := newTestREST2Eth(t, dispatcher)
 	r.subMgr = &mockSubMgr{}
 	bodyBytes, _ := json.Marshal(&map[string]string{})
 	req := httptest.NewRequest("POST", "/abis/ABI1/Changed/subscribe", bytes.NewReader(bodyBytes))
@@ -1457,7 +1462,7 @@ func TestSubscribeNoAddressSuccess(t *testing.T) {
 	defer cleanup(dir)
 
 	dispatcher := &mockREST2EthDispatcher{}
-	r, _, router := newTestREST2Eth(dispatcher)
+	r, _, router := newTestREST2Eth(t, dispatcher)
 	sm := &mockSubMgr{
 		sub: &kldevents.SubscriptionInfo{ID: "sub1", Name: "stream-without-address"},
 	}
@@ -1484,7 +1489,7 @@ func TestSubscribeWithAddressSuccess(t *testing.T) {
 	defer cleanup(dir)
 
 	dispatcher := &mockREST2EthDispatcher{}
-	r, _, router := newTestREST2Eth(dispatcher)
+	r, _, router := newTestREST2Eth(t, dispatcher)
 	sm := &mockSubMgr{
 		sub: &kldevents.SubscriptionInfo{ID: "sub1"},
 	}
@@ -1510,7 +1515,7 @@ func TestSubscribeWithAddressBadAddress(t *testing.T) {
 	defer cleanup(dir)
 
 	dispatcher := &mockREST2EthDispatcher{}
-	r, _, router := newTestREST2Eth(dispatcher)
+	r, _, router := newTestREST2Eth(t, dispatcher)
 	abiLoader := r.gw.(*mockABILoader)
 	abiLoader.resolveContractErr = fmt.Errorf("unregistered")
 	r.subMgr = &mockSubMgr{
@@ -1536,7 +1541,7 @@ func TestSubscribeWithAddressSubmgrFailure(t *testing.T) {
 	defer cleanup(dir)
 
 	dispatcher := &mockREST2EthDispatcher{}
-	r, _, router := newTestREST2Eth(dispatcher)
+	r, _, router := newTestREST2Eth(t, dispatcher)
 	r.subMgr = &mockSubMgr{
 		err: fmt.Errorf("pop"),
 	}

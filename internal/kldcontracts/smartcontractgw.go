@@ -17,6 +17,7 @@ package kldcontracts
 import (
 	"bufio"
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -63,6 +64,7 @@ type SmartContractGateway interface {
 	PreDeploy(msg *kldmessages.DeployContract) error
 	PostDeploy(msg *kldmessages.TransactionReceipt) error
 	AddRoutes(router *httprouter.Router)
+	SendReply(message interface{})
 	Shutdown()
 }
 
@@ -124,6 +126,10 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	router.POST(kldevents.SubPathPrefix+"/:id/reset", g.withEventsAuth(g.resetSub))
 	router.POST(kldevents.StreamPathPrefix+"/:id/suspend", g.withEventsAuth(g.suspendOrResumeStream))
 	router.POST(kldevents.StreamPathPrefix+"/:id/resume", g.withEventsAuth(g.suspendOrResumeStream))
+}
+
+func (g *smartContractGW) SendReply(message interface{}) {
+	g.ws.SendReply(message)
 }
 
 // NewSmartContractGateway constructor
@@ -1140,10 +1146,26 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 		return
 	}
 
-	preCompiled, err := g.compileMultipartFormSolidity(tempdir, req)
+	abi, err := g.parseABI(req.Form)
 	if err != nil {
-		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractCompileFailed, err), 400)
+		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractInvalidFormData, err), 400)
 		return
+	}
+
+	bytecode, err := g.parseBytecode(req.Form)
+	if err != nil {
+		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractInvalidFormData, err), 400)
+		return
+	}
+
+	var preCompiled map[string]*ethbinding.Contract
+	if bytecode == nil {
+		var err error
+		preCompiled, err = g.compileMultipartFormSolidity(tempdir, req)
+		if err != nil {
+			g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractCompileFailed, err), 400)
+			return
+		}
 	}
 
 	if vs := req.Form["findcontracts"]; len(vs) > 0 {
@@ -1158,15 +1180,22 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 		return
 	}
 
-	compiled, err := kldeth.ProcessCompiled(preCompiled, req.FormValue("contract"), false)
-	if err != nil {
-		g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractPostCompileFailed, err), 400)
-		return
-	}
-
 	msg := &kldmessages.DeployContract{}
 	msg.Headers.MsgType = kldmessages.MsgTypeSendTransaction
 	msg.Headers.ID = kldutils.UUIDv4()
+	var compiled *kldeth.CompiledSolidity
+	if bytecode == nil && abi == nil {
+		var err error
+		compiled, err = kldeth.ProcessCompiled(preCompiled, req.FormValue("contract"), false)
+		if err != nil {
+			g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayCompileContractPostCompileFailed, err), 400)
+			return
+		}
+	} else {
+		msg.ABI = abi
+		msg.Compiled = bytecode
+	}
+
 	info, err := g.storeDeployableABI(msg, compiled)
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 500)
@@ -1177,6 +1206,35 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(200)
 	json.NewEncoder(res).Encode(info)
+}
+
+func (g *smartContractGW) parseBytecode(form url.Values) ([]byte, error) {
+	v := form["bytecode"]
+	if len(v) > 0 {
+		b := strings.TrimLeft(v[0], "0x")
+		if bytecode, err := hex.DecodeString(b); err != nil {
+			log.Errorf("failed to decode hex string: %v", err)
+			return nil, err
+		} else {
+			return bytecode, nil
+		}
+	}
+	return nil, nil
+}
+
+func (g *smartContractGW) parseABI(form url.Values) (ethbinding.ABIMarshaling, error) {
+	v := form["abi"]
+	if len(v) > 0 {
+		a := v[0]
+		var abi ethbinding.ABIMarshaling
+		if err := json.Unmarshal([]byte(a), &abi); err != nil {
+			log.Errorf("failed to unmarshal ABI: %v", err.Error())
+			return nil, err
+		} else {
+			return abi, nil
+		}
+	}
+	return nil, nil
 }
 
 func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Request) (map[string]*ethbinding.Contract, error) {

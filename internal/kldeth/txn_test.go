@@ -59,8 +59,8 @@ func (r *testRPCClient) CallContext(ctx context.Context, result interface{}, met
 }
 
 const (
-	simpleStorage = "pragma solidity >=0.4.22 <0.7;\n\ncontract simplestorage {\nuint public storedData;\n\nconstructor(uint initVal) public {\nstoredData = initVal;\n}\n\nfunction set(uint x) public {\nstoredData = x;\n}\n\nfunction get() public view returns (uint retVal) {\nreturn storedData;\n}\n}"
-	twoContracts  = "pragma solidity >=0.4.22 <0.7;\n\ncontract contract1 {function f1() public pure returns (uint retVal) {\nreturn 1;\n}\n}\n\ncontract contract2 {function f2() public pure returns (uint retVal) {\nreturn 2;\n}\n}"
+	simpleStorage = "pragma solidity >=0.4.22 <=0.7;\n\ncontract simplestorage {\nuint public storedData;\n\nconstructor(uint initVal) public {\nstoredData = initVal;\n}\n\nfunction set(uint x) public {\nstoredData = x;\n}\n\nfunction get() public view returns (uint retVal) {\nreturn storedData;\n}\n}"
+	twoContracts  = "pragma solidity >=0.4.22 <=0.7;\n\ncontract contract1 {function f1() public pure returns (uint retVal) {\nreturn 1;\n}\n}\n\ncontract contract2 {function f2() public pure returns (uint retVal) {\nreturn 2;\n}\n}"
 )
 
 func TestNewContractDeployTxnSimpleStorage(t *testing.T) {
@@ -446,7 +446,7 @@ func testComplexParam(t *testing.T, solidityType string, val interface{}, expect
 	assert := assert.New(t)
 
 	var msg kldmessages.DeployContract
-	msg.Solidity = "pragma solidity >=0.4.22 <0.7; contract test {constructor(" + solidityType + " p1) public {}}"
+	msg.Solidity = "pragma solidity >=0.4.22 <=0.7; contract test {constructor(" + solidityType + " p1) public {}}"
 	msg.Parameters = []interface{}{val}
 	msg.From = "0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c"
 	msg.Nonce = "123"

@@ -70,6 +70,19 @@ func TestConstructorBadWebhookURL(t *testing.T) {
 	assert.EqualError(err, "Invalid URL in webhook action")
 }
 
+func TestConstructorBadWebSocketDistributionMode(t *testing.T) {
+	assert := assert.New(t)
+	_, err := newEventStream(newTestSubscriptionManager(), &StreamInfo{
+		ID:   "123",
+		Type: "websocket",
+		WebSocket: &webSocketActionInfo{
+			Topic:            "foobar",
+			DistributionMode: "banana",
+		},
+	}, nil)
+	assert.EqualError(err, "Invalid distribution mode 'banana'. Valid distribution modes are: 'workloadDistribution' and 'broadcast'.")
+}
+
 func testEvent(subID string) *eventData {
 	return &eventData{
 		SubID:         subID,
@@ -689,6 +702,28 @@ func TestProcessEventsEnd2EndWithReset(t *testing.T) {
 	sm.Close()
 }
 
+func TestInterruptWebSocketBroadcast(t *testing.T) {
+	wsChannels := &mockWebSocket{
+		sender:   make(chan interface{}),
+		receiver: make(chan error),
+	}
+	es := &eventStream{
+		wsChannels:      wsChannels,
+		updateInterrupt: make(chan struct{}),
+	}
+	sio, _ := newWebSocketAction(es, &webSocketActionInfo{
+		DistributionMode: "broadcast",
+	})
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		close(es.updateInterrupt)
+		wg.Done()
+	}()
+	sio.attemptBatch(0, 1, []*eventData{})
+	wg.Wait()
+}
+
 func TestInterruptWebSocketSend(t *testing.T) {
 	wsChannels := &mockWebSocket{
 		sender:   make(chan interface{}),
@@ -711,8 +746,10 @@ func TestInterruptWebSocketSend(t *testing.T) {
 
 func TestInterruptWebSocketReceive(t *testing.T) {
 	wsChannels := &mockWebSocket{
-		sender:   make(chan interface{}),
-		receiver: make(chan error),
+		sender:    make(chan interface{}),
+		broadcast: make(chan interface{}),
+		receiver:  make(chan error),
+		closing:   make(chan struct{}),
 	}
 	es := &eventStream{
 		wsChannels:      wsChannels,
@@ -1017,6 +1054,37 @@ func TestUpdateStreamSwapType(t *testing.T) {
 	}
 	_, err := sm.UpdateStream(ctx, stream.spec.ID, updateSpec)
 	assert.EqualError(err, "The type of an event stream cannot be changed")
+}
+
+func TestUpdateWebSocketBadDistributionMode(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	db, _ := kldkvstore.NewLDBKeyValueStore(dir)
+	sm, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingBlock,
+			BatchSize:     5,
+			Type:          "websocket",
+			Name:          "websocket-stream",
+			WebSocket: &webSocketActionInfo{
+				Topic: "test1",
+			},
+		}, db, 200)
+	defer svr.Close()
+	defer close(eventStream)
+	defer stream.stop()
+
+	ctx := context.Background()
+	updateSpec := &StreamInfo{
+		WebSocket: &webSocketActionInfo{
+			Topic:            "test2",
+			DistributionMode: "banana",
+		},
+	}
+	_, err := sm.UpdateStream(ctx, stream.spec.ID, updateSpec)
+	assert.EqualError(err, "Invalid distribution mode 'banana'. Valid distribution modes are: 'workloadDistribution' and 'broadcast'.")
 }
 
 func TestUpdateWebSocket(t *testing.T) {

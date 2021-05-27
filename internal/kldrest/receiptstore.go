@@ -150,7 +150,7 @@ func (r *receiptStore) writeReceipt(requestID string, receipt map[string]interfa
 		err := r.persistence.AddReceipt(requestID, &receipt)
 		if err == nil {
 			log.Infof("%s: Inserted receipt into receipt store", receipt["_id"])
-			return
+			break
 		}
 
 		log.Errorf("%s: addReceipt attempt: %d failed, err: %s", requestID, attempt, err)
@@ -160,7 +160,7 @@ func (r *receiptStore) writeReceipt(requestID string, receipt map[string]interfa
 		if qErr == nil && existing != nil {
 			log.Warnf("%s: exiting   receipt: %+v", requestID, *existing)
 			log.Warnf("%s: duplicate receipt: %+v", requestID, receipt)
-			return
+			break
 		}
 
 		timeRetrying := time.Since(startTime)
@@ -168,6 +168,9 @@ func (r *receiptStore) writeReceipt(requestID string, receipt map[string]interfa
 			log.Infof("%s: receipt: %+v", requestID, receipt)
 			log.Panicf("%s: Failed to insert into receipt store after %.2fs: %s", requestID, timeRetrying.Seconds(), err)
 		}
+	}
+	if r.smartContractGW != nil {
+		r.smartContractGW.SendReply(receipt)
 	}
 }
 

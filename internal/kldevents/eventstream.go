@@ -33,6 +33,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type DistributionMode string
+
+const (
+	DistributionModeBroadcast DistributionMode = "broadcast"
+	DistributionModeWLD       DistributionMode = "workloadDistribution"
+)
+
 const (
 	// FromBlockLatest is the special string that means subscribe from the current block
 	FromBlockLatest = "latest"
@@ -77,7 +84,8 @@ type webhookActionInfo struct {
 }
 
 type webSocketActionInfo struct {
-	Topic string `json:"topic,omitempty"`
+	Topic            string           `json:"topic,omitempty"`
+	DistributionMode DistributionMode `json:"distributionMode,omitempty"`
 }
 
 type eventStream struct {
@@ -105,6 +113,13 @@ type eventStream struct {
 
 type eventStreamAction interface {
 	attemptBatch(batchNumber, attempt uint64, events []*eventData) error
+}
+
+func validateWebSocket(w *webSocketActionInfo) error {
+	if w.DistributionMode != "" && w.DistributionMode != DistributionModeBroadcast && w.DistributionMode != DistributionModeWLD {
+		return klderrors.Errorf(klderrors.EventStreamsInvalidDistributionMode, w.DistributionMode)
+	}
+	return nil
 }
 
 // newEventStream constructor verifies the action is correct, kicks
@@ -164,6 +179,13 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo, wsChannels kldws.W
 			return nil, err
 		}
 	case "websocket":
+
+		if spec.WebSocket != nil {
+			if err := validateWebSocket(spec.WebSocket); err != nil {
+				return nil, err
+			}
+		}
+
 		if a.action, err = newWebSocketAction(a, spec.WebSocket); err != nil {
 			return nil, err
 		}
@@ -245,7 +267,12 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 	}
 	if a.spec.Type == "websocket" && newSpec.WebSocket != nil {
 		a.spec.WebSocket.Topic = newSpec.WebSocket.Topic
+		if err := validateWebSocket(newSpec.WebSocket); err != nil {
+			return nil, err
+		}
+		a.spec.WebSocket.DistributionMode = newSpec.WebSocket.DistributionMode
 	}
+
 	if a.spec.BatchSize != newSpec.BatchSize && newSpec.BatchSize != 0 && newSpec.BatchSize < MaxBatchSize {
 		a.spec.BatchSize = newSpec.BatchSize
 	}

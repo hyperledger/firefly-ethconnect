@@ -78,7 +78,7 @@ const testFromAddr = "0x83dBC8e329b38cBA0Fc4ed99b1Ce9c2a390ABdC1"
 
 var goodDeployTxnJSON = "{" +
 	"  \"headers\":{\"type\": \"DeployContract\"}," +
-	"  \"solidity\":\"pragma solidity >=0.4.22 <0.7; contract t {constructor() public {}}\"," +
+	"  \"solidity\":\"pragma solidity >=0.4.22 <=0.7; contract t {constructor() public {}}\"," +
 	"  \"from\":\"" + testFromAddr + "\"," +
 	"  \"nonce\":\"123\"," +
 	"  \"gas\":\"123\"" +
@@ -86,7 +86,7 @@ var goodDeployTxnJSON = "{" +
 
 var goodHDWalletDeployTxnJSON = "{" +
 	"  \"headers\":{\"type\": \"DeployContract\"}," +
-	"  \"solidity\":\"pragma solidity >=0.4.22 <0.7; contract t {constructor() public {}}\"," +
+	"  \"solidity\":\"pragma solidity >=0.4.22 <=0.7; contract t {constructor() public {}}\"," +
 	"  \"from\":\"hd-testinst-testwallet-1234\"," +
 	"  \"nonce\":\"123\"," +
 	"  \"gas\":\"123\"" +
@@ -107,7 +107,7 @@ var goodSendTxnJSONWithoutGas = "{" +
 
 var goodDeployTxnPrivateJSON = "{" +
 	"  \"headers\":{\"type\": \"DeployContract\"}," +
-	"  \"solidity\":\"pragma solidity >=0.4.22 <0.7; contract t {constructor() public {}}\"," +
+	"  \"solidity\":\"pragma solidity >=0.4.22 <=0.7; contract t {constructor() public {}}\"," +
 	"  \"from\":\"" + testFromAddr + "\"," +
 	"  \"nonce\":\"123\"," +
 	"  \"gas\":\"123\"," +

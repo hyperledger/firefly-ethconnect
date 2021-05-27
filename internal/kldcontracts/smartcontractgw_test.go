@@ -361,7 +361,7 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 		},
 		nil, nil, nil, nil,
 	)
-	iMsg := newTestDeployMsg("0123456789abcdef0123456789abcdef01234567")
+	iMsg := newTestDeployMsg(t, "0123456789abcdef0123456789abcdef01234567")
 	iMsg.Headers.ID = "xyz12345"
 	rr := &mockRR{
 		deployMsg: iMsg,
@@ -469,7 +469,7 @@ func TestRemoteRegistryBadBI(t *testing.T) {
 		},
 		nil, nil, nil, nil,
 	)
-	iMsg := newTestDeployMsg("0123456789abcdef0123456789abcdef01234567")
+	iMsg := newTestDeployMsg(t, "0123456789abcdef0123456789abcdef01234567")
 	iMsg.Headers.ID = "xyz12345"
 	// Append two fallback methods - that is invalid
 	iMsg.ABI = append(iMsg.ABI, kldbind.ABIElementMarshaling{
@@ -2056,7 +2056,7 @@ func TestCheckNameAvailableRRDuplicate(t *testing.T) {
 		nil, nil, nil, nil,
 	)
 	rr := &mockRR{
-		deployMsg: newTestDeployMsg("12345"),
+		deployMsg: newTestDeployMsg(t, "12345"),
 	}
 	s := scgw.(*smartContractGW)
 	s.rr = rr

@@ -24,7 +24,7 @@ import (
 var buildDate, buildVersion string // Set by ldflags
 
 func main() {
-	print("Copyright (C) 2018,2019 Kaleido\n" +
+	print("Copyright (C) 2018,2021 Kaleido\n" +
 		"Licensed under the Apache License, Version 2.0\n")
 	print(fmt.Sprintf("Version: %s (Build Date: %s)\n\n", buildVersion, buildDate))
 	exitVal := cmd.Execute()

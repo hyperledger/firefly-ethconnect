@@ -1,10 +1,13 @@
-FROM golang:1.16.4-alpine3.13 AS builder
+FROM golang:1.16-buster AS builder
 WORKDIR /ethconnect
 ADD . .
-RUN apk add make gcc build-base
+RUN apt-get update -y \
+ && apt-get install -y build-essential \
+ && curl -Lo /usr/bin/solc https://github.com/ethereum/solidity/releases/download/v0.7.6/solc-static-linux \
+ && chmod 755 /usr/bin/solc
 RUN make
 
-FROM alpine:latest
+FROM debian:buster-slim
 WORKDIR /ethconnect
 COPY --from=builder /ethconnect/ethconnect .
 COPY --from=builder /ethconnect/start.sh .

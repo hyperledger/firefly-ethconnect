@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/hex"
 	"math/big"
+	"reflect"
 	"strings"
 	"time"
 
@@ -31,6 +32,13 @@ import (
 const (
 	errorFunctionSelector = "0x08c379a0" // per https://solidity.readthedocs.io/en/v0.4.24/control-structures.html the signature of Error(string)
 )
+
+// CallResult is error object received in response to eth_call JSON/RPC from the ethereum client
+type CallResult struct {
+	Code    *int    `json:"code"`
+	Message *string `json:"message"`
+	Data    *string `json:"data"`
+}
 
 // calculateGas uses eth_estimateGas to estimate the gas required, providing a buffer
 // of 20% for variation as the chain changes between estimation and submission.
@@ -70,12 +78,29 @@ func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res
 	defer cancel()
 
 	var hexString string
-	if err = rpc.CallContext(ctx, &hexString, "eth_call", txArgs, blocknumber); err != nil {
+	var resp interface{}
+	if err = rpc.CallContext(ctx, &resp, "eth_call", txArgs, blocknumber); err != nil {
 		return nil, klderrors.Errorf(klderrors.TransactionSendCallFailedNoRevert, err)
 	}
-	if len(hexString) == 0 || hexString == "0x" {
+	if resp == nil {
 		return nil, nil
 	}
+	respType := reflect.TypeOf(resp)
+	if respType.Kind() == reflect.String {
+		hexString = resp.(string)
+	} else {
+		// response is a JSON with an error object such as:
+		// {
+		//   "error" : {
+		//     "code" : -32000,
+		//     "message" : "Execution reverted",
+		//     "data" : "0x08c379a00..."
+		//   }
+		// }
+		respJson := resp.(*CallResult)
+		hexString = *respJson.Data
+	}
+
 	retStrLen := uint64(len(hexString))
 	if strings.HasPrefix(hexString, errorFunctionSelector) && retStrLen > 138 {
 		// The call reverted. Process the error response

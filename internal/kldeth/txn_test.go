@@ -893,6 +893,39 @@ func TestCallMethodRevert(t *testing.T) {
 	assert.EqualError(err, "Muppetry detected")
 }
 
+func TestCallMethodRevertNewErrFmt(t *testing.T) {
+	assert := assert.New(t)
+
+	params := []interface{}{}
+
+	method := &abi.Method{}
+	method.Name = "testFunc"
+
+	code := -32000
+	msg := "Execution reverted"
+	data := "0x08c379a00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000001943616e206f6e6c7920736574204576656e206e756d6265727300000000000000"
+	ethCallResponse := &CallResult{
+		Code:    &code,
+		Message: &msg,
+		Data:    &data,
+	}
+
+	rpc := &testRPCClient{
+		resultWrangler: func(retObj interface{}) {
+			retVal := ethCallResponse
+			reflect.ValueOf(retObj).Elem().Set(reflect.ValueOf(retVal))
+		},
+	}
+
+	_, err := CallMethod(context.Background(), rpc, nil,
+		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
+		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
+		json.Number("12345"), method, params, "")
+
+	assert.Equal("eth_call", rpc.capturedMethod)
+	assert.EqualError(err, "Can only set Even numbers")
+}
+
 func TestCallMethodRevertBadStrLen(t *testing.T) {
 	assert := assert.New(t)
 

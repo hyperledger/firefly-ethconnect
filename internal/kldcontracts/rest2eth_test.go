@@ -25,14 +25,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/kaleido-io/ethconnect/internal/kldevents"
-
 	"github.com/julienschmidt/httprouter"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
-	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
+	"github.com/kaleido-io/ethconnect/internal/kldevents"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -139,7 +138,7 @@ type mockSubMgr struct {
 	streams         []*kldevents.StreamInfo
 	suspended       bool
 	resumed         bool
-	capturedAddr    *kldbind.Address
+	capturedAddr    *ethbinding.Address
 }
 
 func (m *mockSubMgr) Init() error { return m.err }
@@ -162,7 +161,7 @@ func (m *mockSubMgr) ResumeStream(ctx context.Context, id string) error {
 	return m.err
 }
 func (m *mockSubMgr) DeleteStream(ctx context.Context, id string) error { return m.err }
-func (m *mockSubMgr) AddSubscription(ctx context.Context, addr *kldbind.Address, event *kldbind.ABIElementMarshaling, streamID, initialBlock, name string) (*kldevents.SubscriptionInfo, error) {
+func (m *mockSubMgr) AddSubscription(ctx context.Context, addr *ethbinding.Address, event *ethbinding.ABIElementMarshaling, streamID, initialBlock, name string) (*kldevents.SubscriptionInfo, error) {
 	m.capturedAddr = addr
 	return m.sub, m.err
 }
@@ -449,7 +448,7 @@ func TestSendTransactionSyncPostDeployErr(t *testing.T) {
 	bodyMap["s"] = "testing"
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
-	contractAddr := common.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	contractAddr := eth.API.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	receipt := &kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{
 			Headers: kldmessages.ReplyHeaders{
@@ -858,9 +857,9 @@ func TestSendTransactionBadMethodABI(t *testing.T) {
 	}
 	abiLoader := &mockABILoader{
 		deployMsg: &kldmessages.DeployContract{
-			ABI: kldbind.ABIMarshaling{
+			ABI: ethbinding.ABIMarshaling{
 				{
-					Name: "badmethod", Type: "function", Inputs: []kldbind.ABIArgumentMarshaling{
+					Name: "badmethod", Type: "function", Inputs: []ethbinding.ABIArgumentMarshaling{
 						{Name: "badness", Type: "badness"},
 					},
 				},
@@ -891,9 +890,9 @@ func TestSendTransactionBadEventABI(t *testing.T) {
 	}
 	abiLoader := &mockABILoader{
 		deployMsg: &kldmessages.DeployContract{
-			ABI: kldbind.ABIMarshaling{
+			ABI: ethbinding.ABIMarshaling{
 				{
-					Name: "badevent", Type: "event", Inputs: []kldbind.ABIArgumentMarshaling{
+					Name: "badevent", Type: "event", Inputs: []ethbinding.ABIArgumentMarshaling{
 						{Name: "badness", Type: "badness"},
 					},
 				},
@@ -924,9 +923,9 @@ func TestSendTransactionBadConstructorABI(t *testing.T) {
 	}
 	abiLoader := &mockABILoader{
 		deployMsg: &kldmessages.DeployContract{
-			ABI: kldbind.ABIMarshaling{
+			ABI: ethbinding.ABIMarshaling{
 				{
-					Name: "badevent", Type: "constructor", Inputs: []kldbind.ABIArgumentMarshaling{
+					Name: "badevent", Type: "constructor", Inputs: []ethbinding.ABIArgumentMarshaling{
 						{Name: "badness", Type: "badness"},
 					},
 				},
@@ -957,7 +956,7 @@ func TestSendTransactionDefaultConstructorABI(t *testing.T) {
 	}
 	abiLoader := &mockABILoader{
 		deployMsg: &kldmessages.DeployContract{
-			ABI: kldbind.ABIMarshaling{}, // completely empty ABI is ok
+			ABI: ethbinding.ABIMarshaling{}, // completely empty ABI is ok
 		},
 	}
 	_, _, router := newTestREST2EthCustomAbiLoader(dispatcher, abiLoader)
@@ -980,9 +979,9 @@ func TestSendTransactionUnnamedParamsABI(t *testing.T) {
 	}
 	abiLoader := &mockABILoader{
 		deployMsg: &kldmessages.DeployContract{
-			ABI: kldbind.ABIMarshaling{
+			ABI: ethbinding.ABIMarshaling{
 				{
-					Name: "unnamedparamsmethod", Type: "function", Inputs: []kldbind.ABIArgumentMarshaling{
+					Name: "unnamedparamsmethod", Type: "function", Inputs: []ethbinding.ABIArgumentMarshaling{
 						{Name: "", Type: "uint256", InternalType: "uint256"},
 						{Name: "", Type: "uint256", InternalType: "uint256"},
 					},

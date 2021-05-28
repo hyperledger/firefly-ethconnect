@@ -17,12 +17,13 @@ package kldutils
 import (
 	"strings"
 
-	"github.com/ethereum/go-ethereum/common"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 )
 
 // StrToAddress is a helper to parse eth addresses with useful errors
-func StrToAddress(desc string, strAddr string) (addr common.Address, err error) {
+func StrToAddress(desc string, strAddr string) (addr ethbinding.Address, err error) {
 	if strAddr == "" {
 		err = klderrors.Errorf(klderrors.HelperStrToAddressRequiredField, desc)
 		return
@@ -30,10 +31,10 @@ func StrToAddress(desc string, strAddr string) (addr common.Address, err error) 
 	if !strings.HasPrefix(strAddr, "0x") {
 		strAddr = "0x" + strAddr
 	}
-	if !common.IsHexAddress(strAddr) {
+	if !eth.API.IsHexAddress(strAddr) {
 		err = klderrors.Errorf(klderrors.HelperStrToAddressBadAddress, desc)
 		return
 	}
-	addr = common.HexToAddress(strAddr)
+	addr = eth.API.HexToAddress(strAddr)
 	return
 }

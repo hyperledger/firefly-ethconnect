@@ -23,13 +23,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/kaleido-io/ethconnect/internal/kldbind"
-
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	log "github.com/sirupsen/logrus"
-
-	"github.com/ethereum/go-ethereum/common/compiler"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
+
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -42,8 +40,8 @@ type CompiledSolidity struct {
 	ContractName string
 	Compiled     []byte
 	DevDoc       string
-	ABI          kldbind.ABIMarshaling
-	ContractInfo *compiler.ContractInfo
+	ABI          ethbinding.ABIMarshaling
+	ContractInfo *ethbinding.ContractInfo
 }
 
 var solcVerChecker *regexp.Regexp
@@ -78,12 +76,12 @@ func getSolcExecutable(requestedVersion string) (string, error) {
 
 // GetSolc returns the appropriate solc command based on the combination of env vars, and message-specific request
 // parameters passed in
-func GetSolc(requestedVersion string) (*compiler.Solidity, error) {
+func GetSolc(requestedVersion string) (*ethbinding.Solidity, error) {
 	solc, err := getSolcExecutable(requestedVersion)
 	if err != nil {
 		return nil, err
 	}
-	return compiler.SolidityVersion(solc)
+	return eth.API.SolidityVersion(solc)
 }
 
 // GetSolcArgs get the correct solc args
@@ -116,14 +114,14 @@ func CompileContract(soliditySource, contractName, requestedVersion, evmVersion 
 	if err := cmd.Run(); err != nil {
 		return nil, klderrors.Errorf(klderrors.CompilerFailedSolc, err, stderr.String())
 	}
-	c, _ := compiler.ParseCombinedJSON(stdout.Bytes(), soliditySource, s.Version, s.Version, strings.Join(solcArgs, " "))
+	c, _ := eth.API.ParseCombinedJSON(stdout.Bytes(), soliditySource, s.Version, s.Version, strings.Join(solcArgs, " "))
 	return ProcessCompiled(c, contractName, true)
 }
 
 // ProcessCompiled takes solc output and packs it into our CompiledSolidity structure
-func ProcessCompiled(compiled map[string]*compiler.Contract, contractName string, isStdin bool) (*CompiledSolidity, error) {
+func ProcessCompiled(compiled map[string]*ethbinding.Contract, contractName string, isStdin bool) (*CompiledSolidity, error) {
 	// Get the individual contract we want to deploy
-	var contract *compiler.Contract
+	var contract *ethbinding.Contract
 	contractNames := reflect.ValueOf(compiled).MapKeys()
 	if contractName != "" {
 		if isStdin {
@@ -142,7 +140,7 @@ func ProcessCompiled(compiled map[string]*compiler.Contract, contractName string
 	return packContract(contractName, contract)
 }
 
-func packContract(contractName string, contract *compiler.Contract) (c *CompiledSolidity, err error) {
+func packContract(contractName string, contract *ethbinding.Contract) (c *CompiledSolidity, err error) {
 
 	firstColon := strings.LastIndex(contractName, ":")
 	if firstColon >= 0 && firstColon < (len(contractName)-1) {
@@ -153,7 +151,7 @@ func packContract(contractName string, contract *compiler.Contract) (c *Compiled
 		ContractName: contractName,
 		ContractInfo: &contract.Info,
 	}
-	c.Compiled, err = hexutil.Decode(contract.Code)
+	c.Compiled, err = eth.API.HexDecode(contract.Code)
 	if err != nil {
 		return nil, klderrors.Errorf(klderrors.CompilerBytecodeInvalid, err)
 	}
@@ -165,7 +163,7 @@ func packContract(contractName string, contract *compiler.Contract) (c *Compiled
 	if err != nil {
 		return nil, klderrors.Errorf(klderrors.CompilerABISerialize, err)
 	}
-	var abi kldbind.ABIMarshaling
+	var abi ethbinding.ABIMarshaling
 	err = json.Unmarshal(abiJSON, &abi)
 	if err != nil {
 		return nil, klderrors.Errorf(klderrors.CompilerABIReRead, err)

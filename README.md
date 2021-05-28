@@ -3,7 +3,7 @@
 [![codecov](https://codecov.io/gh/kaleido-io/ethconnect/branch/master/graph/badge.svg?token=RWlSbY389z)](https://codecov.io/gh/kaleido-io/ethconnect) [![Go Report Card](https://goreportcard.com/badge/github.com/kaleido-io/ethconnect)](https://goreportcard.com/report/github.com/kaleido-io/ethconnect)
 
 - [github.com/kaleido-io/ethconnect](#githubcomkaleido-ioethconnect)
-  - [Kaleido's Ethconnect REST Gateway](#kaleidos-ethconnect-rest-gateway)
+  - [Ethconnect REST Gateway](#ethconnect-rest-gateway)
   - [License](#license)
   - [Example payloads](#example-payloads)
     - [YAML to submit a transaction](#yaml-to-submit-a-transaction)
@@ -29,16 +29,17 @@
     - [Maximum messages to hold in-flight (maxinflight)](#maximum-messages-to-hold-in-flight-maxinflight)
     - [Maximum wait time for an individual transaction (tx-timeout)](#maximum-wait-time-for-an-individual-transaction-tx-timeout)
 
-## Kaleido's Ethconnect REST Gateway
+## Ethconnect REST Gateway
 
 A Web and Messaging API, taking the hassle out of submitting Ethereum transactions:
-- Solidity compilation
-- ABI type mapping
-- RLP encoding
-- Transaction receipt polling
+- REST API generation for any ABI
+- Reliable event streaming
 - High throughput tx submission
 - Concurrency management
 - Nonce management
+- Solidity compilation
+- ABI type mapping
+- Transaction receipt polling
 
 Provides an integration bridge into Ethereum permissioned chains, from simple
 Web Service and Messaging interfaces that are friendly to existing Enterprise
@@ -49,23 +50,14 @@ Java EE Application Server.
 
 [![kaleido-io/ethconnect](ethconnect.png)](ethconnect.pdf)
 
-Technology support currently includes:
-- Messaging
-  - Apache Kafka - https://kafka.apache.org/
-- Webhooks
-  - Simple `POST` of a transaction over HTTP in YAML/JSON queued to Kafka for processing
-  - REST store to query results (backed by MongoDB)
-
-Under development:
-
-- Key Management Service
-  - AWS Key Management Service - https://aws.amazon.com/kms/
-
 ## License
 
 This code is distributed under the [Apache 2 license](LICENSE).
 
-> The code statically links to code distributed under the LGPL license.
+A dynamically linked plugin project is used to provide low level utilities like RLP encoding:
+https://github.com/kaleido-io/ethbinding
+
+Additional code and network plugin extension points are provided for extensions.
 
 ## Example payloads
 

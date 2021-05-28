@@ -22,10 +22,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/rlp"
-
-	ecrypto "github.com/ethereum/go-ethereum/crypto"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -41,8 +39,8 @@ func TestHDWalletDefaults(t *testing.T) {
 func TestHDWalletSignOK(t *testing.T) {
 	assert := assert.New(t)
 
-	key, _ := ecrypto.GenerateKey()
-	addr := ecrypto.PubkeyToAddress(key.PublicKey)
+	key, _ := eth.API.GenerateKey()
+	addr := eth.API.PubkeyToAddress(key.PublicKey)
 
 	svr := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		assert.Equal("/testinst/api/v1/testwallet/1234", req.URL.Path)
@@ -51,7 +49,7 @@ func TestHDWalletSignOK(t *testing.T) {
 		res.Write([]byte(`
     {
       "addr": "` + addr.String() + `",
-      "key": "` + hex.EncodeToString(ecrypto.FromECDSA(key)) + `"
+      "key": "` + hex.EncodeToString(eth.API.FromECDSA(key)) + `"
     }`))
 	}))
 	defer svr.Close()
@@ -74,14 +72,14 @@ func TestHDWalletSignOK(t *testing.T) {
 	assert.Equal(s.Type(), "HD Wallet")
 	assert.Equal(addr.String(), s.Address())
 
-	tx := types.NewContractCreation(12345, big.NewInt(0), 0, big.NewInt(0), []byte("hello world"))
+	tx := eth.API.NewContractCreation(12345, big.NewInt(0), 0, big.NewInt(0), []byte("hello world"))
 
 	signed, err := s.Sign(tx)
 	assert.NoError(err)
 
-	eip155 := types.NewEIP155Signer(big.NewInt(12345))
-	tx2 := &types.Transaction{}
-	err = tx2.DecodeRLP(rlp.NewStream(bytes.NewReader(signed), 0))
+	eip155 := eth.API.NewEIP155Signer(big.NewInt(12345))
+	tx2 := &ethbinding.Transaction{}
+	err = tx2.DecodeRLP(eth.API.NewStream(bytes.NewReader(signed), 0))
 	assert.NoError(err)
 	sender, err := eip155.Sender(tx2)
 	assert.NoError(err)

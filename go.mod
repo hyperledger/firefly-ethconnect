@@ -2,14 +2,9 @@ module github.com/kaleido-io/ethconnect
 
 require (
 	github.com/Shopify/sarama v1.29.0
-	github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46 // indirect
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
-	github.com/deckarep/golang-set v1.7.1 // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
-	github.com/ethereum/go-ethereum v1.10.3 // indirect
 	github.com/globalsign/mgo v0.0.0-20181015135952-eeefdecb41b8
-	github.com/go-kit/kit v0.10.0 // indirect
-	github.com/go-ole/go-ole v1.2.5 // indirect
 	github.com/go-openapi/jsonreference v0.19.5
 	github.com/go-openapi/spec v0.20.3
 	github.com/go-openapi/swag v0.19.15 // indirect
@@ -27,14 +22,12 @@ require (
 	github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d
 	github.com/nwaples/rardecode v1.1.0 // indirect
 	github.com/pkg/errors v0.9.1
-	github.com/shirou/gopsutil v3.21.4+incompatible // indirect
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.1.3
 	github.com/stretchr/testify v1.7.0
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/tidwall/gjson v1.8.0
 	github.com/tidwall/pretty v1.1.1 // indirect
-	github.com/tklauser/go-sysconf v0.3.6 // indirect
 	github.com/ulikunitz/xz v0.5.10 // indirect
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect

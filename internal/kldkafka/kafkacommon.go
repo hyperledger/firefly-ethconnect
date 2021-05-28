@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/ethereum/go-ethereum/rpc"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	log "github.com/sirupsen/logrus"
@@ -75,7 +75,7 @@ func NewKafkaCommon(kf KafkaFactory, conf *KafkaCommonConf, kafkaGoRoutines Kafk
 type kafkaCommon struct {
 	conf            *KafkaCommonConf
 	factory         KafkaFactory
-	rpc             *rpc.Client
+	rpc             *ethbinding.RPCClient
 	client          KafkaClient
 	signals         chan os.Signal
 	consumer        KafkaConsumer

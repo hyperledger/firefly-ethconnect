@@ -22,8 +22,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
-
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -45,7 +44,7 @@ func TestABI2SwaggerERC20(t *testing.T) {
 		OrionPrivateAPI:  true,
 		BasicAuth:        true,
 	})
-	abi, err := abi.JSON(strings.NewReader(erc20ABI))
+	abi, err := eth.API.JSON(strings.NewReader(erc20ABI))
 	assert.NoError(err)
 	swagger := c.Gen4Factory("/erc20", "erc20", false, false, &abi, erc20DevDocs)
 
@@ -70,7 +69,7 @@ func TestABI2SwaggerERC20actoryOnlyNoAuthCustomScheme(t *testing.T) {
 		OrionPrivateAPI:  false,
 		BasicAuth:        false,
 	})
-	abi, err := abi.JSON(strings.NewReader(erc20ABI))
+	abi, err := eth.API.JSON(strings.NewReader(erc20ABI))
 	assert.NoError(err)
 	swagger := c.Gen4Factory("/erc20", "erc20", true, false, &abi, erc20DevDocs)
 
@@ -90,7 +89,7 @@ func TestABI2SwaggerLotsOfTypesInstance(t *testing.T) {
 		OrionPrivateAPI:  true,
 		BasicAuth:        true,
 	})
-	abi, err := abi.JSON(strings.NewReader(lotsOfTypesABI))
+	abi, err := eth.API.JSON(strings.NewReader(lotsOfTypesABI))
 	assert.NoError(err)
 	swagger := c.Gen4Instance("/0x0123456789abcdef0123456789abcdef0123456", "lotsOfTypes", &abi, lotsOfTypesDevDocs)
 
@@ -112,7 +111,7 @@ func TestABI2SwaggerV2ABIEncoder(t *testing.T) {
 	})
 	f, err := os.Open("../../test/abicoderv2_example.abi.json")
 	assert.NoError(err)
-	abi, err := abi.JSON(bufio.NewReader(f))
+	abi, err := eth.API.JSON(bufio.NewReader(f))
 	assert.NoError(err)
 	swagger := c.Gen4Instance("/0x0123456789abcdef0123456789abcdef0123456", "abicoderv2", &abi, lotsOfTypesDevDocs)
 
@@ -135,7 +134,7 @@ func TestABI2SwaggerUnnamedInputsABI(t *testing.T) {
 		OrionPrivateAPI:  true,
 		BasicAuth:        true,
 	})
-	abi, err := abi.JSON(strings.NewReader(unnamedInputsABI))
+	abi, err := eth.API.JSON(strings.NewReader(unnamedInputsABI))
 	assert.NoError(err)
 	swagger := c.Gen4Factory("/simplestorage", "ssunnamed", false, false, &abi, "")
 

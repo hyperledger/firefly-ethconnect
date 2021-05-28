@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -32,7 +32,7 @@ func TestGetTXReceiptMined(t *testing.T) {
 	r := testRPCClient{}
 
 	tx := Txn{}
-	var blockNumber hexutil.Big
+	var blockNumber ethbinding.HexBigInt
 	blockNumber.ToInt().SetInt64(10)
 	tx.Receipt.BlockNumber = &blockNumber
 
@@ -51,7 +51,7 @@ func TestGetTXReceiptNotMined(t *testing.T) {
 	r := testRPCClient{}
 
 	tx := Txn{}
-	var blockNumber hexutil.Big
+	var blockNumber ethbinding.HexBigInt
 	tx.Receipt.BlockNumber = &blockNumber
 
 	isMined, err := tx.GetTXReceipt(context.Background(), &r)
@@ -71,7 +71,7 @@ func TestGetTXReceiptFail(t *testing.T) {
 	}
 
 	tx := Txn{}
-	var blockNumber hexutil.Big
+	var blockNumber ethbinding.HexBigInt
 	tx.Receipt.BlockNumber = &blockNumber
 
 	isMined, err := tx.GetTXReceipt(context.Background(), &r)
@@ -92,7 +92,7 @@ func TestGetTXReceiptOrionTX(t *testing.T) {
 		PrivacyGroupID: "test",
 		PrivateFrom:    "foo",
 	}
-	var blockNumber hexutil.Big
+	var blockNumber ethbinding.HexBigInt
 	blockNumber.ToInt().SetInt64(10)
 	tx.Receipt.BlockNumber = &blockNumber
 
@@ -117,7 +117,7 @@ func TestGetTXReceiptOrionTXFail(t *testing.T) {
 		PrivacyGroupID: "test",
 		PrivateFrom:    "foo",
 	}
-	var blockNumber hexutil.Big
+	var blockNumber ethbinding.HexBigInt
 	blockNumber.ToInt().SetInt64(10)
 	tx.Receipt.BlockNumber = &blockNumber
 

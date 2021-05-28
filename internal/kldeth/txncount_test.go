@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -30,7 +30,7 @@ func TestGetTransactionCount(t *testing.T) {
 
 	r := testRPCClient{}
 
-	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
+	addr := eth.API.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
 	_, err := GetTransactionCount(context.Background(), &r, &addr, "latest")
 
 	assert.Equal(nil, err)
@@ -45,7 +45,7 @@ func TestGetTransactionCountErr(t *testing.T) {
 		mockError: fmt.Errorf("pop"),
 	}
 
-	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
+	addr := eth.API.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
 	_, err := GetTransactionCount(context.Background(), &r, &addr, "latest")
 
 	assert.EqualError(err, "eth_getTransactionCount returned: pop")
@@ -57,7 +57,7 @@ func TestGetOrionPrivateTransactionCount(t *testing.T) {
 
 	r := testRPCClient{}
 
-	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
+	addr := eth.API.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
 	_, err := GetOrionTXCount(context.Background(), &r, &addr, "negmDcN2P4ODpqn/6WkJ02zT/0w0bjhGpkZ8UP6vARk=")
 
 	assert.Equal(nil, err)
@@ -72,7 +72,7 @@ func TestGetOrionPrivateTransactionCountErr(t *testing.T) {
 		mockError: fmt.Errorf("pop"),
 	}
 
-	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
+	addr := eth.API.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
 	_, err := GetOrionTXCount(context.Background(), &r, &addr, "negmDcN2P4ODpqn/6WkJ02zT/0w0bjhGpkZ8UP6vARk=")
 
 	assert.EqualError(err, "priv_getTransactionCount for privacy group 'negmDcN2P4ODpqn/6WkJ02zT/0w0bjhGpkZ8UP6vARk=' returned: pop")

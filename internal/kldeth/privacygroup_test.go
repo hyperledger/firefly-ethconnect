@@ -20,7 +20,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -44,7 +44,7 @@ func TestGetOrionPrivacyGroupExists(t *testing.T) {
 		},
 	}
 
-	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
+	addr := eth.API.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
 	privacyGroupID, err := GetOrionPrivacyGroup(context.Background(), &r, &addr,
 		"jO6dpqnMhmnrCHqUumyK09+18diF7quq/rROGs2HFWI=",
 		[]string{"2QiZG7rYPzRvRsioEn6oYUff1DOvPA22EZr0+/o3RUg="})
@@ -61,7 +61,7 @@ func TestGetOrionPrivacyGroupDoesNotExist(t *testing.T) {
 
 	r := testRPCClient{}
 
-	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
+	addr := eth.API.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
 	_, err := GetOrionPrivacyGroup(context.Background(), &r, &addr,
 		"jO6dpqnMhmnrCHqUumyK09+18diF7quq/rROGs2HFWI=",
 		[]string{"2QiZG7rYPzRvRsioEn6oYUff1DOvPA22EZr0+/o3RUg="})
@@ -79,7 +79,7 @@ func TestGetOrionPrivacyGroupErrFind(t *testing.T) {
 		mockError: fmt.Errorf("pop"),
 	}
 
-	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
+	addr := eth.API.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
 	_, err := GetOrionPrivacyGroup(context.Background(), &r, &addr,
 		"jO6dpqnMhmnrCHqUumyK09+18diF7quq/rROGs2HFWI=",
 		[]string{"2QiZG7rYPzRvRsioEn6oYUff1DOvPA22EZr0+/o3RUg="})
@@ -95,7 +95,7 @@ func TestGetOrionPrivacyGroupErrCreate(t *testing.T) {
 		mockError2: fmt.Errorf("pop"),
 	}
 
-	addr := common.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
+	addr := eth.API.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
 	_, err := GetOrionPrivacyGroup(context.Background(), &r, &addr,
 		"jO6dpqnMhmnrCHqUumyK09+18diF7quq/rROGs2HFWI=",
 		[]string{"2QiZG7rYPzRvRsioEn6oYUff1DOvPA22EZr0+/o3RUg="})

@@ -35,15 +35,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common/compiler"
 	"github.com/go-openapi/spec"
 	"github.com/julienschmidt/httprouter"
 	"github.com/mholt/archiver"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
-	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldevents"
@@ -215,9 +215,9 @@ type abiInfo struct {
 
 // remoteContractInfo is the ABI raw data back out of the REST API gateway with bytecode
 type remoteContractInfo struct {
-	ID      string                `json:"id"`
-	Address string                `json:"address,omitempty"`
-	ABI     kldbind.ABIMarshaling `json:"abi"`
+	ID      string                   `json:"id"`
+	Address string                   `json:"address,omitempty"`
+	ABI     ethbinding.ABIMarshaling `json:"abi"`
 }
 
 func (i *contractInfo) GetID() string {
@@ -295,7 +295,7 @@ func (g *smartContractGW) PostDeploy(msg *kldmessages.TransactionReceipt) error 
 	return nil
 }
 
-func (g *smartContractGW) swaggerForRemoteRegistry(swaggerGen *kldopenapi.ABI2Swagger, apiName, addr string, factoryOnly bool, abi *kldbind.RuntimeABI, devdoc, path string) *spec.Swagger {
+func (g *smartContractGW) swaggerForRemoteRegistry(swaggerGen *kldopenapi.ABI2Swagger, apiName, addr string, factoryOnly bool, abi *ethbinding.RuntimeABI, devdoc, path string) *spec.Swagger {
 	var swagger *spec.Swagger
 	if addr == "" {
 		swagger = swaggerGen.Gen4Factory(path, apiName, factoryOnly, true, &abi.ABI, devdoc)
@@ -305,7 +305,7 @@ func (g *smartContractGW) swaggerForRemoteRegistry(swaggerGen *kldopenapi.ABI2Sw
 	return swagger
 }
 
-func (g *smartContractGW) swaggerForABI(swaggerGen *kldopenapi.ABI2Swagger, abiID, apiName string, factoryOnly bool, abi *kldbind.RuntimeABI, devdoc string, addrHexNo0x, registerAs string) *spec.Swagger {
+func (g *smartContractGW) swaggerForABI(swaggerGen *kldopenapi.ABI2Swagger, abiID, apiName string, factoryOnly bool, abi *ethbinding.RuntimeABI, devdoc string, addrHexNo0x, registerAs string) *spec.Swagger {
 	// Ensure we have a contract name in all cases, as the Swagger
 	// won't be valid without a title
 	if apiName == "" {
@@ -418,7 +418,7 @@ func (g *smartContractGW) storeDeployableABI(msg *kldmessages.DeployContract, co
 		return nil, klderrors.Errorf(klderrors.RESTGatewayLocalStoreMissingABI)
 	}
 
-	runtimeABI, err := kldbind.ABIMarshalingToABIRuntime(msg.ABI)
+	runtimeABI, err := eth.API.ABIMarshalingToABIRuntime(msg.ABI)
 	if err != nil {
 		return nil, klderrors.Errorf(klderrors.RESTGatewayInvalidABI, err)
 	}
@@ -966,7 +966,7 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 		g.writeHTMLForUI(prefix, id, from, (prefix == "abi"), factoryOnly, res)
 	} else if swaggerGen != nil {
 		addr := params.ByName("address")
-		runtimeABI, err := kldbind.ABIMarshalingToABIRuntime(deployMsg.ABI)
+		runtimeABI, err := eth.API.ABIMarshalingToABIRuntime(deployMsg.ABI)
 		if err != nil {
 			g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayInvalidABI, err), 404)
 			return
@@ -1032,7 +1032,7 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 	if uiRequest {
 		g.writeHTMLForUI(prefix, id, from, isGateway, factoryOnly, res)
 	} else if swaggerGen != nil {
-		runtimeABI, err := kldbind.ABIMarshalingToABIRuntime(deployMsg.ABI)
+		runtimeABI, err := eth.API.ABIMarshalingToABIRuntime(deployMsg.ABI)
 		if err != nil {
 			g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayInvalidABI, err), 400)
 			return
@@ -1159,7 +1159,7 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 		return
 	}
 
-	var preCompiled map[string]*compiler.Contract
+	var preCompiled map[string]*ethbinding.Contract
 	if bytecode == nil {
 		var err error
 		preCompiled, err = g.compileMultipartFormSolidity(tempdir, req)
@@ -1223,11 +1223,11 @@ func (g *smartContractGW) parseBytecode(form url.Values) ([]byte, error) {
 	return nil, nil
 }
 
-func (g *smartContractGW) parseABI(form url.Values) (kldbind.ABIMarshaling, error) {
+func (g *smartContractGW) parseABI(form url.Values) (ethbinding.ABIMarshaling, error) {
 	v := form["abi"]
 	if len(v) > 0 {
 		a := v[0]
-		var abi kldbind.ABIMarshaling
+		var abi ethbinding.ABIMarshaling
 		if err := json.Unmarshal([]byte(a), &abi); err != nil {
 			log.Errorf("failed to unmarshal ABI: %v", err.Error())
 			return nil, err
@@ -1238,7 +1238,7 @@ func (g *smartContractGW) parseABI(form url.Values) (kldbind.ABIMarshaling, erro
 	return nil, nil
 }
 
-func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Request) (map[string]*compiler.Contract, error) {
+func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Request) (map[string]*ethbinding.Contract, error) {
 	solFiles := []string{}
 	rootFiles, err := ioutil.ReadDir(dir)
 	if err != nil {
@@ -1278,7 +1278,7 @@ func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Req
 		return nil, klderrors.Errorf(klderrors.RESTGatewayCompileContractCompileFailDetails, err, stderr.String())
 	}
 
-	compiled, err := compiler.ParseCombinedJSON(stdout.Bytes(), "", solcVer.Version, solcVer.Version, solOptionsString)
+	compiled, err := eth.API.ParseCombinedJSON(stdout.Bytes(), "", solcVer.Version, solcVer.Version, solOptionsString)
 	if err != nil {
 		return nil, klderrors.Errorf(klderrors.RESTGatewayCompileContractSolcOutputProcessFail, err)
 	}

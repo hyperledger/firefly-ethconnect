@@ -20,7 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kaleido-io/ethconnect/internal/kldbind"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
@@ -29,28 +30,28 @@ import (
 
 // persistedFilter is the part of the filter we record to storage
 type persistedFilter struct {
-	Addresses []kldbind.Address `json:"address,omitempty"`
-	Topics    [][]kldbind.Hash  `json:"topics,omitempty"`
+	Addresses []ethbinding.Address `json:"address,omitempty"`
+	Topics    [][]ethbinding.Hash  `json:"topics,omitempty"`
 }
 
 // ethFilter is the filter structure we send over the wire on eth_newFilter
 type ethFilter struct {
 	persistedFilter
-	FromBlock kldbind.HexBigInt `json:"fromBlock,omitempty"`
-	ToBlock   string            `json:"toBlock,omitempty"`
+	FromBlock ethbinding.HexBigInt `json:"fromBlock,omitempty"`
+	ToBlock   string               `json:"toBlock,omitempty"`
 }
 
 // SubscriptionInfo is the persisted data for the subscription
 type SubscriptionInfo struct {
 	kldmessages.TimeSorted
-	ID        string                        `json:"id,omitempty"`
-	Path      string                        `json:"path"`
-	Summary   string                        `json:"-"`    // System generated name for the subscription
-	Name      string                        `json:"name"` // User provided name for the subscription, set to Summary if missing
-	Stream    string                        `json:"stream"`
-	Filter    persistedFilter               `json:"filter"`
-	Event     *kldbind.ABIElementMarshaling `json:"event"`
-	FromBlock string                        `json:"fromBlock,omitempty"`
+	ID        string                           `json:"id,omitempty"`
+	Path      string                           `json:"path"`
+	Summary   string                           `json:"-"`    // System generated name for the subscription
+	Name      string                           `json:"name"` // User provided name for the subscription, set to Summary if missing
+	Stream    string                           `json:"stream"`
+	Filter    persistedFilter                  `json:"filter"`
+	Event     *ethbinding.ABIElementMarshaling `json:"event"`
+	FromBlock string                           `json:"fromBlock,omitempty"`
 }
 
 // subscription is the runtime that manages the subscription
@@ -59,19 +60,19 @@ type subscription struct {
 	rpc            kldeth.RPCClient
 	lp             *logProcessor
 	logName        string
-	filterID       kldbind.HexBigInt
+	filterID       ethbinding.HexBigInt
 	filteredOnce   bool
 	filterStale    bool
 	deleting       bool
 	resetRequested bool
 }
 
-func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind.Address, i *SubscriptionInfo) (*subscription, error) {
+func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *ethbinding.Address, i *SubscriptionInfo) (*subscription, error) {
 	stream, err := sm.streamByID(i.Stream)
 	if err != nil {
 		return nil, err
 	}
-	event, err := kldbind.ABIElementMarshalingToABIEvent(i.Event)
+	event, err := eth.API.ABIElementMarshalingToABIEvent(i.Event)
 	if err != nil {
 		return nil, err
 	}
@@ -79,16 +80,16 @@ func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind
 		info:        i,
 		rpc:         rpc,
 		lp:          newLogProcessor(i.ID, event, stream),
-		logName:     i.ID + ":" + kldbind.ABIEventSignature(event),
+		logName:     i.ID + ":" + eth.API.ABIEventSignature(event),
 		filterStale: true,
 	}
 	f := &i.Filter
 	addrStr := "*"
 	if addr != nil {
-		f.Addresses = []kldbind.Address{*addr}
+		f.Addresses = []ethbinding.Address{*addr}
 		addrStr = addr.String()
 	}
-	i.Summary = addrStr + ":" + kldbind.ABIEventSignature(event)
+	i.Summary = addrStr + ":" + eth.API.ABIEventSignature(event)
 	// If a name was not provided by the end user, set it to the system generated summary
 	if i.Name == "" {
 		log.Debugf("No name provided for subscription, using auto-generated summary:%s", i.Summary)
@@ -98,7 +99,7 @@ func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *kldbind
 		return nil, klderrors.Errorf(klderrors.EventStreamsSubscribeNoEvent)
 	}
 	// For now we only support filtering on the event type
-	f.Topics = [][]kldbind.Hash{{event.ID}}
+	f.Topics = [][]ethbinding.Hash{{event.ID}}
 	log.Infof("Created subscription ID:%s name:%s topic:%s", i.ID, i.Name, event.ID)
 	return s, nil
 }
@@ -116,7 +117,7 @@ func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *Subscr
 	if err != nil {
 		return nil, err
 	}
-	event, err := kldbind.ABIElementMarshalingToABIEvent(i.Event)
+	event, err := eth.API.ABIElementMarshalingToABIEvent(i.Event)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +125,7 @@ func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *Subscr
 		rpc:         rpc,
 		info:        i,
 		lp:          newLogProcessor(i.ID, event, stream),
-		logName:     i.ID + ":" + kldbind.ABIEventSignature(event),
+		logName:     i.ID + ":" + eth.API.ABIEventSignature(event),
 		filterStale: true,
 	}
 	return s, nil
@@ -140,7 +141,7 @@ func (s *subscription) setInitialBlockHeight(ctx context.Context) (*big.Int, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	blockHeight := kldbind.HexBigInt{}
+	blockHeight := ethbinding.HexBigInt{}
 	err := s.rpc.CallContext(ctx, &blockHeight, "eth_blockNumber")
 	if err != nil {
 		return nil, klderrors.Errorf(klderrors.RPCCallReturnedError, "eth_blockNumber", err)
@@ -190,7 +191,7 @@ func (s *subscription) getEventTimestamp(ctx context.Context, l *logEntry) {
 	// we didn't find the timestamp in our cache, query the node for the block header where we can find the timestamp
 	rpcMethod := "eth_getBlockByNumber"
 
-	var hdr kldbind.Header
+	var hdr ethbinding.Header
 	// 2nd parameter (false) indicates it is sufficient to retrieve only hashes of tx objects
 	if err := s.rpc.CallContext(ctx, &hdr, rpcMethod, blockNumber, false); err != nil {
 		log.Errorf("Unable to retrieve block[%s] timestamp: %s", blockNumber, err)

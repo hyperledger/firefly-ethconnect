@@ -26,11 +26,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/julienschmidt/httprouter"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
-	"github.com/kaleido-io/ethconnect/internal/kldbind"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldevents"
@@ -187,10 +186,10 @@ type restCmd struct {
 	from          string
 	addr          string
 	value         json.Number
-	abiMethod     *kldbind.ABIMethod
-	abiMethodElem *kldbind.ABIElementMarshaling
-	abiEvent      *kldbind.ABIEvent
-	abiEventElem  *kldbind.ABIElementMarshaling
+	abiMethod     *ethbinding.ABIMethod
+	abiMethodElem *ethbinding.ABIElementMarshaling
+	abiEvent      *ethbinding.ABIEvent
+	abiEventElem  *ethbinding.ABIElementMarshaling
 	isDeploy      bool
 	deployMsg     *kldmessages.DeployContract
 	body          map[string]interface{}
@@ -198,7 +197,7 @@ type restCmd struct {
 	blocknumber   string
 }
 
-func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params httprouter.Params, c *restCmd, addrParam string, refresh bool) (a kldbind.ABIMarshaling, validAddress bool, err error) {
+func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params httprouter.Params, c *restCmd, addrParam string, refresh bool) (a ethbinding.ABIMarshaling, validAddress bool, err error) {
 	c.addr = strings.ToLower(strings.TrimPrefix(addrParam, "0x"))
 	validAddress = addrCheck.MatchString(c.addr)
 
@@ -263,11 +262,11 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 	return
 }
 
-func (r *rest2eth) resolveMethod(res http.ResponseWriter, req *http.Request, c *restCmd, a kldbind.ABIMarshaling, methodParam string) (err error) {
+func (r *rest2eth) resolveMethod(res http.ResponseWriter, req *http.Request, c *restCmd, a ethbinding.ABIMarshaling, methodParam string) (err error) {
 	for _, element := range a {
 		if element.Type == "function" && element.Name == methodParam {
 			c.abiMethodElem = &element
-			if c.abiMethod, err = kldbind.ABIElementMarshalingToABIMethod(&element); err != nil {
+			if c.abiMethod, err = eth.API.ABIElementMarshalingToABIMethod(&element); err != nil {
 				err = klderrors.Errorf(klderrors.RESTGatewayMethodABIInvalid, methodParam, err)
 				r.restErrReply(res, req, err, 400)
 				return
@@ -278,11 +277,11 @@ func (r *rest2eth) resolveMethod(res http.ResponseWriter, req *http.Request, c *
 	return
 }
 
-func (r *rest2eth) resolveConstructor(res http.ResponseWriter, req *http.Request, c *restCmd, a kldbind.ABIMarshaling) (err error) {
+func (r *rest2eth) resolveConstructor(res http.ResponseWriter, req *http.Request, c *restCmd, a ethbinding.ABIMarshaling) (err error) {
 	for _, element := range a {
 		if element.Type == "constructor" {
 			c.abiMethodElem = &element
-			if c.abiMethod, err = kldbind.ABIElementMarshalingToABIMethod(&element); err != nil {
+			if c.abiMethod, err = eth.API.ABIElementMarshalingToABIMethod(&element); err != nil {
 				err = klderrors.Errorf(klderrors.RESTGatewayMethodABIInvalid, "constructor", err)
 				r.restErrReply(res, req, err, 400)
 				return
@@ -293,17 +292,17 @@ func (r *rest2eth) resolveConstructor(res http.ResponseWriter, req *http.Request
 	}
 	if !c.isDeploy {
 		// Default constructor
-		c.abiMethodElem = &kldbind.ABIElementMarshaling{
+		c.abiMethodElem = &ethbinding.ABIElementMarshaling{
 			Type: "constructor",
 		}
-		c.abiMethod, _ = kldbind.ABIElementMarshalingToABIMethod(c.abiMethodElem)
+		c.abiMethod, _ = eth.API.ABIElementMarshalingToABIMethod(c.abiMethodElem)
 		c.isDeploy = true
 	}
 	return
 }
 
-func (r *rest2eth) resolveEvent(res http.ResponseWriter, req *http.Request, c *restCmd, a kldbind.ABIMarshaling, methodParam, methodParamLC, addrParam string) (err error) {
-	var eventDef *kldbind.ABIElementMarshaling
+func (r *rest2eth) resolveEvent(res http.ResponseWriter, req *http.Request, c *restCmd, a ethbinding.ABIMarshaling, methodParam, methodParamLC, addrParam string) (err error) {
+	var eventDef *ethbinding.ABIElementMarshaling
 	for _, element := range a {
 		if element.Type == "event" {
 			if element.Name == methodParam {
@@ -319,7 +318,7 @@ func (r *rest2eth) resolveEvent(res http.ResponseWriter, req *http.Request, c *r
 	}
 	if eventDef != nil {
 		c.abiEventElem = eventDef
-		if c.abiEvent, err = kldbind.ABIElementMarshalingToABIEvent(eventDef); err != nil {
+		if c.abiEvent, err = eth.API.ABIElementMarshalingToABIEvent(eventDef); err != nil {
 			err = klderrors.Errorf(klderrors.RESTGatewayEventABIInvalid, eventDef.Name, err)
 			r.restErrReply(res, req, err, 400)
 			return
@@ -478,7 +477,7 @@ func (r *rest2eth) fromBodyOrForm(req *http.Request, body map[string]interface{}
 	return req.FormValue(param)
 }
 
-func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, addrStr string, abiEvent *kldbind.ABIElementMarshaling, body map[string]interface{}) {
+func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, addrStr string, abiEvent *ethbinding.ABIElementMarshaling, body map[string]interface{}) {
 
 	err := kldauth.AuthEventStreams(req.Context())
 	if err != nil {
@@ -497,9 +496,9 @@ func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, ad
 		return
 	}
 	fromBlock := r.fromBodyOrForm(req, body, "fromBlock")
-	var addr *common.Address
+	var addr *ethbinding.Address
 	if addrStr != "" {
-		address := common.HexToAddress(addrStr)
+		address := eth.API.HexToAddress(addrStr)
 		addr = &address
 	}
 	// if the end user provided a name for the subscription, use it
@@ -541,7 +540,7 @@ func (r *rest2eth) addPrivateTx(msg *kldmessages.TransactionCommon, req *http.Re
 	return nil
 }
 
-func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, from string, value json.Number, abiMethodElem *kldbind.ABIElementMarshaling, deployMsg *kldmessages.DeployContract, msgParams []interface{}) {
+func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, from string, value json.Number, abiMethodElem *ethbinding.ABIElementMarshaling, deployMsg *kldmessages.DeployContract, msgParams []interface{}) {
 
 	deployMsg.Headers.MsgType = kldmessages.MsgTypeDeployContract
 	deployMsg.From = from
@@ -590,7 +589,7 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 	return
 }
 
-func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, from, addr string, value json.Number, abiMethodElem *kldbind.ABIElementMarshaling, msgParams []interface{}) {
+func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, from, addr string, value json.Number, abiMethodElem *ethbinding.ABIElementMarshaling, msgParams []interface{}) {
 
 	msg := &kldmessages.SendTransaction{}
 	msg.Headers.MsgType = kldmessages.MsgTypeSendTransaction
@@ -636,7 +635,7 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 	return
 }
 
-func (r *rest2eth) callContract(res http.ResponseWriter, req *http.Request, from, addr string, value json.Number, abiMethod *abi.Method, msgParams []interface{}, blocknumber string) {
+func (r *rest2eth) callContract(res http.ResponseWriter, req *http.Request, from, addr string, value json.Number, abiMethod *ethbinding.ABIMethod, msgParams []interface{}, blocknumber string) {
 	var err error
 	if from, err = r.processor.ResolveAddress(from); err != nil {
 		r.restErrReply(res, req, err, 500)

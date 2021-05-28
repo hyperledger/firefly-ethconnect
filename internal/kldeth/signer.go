@@ -2,7 +2,9 @@
 
 package kldeth
 
-import "github.com/kaleido-io/ethbinding"
+import (
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+)
 
 // TXSigner is an interface for pre-signing signing using the parameters of eth_sendTransaction
 type TXSigner interface {

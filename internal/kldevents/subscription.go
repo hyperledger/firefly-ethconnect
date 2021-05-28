@@ -20,7 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
@@ -71,7 +72,7 @@ func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *ethbind
 	if err != nil {
 		return nil, err
 	}
-	event, err := ethbinding.ABIElementMarshalingToABIEvent(i.Event)
+	event, err := eth.API.ABIElementMarshalingToABIEvent(i.Event)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +80,7 @@ func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *ethbind
 		info:        i,
 		rpc:         rpc,
 		lp:          newLogProcessor(i.ID, event, stream),
-		logName:     i.ID + ":" + ethbinding.ABIEventSignature(event),
+		logName:     i.ID + ":" + eth.API.ABIEventSignature(event),
 		filterStale: true,
 	}
 	f := &i.Filter
@@ -88,7 +89,7 @@ func newSubscription(sm subscriptionManager, rpc kldeth.RPCClient, addr *ethbind
 		f.Addresses = []ethbinding.Address{*addr}
 		addrStr = addr.String()
 	}
-	i.Summary = addrStr + ":" + ethbinding.ABIEventSignature(event)
+	i.Summary = addrStr + ":" + eth.API.ABIEventSignature(event)
 	// If a name was not provided by the end user, set it to the system generated summary
 	if i.Name == "" {
 		log.Debugf("No name provided for subscription, using auto-generated summary:%s", i.Summary)
@@ -116,7 +117,7 @@ func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *Subscr
 	if err != nil {
 		return nil, err
 	}
-	event, err := ethbinding.ABIElementMarshalingToABIEvent(i.Event)
+	event, err := eth.API.ABIElementMarshalingToABIEvent(i.Event)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +125,7 @@ func restoreSubscription(sm subscriptionManager, rpc kldeth.RPCClient, i *Subscr
 		rpc:         rpc,
 		info:        i,
 		lp:          newLogProcessor(i.ID, event, stream),
-		logName:     i.ID + ":" + ethbinding.ABIEventSignature(event),
+		logName:     i.ID + ":" + eth.API.ABIEventSignature(event),
 		filterStale: true,
 	}
 	return s, nil

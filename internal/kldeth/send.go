@@ -21,7 +21,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	log "github.com/sirupsen/logrus"
 )
@@ -94,7 +95,7 @@ func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res
 		return nil, klderrors.Errorf(klderrors.TransactionSendCallFailedRevertMessage, errorStringBytes)
 	}
 	log.Debugf("eth_call response: %s", hexString)
-	res = ethbinding.FromHex(hexString)
+	res = eth.API.FromHex(hexString)
 	return
 }
 
@@ -120,9 +121,9 @@ func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
 		}
 		// Re-encode the EthTX (for external HD Wallet signing)
 		if to != nil {
-			tx.EthTX = ethbinding.NewTransaction(tx.EthTX.Nonce(), *tx.EthTX.To(), tx.EthTX.Value(), uint64(gas), tx.EthTX.GasPrice(), tx.EthTX.Data())
+			tx.EthTX = eth.API.NewTransaction(tx.EthTX.Nonce(), *tx.EthTX.To(), tx.EthTX.Value(), uint64(gas), tx.EthTX.GasPrice(), tx.EthTX.Data())
 		} else {
-			tx.EthTX = ethbinding.NewContractCreation(tx.EthTX.Nonce(), tx.EthTX.Value(), uint64(gas), tx.EthTX.GasPrice(), tx.EthTX.Data())
+			tx.EthTX = eth.API.NewContractCreation(tx.EthTX.Nonce(), tx.EthTX.Value(), uint64(gas), tx.EthTX.GasPrice(), tx.EthTX.Data())
 		}
 	}
 	txArgs.Gas = &gas
@@ -200,7 +201,7 @@ func (tx *Txn) submitTXtoNode(ctx context.Context, rpc RPCClient, txArgs *SendTX
 		if err != nil {
 			return "", err
 		}
-		callParam0 = ethbinding.ToHex(signed)
+		callParam0 = eth.API.HexEncode(signed)
 	}
 
 	var txHash string

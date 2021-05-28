@@ -23,7 +23,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/spf13/cobra"
 
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
 	"github.com/stretchr/testify/assert"

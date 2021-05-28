@@ -21,7 +21,7 @@ import (
 
 	"github.com/go-openapi/jsonreference"
 	"github.com/go-openapi/spec"
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	"github.com/tidwall/gjson"
 )
 

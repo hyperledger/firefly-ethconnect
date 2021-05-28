@@ -26,7 +26,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
@@ -411,7 +412,7 @@ func TestBadTimestampCacheSize(t *testing.T) {
 	_, err := sm.AddStream(context.Background(), &StreamInfo{
 		TimestampCacheSize: -1,
 	})
-	assert.EqualError(err, "Failed to create a resource for the stream: Must provide a positive size")
+	assert.EqualError(err, "Failed to create a resource for the stream: must provide a positive size")
 }
 
 func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, stream *eventStream, subscriptionName string) *SubscriptionInfo {
@@ -473,7 +474,7 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 			},
 		},
 	}
-	addr := ethbinding.HexToAddress("0x167f57a13a9c35ff92f0649d2be0e52b4f8ac3ca")
+	addr := eth.API.HexToAddress("0x167f57a13a9c35ff92f0649d2be0e52b4f8ac3ca")
 	ctx := context.Background()
 	s, _ := sm.AddSubscription(ctx, &addr, event, stream.spec.ID, "", subscriptionName)
 	return s

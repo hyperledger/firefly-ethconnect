@@ -41,7 +41,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
@@ -417,7 +418,7 @@ func (g *smartContractGW) storeDeployableABI(msg *kldmessages.DeployContract, co
 		return nil, klderrors.Errorf(klderrors.RESTGatewayLocalStoreMissingABI)
 	}
 
-	runtimeABI, err := ethbinding.ABIMarshalingToABIRuntime(msg.ABI)
+	runtimeABI, err := eth.API.ABIMarshalingToABIRuntime(msg.ABI)
 	if err != nil {
 		return nil, klderrors.Errorf(klderrors.RESTGatewayInvalidABI, err)
 	}
@@ -965,7 +966,7 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 		g.writeHTMLForUI(prefix, id, from, (prefix == "abi"), factoryOnly, res)
 	} else if swaggerGen != nil {
 		addr := params.ByName("address")
-		runtimeABI, err := ethbinding.ABIMarshalingToABIRuntime(deployMsg.ABI)
+		runtimeABI, err := eth.API.ABIMarshalingToABIRuntime(deployMsg.ABI)
 		if err != nil {
 			g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayInvalidABI, err), 404)
 			return
@@ -1031,7 +1032,7 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 	if uiRequest {
 		g.writeHTMLForUI(prefix, id, from, isGateway, factoryOnly, res)
 	} else if swaggerGen != nil {
-		runtimeABI, err := ethbinding.ABIMarshalingToABIRuntime(deployMsg.ABI)
+		runtimeABI, err := eth.API.ABIMarshalingToABIRuntime(deployMsg.ABI)
 		if err != nil {
 			g.gatewayErrReply(res, req, klderrors.Errorf(klderrors.RESTGatewayInvalidABI, err), 400)
 			return
@@ -1277,7 +1278,7 @@ func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Req
 		return nil, klderrors.Errorf(klderrors.RESTGatewayCompileContractCompileFailDetails, err, stderr.String())
 	}
 
-	compiled, err := ethbinding.ParseCombinedJSON(stdout.Bytes(), "", solcVer.Version, solcVer.Version, solOptionsString)
+	compiled, err := eth.API.ParseCombinedJSON(stdout.Bytes(), "", solcVer.Version, solcVer.Version, solOptionsString)
 	if err != nil {
 		return nil, klderrors.Errorf(klderrors.RESTGatewayCompileContractSolcOutputProcessFail, err)
 	}

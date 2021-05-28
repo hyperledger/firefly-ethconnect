@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"reflect"
 
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 )
 
 const (

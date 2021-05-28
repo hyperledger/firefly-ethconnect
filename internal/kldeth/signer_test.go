@@ -2,7 +2,9 @@
 
 package kldeth
 
-import "github.com/kaleido-io/ethbinding"
+import (
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+)
 
 type mockTXSigner struct {
 	capturedTX *ethbinding.Transaction

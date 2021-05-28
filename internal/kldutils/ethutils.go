@@ -17,7 +17,8 @@ package kldutils
 import (
 	"strings"
 
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 )
 
@@ -30,10 +31,10 @@ func StrToAddress(desc string, strAddr string) (addr ethbinding.Address, err err
 	if !strings.HasPrefix(strAddr, "0x") {
 		strAddr = "0x" + strAddr
 	}
-	if !ethbinding.IsHexAddress(strAddr) {
+	if !eth.API.IsHexAddress(strAddr) {
 		err = klderrors.Errorf(klderrors.HelperStrToAddressBadAddress, desc)
 		return
 	}
-	addr = ethbinding.HexToAddress(strAddr)
+	addr = eth.API.HexToAddress(strAddr)
 	return
 }

@@ -27,7 +27,8 @@ import (
 	"sync"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
@@ -265,7 +266,7 @@ func (r *rest2eth) resolveMethod(res http.ResponseWriter, req *http.Request, c *
 	for _, element := range a {
 		if element.Type == "function" && element.Name == methodParam {
 			c.abiMethodElem = &element
-			if c.abiMethod, err = ethbinding.ABIElementMarshalingToABIMethod(&element); err != nil {
+			if c.abiMethod, err = eth.API.ABIElementMarshalingToABIMethod(&element); err != nil {
 				err = klderrors.Errorf(klderrors.RESTGatewayMethodABIInvalid, methodParam, err)
 				r.restErrReply(res, req, err, 400)
 				return
@@ -280,7 +281,7 @@ func (r *rest2eth) resolveConstructor(res http.ResponseWriter, req *http.Request
 	for _, element := range a {
 		if element.Type == "constructor" {
 			c.abiMethodElem = &element
-			if c.abiMethod, err = ethbinding.ABIElementMarshalingToABIMethod(&element); err != nil {
+			if c.abiMethod, err = eth.API.ABIElementMarshalingToABIMethod(&element); err != nil {
 				err = klderrors.Errorf(klderrors.RESTGatewayMethodABIInvalid, "constructor", err)
 				r.restErrReply(res, req, err, 400)
 				return
@@ -294,7 +295,7 @@ func (r *rest2eth) resolveConstructor(res http.ResponseWriter, req *http.Request
 		c.abiMethodElem = &ethbinding.ABIElementMarshaling{
 			Type: "constructor",
 		}
-		c.abiMethod, _ = ethbinding.ABIElementMarshalingToABIMethod(c.abiMethodElem)
+		c.abiMethod, _ = eth.API.ABIElementMarshalingToABIMethod(c.abiMethodElem)
 		c.isDeploy = true
 	}
 	return
@@ -317,7 +318,7 @@ func (r *rest2eth) resolveEvent(res http.ResponseWriter, req *http.Request, c *r
 	}
 	if eventDef != nil {
 		c.abiEventElem = eventDef
-		if c.abiEvent, err = ethbinding.ABIElementMarshalingToABIEvent(eventDef); err != nil {
+		if c.abiEvent, err = eth.API.ABIElementMarshalingToABIEvent(eventDef); err != nil {
 			err = klderrors.Errorf(klderrors.RESTGatewayEventABIInvalid, eventDef.Name, err)
 			r.restErrReply(res, req, err, 400)
 			return
@@ -497,7 +498,7 @@ func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, ad
 	fromBlock := r.fromBodyOrForm(req, body, "fromBlock")
 	var addr *ethbinding.Address
 	if addrStr != "" {
-		address := ethbinding.HexToAddress(addrStr)
+		address := eth.API.HexToAddress(addrStr)
 		addr = &address
 	}
 	// if the end user provided a name for the subscription, use it

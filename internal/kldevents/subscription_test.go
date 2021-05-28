@@ -20,7 +20,8 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldkvstore"
 
@@ -119,7 +120,7 @@ func TestCreateWebhookSubWithAddr(t *testing.T) {
 		Anonymous: true,
 	}
 
-	addr := ethbinding.HexToAddress("0x0123456789abcDEF0123456789abCDef01234567")
+	addr := eth.API.HexToAddress("0x0123456789abcDEF0123456789abCDef01234567")
 	subInfo := testSubInfo(event)
 	subInfo.Name = "mySubscription"
 	s, err := newSubscription(m, rpc, &addr, subInfo)

@@ -23,7 +23,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 
 	log "github.com/sirupsen/logrus"
@@ -80,7 +81,7 @@ func GetSolc(requestedVersion string) (*ethbinding.Solidity, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ethbinding.SolidityVersion(solc)
+	return eth.API.SolidityVersion(solc)
 }
 
 // GetSolcArgs get the correct solc args
@@ -113,7 +114,7 @@ func CompileContract(soliditySource, contractName, requestedVersion, evmVersion 
 	if err := cmd.Run(); err != nil {
 		return nil, klderrors.Errorf(klderrors.CompilerFailedSolc, err, stderr.String())
 	}
-	c, _ := ethbinding.ParseCombinedJSON(stdout.Bytes(), soliditySource, s.Version, s.Version, strings.Join(solcArgs, " "))
+	c, _ := eth.API.ParseCombinedJSON(stdout.Bytes(), soliditySource, s.Version, s.Version, strings.Join(solcArgs, " "))
 	return ProcessCompiled(c, contractName, true)
 }
 
@@ -150,7 +151,7 @@ func packContract(contractName string, contract *ethbinding.Contract) (c *Compil
 		ContractName: contractName,
 		ContractInfo: &contract.Info,
 	}
-	c.Compiled, err = ethbinding.HexDecode(contract.Code)
+	c.Compiled, err = eth.API.HexDecode(contract.Code)
 	if err != nil {
 		return nil, klderrors.Errorf(klderrors.CompilerBytecodeInvalid, err)
 	}

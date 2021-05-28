@@ -29,8 +29,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kaleido-io/ethbinding"
-
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
 
@@ -171,7 +171,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	assert.NoError(err)
 	assert.NotEmpty(deployStash.CompilerVersion)
 
-	contractAddr := ethbinding.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	contractAddr := eth.API.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	receipt := kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{
 			Headers: kldmessages.ReplyHeaders{
@@ -191,7 +191,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	deployMsg, abiID, err := scgw.(*smartContractGW).loadDeployMsgForInstance("0123456789abcdef0123456789abcdef01234567")
 	assert.NoError(err)
 	assert.NotEmpty(abiID)
-	runtimeABI, err := ethbinding.ABIMarshalingToABIRuntime(deployMsg.ABI)
+	runtimeABI, err := eth.API.ABIMarshalingToABIRuntime(deployMsg.ABI)
 	assert.NoError(err)
 	assert.Equal("set", runtimeABI.Methods["set"].Name)
 
@@ -733,7 +733,7 @@ func TestPostDeployNoRegisteredName(t *testing.T) {
 		},
 		nil, nil, nil, nil,
 	)
-	contractAddr := ethbinding.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	contractAddr := eth.API.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	scgw := s.(*smartContractGW)
 	replyMsg := &kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{
@@ -776,7 +776,7 @@ func TestPostDeployRemoteRegisteredName(t *testing.T) {
 	rr := &mockRR{}
 	s.(*smartContractGW).rr = rr
 
-	contractAddr := ethbinding.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	contractAddr := eth.API.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	scgw := s.(*smartContractGW)
 	replyMsg := &kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{
@@ -822,7 +822,7 @@ func TestPostDeployRemoteRegisteredNameNotSuccess(t *testing.T) {
 	rr := &mockRR{}
 	s.(*smartContractGW).rr = rr
 
-	contractAddr := ethbinding.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	contractAddr := eth.API.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	scgw := s.(*smartContractGW)
 	replyMsg := &kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{

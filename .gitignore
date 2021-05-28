@@ -1,3 +1,4 @@
+*.so
 ethconnect
 ethconnect-go-win
 ethconnect-go-tux

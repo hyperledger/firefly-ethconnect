@@ -25,13 +25,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kaleido-io/ethconnect/internal/kldevents"
-
 	"github.com/julienschmidt/httprouter"
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth/kldauthtest"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
+	"github.com/kaleido-io/ethconnect/internal/kldevents"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -448,7 +448,7 @@ func TestSendTransactionSyncPostDeployErr(t *testing.T) {
 	bodyMap["s"] = "testing"
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
-	contractAddr := ethbinding.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
+	contractAddr := eth.API.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	receipt := &kldmessages.TransactionReceipt{
 		ReplyCommon: kldmessages.ReplyCommon{
 			Headers: kldmessages.ReplyHeaders{

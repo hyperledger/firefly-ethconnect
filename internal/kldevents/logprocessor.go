@@ -20,7 +20,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	log "github.com/sirupsen/logrus"
@@ -95,7 +96,7 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 
 	var data []byte
 	if strings.HasPrefix(entry.Data, "0x") {
-		data, err = ethbinding.HexDecode(entry.Data)
+		data, err = eth.API.HexDecode(entry.Data)
 		if err != nil {
 			return klderrors.Errorf(klderrors.EventStreamsLogDecode, subInfo, err)
 		}
@@ -106,7 +107,7 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 		BlockNumber:      entry.BlockNumber.ToInt().String(),
 		TransactionIndex: entry.TransactionIndex.String(),
 		TransactionHash:  entry.TransactionHash.String(),
-		Signature:        ethbinding.ABIEventSignature(lp.event),
+		Signature:        eth.API.ABIEventSignature(lp.event),
 		Data:             make(map[string]interface{}),
 		SubID:            lp.subID,
 		LogIndex:         strconv.Itoa(idx),
@@ -127,7 +128,7 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 		var val interface{}
 		if input.Indexed {
 			if topicIdx >= len(entry.Topics) {
-				return klderrors.Errorf(klderrors.EventStreamsLogDecodeInsufficientTopics, subInfo, idx, ethbinding.ABIEventSignature(lp.event))
+				return klderrors.Errorf(klderrors.EventStreamsLogDecodeInsufficientTopics, subInfo, idx, eth.API.ABIEventSignature(lp.event))
 			}
 			topic := entry.Topics[topicIdx]
 			topicIdx++
@@ -161,10 +162,10 @@ func topicToValue(topic *ethbinding.Hash, input *ethbinding.ABIArgument) interfa
 	case ethbinding.IntTy, ethbinding.UintTy, ethbinding.BoolTy:
 		h := ethbinding.HexBigInt{}
 		h.UnmarshalText([]byte(topic.Hex()))
-		bI, _ := ethbinding.ParseBig256(topic.Hex())
+		bI, _ := eth.API.ParseBig256(topic.Hex())
 		if input.Type.T == ethbinding.IntTy {
 			// It will be a two's complement number, so needs to be interpretted
-			bI = ethbinding.S256(bI)
+			bI = eth.API.S256(bI)
 			return bI.String()
 		} else if input.Type.T == ethbinding.BoolTy {
 			return (bI.Uint64() != 0)
@@ -173,7 +174,7 @@ func topicToValue(topic *ethbinding.Hash, input *ethbinding.ABIArgument) interfa
 	case ethbinding.AddressTy:
 		topicBytes := topic.Bytes()
 		addrBytes := topicBytes[len(topicBytes)-20:]
-		return ethbinding.BytesToAddress(addrBytes)
+		return eth.API.BytesToAddress(addrBytes)
 	default:
 		// For all other types it is just a hash of the output for indexing, so we can only
 		// logically return it as a hex string. The Solidity developer has to include

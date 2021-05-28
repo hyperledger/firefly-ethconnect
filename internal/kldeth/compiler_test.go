@@ -18,7 +18,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	"github.com/stretchr/testify/assert"
 )
 

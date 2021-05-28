@@ -19,7 +19,8 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/kldauth"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	log "github.com/sirupsen/logrus"
@@ -46,7 +47,7 @@ func RPCConnect(conf *RPCConnOpts) (RPCClientAll, error) {
 	if u.User != nil {
 		u.User = url.UserPassword(u.User.Username(), "xxxxxx")
 	}
-	rpcClient, err := ethbinding.Dial(conf.URL)
+	rpcClient, err := eth.API.Dial(conf.URL)
 	if err != nil {
 		return nil, klderrors.Errorf(klderrors.RPCConnectFailed, u, err)
 	}

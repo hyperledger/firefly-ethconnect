@@ -18,7 +18,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -60,28 +61,28 @@ const sampleEventABIAllIndexedNoData = `
 func TestTopicToValue(t *testing.T) {
 	assert := assert.New(t)
 
-	h := ethbinding.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcfc7")
-	v := topicToValue(&h, &ethbinding.ABIArgument{Type: ethbinding.ABITypeKnown("int64")})
+	h := eth.API.HexToHash("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcfc7")
+	v := topicToValue(&h, &ethbinding.ABIArgument{Type: eth.API.ABITypeKnown("int64")})
 	assert.Equal("-12345", v)
 
-	h = ethbinding.HexToHash("0x000000000000000000000000000000000000000001d2d490d572353317a01f8d")
-	v = topicToValue(&h, &ethbinding.ABIArgument{Type: ethbinding.ABITypeKnown("uint256")})
+	h = eth.API.HexToHash("0x000000000000000000000000000000000000000001d2d490d572353317a01f8d")
+	v = topicToValue(&h, &ethbinding.ABIArgument{Type: eth.API.ABITypeKnown("uint256")})
 	assert.Equal("564363245346346345353453453", v)
 
-	h = ethbinding.HexToHash("0x0000000000000000000000003924d1d6423f88148a4fcc0417a33b27a61d595f")
-	v = topicToValue(&h, &ethbinding.ABIArgument{Type: ethbinding.ABITypeKnown("address")})
-	assert.Equal(ethbinding.HexToAddress("0x3924d1D6423F88148A4fcc0417A33B27a61d595f"), v)
+	h = eth.API.HexToHash("0x0000000000000000000000003924d1d6423f88148a4fcc0417a33b27a61d595f")
+	v = topicToValue(&h, &ethbinding.ABIArgument{Type: eth.API.ABITypeKnown("address")})
+	assert.Equal(eth.API.HexToAddress("0x3924d1D6423F88148A4fcc0417A33B27a61d595f"), v)
 
-	h = ethbinding.HexToHash("0xdc47fb175244491f21a29733a67d2e07647d59d2f36f2603d339299587182f19")
-	v = topicToValue(&h, &ethbinding.ABIArgument{Type: ethbinding.ABITypeKnown("string")})
+	h = eth.API.HexToHash("0xdc47fb175244491f21a29733a67d2e07647d59d2f36f2603d339299587182f19")
+	v = topicToValue(&h, &ethbinding.ABIArgument{Type: eth.API.ABITypeKnown("string")})
 	assert.Equal("0xdc47fb175244491f21a29733a67d2e07647d59d2f36f2603d339299587182f19", v)
 
-	h = ethbinding.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000")
-	v = topicToValue(&h, &ethbinding.ABIArgument{Type: ethbinding.ABITypeKnown("bool")})
+	h = eth.API.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000")
+	v = topicToValue(&h, &ethbinding.ABIArgument{Type: eth.API.ABITypeKnown("bool")})
 	assert.Equal(false, v)
 
-	h = ethbinding.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001")
-	v = topicToValue(&h, &ethbinding.ABIArgument{Type: ethbinding.ABITypeKnown("bool")})
+	h = eth.API.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000001")
+	v = topicToValue(&h, &ethbinding.ABIArgument{Type: eth.API.ABITypeKnown("bool")})
 	assert.Equal(true, v)
 
 }
@@ -106,7 +107,7 @@ func TestProcessLogEntryNillAndTooFewFields(t *testing.T) {
   }`
 	var marshaling ethbinding.ABIElementMarshaling
 	json.Unmarshal([]byte(eventABI), &marshaling)
-	event, err := ethbinding.ABIElementMarshalingToABIEvent(&marshaling)
+	event, err := eth.API.ABIElementMarshalingToABIEvent(&marshaling)
 	assert.NoError(err)
 
 	lp := &logProcessor{
@@ -140,7 +141,7 @@ func TestProcessLogBadRLPData(t *testing.T) {
 	var marshaling ethbinding.ABIElementMarshaling
 	err := json.Unmarshal([]byte(eventABI), &marshaling)
 	assert.NoError(err)
-	event, _ := ethbinding.ABIElementMarshalingToABIEvent(&marshaling)
+	event, _ := eth.API.ABIElementMarshalingToABIEvent(&marshaling)
 	lp := &logProcessor{
 		event:  event,
 		stream: stream,
@@ -166,7 +167,7 @@ func TestProcessLogSampleEvent(t *testing.T) {
 	}
 	var marshaling ethbinding.ABIElementMarshaling
 	json.Unmarshal([]byte(sampleEventABIAllIndexedNoData), &marshaling)
-	event, _ := ethbinding.ABIElementMarshalingToABIEvent(&marshaling)
+	event, _ := eth.API.ABIElementMarshalingToABIEvent(&marshaling)
 	lp := &logProcessor{
 		event:  event,
 		stream: stream,

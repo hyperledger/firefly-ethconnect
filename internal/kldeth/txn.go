@@ -25,7 +25,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/klderrors"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	"github.com/kaleido-io/ethconnect/internal/kldutils"
@@ -87,7 +88,7 @@ func NewContractDeployTxn(msg *kldmessages.DeployContract, signer TXSigner) (tx 
 
 	// Build a runtime ABI from the serialized one
 	var typedArgs []interface{}
-	abi, err := ethbinding.ABIMarshalingToABIRuntime(compiled.ABI)
+	abi, err := eth.API.ABIMarshalingToABIRuntime(compiled.ABI)
 	if err == nil {
 		// Build correctly typed args for the ethereum call
 		typedArgs, err = tx.generateTypedArgs(msg.Parameters, &abi.Constructor)
@@ -143,7 +144,7 @@ func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr 
 			if !ok {
 				return nil, klderrors.Errorf(klderrors.TransactionCallInvalidBlockNumber)
 			}
-			callOption = ethbinding.EncodeBig(n)
+			callOption = eth.API.EncodeBig(n)
 		}
 	}
 
@@ -253,7 +254,7 @@ func mapOutput(argName, argType string, t *ethbinding.ABIType, rawValue interfac
 		for i := 0; i < s.Len(); i++ {
 			arrayVal[i] = byte(s.Index(i).Uint())
 		}
-		return ethbinding.ToHex(arrayVal), nil
+		return eth.API.HexEncode(arrayVal), nil
 	case ethbinding.SliceTy, ethbinding.ArrayTy:
 		if rawType.Kind() != reflect.Slice {
 			return nil, klderrors.Errorf(klderrors.UnpackOutputsMismatchType, "slice",
@@ -310,14 +311,14 @@ func NewSendTxn(msg *kldmessages.SendTransaction, signer TXSigner) (tx *Txn, err
 		var abiInputs ethbinding.ABIArguments
 		msg.Parameters, err = flattenParams(msg.Parameters, &abiInputs, true)
 		if err == nil {
-			abiMethod := ethbinding.NewMethod(msg.MethodName, msg.MethodName, ethbinding.Function, "payable", false, true, abiInputs, ethbinding.ABIArguments{})
+			abiMethod := eth.API.NewMethod(msg.MethodName, msg.MethodName, ethbinding.Function, "payable", false, true, abiInputs, ethbinding.ABIArguments{})
 			methodABI = &abiMethod
 		}
 		if err != nil {
 			return
 		}
 	} else {
-		methodABI, err = ethbinding.ABIElementMarshalingToABIMethod(msg.Method)
+		methodABI, err = eth.API.ABIElementMarshalingToABIMethod(msg.Method)
 		if err != nil {
 			return
 		}
@@ -426,10 +427,10 @@ func (tx *Txn) genEthTransaction(msgFrom, msgTo string, msgNonce, msgValue, msgG
 		if toAddr, err = kldutils.StrToAddress("to", msgTo); err != nil {
 			return
 		}
-		tx.EthTX = ethbinding.NewTransaction(uint64(nonce), toAddr, value, uint64(gas), gasPrice, data)
+		tx.EthTX = eth.API.NewTransaction(uint64(nonce), toAddr, value, uint64(gas), gasPrice, data)
 		toStr = toAddr.Hex()
 	} else {
-		tx.EthTX = ethbinding.NewContractCreation(uint64(nonce), value, uint64(gas), gasPrice, data)
+		tx.EthTX = eth.API.NewContractCreation(uint64(nonce), value, uint64(gas), gasPrice, data)
 		toStr = ""
 	}
 	etx := tx.EthTX
@@ -587,10 +588,10 @@ func (tx *Txn) generateTypedArg(requiredType *ethbinding.ABIType, param interfac
 		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForString, methodName, path, suppliedType)
 	case ethbinding.AddressTy:
 		if suppliedType.Kind() == reflect.String {
-			if !ethbinding.IsHexAddress(param.(string)) {
+			if !eth.API.IsHexAddress(param.(string)) {
 				return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeAddress, methodName, path, suppliedType)
 			}
-			return ethbinding.HexToAddress(param.(string)), nil
+			return eth.API.HexToAddress(param.(string)), nil
 		}
 		return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForAddress, methodName, path, requiredType, suppliedType)
 	case ethbinding.BytesTy, ethbinding.FixedBytesTy:
@@ -614,7 +615,7 @@ func (tx *Txn) generateTypedArg(requiredType *ethbinding.ABIType, param interfac
 				bSlice[i] = byte(floatVal)
 			}
 		} else if suppliedType.Kind() == reflect.String {
-			bSlice = ethbinding.FromHex(param.(string))
+			bSlice = eth.API.FromHex(param.(string))
 		} else {
 			return nil, klderrors.Errorf(klderrors.TransactionSendInputTypeBadJSONTypeForBytes, methodName, path, requiredType, suppliedType)
 		}
@@ -713,7 +714,7 @@ func flattenParams(origParams []interface{}, inputs *ethbinding.ABIArguments, la
 			params[i] = value
 			// Set the type
 			var ethType ethbinding.ABIType
-			if ethType, err = ethbinding.ABITypeFor(typeStr.(string)); err != nil {
+			if ethType, err = eth.API.ABITypeFor(typeStr.(string)); err != nil {
 				err = klderrors.Errorf(klderrors.TransactionSendInputInLineTypeUnknown, i, typeStr, err)
 				return
 			}

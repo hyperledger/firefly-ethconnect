@@ -31,7 +31,8 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/spf13/cobra"
 
-	"github.com/kaleido-io/ethbinding"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/eth"
 	"github.com/kaleido-io/ethconnect/internal/kldeth"
 	"github.com/kaleido-io/ethconnect/internal/kldmessages"
 	log "github.com/sirupsen/logrus"
@@ -289,15 +290,15 @@ func TestOnDeployContractMessageGoodTxnErrOnReceipt(t *testing.T) {
 }
 
 func goodMessageRPC() *testRPC {
-	blockHash := ethbinding.HexToHash("0x6e710868fd2d0ac1f141ba3f0cd569e38ce1999d8f39518ee7633d2b9a7122af")
+	blockHash := eth.API.HexToHash("0x6e710868fd2d0ac1f141ba3f0cd569e38ce1999d8f39518ee7633d2b9a7122af")
 	blockNumber := ethbinding.HexBigInt(*big.NewInt(12345))
-	contractAddr := ethbinding.HexToAddress("0x28a62Cb478a3c3d4DAAD84F1148ea16cd1A66F37")
+	contractAddr := eth.API.HexToAddress("0x28a62Cb478a3c3d4DAAD84F1148ea16cd1A66F37")
 	cumulativeGasUsed := ethbinding.HexBigInt(*big.NewInt(23456))
-	fromAddr := ethbinding.HexToAddress("0xBa25be62a5C55d4ad1d5520268806A8730A4DE5E")
+	fromAddr := eth.API.HexToAddress("0xBa25be62a5C55d4ad1d5520268806A8730A4DE5E")
 	gasUsed := ethbinding.HexBigInt(*big.NewInt(345678))
 	status := ethbinding.HexBigInt(*big.NewInt(1))
-	toAddr := ethbinding.HexToAddress("0xD7FAC2bCe408Ed7C6ded07a32038b1F79C2b27d3")
-	transactionHash := ethbinding.HexToHash("0xe2215336b09f9b5b82e36e1144ed64f40a42e61b68fdaca82549fd98b8531a89")
+	toAddr := eth.API.HexToAddress("0xD7FAC2bCe408Ed7C6ded07a32038b1F79C2b27d3")
+	transactionHash := eth.API.HexToHash("0xe2215336b09f9b5b82e36e1144ed64f40a42e61b68fdaca82549fd98b8531a89")
 	transactionIndex := ethbinding.HexUint(456789)
 	testRPC := &testRPC{
 		ethSendTransactionResult: transactionHash.String(),
@@ -368,14 +369,14 @@ func TestOnDeployContractMessageGoodTxnMined(t *testing.T) {
 func TestOnDeployContractMessageGoodTxnMinedHDWallet(t *testing.T) {
 	assert := assert.New(t)
 
-	key, _ := ethbinding.GenerateKey()
-	addr := ethbinding.PubkeyToAddress(key.PublicKey)
+	key, _ := eth.API.GenerateKey()
+	addr := eth.API.PubkeyToAddress(key.PublicKey)
 	svr := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		res.WriteHeader(200)
 		res.Write([]byte(`
     {
       "address": "` + addr.String() + `",
-      "privateKey": "` + hex.EncodeToString(ethbinding.FromECDSA(key)) + `"
+      "privateKey": "` + hex.EncodeToString(eth.API.FromECDSA(key)) + `"
     }`))
 	}))
 	defer svr.Close()
@@ -1173,7 +1174,7 @@ func TestOnSendTransactionAddressBook(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
-	assert.EqualError(testTxnContext.errorReplies[0].err, "500 Internal Server Error: ")
+	assert.EqualError(testTxnContext.errorReplies[0].err, "500 Internal Server Error")
 }
 
 func TestOnDeployContractMessageFailAddressLookup(t *testing.T) {
@@ -1263,14 +1264,14 @@ func TestResolveAddressNonHDWallet(t *testing.T) {
 func TestResolveAddressHDWalletSuccess(t *testing.T) {
 	assert := assert.New(t)
 
-	key, _ := ethbinding.GenerateKey()
-	addr := ethbinding.PubkeyToAddress(key.PublicKey)
+	key, _ := eth.API.GenerateKey()
+	addr := eth.API.PubkeyToAddress(key.PublicKey)
 	svr := httptest.NewServer(http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		res.WriteHeader(200)
 		res.Write([]byte(`
     {
       "address": "` + addr.String() + `",
-      "privateKey": "` + hex.EncodeToString(ethbinding.FromECDSA(key)) + `"
+      "privateKey": "` + hex.EncodeToString(eth.API.FromECDSA(key)) + `"
     }`))
 	}))
 	defer svr.Close()

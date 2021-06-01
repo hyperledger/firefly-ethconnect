@@ -17,7 +17,7 @@ coverage.txt: $(GOFILES)
 coverage.html:
 	  $(VGO) tool cover -html=coverage.txt
 mocks:
-	  mockgen github.com/Shopify/sarama Client,ConsumerGroup,ConsumerGroupSession,ConsumerGroupClaim > internal/kldkafka/mock_sarama/sarama_mocks.go
+	  mockgen github.com/Shopify/sarama Client,ConsumerGroup,ConsumerGroupSession,ConsumerGroupClaim > internal/kafka/mock_sarama/sarama_mocks.go
 test: coverage.txt
 coverage: coverage.txt coverage.html
 clean: force

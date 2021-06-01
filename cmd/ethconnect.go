@@ -25,10 +25,10 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/icza/dyno"
-	"github.com/kaleido-io/ethconnect/internal/klderrors"
-	"github.com/kaleido-io/ethconnect/internal/kldkafka"
-	"github.com/kaleido-io/ethconnect/internal/kldrest"
-	"github.com/kaleido-io/ethconnect/internal/kldutils"
+	"github.com/kaleido-io/ethconnect/internal/errors"
+	"github.com/kaleido-io/ethconnect/internal/kafka"
+	"github.com/kaleido-io/ethconnect/internal/rest"
+	"github.com/kaleido-io/ethconnect/internal/utils"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	prefixed "github.com/x-cray/logrus-prefixed-formatter"
@@ -40,10 +40,10 @@ import (
 // to run with a set of individual commands as goroutines
 // (rather than the simple commandline mode that runs a single command)
 type ServerConfig struct {
-	KafkaBridges map[string]*kldkafka.KafkaBridgeConf `json:"kafka"`
-	Webhooks     map[string]*kldrest.RESTGatewayConf  `json:"webhooks"`
-	RESTGateways map[string]*kldrest.RESTGatewayConf  `json:"rest"`
-	Plugins      PluginConfig                         `json:"plugins"`
+	KafkaBridges map[string]*kafka.KafkaBridgeConf `json:"kafka"`
+	Webhooks     map[string]*rest.RESTGatewayConf  `json:"webhooks"`
+	RESTGateways map[string]*rest.RESTGatewayConf  `json:"rest"`
+	Plugins      PluginConfig                      `json:"plugins"`
 }
 
 func initLogging(debugLevel int) {
@@ -108,7 +108,7 @@ func initServer() (serverCmd *cobra.Command) {
 		},
 		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
 			if serverCmdConfig.Filename == "" {
-				err = klderrors.Errorf(klderrors.ConfigNoYAML)
+				err = errors.Errorf(errors.ConfigNoYAML)
 				return
 			}
 			return
@@ -126,14 +126,14 @@ func initServer() (serverCmd *cobra.Command) {
 func readServerConfig() (serverConfig *ServerConfig, err error) {
 	confBytes, err := ioutil.ReadFile(serverCmdConfig.Filename)
 	if err != nil {
-		err = klderrors.Errorf(klderrors.ConfigFileReadFailed, serverCmdConfig.Filename, err)
+		err = errors.Errorf(errors.ConfigFileReadFailed, serverCmdConfig.Filename, err)
 		return
 	}
 	if strings.ToLower(serverCmdConfig.Type) == "yaml" {
 		// Convert to JSON first
 		yamlGenericPayload := make(map[interface{}]interface{})
 		if err = yaml.Unmarshal(confBytes, &yamlGenericPayload); err != nil {
-			err = klderrors.Errorf(klderrors.ConfigYAMLParseFile, serverCmdConfig.Filename, err)
+			err = errors.Errorf(errors.ConfigYAMLParseFile, serverCmdConfig.Filename, err)
 			return
 		}
 		genericPayload := dyno.ConvertMapI2MapS(yamlGenericPayload).(map[string]interface{})
@@ -143,7 +143,7 @@ func readServerConfig() (serverConfig *ServerConfig, err error) {
 	serverConfig = &ServerConfig{}
 	err = json.Unmarshal(confBytes, serverConfig)
 	if err != nil {
-		err = klderrors.Errorf(klderrors.ConfigYAMLPostParseFile, serverCmdConfig.Filename, err)
+		err = errors.Errorf(errors.ConfigYAMLPostParseFile, serverCmdConfig.Filename, err)
 		return
 	}
 
@@ -161,7 +161,7 @@ func startServer() (err error) {
 	}
 
 	if rootConfig.PrintYAML {
-		b, err := kldutils.MarshalToYAML(&serverConfig)
+		b, err := utils.MarshalToYAML(&serverConfig)
 		print("# Full YAML configuration processed from supplied file\n" + string(b))
 		return err
 	}
@@ -169,7 +169,7 @@ func startServer() (err error) {
 	anyRoutineFinished := make(chan bool)
 	var dontPrintYaml = false
 	for name, conf := range serverConfig.KafkaBridges {
-		kafkaBridge := kldkafka.NewKafkaBridge(&dontPrintYaml)
+		kafkaBridge := kafka.NewKafkaBridge(&dontPrintYaml)
 		kafkaBridge.SetConf(conf)
 		if err := kafkaBridge.ValidateConf(); err != nil {
 			return err
@@ -184,13 +184,13 @@ func startServer() (err error) {
 	}
 	// Merge in legacy named 'webbhooks' configs
 	if serverConfig.RESTGateways == nil {
-		serverConfig.RESTGateways = make(map[string]*kldrest.RESTGatewayConf)
+		serverConfig.RESTGateways = make(map[string]*rest.RESTGatewayConf)
 	}
 	for name, conf := range serverConfig.Webhooks {
 		serverConfig.RESTGateways[name] = conf
 	}
 	for name, conf := range serverConfig.RESTGateways {
-		restGateway := kldrest.NewRESTGateway(&dontPrintYaml)
+		restGateway := rest.NewRESTGateway(&dontPrintYaml)
 		restGateway.SetConf(conf)
 		if err := restGateway.ValidateConf(); err != nil {
 			return err
@@ -218,10 +218,10 @@ func init() {
 	serverCmd := initServer()
 	rootCmd.AddCommand(serverCmd)
 
-	kafkaBridge := kldkafka.NewKafkaBridge(&rootConfig.PrintYAML)
+	kafkaBridge := kafka.NewKafkaBridge(&rootConfig.PrintYAML)
 	rootCmd.AddCommand(kafkaBridge.CobraInit())
 
-	restGateway := kldrest.NewRESTGateway(&rootConfig.PrintYAML)
+	restGateway := rest.NewRESTGateway(&rootConfig.PrintYAML)
 	rootCmd.AddCommand(restGateway.CobraInit("webhooks")) // for backwards compatibility
 	rootCmd.AddCommand(restGateway.CobraInit("rest"))
 }

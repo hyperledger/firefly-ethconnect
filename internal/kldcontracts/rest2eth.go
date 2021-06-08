@@ -456,7 +456,7 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 		r.subscribeEvent(res, req, c.addr, c.abiEventElem, c.body)
 	} else if (req.Method == http.MethodPost && !c.abiMethod.IsConstant()) && strings.ToLower(getKLDParam("call", req, true)) != "true" {
 		if c.from == "" {
-			err = klderrors.Errorf(klderrors.RESTGatewayMissingFromAddress)
+			err = klderrors.Errorf(klderrors.RESTGatewayMissingFromAddress, kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly"), kldutils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly"))
 			r.restErrReply(res, req, err, 400)
 		} else if c.isDeploy {
 			r.deployContract(res, req, c.from, c.value, c.abiMethodElem, c.deployMsg, c.msgParams)
@@ -535,7 +535,7 @@ func (r *rest2eth) addPrivateTx(msg *kldmessages.TransactionCommon, req *http.Re
 	}
 	msg.PrivacyGroupID = r.doubleURLDecode(getKLDParam("privacygroupid", req, false))
 	if len(msg.PrivateFor) > 0 && msg.PrivacyGroupID != "" {
-		return klderrors.Errorf(klderrors.RESTGatewayMixedPrivateForAndGroupID)
+		return klderrors.Errorf(klderrors.RESTGatewayMixedPrivateForAndGroupID, kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly"))
 	}
 	return nil
 }

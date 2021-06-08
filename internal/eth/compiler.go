@@ -26,6 +26,7 @@ import (
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	"github.com/kaleido-io/ethconnect/internal/errors"
 	"github.com/kaleido-io/ethconnect/internal/ethbind"
+	"github.com/kaleido-io/ethconnect/internal/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -51,16 +52,10 @@ func getSolcExecutable(requestedVersion string) (string, error) {
 	if solcVerChecker == nil {
 		solcVerChecker, _ = regexp.Compile("^([0-9]+)\\.?([0-9]+)")
 	}
-	if defaultSolc == "" {
-		if envVar := os.Getenv("FLY_SOLC_DEFAULT"); envVar != "" {
-			defaultSolc = envVar
-		} else {
-			defaultSolc = "solc"
-		}
-	}
+	defaultSolc = utils.GetenvOrDefaultLowerCase(utils.GetenvOrDefaultUpperCase("PREFIX_SHORT", "fly")+"_SOLC_DEFAULT", "solc")
 	solc := defaultSolc
 	if v := solcVerChecker.FindStringSubmatch(requestedVersion); v != nil {
-		envVarName := "FLY_SOLC_" + v[1] + "_" + v[2]
+		envVarName := utils.GetenvOrDefaultUpperCase("PREFIX_SHORT", "fly") + "_SOLC_" + v[1] + "_" + v[2]
 		if envVar := os.Getenv(envVarName); envVar != "" {
 			solc = envVar
 		} else {

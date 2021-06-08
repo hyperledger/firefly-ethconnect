@@ -18,6 +18,8 @@ import (
 	"net/http"
 	"net/textproto"
 	"strings"
+
+	"github.com/kaleido-io/ethconnect/internal/utils"
 )
 
 func getQueryParamNoCase(name string, req *http.Request) []string {
@@ -34,7 +36,7 @@ func getQueryParamNoCase(name string, req *http.Request) []string {
 // getFlyParam standardizes how special 'fly' params are specified, in query params, or headers
 func getFlyParam(name string, req *http.Request, isBool bool) string {
 	valStr := ""
-	vs := getQueryParamNoCase("fly-"+name, req)
+	vs := getQueryParamNoCase(utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")+"-"+name, req)
 	if len(vs) > 0 {
 		valStr = vs[0]
 	}
@@ -42,7 +44,7 @@ func getFlyParam(name string, req *http.Request, isBool bool) string {
 		valStr = "true"
 	}
 	if valStr == "" {
-		valStr = req.Header.Get("x-firefly-" + name)
+		valStr = req.Header.Get("x-" + utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly") + "-" + name)
 	}
 	return valStr
 }
@@ -51,9 +53,9 @@ func getFlyParam(name string, req *http.Request, isBool bool) string {
 // allows multiple query params / headers, or a single comma-separated query param / header
 func getFlyParamMulti(name string, req *http.Request) (val []string) {
 	req.ParseForm()
-	val = getQueryParamNoCase("fly-"+name, req)
+	val = getQueryParamNoCase(utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")+"-"+name, req)
 	if len(val) == 0 {
-		val = textproto.MIMEHeader(req.Header)[textproto.CanonicalMIMEHeaderKey("x-firefly-"+name)]
+		val = textproto.MIMEHeader(req.Header)[textproto.CanonicalMIMEHeaderKey("x-"+utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")+"-"+name)]
 	}
 	if val != nil && len(val) == 1 {
 		val = strings.Split(val[0], ",")

@@ -324,18 +324,6 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 			Type: "boolean",
 		},
 	}
-	params["privateFromParam"] = spec.Parameter{
-		ParamProps: spec.ParamProps{
-			Description:     "Private transaction sender (header: x-firefly-privatefrom)",
-			Name:            "fly-privatefrom",
-			In:              "query",
-			Required:        false,
-			AllowEmptyValue: false,
-		},
-		SimpleSchema: spec.SimpleSchema{
-			Type: "string",
-		},
-	}
 	params["privateForParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
 			Description:     fmt.Sprintf("Private transaction sender (header: x-%s-privatefrom)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),

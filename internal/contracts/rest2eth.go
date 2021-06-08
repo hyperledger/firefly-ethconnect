@@ -456,7 +456,7 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 		r.subscribeEvent(res, req, c.addr, c.abiEventElem, c.body)
 	} else if (req.Method == http.MethodPost && !c.abiMethod.IsConstant()) && strings.ToLower(getFlyParam("call", req, true)) != "true" {
 		if c.from == "" {
-			err = ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayMissingFromAddress)
+			err = ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayMissingFromAddress, utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly"), utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly"))
 			r.restErrReply(res, req, err, 400)
 		} else if c.isDeploy {
 			r.deployContract(res, req, c.from, c.value, c.abiMethodElem, c.deployMsg, c.msgParams)
@@ -535,7 +535,7 @@ func (r *rest2eth) addPrivateTx(msg *messages.TransactionCommon, req *http.Reque
 	}
 	msg.PrivacyGroupID = r.doubleURLDecode(getFlyParam("privacygroupid", req, false))
 	if len(msg.PrivateFor) > 0 && msg.PrivacyGroupID != "" {
-		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayMixedPrivateForAndGroupID)
+		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayMixedPrivateForAndGroupID, utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly"))
 	}
 	return nil
 }

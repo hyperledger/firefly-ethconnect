@@ -15,6 +15,7 @@
 package openapi
 
 import (
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	"github.com/go-openapi/jsonreference"
 	"github.com/go-openapi/spec"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/utils"
 	"github.com/tidwall/gjson"
 )
 
@@ -252,8 +254,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	params := make(map[string]spec.Parameter)
 	params["fromParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description: "The 'from' address (header: x-firefly-from)",
-			Name:        "fly-from",
+			Description: fmt.Sprintf("The 'from' address (header: x-%s-from)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:        fmt.Sprintf("%s-from", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:          "query",
 			Required:    false,
 		},
@@ -263,8 +265,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["valueParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Ether value to send with the transaction (header: x-firefly-ethvalue)",
-			Name:            "fly-ethvalue",
+			Description:     fmt.Sprintf("Ether value to send with the transaction (header: x-%s-ethvalue)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-ethvalue", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: true,
@@ -275,8 +277,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["gasParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Gas to send with the transaction (auto-calculated if not set) (header: x-firefly-gas)",
-			Name:            "fly-gas",
+			Description:     fmt.Sprintf("Gas to send with the transaction (auto-calculated if not set) (header: x-%s-gas)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-gas", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: true,
@@ -287,8 +289,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["gaspriceParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Gas Price offered (header: x-firefly-gasprice)",
-			Name:            "fly-gasprice",
+			Description:     fmt.Sprintf("Gas Price offered (header: x-%s-gasprice)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-gasprice", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: true,
@@ -299,8 +301,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["syncParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Block the HTTP request until the tx is mined (does not store the receipt) (header: x-firefly-sync)",
-			Name:            "fly-sync",
+			Description:     fmt.Sprintf("Block the HTTP request until the tx is mined (does not store the receipt) (header: x-%s-sync)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-sync", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: true,
@@ -312,8 +314,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["callParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Perform a read-only call with the same parameters that would be used to invoke, and return result (header: x-firefly-call)",
-			Name:            "fly-call",
+			Description:     fmt.Sprintf("Perform a read-only call with the same parameters that would be used to invoke, and return result (header: x-%s-call)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-call", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: true,
@@ -336,8 +338,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["privateForParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Private transaction recipients (comma separated or multiple params) (header: x-firefly-privatefor)",
-			Name:            "fly-privatefor",
+			Description:     fmt.Sprintf("Private transaction sender (header: x-%s-privatefrom)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-privatefrom", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: false,
@@ -348,8 +350,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["privacyGroupIdParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Private transaction group ID (header: x-firefly-privacyGroupId)",
-			Name:            "fly-privacygroupid",
+			Description:     fmt.Sprintf("Private transaction group ID (header: x-%s-privacyGroupId)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-privacygroupid", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: false,
@@ -360,8 +362,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["registerParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Register the installed contract on a friendly path (overwrites existing) (header: x-firefly-register)",
-			Name:            "fly-register",
+			Description:     fmt.Sprintf("Register the installed contract on a friendly path (overwrites existing) (header: x-%s-register)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-register", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: false,
@@ -372,8 +374,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["blocknumberParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "The target block number for eth_call requests. One of 'earliest/latest/pending', a number or a hex string (header: x-firefly-blocknumber)",
-			Name:            "fly-blocknumber",
+			Description:     fmt.Sprintf("The target block number for eth_call requests. One of 'earliest/latest/pending', a number or a hex string (header: x-%s-blocknumber)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-blocknumber", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: false,

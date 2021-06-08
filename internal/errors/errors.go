@@ -232,11 +232,11 @@ const (
 	// RESTGatewayMissingParameter did not supply a parameter required by the method
 	RESTGatewayMissingParameter = "Parameter '%s' of method '%s' was not specified in body or query parameters"
 	// RESTGatewayMissingFromAddress did not supply a signing address for the transaction
-	RESTGatewayMissingFromAddress = "Please specify a valid address in the 'fly-from' query string parameter or x-firefly-from HTTP header"
+	RESTGatewayMissingFromAddress = "Please specify a valid address in the '%[1]s-from' query string parameter or x-%[2]s-from HTTP header"
 	// RESTGatewaySubscribeMissingStreamParameter missed the ID of the stream when registering
 	RESTGatewaySubscribeMissingStreamParameter = "Must supply a 'stream' parameter in the body or query"
 	// RESTGatewayMixedPrivateForAndGroupID confused privacy group info, using simple/Tessera style as well as pre-defined/Orion style
-	RESTGatewayMixedPrivateForAndGroupID = "fly-privatefor and fly-privacygroupid are mutually exclusive"
+	RESTGatewayMixedPrivateForAndGroupID = "%[1]s-privatefor and %[1]s-privacygroupid are mutually exclusive"
 	// RESTGatewayEventManagerInitFailed constructor failure for event manager
 	RESTGatewayEventManagerInitFailed = "Event-stream subscription manager: %s"
 	// RESTGatewayEventStreamInvalid attempt to create an event stream with invalid parameters

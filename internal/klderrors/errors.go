@@ -17,14 +17,21 @@ package klderrors
 import (
 	"fmt"
 
+	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	"github.com/pkg/errors"
 )
 
 // ErrorID enumerates all errors in ethconnect.
 type ErrorID string
 
-const (
+var (
+	// RESTGatewayMissingFromAddress did not supply a signing address for the transaction
+	RESTGatewayMissingFromAddress = fmt.Sprintf("Please specify a valid address in the '%[1]s-from' query string parameter or %[1]s-kaleido-from HTTP header", kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly"))
+	// RESTGatewayMixedPrivateForAndGroupID confused privacy group info, using simple/Tessera style as well as pre-defined/Orion style
+	RESTGatewayMixedPrivateForAndGroupID = fmt.Sprintf("%[1]s-privatefor and %[1]s-privacygroupid are mutually exclusive", kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly"))
+)
 
+const (
 	// AddressBookLookupBadURL we got back a bad URL from the remote address book after our REST call
 	AddressBookLookupBadURL = "Invalid URL obtained for address"
 	// AddressBookLookupBadHostsFile we have a custom hosts file for DNS resolution, but it cannot be processed
@@ -231,12 +238,8 @@ const (
 	RESTGatewayInvalidFromAddress = "From Address must be a 40 character hex string (0x prefix is optional)"
 	// RESTGatewayMissingParameter did not supply a parameter required by the method
 	RESTGatewayMissingParameter = "Parameter '%s' of method '%s' was not specified in body or query parameters"
-	// RESTGatewayMissingFromAddress did not supply a signing address for the transaction
-	RESTGatewayMissingFromAddress = "Please specify a valid address in the 'kld-from' query string parameter or x-kaleido-from HTTP header"
 	// RESTGatewaySubscribeMissingStreamParameter missed the ID of the stream when registering
 	RESTGatewaySubscribeMissingStreamParameter = "Must supply a 'stream' parameter in the body or query"
-	// RESTGatewayMixedPrivateForAndGroupID confused privacy group info, using simple/Tessera style as well as pre-defined/Orion style
-	RESTGatewayMixedPrivateForAndGroupID = "kld-privatefor and kld-privacygroupid are mutually exclusive"
 	// RESTGatewayEventManagerInitFailed constructor failure for event manager
 	RESTGatewayEventManagerInitFailed = "Event-stream subscription manager: %s"
 	// RESTGatewayEventStreamInvalid attempt to create an event stream with invalid parameters

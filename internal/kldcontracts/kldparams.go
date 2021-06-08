@@ -18,6 +18,8 @@ import (
 	"net/http"
 	"net/textproto"
 	"strings"
+
+	"github.com/kaleido-io/ethconnect/internal/kldutils"
 )
 
 func getQueryParamNoCase(name string, req *http.Request) []string {
@@ -34,7 +36,7 @@ func getQueryParamNoCase(name string, req *http.Request) []string {
 // getKLDParam standardizes how special 'kld' params are specified, in query params, or headers
 func getKLDParam(name string, req *http.Request, isBool bool) string {
 	valStr := ""
-	vs := getQueryParamNoCase("kld-"+name, req)
+	vs := getQueryParamNoCase(kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")+"-"+name, req)
 	if len(vs) > 0 {
 		valStr = vs[0]
 	}
@@ -42,7 +44,7 @@ func getKLDParam(name string, req *http.Request, isBool bool) string {
 		valStr = "true"
 	}
 	if valStr == "" {
-		valStr = req.Header.Get("x-kaleido-" + name)
+		valStr = req.Header.Get("x-" + kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly") + "-" + name)
 	}
 	return valStr
 }
@@ -51,9 +53,9 @@ func getKLDParam(name string, req *http.Request, isBool bool) string {
 // allows multiple query params / headers, or a single comma-separated query param / header
 func getKLDParamMulti(name string, req *http.Request) (val []string) {
 	req.ParseForm()
-	val = getQueryParamNoCase("kld-"+name, req)
+	val = getQueryParamNoCase(kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")+"-"+name, req)
 	if len(val) == 0 {
-		val = textproto.MIMEHeader(req.Header)[textproto.CanonicalMIMEHeaderKey("x-kaleido-"+name)]
+		val = textproto.MIMEHeader(req.Header)[textproto.CanonicalMIMEHeaderKey("x-"+kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")+"-"+name)]
 	}
 	if val != nil && len(val) == 1 {
 		val = strings.Split(val[0], ",")

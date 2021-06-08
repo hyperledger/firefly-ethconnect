@@ -15,6 +15,7 @@
 package kldopenapi
 
 import (
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	"github.com/go-openapi/jsonreference"
 	"github.com/go-openapi/spec"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/kldutils"
 	"github.com/tidwall/gjson"
 )
 
@@ -252,8 +254,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	params := make(map[string]spec.Parameter)
 	params["fromParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description: "The 'from' address (header: x-kaleido-from)",
-			Name:        "kld-from",
+			Description: fmt.Sprintf("The 'from' address (header: x-%s-from)", kldutils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:        fmt.Sprintf("%s-from", kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:          "query",
 			Required:    false,
 		},
@@ -263,8 +265,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["valueParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Ether value to send with the transaction (header: x-kaleido-ethvalue)",
-			Name:            "kld-ethvalue",
+			Description:     fmt.Sprintf("Ether value to send with the transaction (header: x-%s-ethvalue)", kldutils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-ethvalue", kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: true,
@@ -275,8 +277,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["gasParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Gas to send with the transaction (auto-calculated if not set) (header: x-kaleido-gas)",
-			Name:            "kld-gas",
+			Description:     fmt.Sprintf("Gas to send with the transaction (auto-calculated if not set) (header: x-%s-gas)", kldutils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-gas", kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: true,
@@ -287,8 +289,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["gaspriceParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Gas Price offered (header: x-kaleido-gasprice)",
-			Name:            "kld-gasprice",
+			Description:     fmt.Sprintf("Gas Price offered (header: x-%s-gasprice)", kldutils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-gasprice", kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: true,
@@ -299,8 +301,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["syncParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Block the HTTP request until the tx is mined (does not store the receipt) (header: x-kaleido-sync)",
-			Name:            "kld-sync",
+			Description:     fmt.Sprintf("Block the HTTP request until the tx is mined (does not store the receipt) (header: x-%s-sync)", kldutils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-sync", kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: true,
@@ -312,8 +314,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["callParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Perform a read-only call with the same parameters that would be used to invoke, and return result (header: x-kaleido-call)",
-			Name:            "kld-call",
+			Description:     fmt.Sprintf("Perform a read-only call with the same parameters that would be used to invoke, and return result (header: x-%s-call)", kldutils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-call", kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: true,
@@ -324,8 +326,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["privateFromParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Private transaction sender (header: x-kaleido-privatefrom)",
-			Name:            "kld-privatefrom",
+			Description:     fmt.Sprintf("Private transaction sender (header: x-%s-privatefrom)", kldutils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-privatefrom", kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: false,
@@ -336,8 +338,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["privateForParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Private transaction recipients (comma separated or multiple params) (header: x-kaleido-privatefor)",
-			Name:            "kld-privatefor",
+			Description:     fmt.Sprintf("Private transaction recipients (comma separated or multiple params) (header: x-%s-privatefor)", kldutils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-privatefor", kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: false,
@@ -348,8 +350,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["privacyGroupIdParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Private transaction group ID (header: x-kaleido-privacyGroupId)",
-			Name:            "kld-privacygroupid",
+			Description:     fmt.Sprintf("Private transaction group ID (header: x-%s-privacyGroupId)", kldutils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-privacygroupid", kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: false,
@@ -360,8 +362,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["registerParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "Register the installed contract on a friendly path (overwrites existing) (header: x-kaleido-register)",
-			Name:            "kld-register",
+			Description:     fmt.Sprintf("Register the installed contract on a friendly path (overwrites existing) (header: x-%s-register)", kldutils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-register", kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: false,
@@ -372,8 +374,8 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	}
 	params["blocknumberParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
-			Description:     "The target block number for eth_call requests. One of 'earliest/latest/pending', a number or a hex string (header: x-kaleido-blocknumber)",
-			Name:            "kld-blocknumber",
+			Description:     fmt.Sprintf("The target block number for eth_call requests. One of 'earliest/latest/pending', a number or a hex string (header: x-%s-blocknumber)", kldutils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-blocknumber", kldutils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
 			In:              "query",
 			Required:        false,
 			AllowEmptyValue: false,

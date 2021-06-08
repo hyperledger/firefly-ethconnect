@@ -319,7 +319,7 @@ func (g *smartContractGW) swaggerForABI(swaggerGen *kldopenapi.ABI2Swagger, abiI
 		}
 		swagger = swaggerGen.Gen4Instance("/contracts/"+pathSuffix, apiName, &abi.ABI, devdoc)
 		if registerAs != "" {
-			swagger.Info.AddExtension("x-kaleido-registered-name", pathSuffix)
+			swagger.Info.AddExtension("x-"+kldutils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")+"-registered-name", pathSuffix)
 		}
 	} else {
 		swagger = swaggerGen.Gen4Factory("/abis/"+abiID, apiName, factoryOnly, false, &abi.ABI, devdoc)
@@ -327,7 +327,7 @@ func (g *smartContractGW) swaggerForABI(swaggerGen *kldopenapi.ABI2Swagger, abiI
 
 	// Add in an extension to the Swagger that points back at the filename of the deployment info
 	if abiID != "" {
-		swagger.Info.AddExtension("x-kaleido-deployment-id", abiID)
+		swagger.Info.AddExtension("x-"+kldutils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")+"-deployment-id", abiID)
 	}
 
 	return swagger
@@ -507,10 +507,10 @@ func (g *smartContractGW) migrateLegacyContract(address, fileName string, create
 		return
 	}
 	var registeredAs string
-	if ext, exists := swagger.Info.Extensions["x-kaleido-registered-name"]; exists {
+	if ext, exists := swagger.Info.Extensions["x-"+kldutils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")+"-registered-name"]; exists {
 		registeredAs = ext.(string)
 	}
-	if ext, exists := swagger.Info.Extensions["x-kaleido-deployment-id"]; exists {
+	if ext, exists := swagger.Info.Extensions["x-"+kldutils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")+"-deployment-id"]; exists {
 		_, err := g.storeNewContractInfo(address, ext.(string), address, registeredAs)
 		if err != nil {
 			log.Errorf("Failed to write migrated instance file: %s", err)
@@ -522,7 +522,7 @@ func (g *smartContractGW) migrateLegacyContract(address, fileName string, create
 		}
 
 	} else {
-		log.Warnf("Swagger cannot be migrated due to missing 'x-kaleido-deployment-id' extension: %s", fileName)
+		log.Warnf("Swagger cannot be migrated due to missing 'x-%s-deployment-id' extension: %s", kldutils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly"), fileName)
 	}
 
 }

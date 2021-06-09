@@ -16,7 +16,7 @@
       "get": {
         "security": [
           {
-            "KaleidoAppCredential": []
+            "FireflyAppCredential": []
           }
         ],
         "description": "Echo back some types",
@@ -106,7 +106,7 @@
       "post": {
         "security": [
           {
-            "KaleidoAppCredential": []
+            "FireflyAppCredential": []
           }
         ],
         "description": "Echo back some types",
@@ -179,7 +179,7 @@
       "get": {
         "security": [
           {
-            "KaleidoAppCredential": []
+            "FireflyAppCredential": []
           }
         ],
         "description": "Echo back some more types",
@@ -269,7 +269,7 @@
       "post": {
         "security": [
           {
-            "KaleidoAppCredential": []
+            "FireflyAppCredential": []
           }
         ],
         "description": "Echo back some more types",
@@ -342,7 +342,7 @@
       "get": {
         "security": [
           {
-            "KaleidoAppCredential": []
+            "FireflyAppCredential": []
           }
         ],
         "produces": [
@@ -424,7 +424,7 @@
       "post": {
         "security": [
           {
-            "KaleidoAppCredential": []
+            "FireflyAppCredential": []
           }
         ],
         "consumes": [
@@ -758,79 +758,79 @@
   "parameters": {
     "blocknumberParam": {
       "type": "string",
-      "description": "The target block number for eth_call requests. One of 'earliest/latest/pending', a number or a hex string (header: x-kaleido-blocknumber)",
-      "name": "kld-blocknumber",
+      "description": "The target block number for eth_call requests. One of 'earliest/latest/pending', a number or a hex string (header: x-firefly-blocknumber)",
+      "name": "fly-blocknumber",
       "in": "query"
     },
     "callParam": {
       "type": "boolean",
-      "description": "Perform a read-only call with the same parameters that would be used to invoke, and return result (header: x-kaleido-call)",
-      "name": "kld-call",
+      "description": "Perform a read-only call with the same parameters that would be used to invoke, and return result (header: x-firefly-call)",
+      "name": "fly-call",
       "in": "query",
       "allowEmptyValue": true
     },
     "fromParam": {
       "type": "string",
-      "description": "The 'from' address (header: x-kaleido-from)",
-      "name": "kld-from",
+      "description": "The 'from' address (header: x-firefly-from)",
+      "name": "fly-from",
       "in": "query"
     },
     "gasParam": {
       "type": "integer",
-      "description": "Gas to send with the transaction (auto-calculated if not set) (header: x-kaleido-gas)",
-      "name": "kld-gas",
+      "description": "Gas to send with the transaction (auto-calculated if not set) (header: x-firefly-gas)",
+      "name": "fly-gas",
       "in": "query",
       "allowEmptyValue": true
     },
     "gaspriceParam": {
       "type": "integer",
-      "description": "Gas Price offered (header: x-kaleido-gasprice)",
-      "name": "kld-gasprice",
+      "description": "Gas Price offered (header: x-firefly-gasprice)",
+      "name": "fly-gasprice",
       "in": "query",
       "allowEmptyValue": true
     },
     "privacyGroupIdParam": {
       "type": "string",
-      "description": "Private transaction group ID (header: x-kaleido-privacyGroupId)",
-      "name": "kld-privacygroupid",
+      "description": "Private transaction group ID (header: x-firefly-privacyGroupId)",
+      "name": "fly-privacygroupid",
       "in": "query"
     },
     "privateForParam": {
       "type": "string",
-      "description": "Private transaction recipients (comma separated or multiple params) (header: x-kaleido-privatefor)",
-      "name": "kld-privatefor",
+      "description": "Private transaction recipients (comma separated or multiple params) (header: x-firefly-privatefor)",
+      "name": "fly-privatefor",
       "in": "query"
     },
     "privateFromParam": {
       "type": "string",
-      "description": "Private transaction sender (header: x-kaleido-privatefrom)",
-      "name": "kld-privatefrom",
+      "description": "Private transaction sender (header: x-firefly-privatefrom)",
+      "name": "fly-privatefrom",
       "in": "query"
     },
     "registerParam": {
       "type": "string",
-      "description": "Register the installed contract on a friendly path (overwrites existing) (header: x-kaleido-register)",
-      "name": "kld-register",
+      "description": "Register the installed contract on a friendly path (overwrites existing) (header: x-firefly-register)",
+      "name": "fly-register",
       "in": "query"
     },
     "syncParam": {
       "type": "boolean",
       "default": true,
-      "description": "Block the HTTP request until the tx is mined (does not store the receipt) (header: x-kaleido-sync)",
-      "name": "kld-sync",
+      "description": "Block the HTTP request until the tx is mined (does not store the receipt) (header: x-firefly-sync)",
+      "name": "fly-sync",
       "in": "query",
       "allowEmptyValue": true
     },
     "valueParam": {
       "type": "integer",
-      "description": "Ether value to send with the transaction (header: x-kaleido-ethvalue)",
-      "name": "kld-ethvalue",
+      "description": "Ether value to send with the transaction (header: x-firefly-ethvalue)",
+      "name": "fly-ethvalue",
       "in": "query",
       "allowEmptyValue": true
     }
   },
   "securityDefinitions": {
-    "KaleidoAppCredential": {
+    "FireflyAppCredential": {
       "type": "basic"
     }
   }

@@ -119,8 +119,7 @@ solidity: |-
 The JSON/RPC specification exposed natively by Go-ethereum and other Ethereum
 protocol implementations, provides a rich low-level API for interfacing with
 the node. It is usually exposed over HTTP (as well as IPC) so can be connected
-over a network, and have security layered in front of it (as has been done within
-the Kaleido platform).
+over a network, and have security layered in front of it.
 
 However, applications seldom code directly to the JSON/RPC API when deploying
 contracts and sending transactions, because it is:
@@ -145,7 +144,7 @@ So you ask, if the goal is simplicity, why not just put the HTTP API in front of
 
 There are some challenges in Enterprise grade Blockchain solutions (particularly in high throughput permissioned/private chains) that cannot be solved by a stateless HTTP bridging layer alone.
 
-So for Kaleido, we started with a robust Messaging tier and layered the HTTP interface on top.
+So for Firefly, we started with a robust Messaging tier and layered the HTTP interface on top.
 
 ## The asynchronous nature of Ethereum transactions
 
@@ -224,9 +223,9 @@ trivially. Some examples as follows:
 
 ## Why Kafka?
 
-We selected Kafka as the first Messaging platform (and built a multi-tenant secured Kafka transport into the Kaleido platform), because Kafka has message ordering and scale characteristics that are ideally suited to the Ethereum transaction model:
+We selected Kafka as the first Messaging platform, because Kafka has message ordering and scale characteristics that are ideally suited to the Ethereum transaction model:
 - Transactions can be sprayed across partitions, while retaining order of the transactions for a particular sender. Allowing independent and dynamic scaling of the application, kaleido-io/ethconnect bridge and Go-ethereum node components.
-- The modern replication based cloud-native and continuously available architecture is ideal for the Kaleido platform, and is likely to be a good fit for the modern Microservice architectures that are common in Blockchain projects.
+- The modern replication based cloud-native and continuously available architecture is ideal for Hyperledger projects, and is likely to be a good fit for the modern Microservice architectures that are common in Blockchain projects.
 
 ## Topics
 
@@ -316,8 +315,6 @@ blockchain.
 
 ## Running the Bridge
 
-Whether you are running a Kaleido permissioned chain and want to use an instance of the kaleido-io/ethconnect bridge managed externally to the platform, or are using the OSS tool with another Ethereum network, here is how to use it.
-
 ### Installation
 
 Requires [Go 1.11](https://golang.org/dl/) or later to install with `go get`
@@ -347,8 +344,8 @@ You can run a single bridge using simple commandline options, which is ideal for
 
 ```sh
 $ ./ethconnect kafka --help
-Copyright (C) 2018, 2019 Kaleido
-For License details see https://kaleido.io/terms-of-service/
+Copyright (C) 2018,2021 Kaleido
+Licensed under the Apache License, Version 2.0
 Version:  (Build Date: )
 
 Kafka->Ethereum (JSON/RPC) Bridge
@@ -384,8 +381,8 @@ Global Flags:
 
 ```
 $ethconnect webhooks --help
-Copyright (C) 2018, 2019 Kaleido
-For License details see https://kaleido.io/terms-of-service/
+Copyright (C) 2018,2021 Kaleido
+Licensed under the Apache License, Version 2.0
 
 Version:  (Build Date: )
 

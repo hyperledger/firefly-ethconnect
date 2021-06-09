@@ -8,6 +8,6 @@ coverage:
         threshold: 0.1%
   ignore:
   - "internal/eth" # Dynamic dependency library loading - relied on by other tests
-  - "internal/kldkafka/mock_sarama" # Generated mock
-  - "internal/kldauth/kldauthtest" # Mock
+  - "internal/kafka/mock_sarama" # Generated mock
+  - "internal/auth/authtest" # Mock
   - "cmd/plugins.go" # Not testable with UTs

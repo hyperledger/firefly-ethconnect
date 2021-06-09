@@ -1,0 +1,760 @@
+// Copyright 2019 Kaleido
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+//     http://www.apache.org/licenses/LICENSE-2.0
+
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package openapi
+
+import (
+	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
+
+	"github.com/go-openapi/jsonreference"
+	"github.com/go-openapi/spec"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
+	"github.com/kaleido-io/ethconnect/internal/utils"
+	"github.com/tidwall/gjson"
+)
+
+// ABI2SwaggerConf are configuration options
+type ABI2SwaggerConf struct {
+	ExternalHost     string
+	ExternalSchemes  []string
+	ExternalRootPath string
+	BasicAuth        bool
+	OrionPrivateAPI  bool
+}
+
+// ABI2Swagger is the main entry point for conversion
+type ABI2Swagger struct {
+	conf *ABI2SwaggerConf
+}
+
+const (
+	fireflyAppCredential   = "FireflyAppCredential"
+	inputSchemaNameSuffix  = "_inputs"
+	outputSchemaNameSuffix = "_outputs"
+)
+
+// NewABI2Swagger constructor
+func NewABI2Swagger(conf *ABI2SwaggerConf) *ABI2Swagger {
+	c := &ABI2Swagger{
+		conf: conf,
+	}
+	if len(c.conf.ExternalSchemes) == 0 {
+		c.conf.ExternalSchemes = []string{"http", "https"}
+	}
+	return c
+}
+
+// Gen4Instance generates OpenAPI for a single contract instance with an address
+func (c *ABI2Swagger) Gen4Instance(basePath, name string, abi *ethbinding.ABI, devdocsJSON string) *spec.Swagger {
+	return c.convert(basePath, name, abi, devdocsJSON, true, false, false)
+}
+
+// Gen4Factory generates OpenAPI for a contract factory, with a constructor, and child methods on any address
+func (c *ABI2Swagger) Gen4Factory(basePath, name string, factoryOnly, externalRegistry bool, abi *ethbinding.ABI, devdocsJSON string) *spec.Swagger {
+	return c.convert(basePath, name, abi, devdocsJSON, false, factoryOnly, externalRegistry)
+}
+
+// convert does the conversion and fills in the details on the Swagger Schema
+func (c *ABI2Swagger) convert(basePath, name string, abi *ethbinding.ABI, devdocsJSON string, inst, factoryOnly, externalRegistry bool) *spec.Swagger {
+
+	basePath = c.conf.ExternalRootPath + basePath
+
+	devdocs := gjson.Parse(devdocsJSON)
+
+	paths := &spec.Paths{}
+	paths.Paths = make(map[string]spec.PathItem)
+	definitions := make(map[string]spec.Schema)
+	parameters := c.getCommonParameters()
+	c.buildDefinitionsAndPaths(inst, factoryOnly, externalRegistry, abi, definitions, paths.Paths, devdocs)
+	swagger := &spec.Swagger{
+		SwaggerProps: spec.SwaggerProps{
+			Swagger: "2.0",
+			Info: &spec.Info{
+				InfoProps: spec.InfoProps{
+					Version:     "1.0",
+					Title:       name,
+					Description: devdocs.Get("details").String(),
+				},
+			},
+			Host:        c.conf.ExternalHost,
+			Schemes:     c.conf.ExternalSchemes,
+			BasePath:    basePath,
+			Paths:       paths,
+			Definitions: definitions,
+			Parameters:  parameters,
+		},
+	}
+	if c.conf.BasicAuth {
+		swagger.SwaggerProps.SecurityDefinitions = map[string]*spec.SecurityScheme{
+			fireflyAppCredential: {
+				SecuritySchemeProps: spec.SecuritySchemeProps{
+					Type: "basic",
+				},
+			},
+		}
+	}
+	return swagger
+}
+
+func (c *ABI2Swagger) buildDefinitionsAndPaths(inst, factoryOnly, externalRegistry bool, abi *ethbinding.ABI, defs map[string]spec.Schema, paths map[string]spec.PathItem, devdocs gjson.Result) {
+	methodsDocs := devdocs.Get("methods")
+	if !inst {
+		c.buildMethodDefinitionsAndPath(inst, defs, paths, "constructor", abi.Constructor, methodsDocs)
+	}
+	if !factoryOnly {
+		if !inst && !externalRegistry {
+			c.addRegisterPath(paths)
+		}
+		for _, method := range abi.Methods {
+			c.buildMethodDefinitionsAndPath(inst, defs, paths, method.Name, method, methodsDocs)
+		}
+		for _, event := range abi.Events {
+			c.buildEventDefinitionsAndPath(inst, defs, paths, event.Name, event, devdocs.Get("events"))
+			if !inst {
+				// We add the event again at the top level (as if it were an instance) on non-instance
+				// swagger definitions, so you can subscribe to all events of this type on all instances
+				c.buildEventDefinitionsAndPath(true, defs, paths, event.Name, event, devdocs.Get("events"))
+			}
+		}
+	}
+	errSchema := spec.Schema{
+		SchemaProps: spec.SchemaProps{
+			Properties: make(map[string]spec.Schema),
+		},
+	}
+	errSchema.Properties["error"] = spec.Schema{
+		SchemaProps: spec.SchemaProps{
+			Description: "Error message",
+			Type:        []string{"string"},
+		},
+	}
+	defs["error"] = errSchema
+}
+
+func (c *ABI2Swagger) getDeclaredIDDetails(inst bool, declaredID string, inputs ethbinding.ABIArguments, devdocs gjson.Result) (bool, string, string, gjson.Result) {
+	sig := declaredID
+	constructor := (declaredID == "constructor")
+	path := "/"
+	if !constructor {
+		if inst {
+			path = "/" + declaredID
+		} else {
+			path = "/{address}/" + declaredID
+		}
+	}
+	sig += "("
+	for i, input := range inputs {
+		if i > 0 {
+			sig += ","
+		}
+		sig += input.Type.String()
+	}
+	sig += ")"
+	search := strings.ReplaceAll(sig, "(", "\\(")
+	search = strings.ReplaceAll(search, ")", "\\)")
+	methodDocs := devdocs.Get(search)
+	return constructor, sig, path, methodDocs
+}
+
+func (c *ABI2Swagger) buildMethodDefinitionsAndPath(inst bool, defs map[string]spec.Schema, paths map[string]spec.PathItem, name string, method ethbinding.ABIMethod, devdocs gjson.Result) {
+
+	constructor, methodSig, path, methodDocs := c.getDeclaredIDDetails(inst, name, method.Inputs, devdocs)
+	if method.IsConstant() {
+		methodSig += " [read only]"
+	}
+
+	inputSchema := url.QueryEscape(name) + inputSchemaNameSuffix
+	outputSchema := url.QueryEscape(name) + outputSchemaNameSuffix
+	c.buildArgumentsDefinition(defs, outputSchema, method.Outputs, methodDocs)
+	pathItem := spec.PathItem{}
+	if !constructor {
+		pathItem.Get = c.buildGETPath(outputSchema, inst, name, method, methodSig, methodDocs)
+	}
+	c.buildArgumentsDefinition(defs, inputSchema, method.Inputs, methodDocs)
+	pathItem.Post = c.buildPOSTPath(inputSchema, outputSchema, inst, constructor, name, method, methodSig, methodDocs)
+	paths[path] = pathItem
+
+	return
+}
+
+func (c *ABI2Swagger) addRegisterPath(paths map[string]spec.PathItem) {
+	pathItem := spec.PathItem{}
+	registerParam, _ := spec.NewRef("#/parameters/registerParam")
+	pathItem.Post = &spec.Operation{
+		OperationProps: spec.OperationProps{
+			ID:          "registerAddress",
+			Summary:     "Register an existing contract address",
+			Description: "Add a friendly path for an instance of this contract already deployed to the chain",
+			Consumes:    []string{"application/json", "application/x-yaml"},
+			Produces:    []string{"application/json"},
+			Responses: &spec.Responses{
+				ResponsesProps: spec.ResponsesProps{
+					StatusCodeResponses: map[int]spec.Response{
+						201: {
+							ResponseProps: spec.ResponseProps{
+								Description: "Successfully registered",
+							},
+						},
+					},
+				},
+			},
+			Parameters: []spec.Parameter{
+				c.getAddressParam(),
+				{
+					Refable: spec.Refable{
+						Ref: registerParam,
+					},
+				},
+				{
+					ParamProps: spec.ParamProps{
+						Name:     "body",
+						In:       "body",
+						Required: true,
+						Schema: &spec.Schema{
+							SchemaProps: spec.SchemaProps{
+								Description: "Registration request",
+								Type:        []string{"object"},
+								Properties:  map[string]spec.Schema{ /* currently no properties - more metadata and version control TBD */ },
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	paths["/{address}"] = pathItem
+}
+
+func (c *ABI2Swagger) buildEventDefinitionsAndPath(inst bool, defs map[string]spec.Schema, paths map[string]spec.PathItem, name string, event ethbinding.ABIEvent, devdocs gjson.Result) {
+	_, eventSig, path, eventDocs := c.getDeclaredIDDetails(inst, event.Name, event.Inputs, devdocs)
+	eventSig += " [event]"
+	pathItem := spec.PathItem{}
+	eventSchema := url.QueryEscape(name) + "_event"
+	c.buildArgumentsDefinition(defs, eventSchema, event.Inputs, eventDocs)
+	pathItem.Post = c.buildEventPOSTPath(eventSchema, inst, event, eventSig, eventDocs)
+	paths[path+"/subscribe"] = pathItem
+	return
+}
+
+func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
+	params := make(map[string]spec.Parameter)
+	params["fromParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description: fmt.Sprintf("The 'from' address (header: x-%s-from)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:        fmt.Sprintf("%s-from", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
+			In:          "query",
+			Required:    false,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "string",
+		},
+	}
+	params["valueParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description:     fmt.Sprintf("Ether value to send with the transaction (header: x-%s-ethvalue)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-ethvalue", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
+			In:              "query",
+			Required:        false,
+			AllowEmptyValue: true,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "integer",
+		},
+	}
+	params["gasParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description:     fmt.Sprintf("Gas to send with the transaction (auto-calculated if not set) (header: x-%s-gas)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-gas", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
+			In:              "query",
+			Required:        false,
+			AllowEmptyValue: true,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "integer",
+		},
+	}
+	params["gaspriceParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description:     fmt.Sprintf("Gas Price offered (header: x-%s-gasprice)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-gasprice", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
+			In:              "query",
+			Required:        false,
+			AllowEmptyValue: true,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "integer",
+		},
+	}
+	params["syncParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description:     fmt.Sprintf("Block the HTTP request until the tx is mined (does not store the receipt) (header: x-%s-sync)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-sync", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
+			In:              "query",
+			Required:        false,
+			AllowEmptyValue: true,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type:    "boolean",
+			Default: true,
+		},
+	}
+	params["callParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description:     fmt.Sprintf("Perform a read-only call with the same parameters that would be used to invoke, and return result (header: x-%s-call)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-call", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
+			In:              "query",
+			Required:        false,
+			AllowEmptyValue: true,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "boolean",
+		},
+	}
+	params["privateFromParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description:     fmt.Sprintf("Private transaction sender (header: x-%s-privatefrom)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-privatefrom", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
+			In:              "query",
+			Required:        false,
+			AllowEmptyValue: false,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "string",
+		},
+	}
+	params["privateForParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description:     fmt.Sprintf("Private transaction recipients (comma separated or multiple params) (header: x-%s-privatefor)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-privatefor", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
+			In:              "query",
+			Required:        false,
+			AllowEmptyValue: false,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "string",
+		},
+	}
+	params["privacyGroupIdParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description:     fmt.Sprintf("Private transaction group ID (header: x-%s-privacyGroupId)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-privacygroupid", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
+			In:              "query",
+			Required:        false,
+			AllowEmptyValue: false,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "string",
+		},
+	}
+	params["registerParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description:     fmt.Sprintf("Register the installed contract on a friendly path (overwrites existing) (header: x-%s-register)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-register", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
+			In:              "query",
+			Required:        false,
+			AllowEmptyValue: false,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "string",
+		},
+	}
+	params["blocknumberParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description:     fmt.Sprintf("The target block number for eth_call requests. One of 'earliest/latest/pending', a number or a hex string (header: x-%s-blocknumber)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-blocknumber", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
+			In:              "query",
+			Required:        false,
+			AllowEmptyValue: false,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "string",
+		},
+	}
+	return params
+}
+
+func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstructor bool) {
+
+	if c.conf.BasicAuth {
+		op.Security = append(op.Security, map[string][]string{fireflyAppCredential: {}})
+	}
+
+	fromParam, _ := spec.NewRef("#/parameters/fromParam")
+	valueParam, _ := spec.NewRef("#/parameters/valueParam")
+	gasParam, _ := spec.NewRef("#/parameters/gasParam")
+	gaspriceParam, _ := spec.NewRef("#/parameters/gaspriceParam")
+	syncParam, _ := spec.NewRef("#/parameters/syncParam")
+	callParam, _ := spec.NewRef("#/parameters/callParam")
+	privateFromParam, _ := spec.NewRef("#/parameters/privateFromParam")
+	privateForParam, _ := spec.NewRef("#/parameters/privateForParam")
+	privacyGroupIDParam, _ := spec.NewRef("#/parameters/privacyGroupIdParam")
+	registerParam, _ := spec.NewRef("#/parameters/registerParam")
+	blocknumberParam, _ := spec.NewRef("#/parameters/blocknumberParam")
+	op.Parameters = append(op.Parameters, spec.Parameter{
+		Refable: spec.Refable{
+			Ref: fromParam,
+		},
+	})
+	op.Parameters = append(op.Parameters, spec.Parameter{
+		Refable: spec.Refable{
+			Ref: valueParam,
+		},
+	})
+	op.Parameters = append(op.Parameters, spec.Parameter{
+		Refable: spec.Refable{
+			Ref: gasParam,
+		},
+	})
+	op.Parameters = append(op.Parameters, spec.Parameter{
+		Refable: spec.Refable{
+			Ref: gaspriceParam,
+		},
+	})
+	if isPOST {
+		op.Parameters = append(op.Parameters, spec.Parameter{
+			Refable: spec.Refable{
+				Ref: syncParam,
+			},
+		})
+		op.Parameters = append(op.Parameters, spec.Parameter{
+			Refable: spec.Refable{
+				Ref: callParam,
+			},
+		})
+		op.Parameters = append(op.Parameters, spec.Parameter{
+			Refable: spec.Refable{
+				Ref: privateFromParam,
+			},
+		})
+		op.Parameters = append(op.Parameters, spec.Parameter{
+			Refable: spec.Refable{
+				Ref: privateForParam,
+			},
+		})
+		op.Parameters = append(op.Parameters, spec.Parameter{
+			Refable: spec.Refable{
+				Ref: blocknumberParam,
+			},
+		})
+		if c.conf.OrionPrivateAPI {
+			op.Parameters = append(op.Parameters, spec.Parameter{
+				Refable: spec.Refable{
+					Ref: privacyGroupIDParam,
+				},
+			})
+		}
+	}
+	if isConstructor {
+		op.Parameters = append(op.Parameters, spec.Parameter{
+			Refable: spec.Refable{
+				Ref: registerParam,
+			},
+		})
+	}
+}
+
+func (c *ABI2Swagger) getAddressParam() spec.Parameter {
+	return spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description: "The contract address",
+			Name:        "address",
+			In:          "path",
+			Required:    true,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "string",
+		},
+	}
+}
+
+func (c *ABI2Swagger) buildGETPath(outputSchema string, inst bool, name string, method ethbinding.ABIMethod, methodSig string, devdocs gjson.Result) *spec.Operation {
+	parameters := make([]spec.Parameter, 0, len(method.Inputs)+1)
+	if !inst {
+		parameters = append(parameters, c.getAddressParam())
+	}
+	for idx, input := range method.Inputs {
+		desc := devdocs.Get("params." + input.Name).String()
+		varDetails := desc
+		if varDetails != "" {
+			varDetails = ": " + desc
+		}
+		// If the ABI input has one or more un-named parameters, assign default names for each function parameter.
+		// Unnamed Input params should be named: input, input1, input2...
+		if input.Name == "" {
+			input.Name = "input"
+			if idx != 0 {
+				input.Name += strconv.Itoa(idx)
+			}
+		}
+		parameters = append(parameters, spec.Parameter{
+			ParamProps: spec.ParamProps{
+				Name:        input.Name,
+				In:          "query",
+				Description: input.Type.String() + varDetails,
+				Required:    true,
+			},
+			SimpleSchema: spec.SimpleSchema{
+				Type: "string",
+			},
+		})
+	}
+	op := &spec.Operation{
+		OperationProps: spec.OperationProps{
+			ID:          name + "_get",
+			Summary:     methodSig,
+			Description: devdocs.Get("details").String(),
+			Produces:    []string{"application/json"},
+			Responses:   c.buildResponses(outputSchema, devdocs),
+			Parameters:  parameters,
+		},
+	}
+	c.addCommonParams(op, false, false)
+	return op
+}
+
+func (c *ABI2Swagger) buildPOSTPath(inputSchema, outputSchema string, inst, constructor bool, name string, method ethbinding.ABIMethod, methodSig string, devdocs gjson.Result) *spec.Operation {
+	parameters := make([]spec.Parameter, 0, 2)
+	if !inst && !constructor {
+		parameters = append(parameters, spec.Parameter{
+			ParamProps: spec.ParamProps{
+				Description: "The contract address",
+				Name:        "address",
+				In:          "path",
+				Required:    true,
+			},
+			SimpleSchema: spec.SimpleSchema{
+				Type: "string",
+			},
+		})
+	}
+	ref, _ := jsonreference.New("#/definitions/" + inputSchema)
+	parameters = append(parameters, spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Name:     "body",
+			In:       "body",
+			Required: true,
+			Schema: &spec.Schema{
+				SchemaProps: spec.SchemaProps{
+					Ref: spec.Ref{
+						Ref: ref,
+					},
+				},
+			},
+		},
+	})
+	op := &spec.Operation{
+		OperationProps: spec.OperationProps{
+			ID:          name + "_post",
+			Summary:     methodSig,
+			Description: devdocs.Get("details").String(),
+			Consumes:    []string{"application/json", "application/x-yaml"},
+			Produces:    []string{"application/json"},
+			Responses:   c.buildResponses(outputSchema, devdocs),
+			Parameters:  parameters,
+		},
+	}
+	c.addCommonParams(op, true, constructor)
+	return op
+}
+
+func (c *ABI2Swagger) buildEventPOSTPath(eventSchema string, inst bool, event ethbinding.ABIEvent, eventSig string, devdocs gjson.Result) *spec.Operation {
+	parameters := make([]spec.Parameter, 0, 2)
+	id := event.Name + "_subscribe"
+	if !inst {
+		parameters = append(parameters, spec.Parameter{
+			ParamProps: spec.ParamProps{
+				Description: "The contract address",
+				Name:        "address",
+				In:          "path",
+				Required:    true,
+			},
+			SimpleSchema: spec.SimpleSchema{
+				Type: "string",
+			},
+		})
+		id = event.Name + "_subscribe_all"
+	}
+	parameters = append(parameters, spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Name:        "body",
+			In:          "body",
+			Description: "Subscription configuration for the REST Gateway (response schema will be delivered async over the configured stream)",
+			Required:    true,
+			Schema: &spec.Schema{
+				SchemaProps: spec.SchemaProps{
+					Properties: map[string]spec.Schema{
+						"stream": {
+							SchemaProps: spec.SchemaProps{
+								Description: "The ID of an event stream already configured in the REST Gateway",
+								Type:        []string{"string"},
+							},
+						},
+						"fromBlock": {
+							SchemaProps: spec.SchemaProps{
+								Description: "The block number to start the subscription from",
+								Type:        []string{"string"},
+								Default:     "latest",
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	op := &spec.Operation{
+		OperationProps: spec.OperationProps{
+			ID:          id,
+			Summary:     eventSig,
+			Description: devdocs.Get("details").String(),
+			Consumes:    []string{"application/json", "application/x-yaml"},
+			Produces:    []string{"application/json"},
+			Responses:   c.buildResponses(eventSchema, devdocs),
+			Parameters:  parameters,
+		},
+	}
+	return op
+}
+
+func (c *ABI2Swagger) buildResponses(outputSchema string, devdocs gjson.Result) *spec.Responses {
+	errRef, _ := jsonreference.New("#/definitions/error")
+	errorResponse := spec.Response{
+		ResponseProps: spec.ResponseProps{
+			Description: "error",
+			Schema: &spec.Schema{
+				SchemaProps: spec.SchemaProps{
+					Ref: spec.Ref{
+						Ref: errRef,
+					},
+				},
+			},
+		},
+	}
+	outputRef, _ := jsonreference.New("#/definitions/" + outputSchema)
+	desc := devdocs.Get("return").String()
+	if desc == "" {
+		desc = "successful response"
+	}
+	return &spec.Responses{
+		ResponsesProps: spec.ResponsesProps{
+			StatusCodeResponses: map[int]spec.Response{
+				200: {
+					ResponseProps: spec.ResponseProps{
+						Description: desc,
+						Schema: &spec.Schema{
+							SchemaProps: spec.SchemaProps{
+								Ref: spec.Ref{
+									Ref: outputRef,
+								},
+							},
+						},
+					},
+				},
+			},
+			Default: &errorResponse,
+		},
+	}
+}
+
+func (c *ABI2Swagger) buildArgumentsDefinition(defs map[string]spec.Schema, name string, args ethbinding.ABIArguments, devdocs gjson.Result) {
+
+	s := spec.Schema{
+		SchemaProps: spec.SchemaProps{
+			Type:       []string{"object"},
+			Properties: make(map[string]spec.Schema),
+		},
+	}
+	defs[name] = s
+	argType := ""
+	if strings.HasSuffix(name, inputSchemaNameSuffix) {
+		argType = "input"
+	} else if strings.HasSuffix(name, outputSchemaNameSuffix) {
+		argType = "output"
+	}
+
+	for idx, arg := range args {
+		argName := arg.Name
+		// If the ABI input has one or more un-named parameters, set default names for such function parameters.
+		// Unnamed Input params should be named: input, input1, input2...
+		if argName == "" {
+			argName = argType
+			if idx != 0 {
+				argName += strconv.Itoa(idx)
+			}
+		}
+		argDocs := devdocs.Get("params." + arg.Name)
+		s.Properties[argName] = c.mapArgToSchema(arg, argDocs.String())
+	}
+
+}
+
+func (c *ABI2Swagger) mapArgToSchema(arg ethbinding.ABIArgument, desc string) spec.Schema {
+
+	varDetails := desc
+	if varDetails != "" {
+		varDetails = ": " + desc
+	}
+
+	s := spec.Schema{
+		SchemaProps: spec.SchemaProps{
+			Description: arg.Type.String() + varDetails,
+			Type:        []string{"string"},
+		},
+	}
+	c.mapTypeToSchema(&s, arg.Type)
+
+	return s
+}
+
+func (c *ABI2Swagger) mapTypeToSchema(s *spec.Schema, t ethbinding.ABIType) {
+
+	switch t.T {
+	case ethbinding.IntTy, ethbinding.UintTy:
+		s.Type = []string{"string"}
+		s.Pattern = "^-?[0-9]+$"
+		// We would like to indicate we support numbers in this field, but neither
+		// type arrays or oneOf seem to work with the tooling
+		break
+	case ethbinding.BoolTy:
+		s.Type = []string{"boolean"}
+		break
+	case ethbinding.AddressTy:
+		s.Type = []string{"string"}
+		s.Pattern = "^(0x)?[a-fA-F0-9]{40}$"
+		break
+	case ethbinding.StringTy:
+		s.Type = []string{"string"}
+		break
+	case ethbinding.BytesTy:
+		s.Type = []string{"string"}
+		s.Pattern = "^(0x)?[a-fA-F0-9]+$"
+		break
+	case ethbinding.FixedBytesTy:
+		s.Type = []string{"string"}
+		s.Pattern = "^(0x)?[a-fA-F0-9]{" + strconv.Itoa(t.Size*2) + "}$"
+		break
+	case ethbinding.SliceTy, ethbinding.ArrayTy:
+		s.Type = []string{"array"}
+		s.Items = &spec.SchemaOrArray{}
+		s.Items.Schema = &spec.Schema{}
+		c.mapTypeToSchema(s.Items.Schema, *t.Elem)
+		break
+	case ethbinding.TupleTy:
+		s.Type = []string{"object"}
+		break
+	}
+
+}

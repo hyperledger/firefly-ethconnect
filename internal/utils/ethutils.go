@@ -1,4 +1,4 @@
-// Copyright 2018, 2019 Kaleido
+// Copyright 2018, 2021 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import (
 
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	"github.com/kaleido-io/ethconnect/internal/errors"
-	"github.com/kaleido-io/ethconnect/internal/ethbind" 
+	"github.com/kaleido-io/ethconnect/internal/ethbind"
 )
 
 // StrToAddress is a helper to parse eth addresses with useful errors

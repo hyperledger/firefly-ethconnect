@@ -20,8 +20,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
 	"github.com/icza/dyno"
-	"github.com/kaleido-io/ethconnect/internal/errors"
 	log "github.com/sirupsen/logrus"
 	yaml "gopkg.in/yaml.v2"
 )

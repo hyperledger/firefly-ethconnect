@@ -20,10 +20,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
-	"github.com/kaleido-io/ethconnect/internal/errors"
-	"github.com/kaleido-io/ethconnect/internal/eth"
-	"github.com/kaleido-io/ethconnect/internal/ethbind"
 	log "github.com/sirupsen/logrus"
 )
 

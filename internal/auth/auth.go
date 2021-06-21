@@ -17,8 +17,8 @@ package auth
 import (
 	"context"
 
-	"github.com/kaleido-io/ethconnect/internal/errors"
-	"github.com/kaleido-io/ethconnect/pkg/plugins"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger-labs/firefly-ethconnect/pkg/plugins"
 )
 
 type ContextKey int

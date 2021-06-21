@@ -18,7 +18,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/kaleido-io/ethconnect/internal/auth/authtest"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth/authtest"
 	"github.com/stretchr/testify/assert"
 )
 

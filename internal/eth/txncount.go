@@ -20,8 +20,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
-	"github.com/kaleido-io/ethconnect/internal/errors"
 )
 
 // GetOrionTXCount uses the special Pantheon/Orion interface to check the

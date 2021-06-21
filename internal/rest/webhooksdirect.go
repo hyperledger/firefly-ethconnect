@@ -21,11 +21,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kaleido-io/ethconnect/internal/errors"
-	"github.com/kaleido-io/ethconnect/internal/eth"
-	"github.com/kaleido-io/ethconnect/internal/messages"
-	"github.com/kaleido-io/ethconnect/internal/tx"
-	"github.com/kaleido-io/ethconnect/internal/utils"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/tx"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
 	log "github.com/sirupsen/logrus"
 )
 

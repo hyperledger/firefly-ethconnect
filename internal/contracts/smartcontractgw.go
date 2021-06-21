@@ -41,17 +41,17 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth"
+	ethconnecterrors "github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/events"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/openapi"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/tx"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/ws"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
-	"github.com/kaleido-io/ethconnect/internal/auth"
-	ethconnecterrors "github.com/kaleido-io/ethconnect/internal/errors"
-	"github.com/kaleido-io/ethconnect/internal/eth"
-	"github.com/kaleido-io/ethconnect/internal/ethbind"
-	"github.com/kaleido-io/ethconnect/internal/events"
-	"github.com/kaleido-io/ethconnect/internal/messages"
-	"github.com/kaleido-io/ethconnect/internal/openapi"
-	"github.com/kaleido-io/ethconnect/internal/tx"
-	"github.com/kaleido-io/ethconnect/internal/utils"
-	"github.com/kaleido-io/ethconnect/internal/ws"
 )
 
 const (

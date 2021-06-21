@@ -22,7 +22,7 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/golang/mock/gomock"
-	"github.com/kaleido-io/ethconnect/internal/kafka/mock_sarama"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/kafka/mock_sarama"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

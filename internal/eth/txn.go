@@ -25,11 +25,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
-	"github.com/kaleido-io/ethconnect/internal/errors"
-	"github.com/kaleido-io/ethconnect/internal/ethbind"
-	"github.com/kaleido-io/ethconnect/internal/messages"
-	"github.com/kaleido-io/ethconnect/internal/utils"
 
 	log "github.com/sirupsen/logrus"
 )

@@ -20,11 +20,11 @@ import (
 	"net/http"
 	"reflect"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/contracts"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
 	"github.com/julienschmidt/httprouter"
-	"github.com/kaleido-io/ethconnect/internal/contracts"
-	"github.com/kaleido-io/ethconnect/internal/errors"
-	"github.com/kaleido-io/ethconnect/internal/messages"
-	"github.com/kaleido-io/ethconnect/internal/utils"
 	log "github.com/sirupsen/logrus"
 )
 

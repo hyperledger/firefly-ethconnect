@@ -23,9 +23,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
-	"github.com/kaleido-io/ethconnect/internal/ethbind"
-	"github.com/kaleido-io/ethconnect/internal/messages"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

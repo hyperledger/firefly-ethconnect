@@ -24,12 +24,12 @@ import (
 
 	"net/http/httptest"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth/authtest"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
 	"github.com/julienschmidt/httprouter"
-	"github.com/kaleido-io/ethconnect/internal/auth"
-	"github.com/kaleido-io/ethconnect/internal/auth/authtest"
-	"github.com/kaleido-io/ethconnect/internal/ethbind"
-	"github.com/kaleido-io/ethconnect/internal/messages"
-	"github.com/kaleido-io/ethconnect/internal/utils"
 )
 
 type mockReceiptErrs struct {

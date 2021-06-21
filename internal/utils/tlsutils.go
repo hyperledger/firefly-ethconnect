@@ -19,7 +19,7 @@ import (
 	"crypto/x509"
 	"io/ioutil"
 
-	"github.com/kaleido-io/ethconnect/internal/errors"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
 	log "github.com/sirupsen/logrus"
 )
 

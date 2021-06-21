@@ -17,9 +17,9 @@ package utils
 import (
 	"strings"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
-	"github.com/kaleido-io/ethconnect/internal/errors"
-	"github.com/kaleido-io/ethconnect/internal/ethbind"
 )
 
 // StrToAddress is a helper to parse eth addresses with useful errors

@@ -22,8 +22,8 @@ import (
 
 	"github.com/go-openapi/jsonreference"
 	"github.com/go-openapi/spec"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
-	"github.com/kaleido-io/ethconnect/internal/utils"
 	"github.com/tidwall/gjson"
 )
 

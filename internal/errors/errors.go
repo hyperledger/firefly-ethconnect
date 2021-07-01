@@ -185,6 +185,8 @@ const (
 	ReceiptStoreMongoDBConnect = "Unable to connect to MongoDB: %s"
 	// ReceiptStoreMongoDBIndex couldn't create MongoDB index
 	ReceiptStoreMongoDBIndex = "Unable to create index: %s"
+	// ReceiptStoreLevelDBConnect couldn't open file for the level DB
+	ReceiptStoreLevelDBConnect = "Unable to open LevelDB: %s"
 	// ReceiptStoreSerializeResponse problem sending a receipt stored back over the REST API
 	ReceiptStoreSerializeResponse = "Error serializing response"
 	// ReceiptStoreInvalidRequestID bad ID query

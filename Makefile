@@ -12,6 +12,9 @@ build: ethbinding.so
 		$(VGO) build -ldflags "-X main.buildDate=`date -u +\"%Y-%m-%dT%H:%M:%SZ\"` -X main.buildVersion=$(BUILD_VERSION)" -tags=prod -o $(BINARY_NAME) -v
 ethbinding.so:	  
 	  go build -buildmode=plugin github.com/kaleido-io/ethbinding
+# if using delv or vscode to debug, use the command below, otherwise you will get error:
+# "plugin was built with a different version of package runtime/internal/sys"
+#	  go build -buildmode=plugin -gcflags='all=-N -l' github.com/kaleido-io/ethbinding
 coverage.txt: $(GOFILES)
 		$(VGO) test  ./... -cover -coverprofile=coverage.txt -covermode=atomic -timeout 30s
 coverage.html:

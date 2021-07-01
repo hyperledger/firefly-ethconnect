@@ -64,10 +64,17 @@ type MongoDBReceiptStoreConf struct {
 	ConnectTimeoutMS int    `json:"connectTimeout"`
 }
 
+// LevelDBReceiptStoreConf is the configuration for a LevelDB receipt store
+type LevelDBReceiptStoreConf struct {
+	ReceiptStoreConf
+	Path string `json:"path"`
+}
+
 // RESTGatewayConf defines the YAML config structure for a webhooks bridge instance
 type RESTGatewayConf struct {
 	Kafka    kafka.KafkaCommonConf              `json:"kafka"`
 	MongoDB  MongoDBReceiptStoreConf            `json:"mongodb"`
+	LevelDB  LevelDBReceiptStoreConf            `json:"leveldb"`
 	MemStore ReceiptStoreConf                   `json:"memstore"`
 	OpenAPI  contracts.SmartContractGatewayConf `json:"openapi"`
 	HTTP     struct {
@@ -275,6 +282,14 @@ func (g *RESTGateway) Start() (err error) {
 		if err = mongoStore.connect(); err != nil {
 			return
 		}
+	} else if g.conf.LevelDB.Path != "" {
+		receiptStoreConf = &g.conf.LevelDB.ReceiptStoreConf
+		leveldbStore, errResult := newLevelDBReceipts(&g.conf.LevelDB)
+		if errResult != nil {
+			err = errResult
+			return
+		}
+		receiptStorePersistence = leveldbStore
 	} else {
 		receiptStoreConf = &g.conf.MemStore
 		memStore := newMemoryReceipts(&g.conf.MemStore)

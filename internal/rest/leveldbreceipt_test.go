@@ -97,6 +97,10 @@ func TestLevelDBReceiptsAddReceiptOK(t *testing.T) {
 	defer r.store.Close()
 
 	receipt := make(map[string]interface{})
+	receipt["receivedAt"] = int64(1625575643620)
+	headers := make(map[string]interface{})
+	headers["timeElapsed"] = 4.403097674
+	receipt["headers"] = headers
 	err = r.AddReceipt("r0", &receipt)
 	assert.NoError(err)
 }
@@ -113,6 +117,10 @@ func TestLevelDBReceiptsAddReceiptFailed(t *testing.T) {
 	}
 
 	receipt := make(map[string]interface{})
+	receipt["receivedAt"] = int64(1625575643620)
+	headers := make(map[string]interface{})
+	headers["timeElapsed"] = 4.403097674
+	receipt["headers"] = headers
 	err := r.AddReceipt("key", &receipt)
 	assert.EqualError(err, "pop")
 }
@@ -127,25 +135,38 @@ func TestLevelDBReceiptsGetReceiptsOK(t *testing.T) {
 	defer r.store.Close()
 
 	receipt1 := make(map[string]interface{})
-	receipt1["_id"] = "r1"
-	receipt1["prop1"] = "value1"
-	err = r.AddReceipt("r1", &receipt1)
+	receipt1["_id"] = "r2"
+	receipt1["prop1"] = "value2"
+	receipt1["receivedAt"] = int64(1625575643620)
+	headers1 := make(map[string]interface{})
+	headers1["timeElapsed"] = 4.403097674
+	receipt1["headers"] = headers1
+	err = r.AddReceipt("r2", &receipt1)
 
 	receipt2 := make(map[string]interface{})
-	receipt2["_id"] = "r2"
-	receipt2["prop1"] = "value2"
-	err = r.AddReceipt("r2", &receipt2)
+	receipt2["_id"] = "r1"
+	receipt2["prop1"] = "value1"
+	receipt2["receivedAt"] = int64(1625575643621)
+	headers2 := make(map[string]interface{})
+	headers2["timeElapsed"] = 4.403097674
+	receipt2["headers"] = headers2
+	err = r.AddReceipt("r1", &receipt2)
 
 	receipt3 := make(map[string]interface{})
 	receipt3["_id"] = "r3"
 	receipt3["prop1"] = "value3"
+	receipt3["receivedAt"] = int64(1625575643621)
+	headers3 := make(map[string]interface{})
+	headers3["timeElapsed"] = 4.403097675
+	receipt3["headers"] = headers3
 	err = r.AddReceipt("r3", &receipt3)
 
-	results, err := r.GetReceipts(1, 2, nil, 0, "", "")
+	results, err := r.GetReceipts(0, 0, nil, 0, "", "")
 	assert.NoError(err)
-	t.Logf("Results: %v+\n", *results)
-	assert.Equal("value2", (*results)[0]["prop1"])
-	assert.Equal("value3", (*results)[1]["prop1"])
+	assert.Equal(3, len(*results))
+	assert.Equal("value3", (*results)[0]["prop1"])
+	assert.Equal("value1", (*results)[1]["prop1"])
+	assert.Equal("value2", (*results)[2]["prop1"])
 }
 
 func TestLevelDBReceiptsFilter(t *testing.T) {
@@ -167,6 +188,9 @@ func TestLevelDBReceiptsFilter(t *testing.T) {
 	receipt1["receivedAt"] = receivedAt
 	receipt1["from"] = "addr1"
 	receipt1["to"] = "addr2"
+	headers1 := make(map[string]interface{})
+	headers1["timeElapsed"] = 4.403097671
+	receipt1["headers"] = headers1
 	err = r.AddReceipt("r1", &receipt1)
 
 	receipt2 := make(map[string]interface{})
@@ -175,18 +199,24 @@ func TestLevelDBReceiptsFilter(t *testing.T) {
 	receipt2["receivedAt"] = receivedAt
 	receipt2["from"] = "addr1"
 	receipt2["to"] = "addr2"
+	headers2 := make(map[string]interface{})
+	headers2["timeElapsed"] = 4.403097672
+	receipt2["headers"] = headers2
 	err = r.AddReceipt("r2", &receipt2)
 
 	receipt3 := make(map[string]interface{})
 	receipt3["_id"] = "r3"
 	receipt3["prop1"] = "value3"
 	receipt3["receivedAt"] = receivedAt
+	headers3 := make(map[string]interface{})
+	headers3["timeElapsed"] = 4.403097673
+	receipt3["headers"] = headers3
 	err = r.AddReceipt("r3", &receipt3)
 
-	results, err := r.GetReceipts(0, 2, []string{"r1", "r2"}, int64((now.UnixNano()/int64(time.Millisecond))-10), "addr1", "addr2")
+	results, err := r.GetReceipts(1, 2, []string{"r1", "r2"}, int64((now.UnixNano()/int64(time.Millisecond))-10), "addr1", "addr2")
 	assert.NoError(err)
-	assert.Equal("value1", (*results)[0]["prop1"])
-	assert.Equal("value2", (*results)[1]["prop1"])
+	assert.Equal("value2", (*results)[0]["prop1"])
+	assert.Equal("value1", (*results)[1]["prop1"])
 }
 
 func TestLevelDBReceiptsFilterNotFound(t *testing.T) {
@@ -208,6 +238,9 @@ func TestLevelDBReceiptsFilterNotFound(t *testing.T) {
 	receipt1["receivedAt"] = receivedAt
 	receipt1["from"] = "addr1"
 	receipt1["to"] = "addr2"
+	headers1 := make(map[string]interface{})
+	headers1["timeElapsed"] = 4.403097673
+	receipt1["headers"] = headers1
 	err = r.AddReceipt("r1", &receipt1)
 
 	receipt2 := make(map[string]interface{})
@@ -216,12 +249,18 @@ func TestLevelDBReceiptsFilterNotFound(t *testing.T) {
 	receipt2["receivedAt"] = receivedAt
 	receipt2["from"] = "addr1"
 	receipt2["to"] = "addr2"
+	headers2 := make(map[string]interface{})
+	headers2["timeElapsed"] = 4.403097673
+	receipt2["headers"] = headers2
 	err = r.AddReceipt("r2", &receipt2)
 
 	receipt3 := make(map[string]interface{})
 	receipt3["_id"] = "r3"
 	receipt3["prop1"] = "value3"
 	receipt3["receivedAt"] = receivedAt
+	headers3 := make(map[string]interface{})
+	headers3["timeElapsed"] = 4.403097673
+	receipt3["headers"] = headers3
 	err = r.AddReceipt("r3", &receipt3)
 
 	// not found due to IDs
@@ -258,6 +297,10 @@ func TestLevelDBReceiptsGetReceiptOK(t *testing.T) {
 	receipt1["prop1"] = "value1"
 	receipt1["from"] = "addr1"
 	receipt1["to"] = "addr2"
+	receipt1["receivedAt"] = int64(1625575643622)
+	headers1 := make(map[string]interface{})
+	headers1["timeElapsed"] = 4.403097674
+	receipt1["headers"] = headers1
 	err = r.AddReceipt("r1", &receipt1)
 
 	result, err := r.GetReceipt("r1")

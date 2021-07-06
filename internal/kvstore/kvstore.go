@@ -26,6 +26,8 @@ type KVIterator interface {
 	Key() string
 	Value() []byte
 	Next() bool
+	Prev() bool
+	Last() bool
 	Release()
 }
 
@@ -85,8 +87,16 @@ func (k *levelDBKeyIterator) Value() []byte {
 	return k.i.Value()
 }
 
+func (k *levelDBKeyIterator) Last() bool {
+	return k.i.Last()
+}
+
 func (k *levelDBKeyIterator) Next() bool {
 	return k.i.Next()
+}
+
+func (k *levelDBKeyIterator) Prev() bool {
+	return k.i.Prev()
 }
 
 func (k *levelDBKeyIterator) Release() {

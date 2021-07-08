@@ -48,7 +48,7 @@ func (m *MockKV) Delete(key string) error {
 }
 
 // NewIterator for a new iterator
-func (m *MockKV) NewIterator() KVIterator {
+func (m *MockKV) NewIterator(slice ...interface{}) KVIterator {
 	return nil // not implemented in mock
 }
 

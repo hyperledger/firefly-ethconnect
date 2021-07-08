@@ -40,7 +40,7 @@ var uuidCharsVerifier, _ = regexp.Compile("^[0-9a-zA-Z-]+$")
 
 // ReceiptStorePersistence interface implemented by persistence layers
 type ReceiptStorePersistence interface {
-	GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to string) (*[]map[string]interface{}, error)
+	GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to, start string) (*[]map[string]interface{}, error)
 	GetReceipt(requestID string) (*map[string]interface{}, error)
 	AddReceipt(requestID string, receipt *map[string]interface{}) error
 }
@@ -268,9 +268,10 @@ func (r *receiptStore) getReplies(res http.ResponseWriter, req *http.Request, pa
 
 	from := req.FormValue("from")
 	to := req.FormValue("to")
+	start := req.FormValue("start")
 
 	// Call the persistence tier - which must return an empty array when no results (not an error)
-	results, err := r.persistence.GetReceipts(skip, limit, ids, sinceEpochMS, from, to)
+	results, err := r.persistence.GetReceipts(skip, limit, ids, sinceEpochMS, from, to, start)
 	if err != nil {
 		log.Errorf("Error querying replies: %s", err)
 		sendRESTError(res, req, errors.Errorf(errors.ReceiptStoreFailedQuery, err), 500)

@@ -81,7 +81,7 @@ func (m *mongoReceipts) AddReceipt(requestID string, receipt *map[string]interfa
 }
 
 // GetReceipts Returns recent receipts with skip & limit
-func (m *mongoReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to string) (*[]map[string]interface{}, error) {
+func (m *mongoReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to, start string) (*[]map[string]interface{}, error) {
 	filter := bson.M{}
 	if len(ids) > 0 {
 		filter["_id"] = bson.M{

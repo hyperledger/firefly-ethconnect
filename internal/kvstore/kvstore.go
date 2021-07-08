@@ -19,6 +19,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
+	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
 // KVIterator interface for key value iterators
@@ -27,6 +28,7 @@ type KVIterator interface {
 	Value() []byte
 	Next() bool
 	Prev() bool
+	Seek(string) bool
 	Last() bool
 	Release()
 }
@@ -36,7 +38,7 @@ type KVStore interface {
 	Put(key string, val []byte) error
 	Get(key string) ([]byte, error)
 	Delete(key string) error
-	NewIterator() KVIterator
+	NewIterator(keyRange ...interface{}) KVIterator
 	Close()
 }
 
@@ -69,9 +71,14 @@ func (k *levelDBKeyValueStore) Delete(key string) error {
 	return err
 }
 
-func (k *levelDBKeyValueStore) NewIterator() KVIterator {
+func (k *levelDBKeyValueStore) NewIterator(slice ...interface{}) KVIterator {
+	var keyRange *util.Range
+	if len(slice) > 0 {
+		keyRange = slice[0].(*util.Range)
+	}
+
 	return &levelDBKeyIterator{
-		i: k.db.NewIterator(nil, nil),
+		i: k.db.NewIterator(keyRange, nil),
 	}
 }
 
@@ -89,6 +96,10 @@ func (k *levelDBKeyIterator) Value() []byte {
 
 func (k *levelDBKeyIterator) Last() bool {
 	return k.i.Last()
+}
+
+func (k *levelDBKeyIterator) Seek(key string) bool {
+	return k.i.Seek([]byte(key))
 }
 
 func (k *levelDBKeyIterator) Next() bool {

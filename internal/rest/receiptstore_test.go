@@ -40,7 +40,7 @@ type mockReceiptErrs struct {
 	addReceiptErr    error
 }
 
-func (m *mockReceiptErrs) GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to string) (*[]map[string]interface{}, error) {
+func (m *mockReceiptErrs) GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to, start string) (*[]map[string]interface{}, error) {
 	return nil, m.getReceiptsErr
 }
 

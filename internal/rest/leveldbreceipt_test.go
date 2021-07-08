@@ -263,15 +263,15 @@ func TestLevelDBReceiptsFilterByIDs(t *testing.T) {
 	results, err := r.GetReceipts(1, 2, []string{"r1", "r2"}, int64((now.UnixNano()/int64(time.Millisecond))-10), "addr1", "addr2", "")
 	assert.NoError(err)
 	assert.Equal(2, len(*results))
-	assert.Equal("value1", (*results)[0]["prop1"])
-	assert.Equal("value2", (*results)[1]["prop1"])
+	assert.Equal("value2", (*results)[0]["prop1"])
+	assert.Equal("value1", (*results)[1]["prop1"])
 }
 
 func TestLevelDBReceiptsFilterByIDsAndFromTo(t *testing.T) {
 	assert := assert.New(t)
 
 	conf := &LevelDBReceiptStoreConf{
-		Path: path.Join(tmpdir, "test2"),
+		Path: path.Join(tmpdir, "test3"),
 	}
 	r, err := newLevelDBReceipts(conf)
 	defer r.store.Close()
@@ -303,7 +303,7 @@ func TestLevelDBReceiptsFilterByIDsAndFromTo(t *testing.T) {
 	receipt3["from"] = "addr1"
 	err = r.AddReceipt("r3", &receipt3)
 
-	results, err := r.GetReceipts(1, 2, []string{"r1", "r2"}, 0, "addr1", "addr2", "")
+	results, err := r.GetReceipts(1, 3, []string{"r1", "r2"}, 0, "addr1", "addr2", "")
 	assert.NoError(err)
 	assert.Equal(1, len(*results))
 	assert.Equal("value1", (*results)[0]["prop1"])
@@ -313,7 +313,7 @@ func TestLevelDBReceiptsFilterNotFound(t *testing.T) {
 	assert := assert.New(t)
 
 	conf := &LevelDBReceiptStoreConf{
-		Path: path.Join(tmpdir, "test3"),
+		Path: path.Join(tmpdir, "test4"),
 	}
 	r, err := newLevelDBReceipts(conf)
 	defer r.store.Close()
@@ -369,7 +369,7 @@ func TestLevelDBReceiptsGetReceiptOK(t *testing.T) {
 	assert := assert.New(t)
 
 	conf := &LevelDBReceiptStoreConf{
-		Path: path.Join(tmpdir, "test4"),
+		Path: path.Join(tmpdir, "test5"),
 	}
 	r, err := newLevelDBReceipts(conf)
 	defer r.store.Close()
@@ -390,7 +390,7 @@ func TestLevelDBReceiptsGetReceiptNotFound(t *testing.T) {
 	assert := assert.New(t)
 
 	conf := &LevelDBReceiptStoreConf{
-		Path: path.Join(tmpdir, "test4"),
+		Path: path.Join(tmpdir, "test6"),
 	}
 	r, _ := newLevelDBReceipts(conf)
 	defer r.store.Close()

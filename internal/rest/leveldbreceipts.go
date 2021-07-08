@@ -124,7 +124,7 @@ func (l *levelDBReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochM
 	}
 	var lookupKeysByFromAndTo []string
 	if from != "" || to != "" {
-		lookupKeysByFromAndTo = l.getLookupKeysByFromAndTo(from, to, start, endKey)
+		lookupKeysByFromAndTo = l.getLookupKeysByFromAndTo(from, to, start, endKey, limit)
 	}
 	if len(ids) > 0 && from == "" && to == "" {
 		lookupKeys = lookupKeysByIDs
@@ -132,6 +132,7 @@ func (l *levelDBReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochM
 		lookupKeys = lookupKeysByFromAndTo
 	} else if len(ids) > 0 && (from != "" || to != "") {
 		lookupKeys = intersect(lookupKeysByIDs, lookupKeysByFromAndTo)
+		sort.Sort(sort.Reverse(sort.StringSlice(lookupKeys)))
 		results := l.getReceiptsByLookupKey(lookupKeys, limit)
 		return results, nil
 	}
@@ -199,7 +200,7 @@ func (l *levelDBReceipts) GetReceipt(requestID string) (*map[string]interface{},
 }
 
 func (l *levelDBReceipts) findEndPoint(sinceEpochMS int64) *util.Range {
-	searchKey := fmt.Sprintf("receivedAt:%d", sinceEpochMS)
+	searchKey := fmt.Sprintf("receivedAt:%d:", sinceEpochMS)
 	itr := l.store.NewIterator()
 	defer itr.Release()
 	found := itr.Seek(searchKey)
@@ -236,14 +237,15 @@ func (l *levelDBReceipts) getLookupKeysByIDs(ids []string, start, end string) []
 	return result
 }
 
-func (l *levelDBReceipts) getLookupKeysByFromAndTo(from, to string, start, end string) []string {
+func (l *levelDBReceipts) getLookupKeysByFromAndTo(from, to string, start, end string, limit int) []string {
 	if from != "" || to != "" {
 		fromKeys := []string{}
 		itr := l.store.NewIterator()
 		defer itr.Release()
 
 		if from != "" {
-			searchKey := fmt.Sprintf("from:%s", from)
+			count := 0
+			searchKey := fmt.Sprintf("from:%s:", from)
 			found := itr.Seek(searchKey)
 			if found {
 				startKey := itr.Key()
@@ -251,38 +253,51 @@ func (l *levelDBReceipts) getLookupKeysByFromAndTo(from, to string, start, end s
 				if strings.HasPrefix(startKey, searchKey) {
 					val := itr.Value()
 					fromKeys = append(fromKeys, string(val))
+					count++
 				}
 				for itr.Next() {
-					key := itr.Key()
-					if strings.HasPrefix(key, searchKey) {
-						val := itr.Value()
-						fromKeys = append(fromKeys, string(val))
+					if count < limit {
+						key := itr.Key()
+						if strings.HasPrefix(key, searchKey) {
+							val := itr.Value()
+							fromKeys = append(fromKeys, string(val))
+						} else {
+							break
+						}
 					} else {
 						break
 					}
+					count++
 				}
 			}
 		}
 
 		toKeys := []string{}
 		if to != "" {
-			searchKey := fmt.Sprintf("to:%s", to)
+			searchKey := fmt.Sprintf("to:%s:", to)
 			found := itr.Seek(searchKey)
 			if found {
+				count := 0
 				startKey := itr.Key()
 				log.Infof("Located entry for 'to' address %s: %s", to, startKey)
 				if strings.HasPrefix(startKey, searchKey) {
 					val := itr.Value()
 					toKeys = append(toKeys, string(val))
+					count++
 				}
 				for itr.Next() {
-					key := itr.Key()
-					if strings.HasPrefix(key, searchKey) {
-						val := itr.Value()
-						toKeys = append(toKeys, string(val))
+					if count < limit {
+						key := itr.Key()
+						if strings.HasPrefix(key, searchKey) {
+							val := itr.Value()
+							toKeys = append(toKeys, string(val))
+						} else {
+							break
+						}
 					} else {
 						break
 					}
+					count++
 				}
 			}
 		}

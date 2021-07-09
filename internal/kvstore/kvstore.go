@@ -38,7 +38,8 @@ type KVStore interface {
 	Put(key string, val []byte) error
 	Get(key string) ([]byte, error)
 	Delete(key string) error
-	NewIterator(keyRange ...interface{}) KVIterator
+	NewIterator() KVIterator
+	NewIteratorWithRange(keyRange interface{}) KVIterator
 	Close()
 }
 
@@ -71,11 +72,14 @@ func (k *levelDBKeyValueStore) Delete(key string) error {
 	return err
 }
 
-func (k *levelDBKeyValueStore) NewIterator(slice ...interface{}) KVIterator {
-	var keyRange *util.Range
-	if len(slice) > 0 {
-		keyRange = slice[0].(*util.Range)
+func (k *levelDBKeyValueStore) NewIterator() KVIterator {
+	return &levelDBKeyIterator{
+		i: k.db.NewIterator(nil, nil),
 	}
+}
+
+func (k *levelDBKeyValueStore) NewIteratorWithRange(rng interface{}) KVIterator {
+	keyRange := rng.(*util.Range)
 
 	return &levelDBKeyIterator{
 		i: k.db.NewIterator(keyRange, nil),

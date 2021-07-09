@@ -120,6 +120,9 @@ func (g *RESTGateway) ValidateConf() (err error) {
 	if g.conf.MongoDB.QueryLimit < 1 {
 		g.conf.MongoDB.QueryLimit = 100
 	}
+	if g.conf.LevelDB.QueryLimit < 1 {
+		g.conf.LevelDB.QueryLimit = 100
+	}
 	if g.conf.OpenAPI.StoragePath != "" && g.conf.RPC.URL == "" {
 		err = errors.Errorf(errors.ConfigRESTGatewayRequiredRPC)
 		return
@@ -183,6 +186,7 @@ func (g *RESTGateway) CobraInit(cmdName string) (cmd *cobra.Command) {
 	cmd.Flags().IntVarP(&g.conf.MongoDB.QueryLimit, "mongodb-query-limit", "Q", utils.DefInt("MONGODB_QUERYLIM", 0), "Maximum docs to return on a rest call (cap on limit)")
 	cmd.Flags().IntVarP(&g.conf.MemStore.MaxDocs, "memstore-receipt-maxdocs", "v", utils.DefInt("MEMSTORE_MAXDOCS", 10), "In-memory receipt store capped size")
 	cmd.Flags().IntVarP(&g.conf.MemStore.QueryLimit, "memstore-query-limit", "V", utils.DefInt("MEMSTORE_QUERYLIM", 0), "In-memory maximum docs to return on a rest call")
+	cmd.Flags().IntVarP(&g.conf.LevelDB.QueryLimit, "leveldb-query-limit", "B", utils.DefInt("LEVELDB_QUERYLIM", 0), "Maximum docs to return on a rest call (cap on limit)")
 	return
 }
 

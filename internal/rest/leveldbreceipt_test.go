@@ -44,7 +44,10 @@ func (m *mockKVStore) Put(key string, val []byte) error {
 func (m *mockKVStore) Delete(key string) error {
 	return m.err
 }
-func (m *mockKVStore) NewIterator(keyRange ...interface{}) kvstore.KVIterator {
+func (m *mockKVStore) NewIterator() kvstore.KVIterator {
+	return nil
+}
+func (m *mockKVStore) NewIteratorWithRange(keyRange interface{}) kvstore.KVIterator {
 	return nil
 }
 

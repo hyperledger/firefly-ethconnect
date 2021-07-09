@@ -20,6 +20,7 @@ import (
 	"math/rand"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kaleido-io/ethconnect/internal/errors"
@@ -32,6 +33,7 @@ import (
 type levelDBReceipts struct {
 	conf         *LevelDBReceiptStoreConf
 	store        kvstore.KVStore
+	entropyLock  sync.Mutex
 	idEntropy    *ulid.MonotonicEntropy
 	defaultLimit int
 }
@@ -48,7 +50,7 @@ func newLevelDBReceipts(conf *LevelDBReceiptStoreConf) (*levelDBReceipts, error)
 		conf:         conf,
 		store:        store,
 		idEntropy:    entropy,
-		defaultLimit: 50,
+		defaultLimit: conf.QueryLimit,
 	}, nil
 }
 
@@ -56,7 +58,9 @@ func newLevelDBReceipts(conf *LevelDBReceiptStoreConf) (*levelDBReceipts, error)
 // To account for any transitory failures writing to mongoDB, it retries adding receipt with a backoff
 func (l *levelDBReceipts) AddReceipt(requestID string, receipt *map[string]interface{}) (err error) {
 	// insert an entry with a composite key to track the insertion order
+	l.entropyLock.Lock()
 	newId := ulid.MustNew(ulid.Timestamp(time.Now()), l.idEntropy)
+	l.entropyLock.Unlock()
 	// add "z" prefix so these entries come after the lookup entries
 	// because for iteration we start from last backwards
 	lookupKey := fmt.Sprintf("z%s", newId)
@@ -94,16 +98,15 @@ func (l *levelDBReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochM
 	// - if "from" or "to" are present, look up the entries using the "from:[address]" and "to:[address]" prefix then work out the intersection of the [lookupKey] segments
 	var itr kvstore.KVIterator
 	var endKey string
-	results := []map[string]interface{}{}
 	if sinceEpochMS > 0 {
 		// locate the iterator range limit
 		keyRange := l.findEndPoint(sinceEpochMS)
 		if keyRange != nil {
-			itr = l.store.NewIterator(keyRange)
+			itr = l.store.NewIteratorWithRange(keyRange)
 			endKey = string(string(keyRange.Limit))
 		} else {
 			// no entries match the sinceEpochMS, return empty
-			return &results, nil
+			return &[]map[string]interface{}{}, nil
 		}
 	} else {
 		// create the iterator without a range
@@ -138,6 +141,12 @@ func (l *levelDBReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochM
 	}
 
 	// no reference points, iterate normally
+	results := l.getReceiptsNoFilter(itr, skip, limit, start)
+	return &results, nil
+}
+
+func (l *levelDBReceipts) getReceiptsNoFilter(itr kvstore.KVIterator, skip, limit int, start string) []map[string]interface{} {
+	results := []map[string]interface{}{}
 	index := 0
 	var valid bool
 	if start != "" {
@@ -169,7 +178,7 @@ func (l *levelDBReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochM
 		}
 		index++
 	}
-	return &results, nil
+	return results
 }
 
 // getReply handles a HTTP request for an individual reply
@@ -238,85 +247,68 @@ func (l *levelDBReceipts) getLookupKeysByIDs(ids []string, start, end string) []
 }
 
 func (l *levelDBReceipts) getLookupKeysByFromAndTo(from, to string, start, end string, limit int) []string {
-	if from != "" || to != "" {
-		fromKeys := []string{}
-		itr := l.store.NewIterator()
-		defer itr.Release()
-
-		if from != "" {
-			count := 0
-			searchKey := fmt.Sprintf("from:%s:", from)
-			found := itr.Seek(searchKey)
-			if found {
-				startKey := itr.Key()
-				log.Infof("Located entry for 'from' address %s: %s", from, startKey)
-				if strings.HasPrefix(startKey, searchKey) {
-					val := itr.Value()
-					fromKeys = append(fromKeys, string(val))
-					count++
-				}
-				for itr.Next() {
-					if count < limit {
-						key := itr.Key()
-						if strings.HasPrefix(key, searchKey) {
-							val := itr.Value()
-							fromKeys = append(fromKeys, string(val))
-						} else {
-							break
-						}
-					} else {
-						break
-					}
-					count++
-				}
-			}
-		}
-
-		toKeys := []string{}
-		if to != "" {
-			searchKey := fmt.Sprintf("to:%s:", to)
-			found := itr.Seek(searchKey)
-			if found {
-				count := 0
-				startKey := itr.Key()
-				log.Infof("Located entry for 'to' address %s: %s", to, startKey)
-				if strings.HasPrefix(startKey, searchKey) {
-					val := itr.Value()
-					toKeys = append(toKeys, string(val))
-					count++
-				}
-				for itr.Next() {
-					if count < limit {
-						key := itr.Key()
-						if strings.HasPrefix(key, searchKey) {
-							val := itr.Value()
-							toKeys = append(toKeys, string(val))
-						} else {
-							break
-						}
-					} else {
-						break
-					}
-					count++
-				}
-			}
-		}
-
-		var result []string
-		if from != "" && to == "" {
-			result = fromKeys
-		} else if from == "" && to != "" {
-			result = toKeys
-		} else {
-			// find the intersection of the 2 slices, note that both slices are sorted
-			result = intersect(fromKeys, toKeys)
-		}
-		// since our query searches in descending order, while sort.SearchString requires ascending order
-		// the "start" is the end, and "end" is the start
-		result = applyBound(result, end, start)
-		return result
+	if from == "" && to == "" {
+		return nil
 	}
-	return nil
+
+	var fromKeys []string
+	itr := l.store.NewIterator()
+	defer itr.Release()
+
+	if from != "" {
+		searchKey := fmt.Sprintf("from:%s:", from)
+		fromKeys = l.getLookupKeysByPrefix(itr, searchKey, limit)
+	}
+
+	var toKeys []string
+	if to != "" {
+		searchKey := fmt.Sprintf("to:%s:", to)
+		toKeys = l.getLookupKeysByPrefix(itr, searchKey, limit)
+	}
+
+	var result []string
+	if from != "" && to == "" {
+		result = fromKeys
+	} else if from == "" && to != "" {
+		result = toKeys
+	} else {
+		// find the intersection of the 2 slices, note that both slices are sorted
+		result = intersect(fromKeys, toKeys)
+	}
+	// since our query searches in descending order, while sort.SearchString requires ascending order
+	// the "start" is the end, and "end" is the start
+	result = applyBound(result, end, start)
+	return result
+}
+
+func (l *levelDBReceipts) getLookupKeysByPrefix(itr kvstore.KVIterator, prefix string, limit int) []string {
+	lookupKeys := []string{}
+	count := 0
+	found := itr.Seek(prefix)
+	if found {
+		startKey := itr.Key()
+		log.Infof("Located entry for prefix %s: %s", prefix, startKey)
+		if strings.HasPrefix(startKey, prefix) {
+			val := itr.Value()
+			lookupKeys = append(lookupKeys, string(val))
+			count++
+		}
+		for itr.Next() {
+			if count < limit {
+				key := itr.Key()
+				if strings.HasPrefix(key, prefix) {
+					val := itr.Value()
+					lookupKeys = append(lookupKeys, string(val))
+				} else {
+					break
+				}
+			} else {
+				break
+			}
+			count++
+		}
+	}
+	return lookupKeys
 }
 
 func (l *levelDBReceipts) getReceiptsByLookupKey(lookupKeys []string, limit int) *[]map[string]interface{} {

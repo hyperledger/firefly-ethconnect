@@ -16,7 +16,7 @@ jobs:
           path: 'ethconnect'
       - uses: actions/checkout@v2
         with:
-          repository: https://github.com/kaleido-io/ethbinding.git
+          repository: kaleido-io/ethbinding
           path: 'ethbinding'
 
       - name: Set up Go

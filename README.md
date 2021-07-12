@@ -1,6 +1,6 @@
 # github.com/kaleido-io/ethconnect
 
-[![codecov](https://codecov.io/gh/kaleido-io/ethconnect/branch/master/graph/badge.svg?token=RWlSbY389z)](https://codecov.io/gh/kaleido-io/ethconnect) [![Go Report Card](https://goreportcard.com/badge/github.com/kaleido-io/ethconnect)](https://goreportcard.com/report/github.com/kaleido-io/ethconnect)
+[![codecov](https://codecov.io/gh/hyperledger-labs/firefly-ethconnect/branch/main/graph/badge.svg?token=Q3m9ZZccwy)](https://codecov.io/gh/hyperledger-labs/firefly-ethconnect) [![Go Report Card](https://goreportcard.com/badge/github.com/kaleido-io/ethconnect)](https://goreportcard.com/report/github.com/kaleido-io/ethconnect)
 
 - [github.com/kaleido-io/ethconnect](#githubcomkaleido-ioethconnect)
   - [Ethconnect REST Gateway](#ethconnect-rest-gateway)

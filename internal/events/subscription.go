@@ -86,7 +86,7 @@ func newSubscription(sm subscriptionManager, rpc eth.RPCClient, addr *ethbinding
 		logName:             i.ID + ":" + ethbind.API.ABIEventSignature(event),
 		filterStale:         true,
 		catchupModeBlockGap: sm.config().CatchupModeBlockGap,
-		catchupModePageSize: sm.config().CatchupModeBlockGap,
+		catchupModePageSize: sm.config().CatchupModePageSize,
 	}
 	f := &i.Filter
 	addrStr := "*"

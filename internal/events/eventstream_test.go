@@ -191,7 +191,7 @@ func TestStopDuringTimeout(t *testing.T) {
 	defer close(eventStream)
 	defer svr.Close()
 
-	stream.handleEvent(testEvent(fmt.Sprintf("sub1")))
+	stream.handleEvent(testEvent("sub1"))
 	time.Sleep(10 * time.Millisecond)
 	stream.stop()
 	time.Sleep(10 * time.Millisecond)
@@ -430,16 +430,20 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 	testBlock.Time = uint64(ts)
 
 	callCount := 0
+	filterChangeCalls := 0
 	rpc := eth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
 		callCount++
+		log.Infof("UT %s call=%d", method, callCount)
 		if method == "eth_blockNumber" || method == "eth_newFilter" {
 		} else if method == "eth_getFilterLogs" {
 			*(res.(*[]*logEntry)) = testData[0:2]
-		} else if method == "eth_getFilterChanges" &&
-			((!stream.spec.Timestamps && callCount == 4) || (stream.spec.Timestamps && callCount == 5)) { //eth_blockNumber is an extra call to retrieve timestamps
-			*(res.(*[]*logEntry)) = testData[2:]
 		} else if method == "eth_getFilterChanges" {
-			*(res.(*[]*logEntry)) = []*logEntry{}
+			if filterChangeCalls == 0 {
+				*(res.(*[]*logEntry)) = testData[2:]
+			} else {
+				*(res.(*[]*logEntry)) = []*logEntry{}
+			}
+			filterChangeCalls++
 		} else if method == "eth_getBlockByNumber" {
 			*(res.(*ethbinding.Header)) = *testBlock
 		}
@@ -480,6 +484,83 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 	return s
 }
 
+func setupCatchupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, stream *eventStream, subscriptionName string) *SubscriptionInfo {
+	log.SetLevel(log.DebugLevel)
+	testDataBytes, err := ioutil.ReadFile("../../test/simplevents_logs.json")
+	assert.NoError(err)
+	var testData []*logEntry
+	json.Unmarshal(testDataBytes, &testData)
+	testBlockDetailBytes, err := ioutil.ReadFile("../../test/block_details.json")
+	assert.NoError(err)
+	testBlock := &ethbinding.Header{}
+	var parsedBlock map[string]interface{}
+	json.Unmarshal(testBlockDetailBytes, &parsedBlock)
+	ts := parsedBlock["timestamp"].(float64)
+	testBlock.Time = uint64(ts)
+
+	callCount := 0
+	getLogsCalls := 0
+	rpc := eth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
+		callCount++
+		log.Infof("UT %s call=%d", method, callCount)
+		if method == "eth_blockNumber" {
+			(*(res.(*ethbinding.HexBigInt))).ToInt().SetString("501", 10)
+		} else if method == "eth_getLogs" {
+			if getLogsCalls == 0 {
+				// Catchup page with data
+				*(res.(*[]*logEntry)) = testData[0:2]
+			} else {
+				// Catchup page with no data
+				*(res.(*[]*logEntry)) = []*logEntry{}
+			}
+			getLogsCalls++
+			assert.LessOrEqual(getLogsCalls, 2)
+		} else if method == "eth_getFilterLogs" {
+			// First page after catchup
+			*(res.(*[]*logEntry)) = testData[2:]
+		} else if method == "eth_getFilterChanges" {
+			// No further updates
+			*(res.(*[]*logEntry)) = []*logEntry{}
+		} else if method == "eth_getBlockByNumber" {
+			*(res.(*ethbinding.Header)) = *testBlock
+		}
+	})
+	sm.rpc = rpc
+
+	event := &ethbinding.ABIElementMarshaling{
+		Name: "Changed",
+		Inputs: []ethbinding.ABIArgumentMarshaling{
+			{
+				Name:    "from",
+				Type:    "address",
+				Indexed: true,
+			},
+			{
+				Name:    "i",
+				Type:    "int64",
+				Indexed: true,
+			},
+			{
+				Name:    "s",
+				Type:    "string",
+				Indexed: true,
+			},
+			{
+				Name: "h",
+				Type: "bytes32",
+			},
+			{
+				Name: "m",
+				Type: "string",
+			},
+		},
+	}
+	addr := ethbind.API.HexToAddress("0x167f57a13a9c35ff92f0649d2be0e52b4f8ac3ca")
+	ctx := context.Background()
+	s, _ := sm.AddSubscription(ctx, &addr, event, stream.spec.ID, "0", subscriptionName)
+	return s
+}
+
 func TestProcessEventsEnd2EndWebhook(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)
@@ -495,6 +576,55 @@ func TestProcessEventsEnd2EndWebhook(t *testing.T) {
 	defer svr.Close()
 
 	s := setupTestSubscription(assert, sm, stream, "mySubName")
+	assert.Equal("mySubName", s.Name)
+
+	// We expect three events to be sent to the webhook
+	// With the default batch size of 1, that means three separate requests
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		e1s := <-eventStream
+		assert.Equal(1, len(e1s))
+		assert.Equal("42", e1s[0].Data["i"])
+		assert.Equal("But what is the question?", e1s[0].Data["m"])
+		assert.Equal("150665", e1s[0].BlockNumber)
+		e2s := <-eventStream
+		assert.Equal(1, len(e2s))
+		assert.Equal("1977", e2s[0].Data["i"])
+		assert.Equal("A long time ago in a galaxy far, far away....", e2s[0].Data["m"])
+		assert.Equal("150665", e2s[0].BlockNumber)
+		e3s := <-eventStream
+		assert.Equal(1, len(e3s))
+		assert.Equal("20151021", e3s[0].Data["i"])
+		assert.Equal("1.21 Gigawatts!", e3s[0].Data["m"])
+		assert.Equal("150721", e3s[0].BlockNumber)
+		wg.Done()
+	}()
+	wg.Wait()
+
+	ctx := context.Background()
+	err := sm.DeleteSubscription(ctx, s.ID)
+	assert.NoError(err)
+	err = sm.DeleteStream(ctx, stream.spec.ID)
+	assert.NoError(err)
+	sm.Close()
+}
+
+func TestProcessEventsEnd2EndCatchupWebhook(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	db, _ := kvstore.NewLDBKeyValueStore(dir)
+	sm, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			BatchSize:  1,
+			Webhook:    &webhookActionInfo{},
+			Timestamps: false,
+		}, db, 200)
+	defer svr.Close()
+
+	s := setupCatchupTestSubscription(assert, sm, stream, "mySubName")
 	assert.Equal("mySubName", s.Name)
 
 	// We expect three events to be sent to the webhook

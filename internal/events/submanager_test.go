@@ -22,7 +22,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path"
-	"reflect"
 	"testing"
 	"time"
 
@@ -34,26 +33,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type mockRPC struct {
-	capturedMethod string
-	mockError      error
-	result         interface{}
-}
-
-func (m *mockRPC) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
-	m.capturedMethod = method
-	v := reflect.ValueOf(result)
-	v.Elem().Set(reflect.ValueOf(m.result))
-	return m.mockError
-}
-
 type mockWebSocket struct {
-	registeredNamespace string
-	capturedNamespace   string
-	sender              chan interface{}
-	broadcast           chan interface{}
-	receiver            chan error
-	closing             chan struct{}
+	capturedNamespace string
+	sender            chan interface{}
+	broadcast         chan interface{}
+	receiver          chan error
+	closing           chan struct{}
 }
 
 func (m *mockWebSocket) GetChannels(namespace string) (chan<- interface{}, chan<- interface{}, <-chan error, <-chan struct{}) {

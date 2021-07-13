@@ -56,15 +56,18 @@ type SubscriptionInfo struct {
 
 // subscription is the runtime that manages the subscription
 type subscription struct {
-	info           *SubscriptionInfo
-	rpc            eth.RPCClient
-	lp             *logProcessor
-	logName        string
-	filterID       ethbinding.HexBigInt
-	filteredOnce   bool
-	filterStale    bool
-	deleting       bool
-	resetRequested bool
+	info                *SubscriptionInfo
+	rpc                 eth.RPCClient
+	lp                  *logProcessor
+	logName             string
+	filterID            ethbinding.HexBigInt
+	filteredOnce        bool
+	filterStale         bool
+	deleting            bool
+	resetRequested      bool
+	catchupBlock        *big.Int
+	catchupModeBlockGap int64
+	catchupModePageSize int64
 }
 
 func newSubscription(sm subscriptionManager, rpc eth.RPCClient, addr *ethbinding.Address, i *SubscriptionInfo) (*subscription, error) {
@@ -77,11 +80,13 @@ func newSubscription(sm subscriptionManager, rpc eth.RPCClient, addr *ethbinding
 		return nil, err
 	}
 	s := &subscription{
-		info:        i,
-		rpc:         rpc,
-		lp:          newLogProcessor(i.ID, event, stream),
-		logName:     i.ID + ":" + ethbind.API.ABIEventSignature(event),
-		filterStale: true,
+		info:                i,
+		rpc:                 rpc,
+		lp:                  newLogProcessor(i.ID, event, stream),
+		logName:             i.ID + ":" + ethbind.API.ABIEventSignature(event),
+		filterStale:         true,
+		catchupModeBlockGap: sm.config().CatchupModeBlockGap,
+		catchupModePageSize: sm.config().CatchupModeBlockGap,
 	}
 	f := &i.Filter
 	addrStr := "*"
@@ -157,7 +162,7 @@ func (s *subscription) setCheckpointBlockHeight(i *big.Int) {
 	log.Infof("%s: checkpoint restored block height for event stream: %s", s.logName, i.String())
 }
 
-func (s *subscription) restartFilter(ctx context.Context, since *big.Int) error {
+func (s *subscription) createFilter(ctx context.Context, since *big.Int) error {
 	f := &ethFilter{}
 	f.persistedFilter = s.info.Filter
 	f.FromBlock.ToInt().Set(since)
@@ -168,10 +173,37 @@ func (s *subscription) restartFilter(ctx context.Context, since *big.Int) error 
 	if err != nil {
 		return errors.Errorf(errors.RPCCallReturnedError, "eth_newFilter", err)
 	}
+	s.catchupBlock = nil // we are not in catchup mode now
 	s.filteredOnce = false
 	s.markFilterStale(ctx, false)
 	log.Infof("%s: created filter from block %s: %s - %+v", s.logName, since.String(), s.filterID.String(), s.info.Filter)
 	return err
+}
+
+func (s *subscription) restartFilter(ctx context.Context, checkpoint *big.Int) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	since := checkpoint
+	if s.catchupBlock != nil {
+		// If we're already in catchup mode, we need to look at the current catchupBlock,
+		// not the checkpoint.
+		since = s.catchupBlock
+	}
+
+	var blockNumber big.Int
+	err := s.rpc.CallContext(ctx, &blockNumber, "eth_blockNumber")
+	if err != nil {
+		return errors.Errorf(errors.RPCCallReturnedError, "eth_blockNumber", err)
+	}
+
+	blockGap := new(big.Int).Sub(&blockNumber, since).Int64()
+	if s.catchupModeBlockGap > 0 && blockGap > s.catchupModeBlockGap {
+		s.catchupBlock = since // note if we were already in catchup, this does not change anything
+		return nil
+	}
+
+	return s.createFilter(ctx, since)
 }
 
 // getEventTimestamp adds the block timestamp to the log entry.
@@ -202,7 +234,52 @@ func (s *subscription) getEventTimestamp(ctx context.Context, l *logEntry) {
 	s.lp.stream.blockTimestampCache.Add(blockNumber, l.Timestamp)
 }
 
+func (s *subscription) processCatchupBlocks(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	var logs []*logEntry
+
+	f := &ethFilter{}
+	f.persistedFilter = s.info.Filter
+	f.FromBlock.ToInt().Set(s.catchupBlock)
+	endBlock := new(big.Int).Add(s.catchupBlock, big.NewInt(s.catchupModePageSize-1))
+	f.ToBlock = "0x" + endBlock.Text(16)
+
+	log.Infof("%s: catchup mode. Blocks %d -> %d", s.logName, s.catchupBlock.Int64(), endBlock.Int64())
+	if err := s.rpc.CallContext(ctx, &logs, "eth_getLogs", f); err != nil {
+		return err
+	}
+	if len(logs) == 0 {
+		// We only want to catch up once - so see if we can update our HWM based on the fact
+		// we know these historical blocks are empty.
+		s.lp.markNoEvents(endBlock)
+	} else {
+		s.processLogs(ctx, "eth_getLogs", logs)
+	}
+	s.catchupBlock = endBlock.Add(endBlock, big.NewInt(1))
+	return nil
+}
+
+func (s *subscription) processLogs(ctx context.Context, rpcMethod string, logs []*logEntry) {
+	if len(logs) > 0 {
+		// Only log if we received at least one event
+		log.Debugf("%s: received %d events (%s)", s.logName, len(logs), rpcMethod)
+	}
+	for idx, logEntry := range logs {
+		if s.lp.stream.spec.Timestamps {
+			s.getEventTimestamp(context.Background(), logEntry)
+		}
+		if err := s.lp.processLogEntry(s.logName, logEntry, idx); err != nil {
+			log.Errorf("Failed to process event: %s", err)
+		}
+	}
+}
+
 func (s *subscription) processNewEvents(ctx context.Context) error {
+	if s.catchupBlock != nil {
+		return s.processCatchupBlocks(ctx)
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	var logs []*logEntry
@@ -216,18 +293,7 @@ func (s *subscription) processNewEvents(ctx context.Context) error {
 		}
 		return err
 	}
-	if len(logs) > 0 {
-		// Only log if we received at least one event
-		log.Debugf("%s: received %d events (%s)", s.logName, len(logs), rpcMethod)
-	}
-	for idx, logEntry := range logs {
-		if s.lp.stream.spec.Timestamps {
-			s.getEventTimestamp(context.Background(), logEntry)
-		}
-		if err := s.lp.processLogEntry(s.logName, logEntry, idx); err != nil {
-			log.Errorf("Failed to process event: %s", err)
-		}
-	}
+	s.processLogs(ctx, rpcMethod, logs)
 	s.filteredOnce = true
 	return nil
 }
@@ -261,7 +327,8 @@ func (s *subscription) markFilterStale(ctx context.Context, newFilterStale bool)
 		err := s.rpc.CallContext(ctx, &retval, "eth_uninstallFilter", s.filterID)
 		// We treat error as informational here - the filter might already not be valid (if the node restarted)
 		log.Infof("%s: Uninstalled filter. ok=%t (%s)", s.logName, retval, err)
+		// Clear any catchup mode state. We will restart from the last checkpoint
+		s.catchupBlock = nil
 	}
 	s.filterStale = newFilterStale
-	return
 }

@@ -52,11 +52,12 @@ type eventData struct {
 }
 
 type logProcessor struct {
-	subID    string
-	event    *ethbinding.ABIEvent
-	stream   *eventStream
-	blockHWM big.Int
-	hwnSync  sync.Mutex
+	subID             string
+	event             *ethbinding.ABIEvent
+	stream            *eventStream
+	blockHWM          big.Int
+	highestDispatched big.Int
+	hwnSync           sync.Mutex
 }
 
 func newLogProcessor(subID string, event *ethbinding.ABIEvent, stream *eventStream) *logProcessor {
@@ -86,6 +87,16 @@ func (lp *logProcessor) getBlockHWM() big.Int {
 	return v
 }
 
+func (lp *logProcessor) markNoEvents(blockNumber *big.Int) {
+	lp.hwnSync.Lock()
+	if lp.highestDispatched.Cmp(&lp.blockHWM) < 0 {
+		// Nothing in-flight, its safe to update the HWM
+		lp.blockHWM.Set(blockNumber)
+		log.Debugf("%s: HWM: %s", lp.subID, lp.blockHWM.String())
+	}
+	lp.hwnSync.Unlock()
+}
+
 func (lp *logProcessor) initBlockHWM(intVal *big.Int) {
 	lp.hwnSync.Lock()
 	lp.blockHWM = *intVal
@@ -102,9 +113,10 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 		}
 	}
 
+	blockNumber := entry.BlockNumber.ToInt()
 	result := &eventData{
 		Address:          entry.Address.String(),
-		BlockNumber:      entry.BlockNumber.ToInt().String(),
+		BlockNumber:      blockNumber.String(),
 		TransactionIndex: entry.TransactionIndex.String(),
 		TransactionHash:  entry.TransactionHash.String(),
 		Signature:        ethbind.API.ABIEventSignature(lp.event),
@@ -153,6 +165,11 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 
 	// Ok, now we have the full event in a friendly map output. Pass it down to the event processor
 	log.Infof("%s: Dispatching event. Address=%s BlockNumber=%s TxIndex=%s", subInfo, result.Address, result.BlockNumber, result.TransactionIndex)
+	lp.hwnSync.Lock()
+	if blockNumber.Cmp(&lp.highestDispatched) > 0 {
+		lp.highestDispatched.Set(blockNumber)
+	}
+	lp.hwnSync.Unlock()
 	lp.stream.handleEvent(result)
 	return nil
 }

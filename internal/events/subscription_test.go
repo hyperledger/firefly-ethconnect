@@ -246,6 +246,16 @@ func TestRestartFilterFail(t *testing.T) {
 		rpc:  eth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
 	}
 	err := s.restartFilter(context.Background(), big.NewInt(0))
+	assert.EqualError(err, "eth_blockNumber returned: pop")
+}
+
+func TestCreateFilterFail(t *testing.T) {
+	assert := assert.New(t)
+	s := &subscription{
+		info: &SubscriptionInfo{},
+		rpc:  eth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
+	}
+	err := s.createFilter(context.Background(), big.NewInt(0))
 	assert.EqualError(err, "eth_newFilter returned: pop")
 }
 

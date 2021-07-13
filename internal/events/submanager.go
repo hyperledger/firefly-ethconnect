@@ -42,6 +42,9 @@ const (
 	subIDPrefix        = "sb-"
 	streamIDPrefix     = "es-"
 	checkpointIDPrefix = "cp-"
+
+	defaultCatchupModeBlockGap = int64(250)
+	defaultCatchupModePageSize = int64(250)
 )
 
 // SubscriptionManager provides REST APIs for managing events
@@ -75,6 +78,8 @@ type subscriptionManager interface {
 type SubscriptionManagerConf struct {
 	EventLevelDBPath        string `json:"eventsDB"`
 	EventPollingIntervalSec uint64 `json:"eventPollingIntervalSec,omitempty"`
+	CatchupModeBlockGap     int64  `json:"catchupModeBlockGap,omitempty"`
+	CatchupModePageSize     int64  `json:"catchupModePageSize,omitempty"`
 	WebhooksAllowPrivateIPs bool   `json:"webhooksAllowPrivateIPs,omitempty"`
 }
 
@@ -107,6 +112,12 @@ func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc eth.RPCClient, ws
 	}
 	if conf.EventPollingIntervalSec <= 0 {
 		conf.EventPollingIntervalSec = 1
+	}
+	if conf.CatchupModeBlockGap <= 0 {
+		conf.CatchupModeBlockGap = defaultCatchupModeBlockGap
+	}
+	if conf.CatchupModePageSize <= 0 {
+		conf.CatchupModePageSize = defaultCatchupModePageSize
 	}
 	return sm
 }

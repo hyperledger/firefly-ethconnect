@@ -386,9 +386,7 @@ func (a *eventStream) eventPoller() {
 				if sub.resetRequested {
 					sub.unsubscribe(ctx, false)
 					// Clear any checkpoint
-					if _, exists := checkpoint[sub.info.ID]; exists {
-						delete(checkpoint, sub.info.ID)
-					}
+					delete(checkpoint, sub.info.ID)
 				}
 				if sub.filterStale && !sub.deleting {
 					blockHeight, exists := checkpoint[sub.info.ID]
@@ -414,7 +412,7 @@ func (a *eventStream) eventPoller() {
 		if checkpoint != nil {
 			changed := false
 			for _, sub := range subs {
-				i1, _ := checkpoint[sub.info.ID]
+				i1 := checkpoint[sub.info.ID]
 				i2 := sub.blockHWM()
 
 				changed = changed || i1 == nil || i1.Cmp(&i2) != 0
@@ -458,7 +456,7 @@ func (a *eventStream) batchDispatcher() {
 		timeout := false
 		if len(currentBatch) > 0 {
 			// Existing batch
-			timeLeft := (batchStart.Add(batchTimeout)).Sub(time.Now())
+			timeLeft := time.Until(batchStart.Add(batchTimeout))
 			ctx, cancel := context.WithTimeout(context.Background(), timeLeft)
 			select {
 			case <-ctx.Done():
@@ -528,14 +526,12 @@ func (a *eventStream) batchProcessor() {
 		a.batchCond.L.Lock()
 		for !a.suspendOrStop() && a.batchQueue.Len() == 0 {
 			if a.updateInProgress {
-				select {
-				case <-a.updateInterrupt:
-					// we were notified by the caller about an ongoing update, return
-					log.Infof("%s: Notified of an ongoing stream update, exiting batch processor", a.spec.ID)
-					a.updateWG.Done() //Not moving this to a 'defer' since we need to unlock after calling Done()
-					a.batchCond.L.Unlock()
-					return
-				}
+				<-a.updateInterrupt
+				// we were notified by the caller about an ongoing update, return
+				log.Infof("%s: Notified of an ongoing stream update, exiting batch processor", a.spec.ID)
+				a.updateWG.Done() //Not moving this to a 'defer' since we need to unlock after calling Done()
+				a.batchCond.L.Unlock()
+				return
 			} else {
 				a.batchCond.Wait()
 			}
@@ -640,7 +636,7 @@ func (a *eventStream) performActionWithRetry(batchNumber uint64, events []*event
 		}
 		attempt++
 		err = a.action.attemptBatch(batchNumber, attempt, events)
-		complete = err == nil || endTime.Sub(time.Now()) < 0
+		complete = err == nil || time.Until(endTime) < 0
 	}
 	return err
 }

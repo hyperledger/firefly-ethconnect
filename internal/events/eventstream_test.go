@@ -191,7 +191,7 @@ func TestStopDuringTimeout(t *testing.T) {
 	defer close(eventStream)
 	defer svr.Close()
 
-	stream.handleEvent(testEvent(fmt.Sprintf("sub1")))
+	stream.handleEvent(testEvent("sub1"))
 	time.Sleep(10 * time.Millisecond)
 	stream.stop()
 	time.Sleep(10 * time.Millisecond)
@@ -430,16 +430,20 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 	testBlock.Time = uint64(ts)
 
 	callCount := 0
+	filterChangeCalls := 0
 	rpc := eth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
 		callCount++
+		log.Infof("UT %s call=%d", method, callCount)
 		if method == "eth_blockNumber" || method == "eth_newFilter" {
 		} else if method == "eth_getFilterLogs" {
 			*(res.(*[]*logEntry)) = testData[0:2]
-		} else if method == "eth_getFilterChanges" &&
-			((!stream.spec.Timestamps && callCount == 4) || (stream.spec.Timestamps && callCount == 5)) { //eth_blockNumber is an extra call to retrieve timestamps
-			*(res.(*[]*logEntry)) = testData[2:]
 		} else if method == "eth_getFilterChanges" {
-			*(res.(*[]*logEntry)) = []*logEntry{}
+			if filterChangeCalls == 0 {
+				*(res.(*[]*logEntry)) = testData[2:]
+			} else {
+				*(res.(*[]*logEntry)) = []*logEntry{}
+			}
+			filterChangeCalls++
 		} else if method == "eth_getBlockByNumber" {
 			*(res.(*ethbinding.Header)) = *testBlock
 		}

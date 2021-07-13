@@ -259,6 +259,17 @@ func TestCreateFilterFail(t *testing.T) {
 	assert.EqualError(err, "eth_newFilter returned: pop")
 }
 
+func TestProcessCatchupBlocksFail(t *testing.T) {
+	assert := assert.New(t)
+	s := &subscription{
+		info:         &SubscriptionInfo{},
+		rpc:          eth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
+		catchupBlock: big.NewInt(12345),
+	}
+	err := s.processCatchupBlocks(context.Background())
+	assert.EqualError(err, "eth_getLogs returned: pop")
+}
+
 func TestEventTimestampFail(t *testing.T) {
 	assert := assert.New(t)
 	stream := newTestStream()

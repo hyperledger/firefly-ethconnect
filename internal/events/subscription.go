@@ -191,13 +191,13 @@ func (s *subscription) restartFilter(ctx context.Context, checkpoint *big.Int) e
 		since = s.catchupBlock
 	}
 
-	var blockNumber big.Int
+	blockNumber := ethbinding.HexBigInt{}
 	err := s.rpc.CallContext(ctx, &blockNumber, "eth_blockNumber")
 	if err != nil {
 		return errors.Errorf(errors.RPCCallReturnedError, "eth_blockNumber", err)
 	}
 
-	blockGap := new(big.Int).Sub(&blockNumber, since).Int64()
+	blockGap := new(big.Int).Sub(blockNumber.ToInt(), since).Int64()
 	if s.catchupModeBlockGap > 0 && blockGap > s.catchupModeBlockGap {
 		s.catchupBlock = since // note if we were already in catchup, this does not change anything
 		return nil
@@ -247,7 +247,7 @@ func (s *subscription) processCatchupBlocks(ctx context.Context) error {
 
 	log.Infof("%s: catchup mode. Blocks %d -> %d", s.logName, s.catchupBlock.Int64(), endBlock.Int64())
 	if err := s.rpc.CallContext(ctx, &logs, "eth_getLogs", f); err != nil {
-		return err
+		return errors.Errorf(errors.RPCCallReturnedError, "eth_getLogs", err)
 	}
 	if len(logs) == 0 {
 		// We only want to catch up once - so see if we can update our HWM based on the fact

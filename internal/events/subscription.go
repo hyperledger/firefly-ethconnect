@@ -127,11 +127,13 @@ func restoreSubscription(sm subscriptionManager, rpc eth.RPCClient, i *Subscript
 		return nil, err
 	}
 	s := &subscription{
-		rpc:         rpc,
-		info:        i,
-		lp:          newLogProcessor(i.ID, event, stream),
-		logName:     i.ID + ":" + ethbind.API.ABIEventSignature(event),
-		filterStale: true,
+		rpc:                 rpc,
+		info:                i,
+		lp:                  newLogProcessor(i.ID, event, stream),
+		logName:             i.ID + ":" + ethbind.API.ABIEventSignature(event),
+		filterStale:         true,
+		catchupModeBlockGap: sm.config().CatchupModeBlockGap,
+		catchupModePageSize: sm.config().CatchupModePageSize,
 	}
 	return s, nil
 }
@@ -198,7 +200,7 @@ func (s *subscription) restartFilter(ctx context.Context, checkpoint *big.Int) e
 	}
 
 	blockGap := new(big.Int).Sub(blockNumber.ToInt(), since).Int64()
-	log.Infof("%s restart. Head=%s Position=%s Gap=%d (catchup mode at %d)", s.logName, blockNumber.String(), since.String(), blockGap, s.catchupModeBlockGap)
+	log.Debugf("%s: restarting. Head=%s Position=%s Gap=%d (catchup threshold: %d)", s.logName, blockNumber.String(), since.String(), blockGap, s.catchupModeBlockGap)
 	if s.catchupModeBlockGap > 0 && blockGap > s.catchupModeBlockGap {
 		s.catchupBlock = since // note if we were already in catchup, this does not change anything
 		return nil

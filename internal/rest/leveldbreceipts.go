@@ -108,7 +108,7 @@ func (l *levelDBReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochM
 	var endKey string
 	if sinceEpochMS > 0 {
 		// locate the iterator range limit
-		endKey := l.findEndPoint(sinceEpochMS)
+		endKey = l.findEndPoint(sinceEpochMS)
 		if endKey == "" {
 			// no entries match the sinceEpochMS, return empty
 			return &[]map[string]interface{}{}, nil

@@ -339,7 +339,7 @@ func TestLevelDBReceiptsFilterFromTo(t *testing.T) {
 	assert := assert.New(t)
 
 	conf := &LevelDBReceiptStoreConf{
-		Path: path.Join(tmpdir, "test3"),
+		Path: path.Join(tmpdir, "test4"),
 	}
 	r, err := newLevelDBReceipts(conf)
 	defer r.store.Close()
@@ -393,7 +393,7 @@ func TestLevelDBReceiptsFilterNotFound(t *testing.T) {
 	assert := assert.New(t)
 
 	conf := &LevelDBReceiptStoreConf{
-		Path: path.Join(tmpdir, "test4"),
+		Path: path.Join(tmpdir, "test6"),
 	}
 	r, err := newLevelDBReceipts(conf)
 	defer r.store.Close()
@@ -449,7 +449,7 @@ func TestLevelDBReceiptsGetReceiptOK(t *testing.T) {
 	assert := assert.New(t)
 
 	conf := &LevelDBReceiptStoreConf{
-		Path: path.Join(tmpdir, "test5"),
+		Path: path.Join(tmpdir, "test7"),
 	}
 	r, err := newLevelDBReceipts(conf)
 	defer r.store.Close()
@@ -470,7 +470,7 @@ func TestLevelDBReceiptsGetReceiptsUnmarshalFailIgnoreReceipt(t *testing.T) {
 	assert := assert.New(t)
 
 	conf := &LevelDBReceiptStoreConf{
-		Path: path.Join(tmpdir, "test5"),
+		Path: path.Join(tmpdir, "test8"),
 	}
 	r, err := newLevelDBReceipts(conf)
 	defer r.store.Close()
@@ -513,7 +513,7 @@ func TestLevelDBReceiptsGetReceiptErrorID(t *testing.T) {
 	}
 
 	_, err := r.GetReceipt("receipt1")
-	assert.EqualError(err, "Failed to the entry for the original key: receipt1. pop")
+	assert.EqualError(err, "Failed to retrieve the entry for the original key: receipt1. pop")
 }
 
 func TestLevelDBReceiptsGetReceiptErrorGeneratedID(t *testing.T) {

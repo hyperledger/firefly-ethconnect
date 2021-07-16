@@ -59,32 +59,41 @@ func newLevelDBReceipts(conf *LevelDBReceiptStoreConf) (*levelDBReceipts, error)
 func (l *levelDBReceipts) AddReceipt(requestID string, receipt *map[string]interface{}) (err error) {
 	// insert an entry with a composite key to track the insertion order
 	l.entropyLock.Lock()
-	newId := ulid.MustNew(ulid.Timestamp(time.Now()), l.idEntropy)
+	newID := ulid.MustNew(ulid.Timestamp(time.Now()), l.idEntropy)
 	l.entropyLock.Unlock()
 	// add "z" prefix so these entries come after the lookup entries
 	// because for iteration we start from last backwards
-	lookupKey := fmt.Sprintf("z%s", newId)
+	lookupKey := fmt.Sprintf("z%s", newID)
 
 	b, _ := json.MarshalIndent(receipt, "", "  ")
-	l.store.Put(lookupKey, b)
+	err = l.store.Put(lookupKey, b)
 
-	// build the index for "from"
-	fromKey := fmt.Sprintf("from:%s:%s", (*receipt)["from"], lookupKey)
-	l.store.Put(fromKey, []byte(lookupKey))
-
-	// build the index for "to" if a value is present
-	to := (*receipt)["to"]
-	if to != "" {
-		toKey := fmt.Sprintf("to:%s:%s", to, lookupKey)
-		l.store.Put(toKey, []byte(lookupKey))
+	if err == nil {
+		// build the index for "from"
+		fromKey := fmt.Sprintf("from:%s:%s", (*receipt)["from"], lookupKey)
+		err = l.store.Put(fromKey, []byte(lookupKey))
 	}
 
-	// build the indiex for "receivedAt"
-	receivedAtKey := fmt.Sprintf("receivedAt:%d:%s", (*receipt)["receivedAt"], lookupKey)
-	l.store.Put(receivedAtKey, []byte(lookupKey))
+	if err == nil {
+		// build the index for "to" if a value is present
+		to, ok := (*receipt)["to"]
+		if ok && to != "" {
+			toKey := fmt.Sprintf("to:%s:%s", to, lookupKey)
+			err = l.store.Put(toKey, []byte(lookupKey))
+		}
+	}
 
-	// insert the lookup entry for GetReceipt()
-	return l.store.Put(requestID, []byte(lookupKey))
+	if err == nil {
+		// build the index for "receivedAt"
+		receivedAtKey := fmt.Sprintf("receivedAt:%d:%s", (*receipt)["receivedAt"], lookupKey)
+		err = l.store.Put(receivedAtKey, []byte(lookupKey))
+	}
+
+	if err == nil {
+		// insert the lookup entry for GetReceipt()
+		err = l.store.Put(requestID, []byte(lookupKey))
+	}
+	return err
 }
 
 // GetReceipts Returns recent receipts with skip, limit and other query parameters
@@ -135,6 +144,8 @@ func (l *levelDBReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochM
 		lookupKeys = lookupKeysByFromAndTo
 	} else if len(ids) > 0 && (from != "" || to != "") {
 		lookupKeys = intersect(lookupKeysByIDs, lookupKeysByFromAndTo)
+	}
+	if lookupKeys != nil {
 		sort.Sort(sort.Reverse(sort.StringSlice(lookupKeys)))
 		results := l.getReceiptsByLookupKey(lookupKeys, limit)
 		return results, nil
@@ -185,11 +196,11 @@ func (l *levelDBReceipts) getReceiptsNoFilter(itr kvstore.KVIterator, skip, limi
 func (l *levelDBReceipts) GetReceipt(requestID string) (*map[string]interface{}, error) {
 	val, err := l.store.Get(requestID)
 	if err != nil {
-		if err.Error() == "leveldb: not found" {
+		if err == kvstore.ErrorNotFound {
 			return nil, nil
 		} else {
 			log.Errorf("Failed to retrieve the entry for the original key: %s. %s\n", requestID, err)
-			return nil, fmt.Errorf("Failed to the entry for the original key: %s. %s", requestID, err)
+			return nil, errors.Errorf(errors.LevelDBFailedRetriveOriginalKey, requestID, err)
 		}
 	}
 	// returned val represents the composite key, use it to retrieve the actual content
@@ -197,7 +208,7 @@ func (l *levelDBReceipts) GetReceipt(requestID string) (*map[string]interface{},
 	content, err := l.store.Get(lookupKey)
 	if err != nil {
 		log.Errorf("Failed to retrieve the entry using the generated ID: %s. %s\n", lookupKey, err)
-		return nil, fmt.Errorf("Failed to retrieve the entry using the generated ID: %s. %s", requestID, err)
+		return nil, fmt.Errorf(errors.LevelDBFailedRetriveGeneratedID, requestID, err)
 	}
 
 	result := make(map[string]interface{})
@@ -239,7 +250,7 @@ func (l *levelDBReceipts) getLookupKeysByIDs(ids []string, start, end string) []
 			result = append(result, string(val))
 		}
 	}
-	sort.Sort(sort.StringSlice(result))
+	sort.Strings(result)
 	// since our query searches in descending order, while sort.SearchString requires ascending order
 	// the "start" is the end, and "end" is the start
 	result = applyBound(result, end, start)
@@ -247,9 +258,6 @@ func (l *levelDBReceipts) getLookupKeysByIDs(ids []string, start, end string) []
 }
 
 func (l *levelDBReceipts) getLookupKeysByFromAndTo(from, to string, start, end string, limit int) []string {
-	if from == "" && to == "" {
-		return nil
-	}
 
 	var fromKeys []string
 	itr := l.store.NewIterator()
@@ -317,8 +325,7 @@ func (l *levelDBReceipts) getReceiptsByLookupKey(lookupKeys []string, limit int)
 		length = limit
 	}
 	results := []map[string]interface{}{}
-	i := 0
-	for _, key := range lookupKeys {
+	for i, key := range lookupKeys {
 		if i >= length {
 			break
 		}
@@ -334,7 +341,6 @@ func (l *levelDBReceipts) getReceiptsByLookupKey(lookupKeys []string, limit int)
 			continue
 		}
 		results = append(results, receipt)
-		i++
 	}
 	return &results
 }

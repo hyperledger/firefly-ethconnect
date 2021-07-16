@@ -22,6 +22,9 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
+// ErrorNotFound signal error for not found
+var ErrorNotFound = leveldb.ErrNotFound
+
 // KVIterator interface for key value iterators
 type KVIterator interface {
 	Key() string

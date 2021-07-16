@@ -21,7 +21,7 @@ require (
 	github.com/mholt/archiver v3.1.1+incompatible
 	github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d
 	github.com/nwaples/rardecode v1.1.0 // indirect
-	github.com/oklog/ulid/v2 v2.0.2 // indirect
+	github.com/oklog/ulid/v2 v2.0.2
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.1.3

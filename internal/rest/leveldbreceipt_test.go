@@ -26,17 +26,25 @@ import (
 
 	"github.com/kaleido-io/ethconnect/internal/kvstore"
 	"github.com/oklog/ulid/v2"
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
 var tmpdir string
 
 type mockKVStore struct {
-	err error
+	getVal     []byte
+	err        error
+	getFailIdx int
+	getCount   int
 }
 
 func (m *mockKVStore) Get(key string) ([]byte, error) {
-	return nil, m.err
+	if m.getFailIdx > 0 && m.getFailIdx != m.getCount {
+		m.getCount++
+		return m.getVal, nil
+	}
+	return m.getVal, m.err
 }
 func (m *mockKVStore) Put(key string, val []byte) error {
 	return m.err
@@ -177,7 +185,7 @@ func TestLevelDBReceiptsGetReceiptsOK(t *testing.T) {
 	assert.Equal("value2", (*results)[2]["prop1"])
 }
 
-func TestLevelDBReceiptsGetReceiptsWithStart(t *testing.T) {
+func TestLevelDBReceiptsGetReceiptsWithStartEnd(t *testing.T) {
 	assert := assert.New(t)
 
 	conf := &LevelDBReceiptStoreConf{
@@ -191,6 +199,7 @@ func TestLevelDBReceiptsGetReceiptsWithStart(t *testing.T) {
 	receipt1["_id"] = id1
 	receipt1["prop1"] = "value2"
 	receipt1["from"] = "0xc1f617aa2e1b22be21b5ef4a93d49678533a9662"
+	receipt1["receivedAt"] = 1626405000000
 	err = r.AddReceipt(id1, &receipt1)
 
 	id2 := "f1ac18f4-97ad-42e6-673d-64a9f6376993"
@@ -198,6 +207,7 @@ func TestLevelDBReceiptsGetReceiptsWithStart(t *testing.T) {
 	receipt2["_id"] = id1
 	receipt2["prop1"] = "value1"
 	receipt2["from"] = "0xc1f617aa2e1b22be21b5ef4a93d49678533a9662"
+	receipt1["receivedAt"] = 1626406000000
 	err = r.AddReceipt(id2, &receipt2)
 
 	id3 := "186eb2db-a098-4eaf-718c-efa047870830"
@@ -205,6 +215,7 @@ func TestLevelDBReceiptsGetReceiptsWithStart(t *testing.T) {
 	receipt3["_id"] = id3
 	receipt3["prop1"] = "value3"
 	receipt3["from"] = "0xc1f617aa2e1b22be21b5ef4a93d49678533a9662"
+	receipt1["receivedAt"] = 1626407000000
 	err = r.AddReceipt(id3, &receipt3)
 
 	itr := r.store.NewIterator()
@@ -212,6 +223,8 @@ func TestLevelDBReceiptsGetReceiptsWithStart(t *testing.T) {
 	var startKey string
 	valid := itr.Last()
 	for ; valid; valid = itr.Prev() {
+		b, _ := r.store.Get(itr.Key())
+		log.Infof("%s: %s", itr.Key(), b)
 		if i == 1 {
 			startKey = itr.Key()
 			break
@@ -219,7 +232,7 @@ func TestLevelDBReceiptsGetReceiptsWithStart(t *testing.T) {
 		i++
 	}
 
-	results, err := r.GetReceipts(0, 2, nil, 0, "", "", startKey)
+	results, err := r.GetReceipts(0, 2, nil, 1626404000000, "", "", "") //startKey)
 	assert.NoError(err)
 	assert.Equal(2, len(*results))
 	assert.Equal("value1", (*results)[0]["prop1"])
@@ -263,7 +276,7 @@ func TestLevelDBReceiptsFilterByIDs(t *testing.T) {
 	receipt3["from"] = "addr1"
 	err = r.AddReceipt("r3", &receipt3)
 
-	results, err := r.GetReceipts(1, 2, []string{"r1", "r2"}, int64((now.UnixNano()/int64(time.Millisecond))-10), "addr1", "addr2", "")
+	results, err := r.GetReceipts(1, 2, []string{"r1", "r2"}, int64((now.UnixNano()/int64(time.Millisecond))-10), "", "", "")
 	assert.NoError(err)
 	assert.Equal(2, len(*results))
 	assert.Equal("value2", (*results)[0]["prop1"])
@@ -310,6 +323,60 @@ func TestLevelDBReceiptsFilterByIDsAndFromTo(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal(1, len(*results))
 	assert.Equal("value1", (*results)[0]["prop1"])
+}
+
+func TestLevelDBReceiptsFilterFromTo(t *testing.T) {
+	assert := assert.New(t)
+
+	conf := &LevelDBReceiptStoreConf{
+		Path: path.Join(tmpdir, "test3"),
+	}
+	r, err := newLevelDBReceipts(conf)
+	defer r.store.Close()
+
+	now := time.Now()
+	var receivedAt int64
+	receivedAt = int64(now.UnixNano() / int64(time.Millisecond))
+
+	receipt1 := make(map[string]interface{})
+	receipt1["_id"] = "r1"
+	receipt1["prop1"] = "value1"
+	receipt1["receivedAt"] = receivedAt
+	receipt1["from"] = "addr1"
+	receipt1["to"] = "addr2"
+	err = r.AddReceipt("r1", &receipt1)
+
+	receipt2 := make(map[string]interface{})
+	receipt2["_id"] = "r2"
+	receipt2["prop1"] = "value2"
+	receipt2["receivedAt"] = receivedAt
+	receipt2["from"] = "addr1.1"
+	receipt2["to"] = "addr2"
+	err = r.AddReceipt("r2", &receipt2)
+
+	receipt3 := make(map[string]interface{})
+	receipt3["_id"] = "r3"
+	receipt3["prop1"] = "value3"
+	receipt3["receivedAt"] = receivedAt
+	receipt3["from"] = "addr1"
+	err = r.AddReceipt("r3", &receipt3)
+
+	results, err := r.GetReceipts(1, 3, []string{}, 0, "addr1", "addr2", "")
+	assert.NoError(err)
+	assert.Equal(1, len(*results))
+	assert.Equal("value1", (*results)[0]["prop1"])
+
+	results, err = r.GetReceipts(1, 3, []string{}, 0, "addr1", "", "")
+	assert.NoError(err)
+	assert.Equal(2, len(*results))
+	assert.Equal("value3", (*results)[0]["prop1"])
+	assert.Equal("value1", (*results)[1]["prop1"])
+
+	results, err = r.GetReceipts(1, 3, []string{}, 0, "", "addr2", "")
+	assert.NoError(err)
+	assert.Equal(2, len(*results))
+	assert.Equal("value2", (*results)[0]["prop1"])
+	assert.Equal("value1", (*results)[1]["prop1"])
 }
 
 func TestLevelDBReceiptsFilterNotFound(t *testing.T) {
@@ -389,6 +456,27 @@ func TestLevelDBReceiptsGetReceiptOK(t *testing.T) {
 	assert.Equal("value1", (*result)["prop1"])
 }
 
+func TestLevelDBReceiptsGetReceiptsUnmarshalFailIgnoreReceipt(t *testing.T) {
+	assert := assert.New(t)
+
+	conf := &LevelDBReceiptStoreConf{
+		Path: path.Join(tmpdir, "test5"),
+	}
+	r, err := newLevelDBReceipts(conf)
+	defer r.store.Close()
+	receipt1 := make(map[string]interface{})
+	receipt1["_id"] = "r1"
+	receipt1["prop1"] = "value1"
+	receipt1["from"] = "addr1"
+	receipt1["to"] = "addr2"
+	err = r.store.Put("zr1", []byte("!json"))
+	assert.NoError(err)
+
+	results, err := r.GetReceipts(0, 1, nil, 0, "", "", "")
+	assert.NoError(err)
+	assert.Empty(results)
+}
+
 func TestLevelDBReceiptsGetReceiptNotFound(t *testing.T) {
 	assert := assert.New(t)
 
@@ -403,7 +491,7 @@ func TestLevelDBReceiptsGetReceiptNotFound(t *testing.T) {
 	assert.Nil(result)
 }
 
-func TestLevelDBReceiptsGetReceiptError(t *testing.T) {
+func TestLevelDBReceiptsGetReceiptErrorID(t *testing.T) {
 	assert := assert.New(t)
 
 	kvstoreMock := &mockKVStore{
@@ -416,4 +504,81 @@ func TestLevelDBReceiptsGetReceiptError(t *testing.T) {
 
 	_, err := r.GetReceipt("receipt1")
 	assert.EqualError(err, "Failed to the entry for the original key: receipt1. pop")
+}
+
+func TestLevelDBReceiptsGetReceiptErrorGeneratedID(t *testing.T) {
+	assert := assert.New(t)
+
+	kvstoreMock := &mockKVStore{
+		err:        fmt.Errorf("pop"),
+		getFailIdx: 1,
+		getVal:     []byte("generated-id"),
+	}
+	r := &levelDBReceipts{
+		conf:  &LevelDBReceiptStoreConf{},
+		store: kvstoreMock,
+	}
+
+	_, err := r.GetReceipt("receipt1")
+	assert.EqualError(err, "Failed to retrieve the entry for the generated ID: receipt1. pop")
+}
+
+func TestLevelDBReceiptsGetReceiptBadDataID(t *testing.T) {
+	assert := assert.New(t)
+
+	kvstoreMock := &mockKVStore{
+		getVal: []byte("!json"),
+	}
+	r := &levelDBReceipts{
+		conf:  &LevelDBReceiptStoreConf{},
+		store: kvstoreMock,
+	}
+
+	_, err := r.GetReceipt("receipt1")
+	assert.Regexp("invalid character", err)
+}
+
+func TestGetReceiptsByLookupKeyLimit(t *testing.T) {
+	assert := assert.New(t)
+
+	kvstoreMock := &mockKVStore{
+		getVal: []byte("{}"),
+	}
+	r := &levelDBReceipts{
+		conf:  &LevelDBReceiptStoreConf{},
+		store: kvstoreMock,
+	}
+
+	results := r.getReceiptsByLookupKey([]string{"key1", "key2"}, 1)
+	assert.Len(*results, 1)
+}
+
+func TestGetReceiptsByLookupKeyGetFail(t *testing.T) {
+	assert := assert.New(t)
+
+	kvstoreMock := &mockKVStore{
+		err: fmt.Errorf("pop"),
+	}
+	r := &levelDBReceipts{
+		conf:  &LevelDBReceiptStoreConf{},
+		store: kvstoreMock,
+	}
+
+	results := r.getReceiptsByLookupKey([]string{"key1", "key2"}, 1)
+	assert.Empty(results)
+}
+
+func TestGetReceiptsByLookupUnmarshalFail(t *testing.T) {
+	assert := assert.New(t)
+
+	kvstoreMock := &mockKVStore{
+		getVal: []byte("!json"),
+	}
+	r := &levelDBReceipts{
+		conf:  &LevelDBReceiptStoreConf{},
+		store: kvstoreMock,
+	}
+
+	results := r.getReceiptsByLookupKey([]string{"key1", "key2"}, 1)
+	assert.Empty(results)
 }

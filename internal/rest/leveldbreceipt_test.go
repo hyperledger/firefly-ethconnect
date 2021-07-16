@@ -191,32 +191,40 @@ func TestLevelDBReceiptsGetReceiptsWithStartEnd(t *testing.T) {
 	conf := &LevelDBReceiptStoreConf{
 		Path: path.Join(tmpdir, "test1"),
 	}
-	r, err := newLevelDBReceipts(conf)
+	r, _ := newLevelDBReceipts(conf)
 	defer r.store.Close()
 
 	id1 := "a492bc53-d971-4a9b-7d8c-d420a10d0aad"
 	receipt1 := make(map[string]interface{})
 	receipt1["_id"] = id1
-	receipt1["prop1"] = "value2"
+	receipt1["prop1"] = "value1"
 	receipt1["from"] = "0xc1f617aa2e1b22be21b5ef4a93d49678533a9662"
 	receipt1["receivedAt"] = 1626405000000
-	err = r.AddReceipt(id1, &receipt1)
+	r.AddReceipt(id1, &receipt1)
 
 	id2 := "f1ac18f4-97ad-42e6-673d-64a9f6376993"
 	receipt2 := make(map[string]interface{})
-	receipt2["_id"] = id1
-	receipt2["prop1"] = "value1"
+	receipt2["_id"] = id2
+	receipt2["prop1"] = "value2"
 	receipt2["from"] = "0xc1f617aa2e1b22be21b5ef4a93d49678533a9662"
-	receipt1["receivedAt"] = 1626406000000
-	err = r.AddReceipt(id2, &receipt2)
+	receipt1["receivedAt"] = 1626406000001
+	r.AddReceipt(id2, &receipt2)
 
 	id3 := "186eb2db-a098-4eaf-718c-efa047870830"
 	receipt3 := make(map[string]interface{})
 	receipt3["_id"] = id3
 	receipt3["prop1"] = "value3"
 	receipt3["from"] = "0xc1f617aa2e1b22be21b5ef4a93d49678533a9662"
-	receipt1["receivedAt"] = 1626407000000
-	err = r.AddReceipt(id3, &receipt3)
+	receipt1["receivedAt"] = 1626407000002
+	r.AddReceipt(id3, &receipt3)
+
+	id4 := "f6624085-7f35-46f5-ae0a-40d9c4cf43e6"
+	receipt4 := make(map[string]interface{})
+	receipt4["_id"] = id4
+	receipt4["prop1"] = "value4"
+	receipt4["from"] = "0xc1f617aa2e1b22be21b5ef4a93d49678533a9662"
+	receipt1["receivedAt"] = 1626407000003
+	r.AddReceipt(id4, &receipt4)
 
 	// Some test debug info
 	itr := r.store.NewIterator()
@@ -225,7 +233,7 @@ func TestLevelDBReceiptsGetReceiptsWithStartEnd(t *testing.T) {
 		b, _ := r.store.Get(itr.Key())
 		log.Infof("%s: %s", itr.Key(), b)
 	}
-	endKey := r.findEndPoint(1626404000000)
+	endKey := r.findEndPoint(1626404000001)
 	log.Infof("End key: %s", endKey)
 	itr.Release()
 
@@ -235,19 +243,20 @@ func TestLevelDBReceiptsGetReceiptsWithStartEnd(t *testing.T) {
 	valid = itr.Last()
 	for ; valid; valid = itr.Prev() {
 		_, _ = r.store.Get(itr.Key())
-		if i == 1 {
+		if i == 2 {
 			startKey = itr.Key()
 			break
 		}
 		i++
 	}
 
-	results, err := r.GetReceipts(0, 2, nil, 1626404000000, "", "", startKey)
+	// start key is item at index 2, `since` is item at index 1, expecting result to be items at indexes 1 and 2
+	results, err := r.GetReceipts(0, 2, nil, 1626404000001, "", "", startKey)
 	assert.NoError(err)
 	assert.Equal(2, len(*results))
-	assert.Equal("value1", (*results)[0]["prop1"])
+	assert.Equal("value2", (*results)[0]["prop1"])
 	assert.Equal(startKey, (*results)[0]["_sequenceKey"])
-	assert.Equal("value2", (*results)[1]["prop1"])
+	assert.Equal("value1", (*results)[1]["prop1"])
 }
 
 func TestLevelDBReceiptsFilterByIDs(t *testing.T) {

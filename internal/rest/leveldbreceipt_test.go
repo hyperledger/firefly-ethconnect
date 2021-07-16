@@ -218,13 +218,23 @@ func TestLevelDBReceiptsGetReceiptsWithStartEnd(t *testing.T) {
 	receipt1["receivedAt"] = 1626407000000
 	err = r.AddReceipt(id3, &receipt3)
 
+	// Some test debug info
 	itr := r.store.NewIterator()
-	i := 0
-	var startKey string
-	valid := itr.Last()
-	for ; valid; valid = itr.Prev() {
+	valid := itr.Next()
+	for ; valid; valid = itr.Next() {
 		b, _ := r.store.Get(itr.Key())
 		log.Infof("%s: %s", itr.Key(), b)
+	}
+	endKey := r.findEndPoint(1626404000000)
+	log.Infof("End key: %s", endKey)
+	itr.Release()
+
+	itr = r.store.NewIterator()
+	i := 0
+	var startKey string
+	valid = itr.Last()
+	for ; valid; valid = itr.Prev() {
+		_, _ = r.store.Get(itr.Key())
 		if i == 1 {
 			startKey = itr.Key()
 			break

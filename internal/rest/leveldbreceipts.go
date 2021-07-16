@@ -105,24 +105,15 @@ func (l *levelDBReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochM
 	// - if "skip" is present, forward to the count
 	// - if "ids" are present, use them to look up the specific entries and filter out the entries falling out of the cursor range
 	// - if "from" or "to" are present, look up the entries using the "from:[address]" and "to:[address]" prefix then work out the intersection of the [lookupKey] segments
-	var itr kvstore.KVIterator
 	var endKey string
 	if sinceEpochMS > 0 {
 		// locate the iterator range limit
-		keyRange := l.findEndPoint(sinceEpochMS)
-		if keyRange != nil {
-			itr = l.store.NewIteratorWithRange(keyRange)
-			endKey = string(string(keyRange.Limit))
-		} else {
+		endKey := l.findEndPoint(sinceEpochMS)
+		if endKey == "" {
 			// no entries match the sinceEpochMS, return empty
 			return &[]map[string]interface{}{}, nil
 		}
-	} else {
-		// create the iterator without a range
-		itr = l.store.NewIterator()
 	}
-	defer itr.Release()
-
 	if limit == 0 {
 		limit = l.defaultLimit
 	}
@@ -152,6 +143,18 @@ func (l *levelDBReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochM
 	}
 
 	// no reference points, iterate normally
+	var itr kvstore.KVIterator
+	if endKey != "" {
+		// We iterate in reverse order, so the end key is the start
+		itr = l.store.NewIteratorWithRange(&util.Range{
+			Start: []byte(endKey),
+		})
+	} else {
+		// create the iterator without a range
+		itr = l.store.NewIterator()
+	}
+	defer itr.Release()
+
 	results := l.getReceiptsNoFilter(itr, skip, limit, start)
 	return &results, nil
 }
@@ -219,7 +222,7 @@ func (l *levelDBReceipts) GetReceipt(requestID string) (*map[string]interface{},
 	return &result, nil
 }
 
-func (l *levelDBReceipts) findEndPoint(sinceEpochMS int64) *util.Range {
+func (l *levelDBReceipts) findEndPoint(sinceEpochMS int64) string {
 	searchKey := fmt.Sprintf("receivedAt:%d:", sinceEpochMS)
 	itr := l.store.NewIterator()
 	defer itr.Release()
@@ -231,12 +234,10 @@ func (l *levelDBReceipts) findEndPoint(sinceEpochMS int64) *util.Range {
 		// all the "receiveAt" entries without a hit
 		if strings.HasPrefix(foundKey, "receivedAt:") {
 			segments := strings.Split(foundKey, ":")
-			return &util.Range{
-				Limit: []byte(segments[2]),
-			}
+			return segments[2]
 		}
 	}
-	return nil
+	return ""
 }
 
 func (l *levelDBReceipts) getLookupKeysByIDs(ids []string, start, end string) []string {

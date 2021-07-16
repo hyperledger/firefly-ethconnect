@@ -242,7 +242,7 @@ func TestLevelDBReceiptsGetReceiptsWithStartEnd(t *testing.T) {
 		i++
 	}
 
-	results, err := r.GetReceipts(0, 2, nil, 1626404000000, "", "", "") //startKey)
+	results, err := r.GetReceipts(0, 2, nil, 1626404000000, "", "", startKey)
 	assert.NoError(err)
 	assert.Equal(2, len(*results))
 	assert.Equal("value1", (*results)[0]["prop1"])

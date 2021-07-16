@@ -16,7 +16,7 @@ clean-ethbinding: force
 	  rm ethbinding.so
 reset-ethbinding: clean-ethbinding ethbinding.so ;
 delv-ethbinding: force
-# if using delv or vscode to debug, use "make vscode-ethbinding", otherwise you will get error:
+# if using delv or vscode to debug, use "make delv-ethbinding", otherwise you will get error:
 # "plugin was built with a different version of package runtime/internal/sys"
 	  go build -buildmode=plugin -gcflags='all=-N -l' github.com/kaleido-io/ethbinding
 coverage.txt: $(GOFILES)
@@ -45,4 +45,3 @@ build-mac:
 		GOOS=darwin GOARCH=amd64 $(VGO) build -o $(BINARY_MAC) -v
 build-win:
 		GOOS=windows GOARCH=amd64 $(VGO) build -o $(BINARY_WIN) -v
-

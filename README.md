@@ -473,6 +473,30 @@ webhooks:
       consumerGroup: "example-webhoooksto-kafka-cg"
 ```
 
+Note that 3 separate stores are utilizing LevelDB: OpenAPI configuration, event stream management, and transaction receipts. A sample configuration is provided below.
+
+```yaml
+kafka:
+  kafka-tx-streaming:
+    ...
+rest:
+  rest-gateway:
+    ...
+    openapi:
+      # for OpenAPI configurations
+      storagePath: "/data/ethconnect/openapi"
+      # for event stream management (subscriptions, etc.)
+      eventsDB: "/data/ethconnect/eventsdb"
+      ...
+    # for transaction receipts when using async endpoints
+    leveldb:
+      path: "/data/ethconnect/receiptsdb"
+      queryLimit: 100
+    ...
+plugins:
+  securityModule: ""
+```
+
 ## Tuning
 
 The following tuning parameters are currently exposed on the Kafka->Ethereum bridge:

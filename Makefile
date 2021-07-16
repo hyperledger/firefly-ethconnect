@@ -10,8 +10,15 @@ GOFILES := $(shell find . -name '*.go' -print)
 all: deps build test
 build: ethbinding.so
 		$(VGO) build -ldflags "-X main.buildDate=`date -u +\"%Y-%m-%dT%H:%M:%SZ\"` -X main.buildVersion=$(BUILD_VERSION)" -tags=prod -o $(BINARY_NAME) -v
-ethbinding.so:	  
+ethbinding.so:
 	  go build -buildmode=plugin github.com/kaleido-io/ethbinding
+clean-ethbinding: force
+	  rm ethbinding.so
+reset-ethbinding: clean-ethbinding ethbinding.so ;
+delv-ethbinding: force
+# if using delv or vscode to debug, use "make delv-ethbinding", otherwise you will get error:
+# "plugin was built with a different version of package runtime/internal/sys"
+	  go build -buildmode=plugin -gcflags='all=-N -l' github.com/kaleido-io/ethbinding
 coverage.txt: $(GOFILES)
 		$(VGO) test  ./... -cover -coverprofile=coverage.txt -covermode=atomic -timeout 30s
 coverage.html:
@@ -38,4 +45,3 @@ build-mac:
 		GOOS=darwin GOARCH=amd64 $(VGO) build -o $(BINARY_MAC) -v
 build-win:
 		GOOS=windows GOARCH=amd64 $(VGO) build -o $(BINARY_WIN) -v
-

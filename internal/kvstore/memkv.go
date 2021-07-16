@@ -52,6 +52,11 @@ func (m *MockKV) NewIterator() KVIterator {
 	return nil // not implemented in mock
 }
 
+// NewIterator for a new iterator
+func (m *MockKV) NewIteratorWithRange(rng interface{}) KVIterator {
+	return nil // not implemented in mock
+}
+
 // Close it
 func (m *MockKV) Close() {}
 

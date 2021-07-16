@@ -64,10 +64,17 @@ type MongoDBReceiptStoreConf struct {
 	ConnectTimeoutMS int    `json:"connectTimeout"`
 }
 
+// LevelDBReceiptStoreConf is the configuration for a LevelDB receipt store
+type LevelDBReceiptStoreConf struct {
+	ReceiptStoreConf
+	Path string `json:"path"`
+}
+
 // RESTGatewayConf defines the YAML config structure for a webhooks bridge instance
 type RESTGatewayConf struct {
 	Kafka    kafka.KafkaCommonConf              `json:"kafka"`
 	MongoDB  MongoDBReceiptStoreConf            `json:"mongodb"`
+	LevelDB  LevelDBReceiptStoreConf            `json:"leveldb"`
 	MemStore ReceiptStoreConf                   `json:"memstore"`
 	OpenAPI  contracts.SmartContractGatewayConf `json:"openapi"`
 	HTTP     struct {
@@ -112,6 +119,9 @@ func (g *RESTGateway) ValidateConf() (err error) {
 	}
 	if g.conf.MongoDB.QueryLimit < 1 {
 		g.conf.MongoDB.QueryLimit = 100
+	}
+	if g.conf.LevelDB.QueryLimit < 1 {
+		g.conf.LevelDB.QueryLimit = 100
 	}
 	if g.conf.OpenAPI.StoragePath != "" && g.conf.RPC.URL == "" {
 		err = errors.Errorf(errors.ConfigRESTGatewayRequiredRPC)
@@ -176,6 +186,7 @@ func (g *RESTGateway) CobraInit(cmdName string) (cmd *cobra.Command) {
 	cmd.Flags().IntVarP(&g.conf.MongoDB.QueryLimit, "mongodb-query-limit", "Q", utils.DefInt("MONGODB_QUERYLIM", 0), "Maximum docs to return on a rest call (cap on limit)")
 	cmd.Flags().IntVarP(&g.conf.MemStore.MaxDocs, "memstore-receipt-maxdocs", "v", utils.DefInt("MEMSTORE_MAXDOCS", 10), "In-memory receipt store capped size")
 	cmd.Flags().IntVarP(&g.conf.MemStore.QueryLimit, "memstore-query-limit", "V", utils.DefInt("MEMSTORE_QUERYLIM", 0), "In-memory maximum docs to return on a rest call")
+	cmd.Flags().IntVarP(&g.conf.LevelDB.QueryLimit, "leveldb-query-limit", "B", utils.DefInt("LEVELDB_QUERYLIM", 0), "Maximum docs to return on a rest call (cap on limit)")
 	return
 }
 
@@ -275,6 +286,14 @@ func (g *RESTGateway) Start() (err error) {
 		if err = mongoStore.connect(); err != nil {
 			return
 		}
+	} else if g.conf.LevelDB.Path != "" {
+		receiptStoreConf = &g.conf.LevelDB.ReceiptStoreConf
+		leveldbStore, errResult := newLevelDBReceipts(&g.conf.LevelDB)
+		if errResult != nil {
+			err = errResult
+			return
+		}
+		receiptStorePersistence = leveldbStore
 	} else {
 		receiptStoreConf = &g.conf.MemStore
 		memStore := newMemoryReceipts(&g.conf.MemStore)

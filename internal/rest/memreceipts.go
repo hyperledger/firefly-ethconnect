@@ -37,7 +37,7 @@ func newMemoryReceipts(conf *ReceiptStoreConf) *memoryReceipts {
 	return r
 }
 
-func (m *memoryReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to string) (*[]map[string]interface{}, error) {
+func (m *memoryReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to, start string) (*[]map[string]interface{}, error) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 

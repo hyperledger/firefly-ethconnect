@@ -185,6 +185,8 @@ const (
 	ReceiptStoreMongoDBConnect = "Unable to connect to MongoDB: %s"
 	// ReceiptStoreMongoDBIndex couldn't create MongoDB index
 	ReceiptStoreMongoDBIndex = "Unable to create index: %s"
+	// ReceiptStoreLevelDBConnect couldn't open file for the level DB
+	ReceiptStoreLevelDBConnect = "Unable to open LevelDB: %s"
 	// ReceiptStoreSerializeResponse problem sending a receipt stored back over the REST API
 	ReceiptStoreSerializeResponse = "Error serializing response"
 	// ReceiptStoreInvalidRequestID bad ID query
@@ -440,6 +442,11 @@ const (
 	WebhooksDirectTooManyInflight = "Too many in-flight transactions"
 	// WebhooksDirectBadHeaders problem processing for in-memory operation
 	WebhooksDirectBadHeaders = "Failed to process headers in message"
+
+	// LevelDBFailedRetriveOriginalKey problem retrieving entry - original key
+	LevelDBFailedRetriveOriginalKey = "Failed to retrieve the entry for the original key: %s. %s"
+	// LevelDBFailedRetriveGeneratedID problem retrieving entry - generated ID
+	LevelDBFailedRetriveGeneratedID = "Failed to retrieve the entry for the generated ID: %s. %s"
 )
 
 type Error string

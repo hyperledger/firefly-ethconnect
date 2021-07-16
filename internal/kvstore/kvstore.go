@@ -19,13 +19,20 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/iterator"
+	"github.com/syndtr/goleveldb/leveldb/util"
 )
+
+// ErrorNotFound signal error for not found
+var ErrorNotFound = leveldb.ErrNotFound
 
 // KVIterator interface for key value iterators
 type KVIterator interface {
 	Key() string
 	Value() []byte
 	Next() bool
+	Prev() bool
+	Seek(string) bool
+	Last() bool
 	Release()
 }
 
@@ -35,6 +42,7 @@ type KVStore interface {
 	Get(key string) ([]byte, error)
 	Delete(key string) error
 	NewIterator() KVIterator
+	NewIteratorWithRange(keyRange interface{}) KVIterator
 	Close()
 }
 
@@ -73,6 +81,14 @@ func (k *levelDBKeyValueStore) NewIterator() KVIterator {
 	}
 }
 
+func (k *levelDBKeyValueStore) NewIteratorWithRange(rng interface{}) KVIterator {
+	keyRange := rng.(*util.Range)
+
+	return &levelDBKeyIterator{
+		i: k.db.NewIterator(keyRange, nil),
+	}
+}
+
 type levelDBKeyIterator struct {
 	i iterator.Iterator
 }
@@ -85,8 +101,20 @@ func (k *levelDBKeyIterator) Value() []byte {
 	return k.i.Value()
 }
 
+func (k *levelDBKeyIterator) Last() bool {
+	return k.i.Last()
+}
+
+func (k *levelDBKeyIterator) Seek(key string) bool {
+	return k.i.Seek([]byte(key))
+}
+
 func (k *levelDBKeyIterator) Next() bool {
 	return k.i.Next()
+}
+
+func (k *levelDBKeyIterator) Prev() bool {
+	return k.i.Prev()
 }
 
 func (k *levelDBKeyIterator) Release() {

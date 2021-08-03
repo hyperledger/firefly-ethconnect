@@ -455,7 +455,11 @@ func (a *eventStream) batchDispatcher() {
 	var currentBatch []*eventData
 	var batchStart time.Time
 	batchTimeout := time.Duration(a.spec.BatchTimeoutMS) * time.Millisecond
-	defer a.updateWG.Done()
+	defer func() {
+		// note for suspend-resume-update case, the `updateWG` might have been recreated.
+		// So we cannot defer the updateWG call itself (need to wrap in a separate function)
+		a.updateWG.Done()
+	}()
 	for {
 		// Wait for the next event - if we're in the middle of a batch, we
 		// need to cope with a timeout

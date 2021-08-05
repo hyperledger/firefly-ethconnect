@@ -163,7 +163,7 @@ func (c *webSocketConnection) handleAckOrError(t *webSocketTopic, err error) {
 		log.Debugf("WS/%s: response (error='%t') on topic '%s' passed on for processing", c.id, isError, t.topic)
 		break
 	default:
-		log.Debugf("WS/%s: suprious ack received (error='%t') on topic '%s'", c.id, isError, t.topic)
+		log.Debugf("WS/%s: spurious ack received (error='%t') on topic '%s'", c.id, isError, t.topic)
 		break
 	}
 }

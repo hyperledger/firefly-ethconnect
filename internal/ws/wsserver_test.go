@@ -204,14 +204,6 @@ func TestSpuriousAckProcessing(t *testing.T) {
 	for len(w.connections) > 0 {
 		time.Sleep(1 * time.Millisecond)
 	}
-
-	for _, conn := range w.connections {
-		_, _, receiver, _ := conn.server.GetChannels("mytopic")
-		select {
-		case <-receiver:
-			return
-		}
-	}
 	w.Close()
 }
 

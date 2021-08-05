@@ -18,7 +18,6 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"time"
 
 	ws "github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
@@ -160,11 +159,11 @@ func (c *webSocketConnection) listen() {
 func (c *webSocketConnection) handleAckOrError(t *webSocketTopic, err error) {
 	isError := err != nil
 	select {
-	case <-time.After(c.server.processingTimeout):
-		log.Errorf("WS/%s: response (error='%t') on topic '%s'. We were not available to process it after %.2f seconds. Closing connection", c.id, isError, t.topic, c.server.processingTimeout.Seconds())
-		c.close()
 	case t.receiverChannel <- err:
 		log.Debugf("WS/%s: response (error='%t') on topic '%s' passed on for processing", c.id, isError, t.topic)
+		break
+	default:
+		log.Debugf("WS/%s: spurious ack received (error='%t') on topic '%s'", c.id, isError, t.topic)
 		break
 	}
 }

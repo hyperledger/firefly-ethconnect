@@ -178,7 +178,7 @@ func TestConnectAbandonRequest(t *testing.T) {
 
 }
 
-func TestTimeoutProcessing(t *testing.T) {
+func TestSpuriousAckProcessing(t *testing.T) {
 	assert := assert.New(t)
 
 	w, ts := newTestWebSocketServer()
@@ -192,16 +192,19 @@ func TestTimeoutProcessing(t *testing.T) {
 	assert.NoError(err)
 
 	c.WriteJSON(&webSocketCommandMessage{
-		Type: "ack",
+		Type:  "ack",
+		Topic: "mytopic",
 	})
+	c.WriteJSON(&webSocketCommandMessage{
+		Type:  "ack",
+		Topic: "mytopic",
+	})
+	c.Close()
 
-	// Confirm we close the connection after the timeout pops
 	for len(w.connections) > 0 {
 		time.Sleep(1 * time.Millisecond)
 	}
-
 	w.Close()
-
 }
 
 func TestConnectBadWebsocketHandshake(t *testing.T) {

@@ -130,7 +130,7 @@ func (s *webSocketServer) getTopic(topic string) *webSocketTopic {
 			topic:            topic,
 			senderChannel:    make(chan interface{}),
 			broadcastChannel: make(chan interface{}),
-			receiverChannel:  make(chan error),
+			receiverChannel:  make(chan error, 1),
 			closingChannel:   make(chan struct{}),
 		}
 		s.topics[topic] = t

@@ -208,9 +208,9 @@ func (a *eventStream) startEventHandlers(resume bool) {
 	go a.batchProcessor()
 	// For a pause/resume, the batch dispatcher goroutine is not terminated, hence no need to start it
 	if !resume {
-		a.updateWG.Add(1) // add a channel for batchDispatcher to inform after it has stopped
 		go a.batchDispatcher()
 	}
+	a.updateWG.Add(1) // add a channel for batchDispatcher to inform after it has stopped
 }
 
 // GetID returns the ID (for sorting)
@@ -219,11 +219,18 @@ func (spec *StreamInfo) GetID() string {
 }
 
 // preUpdateStream sets a flag to indicate updateInProgress and wakes up goroutines waiting on condition variable
-func (a *eventStream) preUpdateStream() {
+func (a *eventStream) preUpdateStream() error {
 	a.batchCond.L.Lock()
+	if a.updateInProgress {
+		a.batchCond.L.Unlock()
+		return errors.Errorf(errors.EventStreamsUpdateAlreadyInProgress)
+	}
 	a.updateInProgress = true
+	// close the updateInterrupt channel so that the event handler go routines can be woken up
+	close(a.updateInterrupt)
 	a.batchCond.Broadcast()
 	a.batchCond.L.Unlock()
+	return nil
 }
 
 // postUpdateStream resets flags and kicks off a fresh round of handler go routines
@@ -231,9 +238,9 @@ func (a *eventStream) postUpdateStream() {
 	a.batchCond.L.Lock()
 	a.pollerDone = false
 	a.processorDone = false
+	a.startEventHandlers(false)
 	a.updateInProgress = false
 	a.batchCond.L.Unlock()
-	a.startEventHandlers(false)
 }
 
 // update modifies an existing eventStream
@@ -241,9 +248,9 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 	log.Infof("%s: Update event stream", a.spec.ID)
 	// set a flag to indicate updateInProgress
 	// For any go routines that are Wait() ing on the eventListener, wake them up
-	a.preUpdateStream()
-	// close the updateInterrupt channel so that the event handler go routines can be woken up
-	close(a.updateInterrupt)
+	if err := a.preUpdateStream(); err != nil {
+		return nil, err
+	}
 	// wait for the poked goroutines to finish up
 	a.updateWG.Wait()
 
@@ -448,7 +455,11 @@ func (a *eventStream) batchDispatcher() {
 	var currentBatch []*eventData
 	var batchStart time.Time
 	batchTimeout := time.Duration(a.spec.BatchTimeoutMS) * time.Millisecond
-	defer a.updateWG.Done()
+	defer func() {
+		// note for suspend-resume-update case, the `updateWG` might have been recreated.
+		// So we cannot defer the updateWG call itself (need to wrap in a separate function)
+		a.updateWG.Done()
+	}()
 	for {
 		// Wait for the next event - if we're in the middle of a batch, we
 		// need to cope with a timeout

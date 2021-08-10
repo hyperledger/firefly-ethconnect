@@ -1407,3 +1407,23 @@ func TestUpdateStreamInvalidWebhookURL(t *testing.T) {
 	assert.NoError(err)
 	sm.Close()
 }
+
+func TestUpdateStreamDuplicateCall(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	db, _ := kvstore.NewLDBKeyValueStore(dir)
+	_, stream, svr, _ := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingBlock,
+			Webhook:       &webhookActionInfo{},
+		}, db, 200)
+	defer svr.Close()
+
+	err := stream.preUpdateStream()
+	assert.NoError(err)
+
+	err = stream.preUpdateStream()
+	assert.Regexp("Update to event stream already in progress", err)
+}

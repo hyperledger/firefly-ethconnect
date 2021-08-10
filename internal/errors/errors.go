@@ -133,6 +133,8 @@ const (
 	EventStreamsCannotUpdateType = "The type of an event stream cannot be changed"
 	// EventStreamsInvalidDistributionMode unknown distribution mode
 	EventStreamsInvalidDistributionMode = "Invalid distribution mode '%s'. Valid distribution modes are: 'workloadDistribution' and 'broadcast'."
+	// EventStreamsUpdateAlreadyInProgress update already in progress
+	EventStreamsUpdateAlreadyInProgress = "Update to event stream already in progress"
 
 	// KakfaProducerConfirmMsgUnknown we received a confirmation callback, but we aren't expecting it
 	KakfaProducerConfirmMsgUnknown = "Received confirmation for message not in in-flight map: %s"

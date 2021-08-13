@@ -325,6 +325,17 @@ go get github.com/kaleido-io/ethconnect
 
 ## Development environment
 
+### Pre-requisites
+
+Before building, the `ethbinding` plugin project must be present in an `ethbinding` directory
+at the same level as the ethconnect source. This project provides dynamic bindings to
+go-ethereum.
+
+Unit tests also require a version of solc 0.5 - 0.7, installed with `brew install solidity@7`
+[or similar](https://docs.soliditylang.org/en/v0.8.7/installing-solidity.html).
+
+### Building
+
 With Go 1.11 or later simply use
 ```sh
 make

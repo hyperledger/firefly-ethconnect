@@ -37,6 +37,9 @@
             }
           },
           {
+            "$ref": "#/parameters/idParam"
+          },
+          {
             "$ref": "#/parameters/fromParam"
           },
           {
@@ -368,6 +371,9 @@
             "required": true
           },
           {
+            "$ref": "#/parameters/idParam"
+          },
+          {
             "$ref": "#/parameters/fromParam"
           },
           {
@@ -426,6 +432,9 @@
             "schema": {
               "$ref": "#/definitions/allowance_inputs"
             }
+          },
+          {
+            "$ref": "#/parameters/idParam"
           },
           {
             "$ref": "#/parameters/fromParam"
@@ -510,6 +519,9 @@
             "required": true
           },
           {
+            "$ref": "#/parameters/idParam"
+          },
+          {
             "$ref": "#/parameters/fromParam"
           },
           {
@@ -568,6 +580,9 @@
             "schema": {
               "$ref": "#/definitions/approve_inputs"
             }
+          },
+          {
+            "$ref": "#/parameters/idParam"
           },
           {
             "$ref": "#/parameters/fromParam"
@@ -645,6 +660,9 @@
             "required": true
           },
           {
+            "$ref": "#/parameters/idParam"
+          },
+          {
             "$ref": "#/parameters/fromParam"
           },
           {
@@ -703,6 +721,9 @@
             "schema": {
               "$ref": "#/definitions/balanceOf_inputs"
             }
+          },
+          {
+            "$ref": "#/parameters/idParam"
           },
           {
             "$ref": "#/parameters/fromParam"
@@ -787,6 +808,9 @@
             "required": true
           },
           {
+            "$ref": "#/parameters/idParam"
+          },
+          {
             "$ref": "#/parameters/fromParam"
           },
           {
@@ -845,6 +869,9 @@
             "schema": {
               "$ref": "#/definitions/decreaseAllowance_inputs"
             }
+          },
+          {
+            "$ref": "#/parameters/idParam"
           },
           {
             "$ref": "#/parameters/fromParam"
@@ -929,6 +956,9 @@
             "required": true
           },
           {
+            "$ref": "#/parameters/idParam"
+          },
+          {
             "$ref": "#/parameters/fromParam"
           },
           {
@@ -987,6 +1017,9 @@
             "schema": {
               "$ref": "#/definitions/increaseAllowance_inputs"
             }
+          },
+          {
+            "$ref": "#/parameters/idParam"
           },
           {
             "$ref": "#/parameters/fromParam"
@@ -1057,6 +1090,9 @@
             "required": true
           },
           {
+            "$ref": "#/parameters/idParam"
+          },
+          {
             "$ref": "#/parameters/fromParam"
           },
           {
@@ -1115,6 +1151,9 @@
             "schema": {
               "$ref": "#/definitions/totalSupply_inputs"
             }
+          },
+          {
+            "$ref": "#/parameters/idParam"
           },
           {
             "$ref": "#/parameters/fromParam"
@@ -1199,6 +1238,9 @@
             "required": true
           },
           {
+            "$ref": "#/parameters/idParam"
+          },
+          {
             "$ref": "#/parameters/fromParam"
           },
           {
@@ -1257,6 +1299,9 @@
             "schema": {
               "$ref": "#/definitions/transfer_inputs"
             }
+          },
+          {
+            "$ref": "#/parameters/idParam"
           },
           {
             "$ref": "#/parameters/fromParam"
@@ -1348,6 +1393,9 @@
             "required": true
           },
           {
+            "$ref": "#/parameters/idParam"
+          },
+          {
             "$ref": "#/parameters/fromParam"
           },
           {
@@ -1406,6 +1454,9 @@
             "schema": {
               "$ref": "#/definitions/transferFrom_inputs"
             }
+          },
+          {
+            "$ref": "#/parameters/idParam"
           },
           {
             "$ref": "#/parameters/fromParam"
@@ -1727,6 +1778,12 @@
       "name": "fly-gasprice",
       "in": "query",
       "allowEmptyValue": true
+    },
+    "idParam": {
+      "type": "string",
+      "description": "Optionally set the ID for this request - must be unique if set (header: x-firefly-id)",
+      "name": "fly-id",
+      "in": "query"
     },
     "privacyGroupIdParam": {
       "type": "string",

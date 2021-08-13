@@ -19,8 +19,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"testing"
 
 	"github.com/julienschmidt/httprouter"
@@ -144,4 +146,75 @@ func TestContractGWHandlerUnmarshalFail(t *testing.T) {
 		"bad json": map[bool]bool{true: false},
 	})
 	assert.EqualError(err, "unexpected end of JSON input")
+}
+
+func TestWebhookHandlerTransaction(t *testing.T) {
+	assert := assert.New(t)
+
+	transactionMsg := messages.SendTransaction{
+		TransactionCommon: messages.TransactionCommon{
+			RequestCommon: messages.RequestCommon{
+				Headers: messages.RequestHeaders{
+					CommonHeaders: messages.CommonHeaders{
+						MsgType: messages.MsgTypeDeployContract,
+					},
+				},
+			},
+		},
+	}
+	transactionMsgBytes, _ := json.Marshal(&transactionMsg)
+	req, _ := http.NewRequest("POST", "/any", bytes.NewReader(transactionMsgBytes))
+	w := &webhooks{
+		smartContractGW: &mockContractGW{},
+		handler:         &mockHandler{},
+	}
+	rec := httptest.NewRecorder()
+	w.webhookHandler(rec, req, false)
+	res := rec.Result()
+	assert.Equal(200, res.StatusCode)
+
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	assert.NoError(err)
+
+	var asyncResponse messages.AsyncSentMsg
+	err = json.Unmarshal(data, &asyncResponse)
+	assert.NoError(err)
+	assert.Regexp(regexp.MustCompile(`\w{8}-\w{4}-\w{4}-\w{4}-\w{12}`), asyncResponse.Request)
+}
+
+func TestWebhookHandlerTransactionWithID(t *testing.T) {
+	assert := assert.New(t)
+
+	transactionMsg := messages.SendTransaction{
+		TransactionCommon: messages.TransactionCommon{
+			RequestCommon: messages.RequestCommon{
+				Headers: messages.RequestHeaders{
+					CommonHeaders: messages.CommonHeaders{
+						MsgType: messages.MsgTypeDeployContract,
+						ID:      "test-id",
+					},
+				},
+			},
+		},
+	}
+	transactionMsgBytes, _ := json.Marshal(&transactionMsg)
+	req, _ := http.NewRequest("POST", "/any", bytes.NewReader(transactionMsgBytes))
+	w := &webhooks{
+		smartContractGW: &mockContractGW{},
+		handler:         &mockHandler{},
+	}
+	rec := httptest.NewRecorder()
+	w.webhookHandler(rec, req, false)
+	res := rec.Result()
+	assert.Equal(200, res.StatusCode)
+
+	defer res.Body.Close()
+	data, err := ioutil.ReadAll(res.Body)
+	assert.NoError(err)
+
+	var asyncResponse messages.AsyncSentMsg
+	err = json.Unmarshal(data, &asyncResponse)
+	assert.NoError(err)
+	assert.Equal("test-id", asyncResponse.Request)
 }

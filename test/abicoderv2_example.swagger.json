@@ -28,6 +28,9 @@
             "required": true
           },
           {
+            "$ref": "#/parameters/idParam"
+          },
+          {
             "$ref": "#/parameters/fromParam"
           },
           {
@@ -73,6 +76,9 @@
             "schema": {
               "$ref": "#/definitions/inOutType1_inputs"
             }
+          },
+          {
+            "$ref": "#/parameters/idParam"
           },
           {
             "$ref": "#/parameters/fromParam"
@@ -180,6 +186,12 @@
       "name": "fly-gasprice",
       "in": "query",
       "allowEmptyValue": true
+    },
+    "idParam": {
+      "type": "string",
+      "description": "Optionally set the ID for this request - must be unique if set (header: x-firefly-id)",
+      "name": "fly-id",
+      "in": "query"
     },
     "privacyGroupIdParam": {
       "type": "string",

@@ -126,9 +126,15 @@ func (w *webhooks) processMsg(ctx context.Context, msg map[string]interface{}, a
 		return nil, 400, errors.Errorf(errors.WebhooksInvalidMsgType, msgType)
 	}
 
-	// We always generate the ID. It cannot be set by the user
-	msgID := utils.UUIDv4()
-	headers.(map[string]interface{})["id"] = msgID
+	// Generate a message ID if not already set
+	var msgID string
+	incomingID := headers.(map[string]interface{})["id"]
+	if incomingID == nil {
+		msgID = utils.UUIDv4()
+		headers.(map[string]interface{})["id"] = msgID
+	} else {
+		msgID = incomingID.(string)
+	}
 
 	if w.smartContractGW != nil && msgType == messages.MsgTypeDeployContract {
 		var err error

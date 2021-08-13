@@ -1558,3 +1558,41 @@ func TestSubscribeWithAddressSubmgrFailure(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal("pop", reply.Message)
 }
+
+func TestSendTransactionWithIDAsyncSuccess(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	bodyMap["i"] = 12345
+	bodyMap["s"] = "testing"
+	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
+	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
+	dispatcher := &mockREST2EthDispatcher{
+		asyncDispatchReply: &messages.AsyncSentMsg{
+			Sent:    true,
+			Request: "request1",
+		},
+	}
+	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
+	req.Header.Set("X-Firefly-PrivateFrom", "0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90")
+	req.Header.Set("X-Firefly-PrivateFor", "0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745,0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C")
+	req.Header.Set("X-Firefly-ID", "my-id")
+	router.ServeHTTP(res, req)
+
+	assert.Equal(202, res.Result().StatusCode)
+	reply := messages.AsyncSentMsg{}
+	err := json.NewDecoder(res.Result().Body).Decode(&reply)
+	assert.NoError(err)
+	assert.Equal(true, reply.Sent)
+	assert.Equal("request1", reply.Request)
+
+	assert.Equal(true, dispatcher.asyncDispatchAck)
+	assert.Equal(from, dispatcher.asyncDispatchMsg["from"])
+	assert.Equal(to, dispatcher.asyncDispatchMsg["to"])
+	assert.Equal("0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90", dispatcher.asyncDispatchMsg["privateFrom"])
+	assert.Equal("0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745", dispatcher.asyncDispatchMsg["privateFor"].([]interface{})[0])
+	assert.Equal("0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C", dispatcher.asyncDispatchMsg["privateFor"].([]interface{})[1])
+	assert.Equal("my-id", dispatcher.asyncDispatchMsg["headers"].(map[string]interface{})["id"])
+}

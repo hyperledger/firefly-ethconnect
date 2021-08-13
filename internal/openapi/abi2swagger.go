@@ -252,6 +252,17 @@ func (c *ABI2Swagger) buildEventDefinitionsAndPath(inst bool, defs map[string]sp
 
 func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 	params := make(map[string]spec.Parameter)
+	params["idParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description: fmt.Sprintf("Optionally set the ID for this request - must be unique if set (header: x-%s-id)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:        fmt.Sprintf("%s-id", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
+			In:          "query",
+			Required:    false,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "string",
+		},
+	}
 	params["fromParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
 			Description: fmt.Sprintf("The 'from' address (header: x-%s-from)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
@@ -393,6 +404,7 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 		op.Security = append(op.Security, map[string][]string{fireflyAppCredential: {}})
 	}
 
+	idParam, _ := spec.NewRef("#/parameters/idParam")
 	fromParam, _ := spec.NewRef("#/parameters/fromParam")
 	valueParam, _ := spec.NewRef("#/parameters/valueParam")
 	gasParam, _ := spec.NewRef("#/parameters/gasParam")
@@ -404,6 +416,11 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 	privacyGroupIDParam, _ := spec.NewRef("#/parameters/privacyGroupIdParam")
 	registerParam, _ := spec.NewRef("#/parameters/registerParam")
 	blocknumberParam, _ := spec.NewRef("#/parameters/blocknumberParam")
+	op.Parameters = append(op.Parameters, spec.Parameter{
+		Refable: spec.Refable{
+			Ref: idParam,
+		},
+	})
 	op.Parameters = append(op.Parameters, spec.Parameter{
 		Refable: spec.Refable{
 			Ref: fromParam,

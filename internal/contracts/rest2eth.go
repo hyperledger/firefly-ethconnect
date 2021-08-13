@@ -593,6 +593,7 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 
 	msg := &messages.SendTransaction{}
 	msg.Headers.MsgType = messages.MsgTypeSendTransaction
+	msg.Headers.ID = getFlyParam("id", req, false)
 	msg.Method = abiMethodElem
 	msg.To = addr
 	msg.From = from

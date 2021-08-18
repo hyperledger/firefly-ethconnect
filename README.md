@@ -2,7 +2,7 @@
 
 [![codecov](https://codecov.io/gh/hyperledger-labs/firefly-ethconnect/branch/master/graph/badge.svg?token=RWlSbY389z)](https://codecov.io/gh/hyperledger-labs/firefly-ethconnect) [![Go Report Card](https://goreportcard.com/badge/github.com/hyperledger-labs/firefly-ethconnect)](https://goreportcard.com/report/github.com/hyperledger-labs/firefly-ethconnect)
 
-- [github.com/hyperledger-labs/firefly-ethconnect](#githubcomkaleido-ioethconnect)
+- [github.com/hyperledger-labs/firefly-ethconnect](#githubcomhyperledger-labsfirefly-ethconnect)
   - [Ethconnect REST Gateway](#ethconnect-rest-gateway)
   - [License](#license)
   - [Example payloads](#example-payloads)

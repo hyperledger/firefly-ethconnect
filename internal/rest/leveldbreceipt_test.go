@@ -24,7 +24,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kaleido-io/ethconnect/internal/kvstore"
+	"github.com/hyperledger-firefly/firefly-ethconnect/internal/kvstore"
 	"github.com/oklog/ulid/v2"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"

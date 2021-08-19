@@ -23,10 +23,10 @@ import (
 	"path"
 	"testing"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/kvstore"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
 	"github.com/julienschmidt/httprouter"
-	"github.com/kaleido-io/ethconnect/internal/ethbind"
-	"github.com/kaleido-io/ethconnect/internal/kvstore"
-	"github.com/kaleido-io/ethconnect/internal/messages"
 	"github.com/stretchr/testify/assert"
 )
 

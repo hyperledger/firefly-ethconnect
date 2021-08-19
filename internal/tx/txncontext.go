@@ -17,7 +17,7 @@ package tx
 import (
 	"context"
 
-	"github.com/kaleido-io/ethconnect/internal/messages"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
 )
 
 // TxnContext is passed for each message that arrives at the bridge

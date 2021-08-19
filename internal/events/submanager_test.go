@@ -25,10 +25,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/kvstore"
 	"github.com/julienschmidt/httprouter"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
-	"github.com/kaleido-io/ethconnect/internal/eth"
-	"github.com/kaleido-io/ethconnect/internal/kvstore"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )

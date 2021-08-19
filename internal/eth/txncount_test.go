@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/kaleido-io/ethconnect/internal/ethbind"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

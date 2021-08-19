@@ -23,8 +23,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kaleido-io/ethconnect/internal/errors"
-	"github.com/kaleido-io/ethconnect/internal/kvstore"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/kvstore"
 	"github.com/oklog/ulid/v2"
 	log "github.com/sirupsen/logrus"
 	"github.com/syndtr/goleveldb/leveldb/util"

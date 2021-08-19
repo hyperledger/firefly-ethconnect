@@ -24,7 +24,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/kaleido-io/ethconnect/internal/errors"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
 
 	log "github.com/sirupsen/logrus"
 )

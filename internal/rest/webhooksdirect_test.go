@@ -24,10 +24,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/tx"
 	"github.com/julienschmidt/httprouter"
-	"github.com/kaleido-io/ethconnect/internal/eth"
-	"github.com/kaleido-io/ethconnect/internal/messages"
-	"github.com/kaleido-io/ethconnect/internal/tx"
 
 	"github.com/stretchr/testify/assert"
 )

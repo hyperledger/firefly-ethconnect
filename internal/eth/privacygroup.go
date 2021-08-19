@@ -18,8 +18,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
-	"github.com/kaleido-io/ethconnect/internal/errors"
 )
 
 // OrionPrivacyGroup is the result of the priv_findPrivacyGroup call

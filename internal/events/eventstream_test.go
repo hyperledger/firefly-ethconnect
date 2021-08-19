@@ -26,11 +26,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/kvstore"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
-	"github.com/kaleido-io/ethconnect/internal/errors"
-	"github.com/kaleido-io/ethconnect/internal/eth"
-	"github.com/kaleido-io/ethconnect/internal/ethbind"
-	"github.com/kaleido-io/ethconnect/internal/kvstore"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

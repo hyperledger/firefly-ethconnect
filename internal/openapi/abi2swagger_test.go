@@ -22,7 +22,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kaleido-io/ethconnect/internal/ethbind"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	"github.com/stretchr/testify/assert"
 )
 

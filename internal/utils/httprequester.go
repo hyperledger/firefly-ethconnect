@@ -21,7 +21,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/kaleido-io/ethconnect/internal/errors"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
 	log "github.com/sirupsen/logrus"
 )
 

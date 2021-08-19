@@ -25,8 +25,8 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
 	"github.com/julienschmidt/httprouter"
-	"github.com/kaleido-io/ethconnect/internal/messages"
 	"github.com/stretchr/testify/assert"
 )
 

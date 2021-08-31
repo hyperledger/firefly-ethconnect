@@ -34,19 +34,31 @@ func getQueryParamNoCase(name string, req *http.Request) []string {
 }
 
 // getFlyParam standardizes how special 'fly' params are specified, in query params, or headers
-func getFlyParam(name string, req *http.Request, isBool bool) string {
+func getFlyParam(name string, req *http.Request) string {
 	valStr := ""
 	vs := getQueryParamNoCase(utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")+"-"+name, req)
 	if len(vs) > 0 {
 		valStr = vs[0]
 	}
-	if isBool && valStr == "" && len(vs) > 0 {
-		valStr = "true"
-	}
 	if valStr == "" {
 		valStr = req.Header.Get("x-" + utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly") + "-" + name)
 	}
 	return valStr
+}
+
+// getFlyParamBool returns a 'fly' param as a boolean
+func getFlyParamBool(name string, req *http.Request) bool {
+	valStr := ""
+	vs := getQueryParamNoCase(utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")+"-"+name, req)
+	if len(vs) == 0 {
+		valStr = req.Header.Get("x-" + utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly") + "-" + name)
+	} else {
+		valStr = vs[0]
+		if valStr == "" {
+			valStr = "true"
+		}
+	}
+	return strings.ToLower(valStr) == "true"
 }
 
 // getFlyParamMulti returns an array parameter, or nil if none specified.
@@ -57,7 +69,7 @@ func getFlyParamMulti(name string, req *http.Request) (val []string) {
 	if len(val) == 0 {
 		val = textproto.MIMEHeader(req.Header)[textproto.CanonicalMIMEHeaderKey("x-"+utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")+"-"+name)]
 	}
-	if val != nil && len(val) == 1 {
+	if len(val) == 1 {
 		val = strings.Split(val[0], ",")
 	}
 	return

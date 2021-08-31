@@ -390,8 +390,8 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 	}
 
 	// If we have a from, it needs to be a valid address
-	From := getFlyParam("from", req, false)
-	fromNo0xPrefix := strings.ToLower(strings.TrimPrefix(getFlyParam("from", req, false), "0x"))
+	From := getFlyParam("from", req)
+	fromNo0xPrefix := strings.ToLower(strings.TrimPrefix(From, "0x"))
 	if fromNo0xPrefix != "" {
 		if addrCheck.MatchString(fromNo0xPrefix) {
 			c.from = "0x" + fromNo0xPrefix
@@ -404,7 +404,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 			return
 		}
 	}
-	c.value = json.Number(getFlyParam("ethvalue", req, false))
+	c.value = json.Number(getFlyParam("ethvalue", req))
 
 	c.body, err = utils.YAMLorJSONPayload(req)
 	if err != nil {
@@ -439,7 +439,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 		}
 	}
 
-	c.blocknumber = getFlyParam("blocknumber", req, false)
+	c.blocknumber = getFlyParam("blocknumber", req)
 
 	return
 }
@@ -454,7 +454,7 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 
 	if c.abiEvent != nil {
 		r.subscribeEvent(res, req, c.addr, c.abiEventElem, c.body)
-	} else if (req.Method == http.MethodPost && !c.abiMethod.IsConstant()) && strings.ToLower(getFlyParam("call", req, true)) != "true" {
+	} else if (req.Method == http.MethodPost && !c.abiMethod.IsConstant()) && !getFlyParamBool("call", req) {
 		if c.from == "" {
 			err = ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayMissingFromAddress, utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly"), utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly"))
 			r.restErrReply(res, req, err, 400)
@@ -528,12 +528,12 @@ func (r *rest2eth) doubleURLDecode(s string) string {
 }
 
 func (r *rest2eth) addPrivateTx(msg *messages.TransactionCommon, req *http.Request, res http.ResponseWriter) error {
-	msg.PrivateFrom = r.doubleURLDecode(getFlyParam("privatefrom", req, false))
+	msg.PrivateFrom = r.doubleURLDecode(getFlyParam("privatefrom", req))
 	msg.PrivateFor = getFlyParamMulti("privatefor", req)
 	for idx, val := range msg.PrivateFor {
 		msg.PrivateFor[idx] = r.doubleURLDecode(val)
 	}
-	msg.PrivacyGroupID = r.doubleURLDecode(getFlyParam("privacygroupid", req, false))
+	msg.PrivacyGroupID = r.doubleURLDecode(getFlyParam("privacygroupid", req))
 	if len(msg.PrivateFor) > 0 && msg.PrivacyGroupID != "" {
 		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayMixedPrivateForAndGroupID, utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly"))
 	}
@@ -544,22 +544,22 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 
 	deployMsg.Headers.MsgType = messages.MsgTypeDeployContract
 	deployMsg.From = from
-	deployMsg.Gas = json.Number(getFlyParam("gas", req, false))
-	deployMsg.GasPrice = json.Number(getFlyParam("gasprice", req, false))
+	deployMsg.Gas = json.Number(getFlyParam("gas", req))
+	deployMsg.GasPrice = json.Number(getFlyParam("gasprice", req))
 	deployMsg.Value = value
 	deployMsg.Parameters = msgParams
 	if err := r.addPrivateTx(&deployMsg.TransactionCommon, req, res); err != nil {
 		r.restErrReply(res, req, err, 400)
 		return
 	}
-	deployMsg.RegisterAs = getFlyParam("register", req, false)
+	deployMsg.RegisterAs = getFlyParam("register", req)
 	if deployMsg.RegisterAs != "" {
 		if err := r.gw.checkNameAvailable(deployMsg.RegisterAs, isRemote(deployMsg.Headers.CommonHeaders)); err != nil {
 			r.restErrReply(res, req, err, 409)
 			return
 		}
 	}
-	if strings.ToLower(getFlyParam("sync", req, true)) == "true" {
+	if getFlyParamBool("sync", req) {
 		responder := &rest2EthSyncResponder{
 			r:      r,
 			res:    res,
@@ -573,7 +573,7 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 			responder.waiter.Wait()
 		}
 	} else {
-		ack := (getFlyParam("noack", req, true) != "true") // turn on ack's by default
+		ack := !getFlyParamBool("noack", req) // turn on ack's by default
 
 		// Async messages are dispatched as generic map payloads.
 		// We are confident in the re-serialization here as we've deserialized from JSON then built our own structure
@@ -593,12 +593,12 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 
 	msg := &messages.SendTransaction{}
 	msg.Headers.MsgType = messages.MsgTypeSendTransaction
-	msg.Headers.ID = getFlyParam("id", req, false)
+	msg.Headers.ID = getFlyParam("id", req)
 	msg.Method = abiMethodElem
 	msg.To = addr
 	msg.From = from
-	msg.Gas = json.Number(getFlyParam("gas", req, false))
-	msg.GasPrice = json.Number(getFlyParam("gasprice", req, false))
+	msg.Gas = json.Number(getFlyParam("gas", req))
+	msg.GasPrice = json.Number(getFlyParam("gasprice", req))
 	msg.Value = value
 	msg.Parameters = msgParams
 	if err := r.addPrivateTx(&msg.TransactionCommon, req, res); err != nil {
@@ -606,7 +606,7 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 		return
 	}
 
-	if strings.ToLower(getFlyParam("sync", req, true)) == "true" {
+	if getFlyParamBool("sync", req) {
 		responder := &rest2EthSyncResponder{
 			r:      r,
 			res:    res,
@@ -620,7 +620,7 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 			responder.waiter.Wait()
 		}
 	} else {
-		ack := (getFlyParam("noack", req, true) != "true") // turn on ack's by default
+		ack := !getFlyParamBool("noack", req) // turn on ack's by default
 
 		// Async messages are dispatched as generic map payloads.
 		// We are confident in the re-serialization here as we've deserialized from JSON then built our own structure

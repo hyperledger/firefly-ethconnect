@@ -1080,7 +1080,7 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 		return
 	}
 
-	registerAs := getFlyParam("register", req, false)
+	registerAs := getFlyParam("register", req)
 	registeredName := registerAs
 	if registeredName == "" {
 		registeredName = addrHexNo0x

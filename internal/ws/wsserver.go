@@ -136,8 +136,10 @@ func (s *webSocketServer) getTopic(topic string) *webSocketTopic {
 		s.topicMap[topic] = make(map[string]*webSocketConnection)
 	}
 	s.mux.Unlock()
-	// Signal to the broadcaster that a new topic has been added
-	s.newTopic <- true
+	if !exists {
+		// Signal to the broadcaster that a new topic has been added
+		s.newTopic <- true
+	}
 	return t
 }
 

@@ -95,6 +95,11 @@ type rest2EthSyncResponder struct {
 	waiter *sync.Cond
 }
 
+type txnInfoDecoded struct {
+	eth.TxnInfo
+	InputArgs map[string]interface{} `json:"inputArgs"`
+}
+
 var addrCheck = regexp.MustCompile("^(0x)?[0-9a-z]{40}$")
 
 func (i *rest2EthSyncResponder) ReplyWithError(err error) {
@@ -186,18 +191,19 @@ func (r *rest2eth) addRoutes(router *httprouter.Router) {
 }
 
 type restCmd struct {
-	from          string
-	addr          string
-	value         json.Number
-	abiMethod     *ethbinding.ABIMethod
-	abiMethodElem *ethbinding.ABIElementMarshaling
-	abiEvent      *ethbinding.ABIEvent
-	abiEventElem  *ethbinding.ABIElementMarshaling
-	isDeploy      bool
-	deployMsg     *messages.DeployContract
-	body          map[string]interface{}
-	msgParams     []interface{}
-	blocknumber   string
+	from            string
+	addr            string
+	value           json.Number
+	abiMethod       *ethbinding.ABIMethod
+	abiMethodElem   *ethbinding.ABIElementMarshaling
+	abiEvent        *ethbinding.ABIEvent
+	abiEventElem    *ethbinding.ABIElementMarshaling
+	isDeploy        bool
+	deployMsg       *messages.DeployContract
+	body            map[string]interface{}
+	msgParams       []interface{}
+	blocknumber     string
+	transactionHash string
 }
 
 func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params httprouter.Params, c *restCmd, addrParam string, refresh bool) (a ethbinding.ABIMarshaling, validAddress bool, err error) {
@@ -419,7 +425,10 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 		return
 	}
 
-	if c.abiEvent != nil {
+	c.blocknumber = getFlyParam("blocknumber", req)
+	c.transactionHash = getFlyParam("transaction", req)
+
+	if c.abiEvent != nil || c.transactionHash != "" {
 		return
 	}
 
@@ -446,8 +455,6 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 		}
 	}
 
-	c.blocknumber = getFlyParam("blocknumber", req)
-
 	return
 }
 
@@ -461,7 +468,11 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 
 	if c.abiEvent != nil {
 		r.subscribeEvent(res, req, c.addr, c.abiEventElem, c.body)
-	} else if (req.Method == http.MethodPost && !c.abiMethod.IsConstant()) && !getFlyParamBool("call", req) {
+	} else if c.transactionHash != "" {
+		r.lookupTransaction(res, req, c.transactionHash, c.abiMethod)
+	} else if req.Method != http.MethodPost || c.abiMethod.IsConstant() || getFlyParamBool("call", req) {
+		r.callContract(res, req, c.from, c.addr, c.value, c.abiMethod, c.msgParams, c.blocknumber)
+	} else {
 		if c.from == "" {
 			err = ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayMissingFromAddress, utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly"), utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly"))
 			r.restErrReply(res, req, err, 400)
@@ -470,8 +481,6 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 		} else {
 			r.sendTransaction(res, req, c.from, c.addr, c.value, c.abiMethodElem, c.msgParams)
 		}
-	} else {
-		r.callContract(res, req, c.from, c.addr, c.value, c.abiMethod, c.msgParams, c.blocknumber)
 	}
 }
 
@@ -655,6 +664,30 @@ func (r *rest2eth) callContract(res http.ResponseWriter, req *http.Request, from
 		r.restErrReply(res, req, err, 500)
 		return
 	}
+	resBytes, _ := json.MarshalIndent(&resBody, "", "  ")
+	status := 200
+	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
+	log.Debugf("<-- %s", resBytes)
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(status)
+	res.Write(resBytes)
+	return
+}
+
+func (r *rest2eth) lookupTransaction(res http.ResponseWriter, req *http.Request, txHash string, abiMethod *ethbinding.ABIMethod) {
+	var resBody txnInfoDecoded
+	info, err := eth.GetTransactionInfo(req.Context(), r.rpc, txHash)
+	if err != nil {
+		r.restErrReply(res, req, err, 500)
+		return
+	}
+	resBody.TxnInfo = *info
+	resBody.InputArgs, err = eth.DecodeInputs(abiMethod, info.Input)
+	if err != nil {
+		r.restErrReply(res, req, err, 500)
+		return
+	}
+
 	resBytes, _ := json.MarshalIndent(&resBody, "", "  ")
 	status := 200
 	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)

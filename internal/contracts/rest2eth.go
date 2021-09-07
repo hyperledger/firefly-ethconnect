@@ -251,8 +251,12 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 				validAddress = true
 				addrParam = c.addr
 			}
-			c.deployMsg, _, err = r.gw.loadDeployMsgForInstance(addrParam)
-			if err != nil {
+			var info *contractInfo
+			if info, err = r.gw.lookupContractInstance(addrParam); err != nil {
+				r.restErrReply(res, req, err, 404)
+				return
+			}
+			if c.deployMsg, _, err = r.gw.loadDeployMsgByID(info.ABI); err != nil {
 				r.restErrReply(res, req, err, 404)
 				return
 			}

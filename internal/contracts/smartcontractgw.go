@@ -72,7 +72,7 @@ type SmartContractGateway interface {
 type smartContractGatewayInt interface {
 	SmartContractGateway
 	resolveContractAddr(registeredName string) (string, error)
-	loadDeployMsgForInstance(addrHexNo0x string) (*messages.DeployContract, *contractInfo, error)
+	lookupContractInstance(addrHex string) (*contractInfo, error)
 	loadDeployMsgByID(abi string) (*messages.DeployContract, *abiInfo, error)
 	checkNameAvailable(name string, isRemote bool) error
 }
@@ -356,14 +356,13 @@ func (g *smartContractGW) resolveContractAddr(registeredName string) (string, er
 	return info.Address, nil
 }
 
-func (g *smartContractGW) loadDeployMsgForInstance(addrHex string) (*messages.DeployContract, *contractInfo, error) {
+func (g *smartContractGW) lookupContractInstance(addrHex string) (*contractInfo, error) {
 	addrHexNo0x := strings.TrimPrefix(strings.ToLower(addrHex), "0x")
 	info, exists := g.contractIndex[addrHexNo0x]
 	if !exists {
-		return nil, nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreContractNotFound, addrHexNo0x)
+		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreContractNotFound, addrHexNo0x)
 	}
-	deployMsg, _, err := g.loadDeployMsgByID(info.(*contractInfo).ABI)
-	return deployMsg, info.(*contractInfo), err
+	return info.(*contractInfo), nil
 }
 
 func (g *smartContractGW) loadDeployMsgByID(id string) (*messages.DeployContract, *abiInfo, error) {
@@ -855,7 +854,7 @@ func (g *smartContractGW) suspendOrResumeStream(res http.ResponseWriter, req *ht
 }
 
 func (g *smartContractGW) resolveAddressOrName(id string) (deployMsg *messages.DeployContract, registeredName string, info *contractInfo, err error) {
-	deployMsg, info, err = g.loadDeployMsgForInstance(id)
+	info, err = g.lookupContractInstance(id)
 	if err != nil {
 		var origErr = err
 		registeredName = id
@@ -863,10 +862,11 @@ func (g *smartContractGW) resolveAddressOrName(id string) (deployMsg *messages.D
 			log.Infof("%s is not a friendly name: %s", registeredName, err)
 			return nil, "", nil, origErr
 		}
-		if deployMsg, info, err = g.loadDeployMsgForInstance(id); err != nil {
+		if info, err = g.lookupContractInstance(id); err != nil {
 			return nil, "", nil, err
 		}
 	}
+	deployMsg, _, err = g.loadDeployMsgByID(info.ABI)
 	return deployMsg, registeredName, info, err
 }
 

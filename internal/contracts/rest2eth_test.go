@@ -90,16 +90,16 @@ func (m *mockABILoader) SendReply(message interface{}) {
 
 }
 
-func (m *mockABILoader) loadDeployMsgForInstance(addrHexNo0x string) (*messages.DeployContract, *contractInfo, error) {
-	m.capturedAddr = addrHexNo0x
-	return m.deployMsg, m.contractInfo, m.loadABIError
+func (m *mockABILoader) lookupContractInstance(addrHex string) (*contractInfo, error) {
+	m.capturedAddr = addrHex
+	return m.contractInfo, m.loadABIError
 }
 
 func (m *mockABILoader) resolveContractAddr(registeredName string) (string, error) {
 	return m.registeredContractAddr, m.resolveContractErr
 }
 
-func (m *mockABILoader) loadDeployMsgByID(addrHexNo0x string) (*messages.DeployContract, *abiInfo, error) {
+func (m *mockABILoader) loadDeployMsgByID(addrHex string) (*messages.DeployContract, *abiInfo, error) {
 	return m.deployMsg, m.abiInfo, m.loadABIError
 }
 
@@ -188,7 +188,8 @@ func newTestREST2Eth(t *testing.T, dispatcher *mockREST2EthDispatcher) (*rest2et
 	mockRPC := &mockRPC{}
 	deployMsg := newTestDeployMsg(t, "")
 	abiLoader := &mockABILoader{
-		deployMsg: &deployMsg.DeployContract,
+		contractInfo: &contractInfo{},
+		deployMsg:    &deployMsg.DeployContract,
 	}
 	mockProcessor := &mockProcessor{}
 	r := newREST2eth(abiLoader, mockRPC, nil, nil, mockProcessor, dispatcher, dispatcher)
@@ -222,6 +223,7 @@ func newTestREST2EthAndMsg(t *testing.T, dispatcher *mockREST2EthDispatcher, fro
 func newTestREST2EthAndMsgPostDeployError(t *testing.T, dispatcher *mockREST2EthDispatcher, from, to string, bodyMap map[string]interface{}) (*rest2eth, *mockRPC, *httprouter.Router, *httptest.ResponseRecorder, *http.Request) {
 	deployMsg := newTestDeployMsg(t, "")
 	abiLoader := &mockABILoader{
+		contractInfo:    &contractInfo{},
 		deployMsg:       &deployMsg.DeployContract,
 		postDeployError: fmt.Errorf("pop"),
 	}
@@ -856,6 +858,7 @@ func TestSendTransactionBadMethodABI(t *testing.T) {
 		},
 	}
 	abiLoader := &mockABILoader{
+		contractInfo: &contractInfo{},
 		deployMsg: &messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{
 				{
@@ -889,6 +892,7 @@ func TestSendTransactionBadEventABI(t *testing.T) {
 		},
 	}
 	abiLoader := &mockABILoader{
+		contractInfo: &contractInfo{},
 		deployMsg: &messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{
 				{
@@ -922,6 +926,7 @@ func TestSendTransactionBadConstructorABI(t *testing.T) {
 		},
 	}
 	abiLoader := &mockABILoader{
+		contractInfo: &contractInfo{},
 		deployMsg: &messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{
 				{
@@ -955,6 +960,7 @@ func TestSendTransactionDefaultConstructorABI(t *testing.T) {
 		},
 	}
 	abiLoader := &mockABILoader{
+		contractInfo: &contractInfo{},
 		deployMsg: &messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{}, // completely empty ABI is ok
 		},
@@ -978,6 +984,7 @@ func TestSendTransactionUnnamedParamsABI(t *testing.T) {
 		},
 	}
 	abiLoader := &mockABILoader{
+		contractInfo: &contractInfo{},
 		deployMsg: &messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{
 				{

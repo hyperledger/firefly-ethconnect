@@ -187,7 +187,10 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	err = scgw.PostDeploy(&receipt)
 	assert.NoError(err)
 
-	deployMsg, abiID, err := scgw.(*smartContractGW).loadDeployMsgForInstance("0123456789abcdef0123456789abcdef01234567")
+	info, err := scgw.(*smartContractGW).lookupContractInstance("0123456789abcdef0123456789abcdef01234567")
+	assert.NoError(err)
+	assert.NotEmpty(info)
+	deployMsg, abiID, err := scgw.(*smartContractGW).loadDeployMsgByID(info.ABI)
 	assert.NoError(err)
 	assert.NotEmpty(abiID)
 	runtimeABI, err := ethbind.API.ABIMarshalingToABIRuntime(deployMsg.ABI)
@@ -212,7 +215,6 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(200, res.Result().StatusCode)
-	var info contractInfo
 	err = json.NewDecoder(res.Body).Decode(&info)
 	assert.NoError(err)
 	assert.Equal("0123456789abcdef0123456789abcdef01234567", info.Address)
@@ -914,7 +916,7 @@ func TestLoadABIForInstanceUnknown(t *testing.T) {
 	)
 	scgw := s.(*smartContractGW)
 
-	_, _, err := scgw.loadDeployMsgForInstance("invalid")
+	_, err := scgw.lookupContractInstance("invalid")
 	assert.Regexp("No contract instance registered with address invalid", err.Error())
 }
 

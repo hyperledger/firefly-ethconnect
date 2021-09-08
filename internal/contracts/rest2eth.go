@@ -32,6 +32,7 @@ import (
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/events"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/remoteregistry"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/tx"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
 	"github.com/julienschmidt/httprouter"
@@ -68,7 +69,7 @@ type rest2eth struct {
 	asyncDispatcher REST2EthAsyncDispatcher
 	syncDispatcher  rest2EthSyncDispatcher
 	subMgr          events.SubscriptionManager
-	rr              RemoteRegistry
+	rr              remoteregistry.RemoteRegistry
 }
 
 type restErrMsg struct {
@@ -139,7 +140,7 @@ func (i *rest2EthSyncResponder) ReplyWithReceipt(receipt messages.ReplyWithHeade
 	return
 }
 
-func newREST2eth(gw smartContractGatewayInt, rpc eth.RPCClient, subMgr events.SubscriptionManager, rr RemoteRegistry, processor tx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher, syncDispatcher rest2EthSyncDispatcher) *rest2eth {
+func newREST2eth(gw smartContractGatewayInt, rpc eth.RPCClient, subMgr events.SubscriptionManager, rr remoteregistry.RemoteRegistry, processor tx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher, syncDispatcher rest2EthSyncDispatcher) *rest2eth {
 	return &rest2eth{
 		gw:              gw,
 		processor:       processor,
@@ -209,7 +210,7 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 	//    - /abis      is for factory interfaces installed into ethconnect by uploading the Solidity
 	//    - /contracts is for individual instances deployed via ethconnect factory interfaces
 	if strings.HasPrefix(req.URL.Path, "/gateways/") || strings.HasPrefix(req.URL.Path, "/g/") {
-		c.deployMsg, err = r.rr.loadFactoryForGateway(params.ByName("gateway_lookup"), refresh)
+		c.deployMsg, err = r.rr.LoadFactoryForGateway(params.ByName("gateway_lookup"), refresh)
 		if err != nil {
 			r.restErrReply(res, req, err, 500)
 			return
@@ -219,8 +220,8 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 			return
 		}
 	} else if strings.HasPrefix(req.URL.Path, "/instances/") || strings.HasPrefix(req.URL.Path, "/i/") {
-		var msg *deployContractWithAddress
-		msg, err = r.rr.loadFactoryForInstance(params.ByName("instance_lookup"), refresh)
+		var msg *remoteregistry.DeployContractWithAddress
+		msg, err = r.rr.LoadFactoryForInstance(params.ByName("instance_lookup"), refresh)
 		if err != nil {
 			r.restErrReply(res, req, err, 500)
 			return

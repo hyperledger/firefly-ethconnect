@@ -35,6 +35,7 @@ import (
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/events"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/remoteregistry"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/tx"
 	"github.com/julienschmidt/httprouter"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
@@ -784,7 +785,7 @@ func TestPostDeployRemoteRegisteredName(t *testing.T) {
 			Headers: messages.ReplyHeaders{
 				CommonHeaders: messages.CommonHeaders{
 					Context: map[string]interface{}{
-						remoteRegistryContextKey: true,
+						remoteregistry.RemoteRegistryContextKey: true,
 					},
 					MsgType: messages.MsgTypeTransactionSuccess,
 				},
@@ -830,7 +831,7 @@ func TestPostDeployRemoteRegisteredNameNotSuccess(t *testing.T) {
 			Headers: messages.ReplyHeaders{
 				CommonHeaders: messages.CommonHeaders{
 					Context: map[string]interface{}{
-						remoteRegistryContextKey: true,
+						remoteregistry.RemoteRegistryContextKey: true,
 					},
 					MsgType: messages.MsgTypeTransactionFailure,
 				},

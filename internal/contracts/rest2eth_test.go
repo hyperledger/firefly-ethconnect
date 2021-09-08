@@ -31,6 +31,7 @@ import (
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/events"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/remoteregistry"
 	"github.com/julienschmidt/httprouter"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	log "github.com/sirupsen/logrus"
@@ -175,10 +176,40 @@ func (m *mockSubMgr) ResetSubscription(ctx context.Context, id, initialBlock str
 }
 func (m *mockSubMgr) Close() {}
 
-func newTestDeployMsg(t *testing.T, addr string) *deployContractWithAddress {
+type mockRR struct {
+	idCapture      string
+	addrCapture    string
+	lookupCapture  string
+	refreshCapture bool
+	deployMsg      *remoteregistry.DeployContractWithAddress
+	err            error
+}
+
+func (rr *mockRR) LoadFactoryForGateway(id string, refresh bool) (*messages.DeployContract, error) {
+	rr.idCapture = id
+	rr.refreshCapture = refresh
+	if rr.deployMsg == nil {
+		return nil, rr.err
+	}
+	return &rr.deployMsg.DeployContract, rr.err
+}
+func (rr *mockRR) LoadFactoryForInstance(id string, refresh bool) (*remoteregistry.DeployContractWithAddress, error) {
+	rr.addrCapture = id
+	rr.refreshCapture = refresh
+	return rr.deployMsg, rr.err
+}
+func (rr *mockRR) RegisterInstance(lookupStr, address string) error {
+	rr.lookupCapture = lookupStr
+	rr.addrCapture = address
+	return rr.err
+}
+func (rr *mockRR) Close()      {}
+func (rr *mockRR) Init() error { return nil }
+
+func newTestDeployMsg(t *testing.T, addr string) *remoteregistry.DeployContractWithAddress {
 	compiled, err := eth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")
 	assert.NoError(t, err)
-	return &deployContractWithAddress{
+	return &remoteregistry.DeployContractWithAddress{
 		DeployContract: messages.DeployContract{ABI: compiled.ABI},
 		Address:        addr,
 	}
@@ -561,7 +592,7 @@ func TestDeployContractSyncRemoteRegitryInstance(t *testing.T) {
 				CommonHeaders: messages.CommonHeaders{
 					MsgType: messages.MsgTypeTransactionSuccess,
 					Context: map[string]interface{}{
-						remoteRegistryContextKey: true,
+						remoteregistry.RemoteRegistryContextKey: true,
 					},
 				},
 			},

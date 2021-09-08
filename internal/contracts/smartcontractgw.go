@@ -48,6 +48,7 @@ import (
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/events"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/openapi"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/remoteregistry"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/tx"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/ws"
@@ -55,9 +56,8 @@ import (
 )
 
 const (
-	maxFormParsingMemory     = 32 << 20 // 32 MB
-	errEventSupportMissing   = "Event support is not configured on this gateway"
-	remoteRegistryContextKey = "isRemoteRegistry"
+	maxFormParsingMemory   = 32 << 20 // 32 MB
+	errEventSupportMissing = "Event support is not configured on this gateway"
 )
 
 // SmartContractGateway provides gateway functions for OpenAPI 2.0 processing of Solidity contracts
@@ -80,9 +80,9 @@ type smartContractGatewayInt interface {
 // SmartContractGatewayConf configuration
 type SmartContractGatewayConf struct {
 	events.SubscriptionManagerConf
-	StoragePath    string             `json:"storagePath"`
-	BaseURL        string             `json:"baseURL"`
-	RemoteRegistry RemoteRegistryConf `json:"registry,omitempty"` // JSON only config - no commandline
+	StoragePath    string                            `json:"storagePath"`
+	BaseURL        string                            `json:"baseURL"`
+	RemoteRegistry remoteregistry.RemoteRegistryConf `json:"registry,omitempty"` // JSON only config - no commandline
 }
 
 // CobraInitContractGateway standard naming for contract gateway command params
@@ -148,7 +148,7 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 	log.Infof("OpenAPI Smart Contract Gateway configured with base URL '%s'", baseURL.String())
 	gw := &smartContractGW{
 		conf:                  conf,
-		rr:                    NewRemoteRegistry(&conf.RemoteRegistry),
+		rr:                    remoteregistry.NewRemoteRegistry(&conf.RemoteRegistry),
 		contractIndex:         make(map[string]messages.TimeSortable),
 		contractRegistrations: make(map[string]*contractInfo),
 		abiIndex:              make(map[string]messages.TimeSortable),
@@ -161,7 +161,7 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 		},
 		ws: ws,
 	}
-	if err = gw.rr.init(); err != nil {
+	if err = gw.rr.Init(); err != nil {
 		return nil, err
 	}
 	syncDispatcher := newSyncDispatcher(processor)
@@ -180,7 +180,7 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 type smartContractGW struct {
 	conf                  *SmartContractGatewayConf
 	sm                    events.SubscriptionManager
-	rr                    RemoteRegistry
+	rr                    remoteregistry.RemoteRegistry
 	r2e                   *rest2eth
 	ws                    ws.WebSocketChannels
 	contractIndex         map[string]messages.TimeSortable
@@ -247,7 +247,7 @@ func (g *smartContractGW) storeNewContractInfo(addrHexNo0x, abiID, pathName, reg
 
 func isRemote(msg messages.CommonHeaders) bool {
 	ctxMap := msg.Context
-	if isRemoteGeneric, ok := ctxMap[remoteRegistryContextKey]; ok {
+	if isRemoteGeneric, ok := ctxMap[remoteregistry.RemoteRegistryContextKey]; ok {
 		if isRemote, ok := isRemoteGeneric.(bool); ok {
 			return isRemote
 		}
@@ -285,7 +285,7 @@ func (g *smartContractGW) PostDeploy(msg *messages.TransactionReceipt) error {
 		var err error
 		if isRemote {
 			if msg.RegisterAs != "" {
-				err = g.rr.registerInstance(msg.RegisterAs, "0x"+addrHexNo0x)
+				err = g.rr.RegisterInstance(msg.RegisterAs, "0x"+addrHexNo0x)
 			}
 		} else {
 			_, err = g.storeNewContractInfo(addrHexNo0x, requestID, registeredName, msg.RegisterAs)
@@ -560,7 +560,7 @@ func (g *smartContractGW) addFileToABIIndex(id, fileName string, createdTime tim
 
 func (g *smartContractGW) checkNameAvailable(registerAs string, isRemote bool) error {
 	if isRemote {
-		msg, err := g.rr.loadFactoryForInstance(registerAs, false)
+		msg, err := g.rr.LoadFactoryForInstance(registerAs, false)
 		if err != nil {
 			return err
 		} else if msg != nil {
@@ -1003,7 +1003,7 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 		isGateway = true
 		prefix = "gateway"
 		id = params.ByName("gateway_lookup")
-		deployMsg, err = g.rr.loadFactoryForGateway(id, refreshABI)
+		deployMsg, err = g.rr.LoadFactoryForGateway(id, refreshABI)
 		if err != nil {
 			g.gatewayErrReply(res, req, err, 500)
 			return
@@ -1015,8 +1015,8 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 	} else {
 		prefix = "instance"
 		id = params.ByName("instance_lookup")
-		var msg *deployContractWithAddress
-		msg, err = g.rr.loadFactoryForInstance(id, refreshABI)
+		var msg *remoteregistry.DeployContractWithAddress
+		msg, err = g.rr.LoadFactoryForInstance(id, refreshABI)
 		if err != nil {
 			g.gatewayErrReply(res, req, err, 500)
 			return
@@ -1439,6 +1439,6 @@ func (g *smartContractGW) Shutdown() {
 		g.sm.Close()
 	}
 	if g.rr != nil {
-		g.rr.close()
+		g.rr.Close()
 	}
 }

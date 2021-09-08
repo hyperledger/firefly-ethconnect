@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package contracts
+package remoteregistry
 
 import (
 	"encoding/json"
@@ -20,45 +20,24 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path"
 	"testing"
 
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/kvstore"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
 	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/assert"
 )
 
-type mockRR struct {
-	idCapture      string
-	addrCapture    string
-	lookupCapture  string
-	refreshCapture bool
-	deployMsg      *deployContractWithAddress
-	err            error
+func tempdir() string {
+	dir, _ := ioutil.TempDir("", "fly")
+	return dir
 }
 
-func (rr *mockRR) loadFactoryForGateway(id string, refresh bool) (*messages.DeployContract, error) {
-	rr.idCapture = id
-	rr.refreshCapture = refresh
-	if rr.deployMsg == nil {
-		return nil, rr.err
-	}
-	return &rr.deployMsg.DeployContract, rr.err
+func cleanup(dir string) {
+	os.RemoveAll(dir)
 }
-func (rr *mockRR) loadFactoryForInstance(id string, refresh bool) (*deployContractWithAddress, error) {
-	rr.addrCapture = id
-	rr.refreshCapture = refresh
-	return rr.deployMsg, rr.err
-}
-func (rr *mockRR) registerInstance(lookupStr, address string) error {
-	rr.lookupCapture = lookupStr
-	rr.addrCapture = address
-	return rr.err
-}
-func (rr *mockRR) close()      {}
-func (rr *mockRR) init() error { return nil }
 
 func TestNewRemoteRegistryDefaultPropNames(t *testing.T) {
 	assert := assert.New(t)
@@ -118,9 +97,9 @@ func TestRemoteRegistryInitDB(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	err := rr.init()
+	err := rr.Init()
 	assert.NoError(err)
-	rr.close()
+	rr.Close()
 }
 
 func TestRemoteRegistryInitBadDB(t *testing.T) {
@@ -136,9 +115,9 @@ func TestRemoteRegistryInitBadDB(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	err := rr.init()
+	err := rr.Init()
 	assert.Regexp("Failed to initialize cache for remote registry", err.Error())
-	rr.close()
+	rr.Close()
 }
 
 func TestRemoteRegistryloadFactoryForGatewaySuccess(t *testing.T) {
@@ -162,7 +141,7 @@ func TestRemoteRegistryloadFactoryForGatewaySuccess(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	res, err := rr.loadFactoryForGateway("testid", false)
+	res, err := rr.LoadFactoryForGateway("testid", false)
 	assert.NoError(err)
 	assert.NotEmpty(res.Compiled)
 	runtimeABI, err := ethbind.API.ABIMarshalingToABIRuntime(res.ABI)
@@ -197,12 +176,12 @@ func TestRemoteRegistryloadFactoryForGatewayCached(t *testing.T) {
 		},
 	})
 	rr := r.(*remoteRegistry)
-	rr.init()
-	defer rr.close()
+	rr.Init()
+	defer rr.Close()
 
-	res1, err := rr.loadFactoryForGateway("testid", false)
+	res1, err := rr.LoadFactoryForGateway("testid", false)
 	assert.NoError(err)
-	res2, err := rr.loadFactoryForGateway("testid", false)
+	res2, err := rr.LoadFactoryForGateway("testid", false)
 	assert.NoError(err)
 	assert.Equal(1, callCount)
 	assert.Equal(res1.Headers.ID, res2.Headers.ID)
@@ -211,7 +190,7 @@ func TestRemoteRegistryloadFactoryForGatewayCached(t *testing.T) {
 	assert.Equal(res1.Compiled, res2.Compiled)
 
 	// Force reload
-	res3, err := rr.loadFactoryForGateway("testid", true)
+	res3, err := rr.LoadFactoryForGateway("testid", true)
 	assert.NoError(err)
 	assert.Equal(res1.Headers.ID, res3.Headers.ID)
 	assert.Equal(2, callCount)
@@ -240,7 +219,7 @@ func TestRemoteRegistryRegisterInstanceSuccess(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	err := rr.registerInstance("testid", "12345")
+	err := rr.RegisterInstance("testid", "12345")
 	assert.NoError(err)
 }
 
@@ -262,7 +241,7 @@ func TestRemoteRegistryRegisterInstanceFail(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	err := rr.registerInstance("testid", "12345")
+	err := rr.RegisterInstance("testid", "12345")
 	assert.Regexp("Failed to register instance in remote registry", err)
 }
 
@@ -276,7 +255,7 @@ func TestRemoteRegistryRegisterNoInstanceURL(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	err := rr.registerInstance("testid", "12345")
+	err := rr.RegisterInstance("testid", "12345")
 	assert.EqualError(err, "No remote registry is configured")
 }
 
@@ -302,7 +281,7 @@ func TestRemoteRegistryLoadFactoryMissingID(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	_, err := rr.loadFactoryForGateway("testid", false)
+	_, err := rr.LoadFactoryForGateway("testid", false)
 	assert.EqualError(err, "'id' missing in Contract registry response")
 }
 
@@ -328,7 +307,7 @@ func TestRemoteRegistryLoadFactoryMissingABI(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	_, err := rr.loadFactoryForGateway("testid", false)
+	_, err := rr.LoadFactoryForGateway("testid", false)
 	assert.EqualError(err, "'abi' missing in Contract registry response")
 }
 
@@ -355,7 +334,7 @@ func TestRemoteRegistryLoadFactoryBadABIJSON(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	_, err := rr.loadFactoryForGateway("testid", false)
+	_, err := rr.LoadFactoryForGateway("testid", false)
 	assert.EqualError(err, "Error processing contract registry response")
 }
 
@@ -382,7 +361,7 @@ func TestRemoteRegistryLoadFactoryMissingDevDoc(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	_, err := rr.loadFactoryForGateway("testid", false)
+	_, err := rr.LoadFactoryForGateway("testid", false)
 	assert.EqualError(err, "'devdoc' missing in Contract registry response")
 }
 
@@ -410,7 +389,7 @@ func TestRemoteRegistryLoadFactoryBadDevDoc(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	_, err := rr.loadFactoryForGateway("testid", false)
+	_, err := rr.LoadFactoryForGateway("testid", false)
 	assert.EqualError(err, "'devdoc' not a string in Contract registry response")
 }
 
@@ -439,7 +418,7 @@ func TestRemoteRegistryLoadFactoryEmptyBytecode(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	_, err := rr.loadFactoryForGateway("testid", false)
+	_, err := rr.LoadFactoryForGateway("testid", false)
 	assert.EqualError(err, "'bin' empty (or null) in Contract registry response")
 }
 
@@ -468,7 +447,7 @@ func TestRemoteRegistryLoadFactoryBadBytecode(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	_, err := rr.loadFactoryForGateway("testid", false)
+	_, err := rr.LoadFactoryForGateway("testid", false)
 	assert.EqualError(err, "Error processing contract registry response")
 }
 
@@ -491,7 +470,7 @@ func TestRemoteRegistryLoadFactoryErrorStatusGeneric(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	_, err := rr.loadFactoryForGateway("testid", false)
+	_, err := rr.LoadFactoryForGateway("testid", false)
 	assert.EqualError(err, "Could not process Contract registry [500] response")
 }
 
@@ -515,7 +494,7 @@ func TestRemoteRegistryLoadFactoryErrorStatus(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	_, err := rr.loadFactoryForGateway("testid", false)
+	_, err := rr.LoadFactoryForGateway("testid", false)
 	assert.EqualError(err, "Contract registry returned [500]: poof")
 }
 
@@ -538,7 +517,7 @@ func TestRemoteRegistryLoadFactoryNotFound(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	res, err := rr.loadFactoryForGateway("testid", false)
+	res, err := rr.LoadFactoryForGateway("testid", false)
 	assert.NoError(err)
 	assert.Nil(res)
 }
@@ -563,7 +542,7 @@ func TestRemoteRegistryLoadFactoryBadBody(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	_, err := rr.loadFactoryForGateway("testid", false)
+	_, err := rr.LoadFactoryForGateway("testid", false)
 	assert.EqualError(err, "Could not process Contract registry [200] response")
 }
 
@@ -573,7 +552,7 @@ func TestRemoteRegistryLoadFactoryNOOP(t *testing.T) {
 	r := NewRemoteRegistry(&RemoteRegistryConf{})
 	rr := r.(*remoteRegistry)
 
-	res, err := rr.loadFactoryForGateway("testid", false)
+	res, err := rr.LoadFactoryForGateway("testid", false)
 	assert.NoError(err)
 	assert.Nil(res)
 }
@@ -606,7 +585,7 @@ func TestRemoteRegistryloadFactoryForInstanceSuccess(t *testing.T) {
 	})
 	rr := r.(*remoteRegistry)
 
-	res, err := rr.loadFactoryForInstance("testid", false)
+	res, err := rr.LoadFactoryForInstance("testid", false)
 	assert.NoError(err)
 	assert.Equal(res.Address, "35344e187d669d930c9d513aac63ae204fc03c18")
 }
@@ -617,7 +596,7 @@ func TestRemoteRegistryLoadInstanceNOOP(t *testing.T) {
 	r := NewRemoteRegistry(&RemoteRegistryConf{})
 	rr := r.(*remoteRegistry)
 
-	res, err := rr.loadFactoryForInstance("testid", false)
+	res, err := rr.LoadFactoryForInstance("testid", false)
 	assert.NoError(err)
 	assert.Nil(res)
 }
@@ -632,8 +611,8 @@ func TestRemoteRegistryLoadFactoryFromCacheDBBadBytes(t *testing.T) {
 		CacheDB: path.Join(dir, "testdb"),
 	})
 	rr := r.(*remoteRegistry)
-	rr.init()
-	defer rr.close()
+	rr.Init()
+	defer rr.Close()
 
 	rr.db.Put("testid", []byte("!Bad JSON!"))
 

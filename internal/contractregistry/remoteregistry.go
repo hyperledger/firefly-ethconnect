@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package contracts
+package contractregistry
 
 import (
 	"encoding/hex"
@@ -30,27 +30,28 @@ import (
 )
 
 const (
-	defaultIDProp         = "id"
-	defaultNameProp       = "name"
-	defaultABIProp        = "abi"
-	defaultBytecodeProp   = "bytecode"
-	defaultDevdocProp     = "devdoc"
-	defaultDeployableProp = "deployable"
-	defaultAddressProp    = "address"
+	defaultIDProp            = "id"
+	defaultNameProp          = "name"
+	defaultABIProp           = "abi"
+	defaultBytecodeProp      = "bytecode"
+	defaultDevdocProp        = "devdoc"
+	defaultDeployableProp    = "deployable"
+	defaultAddressProp       = "address"
+	RemoteRegistryContextKey = "isRemoteRegistry"
 )
 
-type deployContractWithAddress struct {
+type DeployContractWithAddress struct {
 	messages.DeployContract
 	Address string `json:"address"`
 }
 
 // RemoteRegistry lookup of ABI, ByteCode and DevDocs against a conformant REST API
 type RemoteRegistry interface {
-	loadFactoryForGateway(lookupStr string, refresh bool) (*messages.DeployContract, error)
-	loadFactoryForInstance(lookupStr string, refresh bool) (*deployContractWithAddress, error)
-	registerInstance(lookupStr, address string) error
-	init() error
-	close()
+	LoadFactoryForGateway(lookupStr string, refresh bool) (*messages.DeployContract, error)
+	LoadFactoryForInstance(lookupStr string, refresh bool) (*DeployContractWithAddress, error)
+	RegisterInstance(lookupStr, address string) error
+	Init() error
+	Close()
 }
 
 // RemoteRegistryConf configuration
@@ -116,7 +117,7 @@ type remoteRegistry struct {
 	db   kvstore.KVStore
 }
 
-func (rr *remoteRegistry) init() (err error) {
+func (rr *remoteRegistry) Init() (err error) {
 	if rr.conf.CacheDB != "" {
 		if rr.db, err = kvstore.NewLDBKeyValueStore(rr.conf.CacheDB); err != nil {
 			return errors.Errorf(errors.RemoteRegistryCacheInit, err)
@@ -125,7 +126,7 @@ func (rr *remoteRegistry) init() (err error) {
 	return nil
 }
 
-func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string, refresh bool) (msg *deployContractWithAddress, err error) {
+func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string, refresh bool) (msg *DeployContractWithAddress, err error) {
 	safeLookupStr := url.QueryEscape(lookupStr)
 	if !refresh {
 		msg = rr.loadFactoryFromCacheDB(ns + "/" + safeLookupStr)
@@ -166,7 +167,7 @@ func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string, refr
 		return nil, errors.Errorf(errors.RemoteRegistryLookupGenericProcessingFailed)
 	}
 	addr, _ := rr.hr.GetResponseString(jsonRes, rr.conf.PropNames.Address, false)
-	msg = &deployContractWithAddress{
+	msg = &DeployContractWithAddress{
 		DeployContract: messages.DeployContract{
 			TransactionCommon: messages.TransactionCommon{
 				RequestCommon: messages.RequestCommon{
@@ -174,7 +175,7 @@ func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string, refr
 						CommonHeaders: messages.CommonHeaders{
 							ID: idString,
 							Context: map[string]interface{}{
-								remoteRegistryContextKey: true,
+								RemoteRegistryContextKey: true,
 							},
 						},
 					},
@@ -190,7 +191,7 @@ func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string, refr
 	return msg, nil
 }
 
-func (rr *remoteRegistry) loadFactoryFromCacheDB(cacheKey string) *deployContractWithAddress {
+func (rr *remoteRegistry) loadFactoryFromCacheDB(cacheKey string) *DeployContractWithAddress {
 	if rr.db == nil {
 		return nil
 	}
@@ -198,7 +199,7 @@ func (rr *remoteRegistry) loadFactoryFromCacheDB(cacheKey string) *deployContrac
 	if err != nil {
 		return nil
 	}
-	var msg deployContractWithAddress
+	var msg DeployContractWithAddress
 	err = json.Unmarshal(b, &msg)
 	if err != nil {
 		log.Warnf("Failed to deserialized cached bytes for key %s: %s", cacheKey, err)
@@ -207,7 +208,7 @@ func (rr *remoteRegistry) loadFactoryFromCacheDB(cacheKey string) *deployContrac
 	return &msg
 }
 
-func (rr *remoteRegistry) storeFactoryToCacheDB(cacheKey string, msg *deployContractWithAddress) {
+func (rr *remoteRegistry) storeFactoryToCacheDB(cacheKey string, msg *DeployContractWithAddress) {
 	if rr.db == nil {
 		return
 	}
@@ -218,7 +219,7 @@ func (rr *remoteRegistry) storeFactoryToCacheDB(cacheKey string, msg *deployCont
 	}
 }
 
-func (rr *remoteRegistry) loadFactoryForGateway(lookupStr string, refresh bool) (*messages.DeployContract, error) {
+func (rr *remoteRegistry) LoadFactoryForGateway(lookupStr string, refresh bool) (*messages.DeployContract, error) {
 	if rr.conf.GatewayURLPrefix == "" {
 		return nil, nil
 	}
@@ -230,14 +231,14 @@ func (rr *remoteRegistry) loadFactoryForGateway(lookupStr string, refresh bool) 
 	return nil, err
 }
 
-func (rr *remoteRegistry) loadFactoryForInstance(lookupStr string, refresh bool) (*deployContractWithAddress, error) {
+func (rr *remoteRegistry) LoadFactoryForInstance(lookupStr string, refresh bool) (*DeployContractWithAddress, error) {
 	if rr.conf.InstanceURLPrefix == "" {
 		return nil, nil
 	}
 	return rr.loadFactoryFromURL(rr.conf.InstanceURLPrefix, "instances", lookupStr, refresh)
 }
 
-func (rr *remoteRegistry) registerInstance(lookupStr, address string) error {
+func (rr *remoteRegistry) RegisterInstance(lookupStr, address string) error {
 	if rr.conf.InstanceURLPrefix == "" {
 		return errors.Errorf(errors.RemoteRegistryNotConfigured)
 	}
@@ -254,5 +255,5 @@ func (rr *remoteRegistry) registerInstance(lookupStr, address string) error {
 	return nil
 }
 
-func (rr *remoteRegistry) close() {
+func (rr *remoteRegistry) Close() {
 }

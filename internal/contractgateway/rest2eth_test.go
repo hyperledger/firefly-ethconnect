@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package contracts
+package contractgateway
 
 import (
 	"bytes"
@@ -27,6 +27,7 @@ import (
 
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth/authtest"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/contractregistry"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/events"
@@ -74,45 +75,50 @@ func (m *mockREST2EthDispatcher) DispatchDeployContractSync(ctx context.Context,
 	}
 }
 
-type mockABILoader struct {
+type mockContractResolver struct {
 	loadABIError           error
 	deployMsg              *messages.DeployContract
-	abiInfo                *abiInfo
-	contractInfo           *contractInfo
+	abiInfo                *contractregistry.ABIInfo
+	contractInfo           *contractregistry.ContractInfo
 	registeredContractAddr string
 	resolveContractErr     error
 	nameAvailableError     error
 	capturedAddr           string
-	postDeployError        error
 }
 
-func (m *mockABILoader) SendReply(message interface{}) {
-
+func (m *mockContractResolver) LookupContractInstance(addrHex string) (*contractregistry.ContractInfo, error) {
+	m.capturedAddr = addrHex
+	return m.contractInfo, m.loadABIError
 }
 
-func (m *mockABILoader) loadDeployMsgForInstance(addrHexNo0x string) (*messages.DeployContract, *contractInfo, error) {
-	m.capturedAddr = addrHexNo0x
-	return m.deployMsg, m.contractInfo, m.loadABIError
-}
-
-func (m *mockABILoader) resolveContractAddr(registeredName string) (string, error) {
+func (m *mockContractResolver) ResolveContractAddr(registeredName string) (string, error) {
 	return m.registeredContractAddr, m.resolveContractErr
 }
 
-func (m *mockABILoader) loadDeployMsgByID(addrHexNo0x string) (*messages.DeployContract, *abiInfo, error) {
+func (m *mockContractResolver) LoadDeployMsgByID(addrHex string) (*messages.DeployContract, *contractregistry.ABIInfo, error) {
 	return m.deployMsg, m.abiInfo, m.loadABIError
 }
 
-func (m *mockABILoader) checkNameAvailable(name string, isRemote bool) error {
+func (m *mockContractResolver) CheckNameAvailable(name string, isRemote bool) error {
 	return m.nameAvailableError
 }
 
-func (m *mockABILoader) PreDeploy(msg *messages.DeployContract) error { return nil }
-func (m *mockABILoader) PostDeploy(msg *messages.TransactionReceipt) error {
+func (m *mockContractResolver) ResolveAddressOrName(id string) (deployMsg *messages.DeployContract, registeredName string, info *contractregistry.ContractInfo, err error) {
+	return m.deployMsg, "", m.contractInfo, m.resolveContractErr
+}
+
+type mockGateway struct {
+	postDeployError error
+}
+
+func (m *mockGateway) SendReply(message interface{}) {
+}
+func (m *mockGateway) PreDeploy(msg *messages.DeployContract) error { return nil }
+func (m *mockGateway) PostDeploy(msg *messages.TransactionReceipt) error {
 	return m.postDeployError
 }
-func (m *mockABILoader) AddRoutes(router *httprouter.Router) { return }
-func (m *mockABILoader) Shutdown()                           { return }
+func (m *mockGateway) AddRoutes(router *httprouter.Router) { return }
+func (m *mockGateway) Shutdown()                           { return }
 
 type mockRPC struct {
 	capturedMethod string
@@ -175,10 +181,40 @@ func (m *mockSubMgr) ResetSubscription(ctx context.Context, id, initialBlock str
 }
 func (m *mockSubMgr) Close() {}
 
-func newTestDeployMsg(t *testing.T, addr string) *deployContractWithAddress {
+type mockRR struct {
+	idCapture      string
+	addrCapture    string
+	lookupCapture  string
+	refreshCapture bool
+	deployMsg      *contractregistry.DeployContractWithAddress
+	err            error
+}
+
+func (rr *mockRR) LoadFactoryForGateway(id string, refresh bool) (*messages.DeployContract, error) {
+	rr.idCapture = id
+	rr.refreshCapture = refresh
+	if rr.deployMsg == nil {
+		return nil, rr.err
+	}
+	return &rr.deployMsg.DeployContract, rr.err
+}
+func (rr *mockRR) LoadFactoryForInstance(id string, refresh bool) (*contractregistry.DeployContractWithAddress, error) {
+	rr.addrCapture = id
+	rr.refreshCapture = refresh
+	return rr.deployMsg, rr.err
+}
+func (rr *mockRR) RegisterInstance(lookupStr, address string) error {
+	rr.lookupCapture = lookupStr
+	rr.addrCapture = address
+	return rr.err
+}
+func (rr *mockRR) Close()      {}
+func (rr *mockRR) Init() error { return nil }
+
+func newTestDeployMsg(t *testing.T, addr string) *contractregistry.DeployContractWithAddress {
 	compiled, err := eth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")
 	assert.NoError(t, err)
-	return &deployContractWithAddress{
+	return &contractregistry.DeployContractWithAddress{
 		DeployContract: messages.DeployContract{ABI: compiled.ABI},
 		Address:        addr,
 	}
@@ -187,21 +223,39 @@ func newTestDeployMsg(t *testing.T, addr string) *deployContractWithAddress {
 func newTestREST2Eth(t *testing.T, dispatcher *mockREST2EthDispatcher) (*rest2eth, *mockRPC, *httprouter.Router) {
 	mockRPC := &mockRPC{}
 	deployMsg := newTestDeployMsg(t, "")
-	abiLoader := &mockABILoader{
-		deployMsg: &deployMsg.DeployContract,
+	gateway := &mockGateway{}
+	contractResolver := &mockContractResolver{
+		contractInfo: &contractregistry.ContractInfo{},
+		deployMsg:    &deployMsg.DeployContract,
 	}
 	mockProcessor := &mockProcessor{}
-	r := newREST2eth(abiLoader, mockRPC, nil, nil, mockProcessor, dispatcher, dispatcher)
+	r := newREST2eth(gateway, contractResolver, mockRPC, nil, nil, mockProcessor, dispatcher, dispatcher)
 	router := &httprouter.Router{}
 	r.addRoutes(router)
 
 	return r, mockRPC, router
 }
 
-func newTestREST2EthCustomAbiLoader(dispatcher *mockREST2EthDispatcher, abiLoader *mockABILoader) (*rest2eth, *mockRPC, *httprouter.Router) {
+func newTestREST2EthCustomGateway(t *testing.T, dispatcher *mockREST2EthDispatcher, gateway *mockGateway) (*rest2eth, *mockRPC, *httprouter.Router) {
 	mockRPC := &mockRPC{}
+	deployMsg := newTestDeployMsg(t, "")
+	contractResolver := &mockContractResolver{
+		contractInfo: &contractregistry.ContractInfo{},
+		deployMsg:    &deployMsg.DeployContract,
+	}
 	mockProcessor := &mockProcessor{}
-	r := newREST2eth(abiLoader, mockRPC, nil, nil, mockProcessor, dispatcher, dispatcher)
+	r := newREST2eth(gateway, contractResolver, mockRPC, nil, nil, mockProcessor, dispatcher, dispatcher)
+	router := &httprouter.Router{}
+	r.addRoutes(router)
+
+	return r, mockRPC, router
+}
+
+func newTestREST2EthCustomContractResolver(dispatcher *mockREST2EthDispatcher, contractResolver *mockContractResolver) (*rest2eth, *mockRPC, *httprouter.Router) {
+	mockRPC := &mockRPC{}
+	gateway := &mockGateway{}
+	mockProcessor := &mockProcessor{}
+	r := newREST2eth(gateway, contractResolver, mockRPC, nil, nil, mockProcessor, dispatcher, dispatcher)
 	router := &httprouter.Router{}
 	r.addRoutes(router)
 
@@ -220,9 +274,7 @@ func newTestREST2EthAndMsg(t *testing.T, dispatcher *mockREST2EthDispatcher, fro
 }
 
 func newTestREST2EthAndMsgPostDeployError(t *testing.T, dispatcher *mockREST2EthDispatcher, from, to string, bodyMap map[string]interface{}) (*rest2eth, *mockRPC, *httprouter.Router, *httptest.ResponseRecorder, *http.Request) {
-	deployMsg := newTestDeployMsg(t, "")
-	abiLoader := &mockABILoader{
-		deployMsg:       &deployMsg.DeployContract,
+	gateway := &mockGateway{
 		postDeployError: fmt.Errorf("pop"),
 	}
 	body, _ := json.Marshal(&bodyMap)
@@ -230,7 +282,7 @@ func newTestREST2EthAndMsgPostDeployError(t *testing.T, dispatcher *mockREST2Eth
 	req.Header.Add("x-firefly-from", from)
 	res := httptest.NewRecorder()
 
-	r, mockRPC, router := newTestREST2EthCustomAbiLoader(dispatcher, abiLoader)
+	r, mockRPC, router := newTestREST2EthCustomGateway(t, dispatcher, gateway)
 
 	return r, mockRPC, router, res, req
 }
@@ -354,8 +406,8 @@ func TestDeployContractAsyncDuplicate(t *testing.T) {
 		},
 	}
 	r, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
-	abiLoader := r.gw.(*mockABILoader)
-	abiLoader.nameAvailableError = fmt.Errorf("spent already")
+	contractResolver := r.cr.(*mockContractResolver)
+	contractResolver.nameAvailableError = fmt.Errorf("spent already")
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/abis/abi1?fly-privateFrom=0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90&fly-privateFor=0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745&fly-privateFor=0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
@@ -559,7 +611,7 @@ func TestDeployContractSyncRemoteRegitryInstance(t *testing.T) {
 				CommonHeaders: messages.CommonHeaders{
 					MsgType: messages.MsgTypeTransactionSuccess,
 					Context: map[string]interface{}{
-						remoteRegistryContextKey: true,
+						contractregistry.RemoteRegistryContextKey: true,
 					},
 				},
 			},
@@ -811,8 +863,8 @@ func TestSendTransactionUnknownRegisteredName(t *testing.T) {
 	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
 	dispatcher := &mockREST2EthDispatcher{}
 	r, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
-	abiLoader := r.gw.(*mockABILoader)
-	abiLoader.resolveContractErr = fmt.Errorf("unregistered")
+	contractResolver := r.cr.(*mockContractResolver)
+	contractResolver.resolveContractErr = fmt.Errorf("unregistered")
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
@@ -855,7 +907,8 @@ func TestSendTransactionBadMethodABI(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	abiLoader := &mockABILoader{
+	contractResolver := &mockContractResolver{
+		contractInfo: &contractregistry.ContractInfo{},
 		deployMsg: &messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{
 				{
@@ -866,7 +919,7 @@ func TestSendTransactionBadMethodABI(t *testing.T) {
 			},
 		},
 	}
-	_, _, router := newTestREST2EthCustomAbiLoader(dispatcher, abiLoader)
+	_, _, router := newTestREST2EthCustomContractResolver(dispatcher, contractResolver)
 	req := httptest.NewRequest("GET", "/contracts/0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8/badmethod", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
 	res := httptest.NewRecorder()
@@ -888,7 +941,8 @@ func TestSendTransactionBadEventABI(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	abiLoader := &mockABILoader{
+	contractResolver := &mockContractResolver{
+		contractInfo: &contractregistry.ContractInfo{},
 		deployMsg: &messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{
 				{
@@ -899,7 +953,7 @@ func TestSendTransactionBadEventABI(t *testing.T) {
 			},
 		},
 	}
-	_, _, router := newTestREST2EthCustomAbiLoader(dispatcher, abiLoader)
+	_, _, router := newTestREST2EthCustomContractResolver(dispatcher, contractResolver)
 	req := httptest.NewRequest("POST", "/contracts/0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8/badevent/subscribe", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
 	res := httptest.NewRecorder()
@@ -921,7 +975,8 @@ func TestSendTransactionBadConstructorABI(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	abiLoader := &mockABILoader{
+	contractResolver := &mockContractResolver{
+		contractInfo: &contractregistry.ContractInfo{},
 		deployMsg: &messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{
 				{
@@ -932,7 +987,7 @@ func TestSendTransactionBadConstructorABI(t *testing.T) {
 			},
 		},
 	}
-	_, _, router := newTestREST2EthCustomAbiLoader(dispatcher, abiLoader)
+	_, _, router := newTestREST2EthCustomContractResolver(dispatcher, contractResolver)
 	req := httptest.NewRequest("POST", "/abis/testabi", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
 	res := httptest.NewRecorder()
@@ -954,12 +1009,13 @@ func TestSendTransactionDefaultConstructorABI(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	abiLoader := &mockABILoader{
+	contractResolver := &mockContractResolver{
+		contractInfo: &contractregistry.ContractInfo{},
 		deployMsg: &messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{}, // completely empty ABI is ok
 		},
 	}
-	_, _, router := newTestREST2EthCustomAbiLoader(dispatcher, abiLoader)
+	_, _, router := newTestREST2EthCustomContractResolver(dispatcher, contractResolver)
 	req := httptest.NewRequest("POST", "/abis/testabi", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
 	res := httptest.NewRecorder()
@@ -977,7 +1033,8 @@ func TestSendTransactionUnnamedParamsABI(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	abiLoader := &mockABILoader{
+	contractResolver := &mockContractResolver{
+		contractInfo: &contractregistry.ContractInfo{},
 		deployMsg: &messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{
 				{
@@ -989,7 +1046,7 @@ func TestSendTransactionUnnamedParamsABI(t *testing.T) {
 			},
 		},
 	}
-	_, _, router := newTestREST2EthCustomAbiLoader(dispatcher, abiLoader)
+	_, _, router := newTestREST2EthCustomContractResolver(dispatcher, contractResolver)
 	req := httptest.NewRequest("POST", "/abis/testabi/0x29fb3f4f7cc82a1456903a506e88cdd63b1d74e8/unnamedparamsmethod", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
 	q := req.URL.Query()
@@ -1040,8 +1097,8 @@ func TestSendTransactionInvalidContract(t *testing.T) {
 		},
 	}
 	r, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
-	abiLoader := r.gw.(*mockABILoader)
-	abiLoader.loadABIError = fmt.Errorf("pop")
+	contractResolver := r.cr.(*mockContractResolver)
+	contractResolver.loadABIError = fmt.Errorf("pop")
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
@@ -1070,8 +1127,8 @@ func TestDeployContractInvalidABI(t *testing.T) {
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/abis/abi1?fly-sync", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
-	abiLoader := r.gw.(*mockABILoader)
-	abiLoader.loadABIError = fmt.Errorf("pop")
+	contractResolver := r.cr.(*mockContractResolver)
+	contractResolver.loadABIError = fmt.Errorf("pop")
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
@@ -1145,13 +1202,13 @@ func TestSendTransactionRegisteredName(t *testing.T) {
 		},
 	}
 	r, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
-	abiLoader := r.gw.(*mockABILoader)
-	abiLoader.registeredContractAddr = "c6c572a18d31ff36d661d680c0060307e038dc47"
+	contractResolver := r.cr.(*mockContractResolver)
+	contractResolver.registeredContractAddr = "c6c572a18d31ff36d661d680c0060307e038dc47"
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?i=999&s=msg&fly-ethvalue=12345", bytes.NewReader([]byte("{}")))
 	req.Header.Set("x-firefly-from", from)
 	router.ServeHTTP(res, req)
 
-	assert.Equal("c6c572a18d31ff36d661d680c0060307e038dc47", abiLoader.capturedAddr)
+	assert.Equal("c6c572a18d31ff36d661d680c0060307e038dc47", contractResolver.capturedAddr)
 	assert.Equal(202, res.Result().StatusCode)
 }
 func TestSendTransactionMissingParam(t *testing.T) {
@@ -1516,8 +1573,8 @@ func TestSubscribeWithAddressBadAddress(t *testing.T) {
 
 	dispatcher := &mockREST2EthDispatcher{}
 	r, _, router := newTestREST2Eth(t, dispatcher)
-	abiLoader := r.gw.(*mockABILoader)
-	abiLoader.resolveContractErr = fmt.Errorf("unregistered")
+	contractResolver := r.cr.(*mockContractResolver)
+	contractResolver.resolveContractErr = fmt.Errorf("unregistered")
 	r.subMgr = &mockSubMgr{
 		sub: &events.SubscriptionInfo{ID: "sub1"},
 	}

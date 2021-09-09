@@ -104,7 +104,7 @@ func (m *mockContractResolver) checkNameAvailable(name string, isRemote bool) er
 }
 
 func (m *mockContractResolver) resolveAddressOrName(id string) (deployMsg *messages.DeployContract, registeredName string, info *contractInfo, err error) {
-	return nil, "", nil, nil
+	return m.deployMsg, "", m.contractInfo, m.resolveContractErr
 }
 
 type mockGateway struct {

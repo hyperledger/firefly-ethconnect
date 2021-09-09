@@ -56,6 +56,27 @@ func (m *mockWebSocketServer) SendReply(message interface{}) {
 	m.testChan <- message
 }
 
+type mockContractStore struct {
+	mockContractResolver
+}
+
+func (cs *mockContractStore) storeNewContractInfo(addrHexNo0x, abiID, pathName, registerAs string) (*contractInfo, error) {
+	return nil, nil
+}
+func (cs *mockContractStore) buildIndex() {
+}
+func (cs *mockContractStore) addFileToContractIndex(address, fileName string) {
+}
+func (cs *mockContractStore) addToABIIndex(id string, deployMsg *messages.DeployContract, createdTime time.Time) *abiInfo {
+	return nil
+}
+func (cs *mockContractStore) listContracts() []messages.TimeSortable {
+	return []messages.TimeSortable{}
+}
+func (cs *mockContractStore) listABIs() []messages.TimeSortable {
+	return []messages.TimeSortable{}
+}
+
 type SolcJson struct {
 	ABI string `json:"abi"`
 	Bin string `json:"bin"`
@@ -941,44 +962,29 @@ func TestGetContractOrABIFail(t *testing.T) {
 		},
 		nil, nil, nil, nil,
 	)
+	cs := &mockContractStore{}
 	scgw := s.(*smartContractGW)
+	scgw.cs = cs
 
-	scgw.cs.(*contractStore).contractIndex["123456789abcdef0123456789abcdef012345678"] = &contractInfo{
-		Address: "123456789abcdef0123456789abcdef012345678",
-	}
-	scgw.cs.(*contractStore).abiIndex["badabi"] = &abiInfo{}
-
-	// One that exists in the index, but for some reason the file isn't there
-	req := httptest.NewRequest("GET", "/contracts/123456789abcdef0123456789abcdef012345678?openapi", bytes.NewReader([]byte{}))
+	// Contract that does not exist in the index
+	cs.mockContractResolver.resolveContractErr = fmt.Errorf("pop")
+	req := httptest.NewRequest("GET", "/contracts/nonexistent?openapi", bytes.NewReader([]byte{}))
 	res := httptest.NewRecorder()
 	router := &httprouter.Router{}
 	scgw.AddRoutes(router)
 	router.ServeHTTP(res, req)
 	assert.Equal(404, res.Result().StatusCode)
+	cs.mockContractResolver.resolveContractErr = nil
 
-	// One that does not exist in the index
-	req = httptest.NewRequest("GET", "/contracts/nonexistent?openapi", bytes.NewReader([]byte{}))
-	res = httptest.NewRecorder()
-	router = &httprouter.Router{}
-	scgw.AddRoutes(router)
-	router.ServeHTTP(res, req)
-	assert.Equal(404, res.Result().StatusCode)
-
-	// One that exists in the index, but for some reason the file isn't there
-	req = httptest.NewRequest("GET", "/abis/badabi?openapi", bytes.NewReader([]byte{}))
-	res = httptest.NewRecorder()
-	router = &httprouter.Router{}
-	scgw.AddRoutes(router)
-	router.ServeHTTP(res, req)
-	assert.Equal(404, res.Result().StatusCode)
-
-	// One that simply doesn't exist in the index - should be a 404
+	// ABI that does not exist in the index
+	cs.mockContractResolver.loadABIError = fmt.Errorf("pop")
 	req = httptest.NewRequest("GET", "/abis/23456789abcdef0123456789abcdef0123456789?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router = &httprouter.Router{}
 	scgw.AddRoutes(router)
 	router.ServeHTTP(res, req)
 	assert.Equal(404, res.Result().StatusCode)
+	cs.mockContractResolver.loadABIError = nil
 }
 
 func TestGetContractUI(t *testing.T) {
@@ -995,14 +1001,15 @@ func TestGetContractUI(t *testing.T) {
 		},
 		nil, nil, nil, nil,
 	)
+	cs := &mockContractStore{}
 	scgw := s.(*smartContractGW)
+	scgw.cs = cs
 
-	scgw.cs.(*contractStore).contractIndex["123456789abcdef0123456789abcdef012345678"] = &contractInfo{
+	cs.contractInfo = &contractInfo{
 		ABI:     "abi1",
 		Address: "123456789abcdef0123456789abcdef012345678",
 	}
-	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), []byte("{}"), 0644)
-	scgw.cs.(*contractStore).abiIndex["abi1"] = &abiInfo{}
+	cs.deployMsg = &messages.DeployContract{}
 
 	req := httptest.NewRequest("GET", "/contracts/123456789abcdef0123456789abcdef012345678?ui", bytes.NewReader([]byte{}))
 	res := httptest.NewRecorder()

@@ -58,6 +58,21 @@ func TestLoadDeployMsgMissing(t *testing.T) {
 	assert.Regexp("No ABI found with ID abi1", err.Error())
 }
 
+func TestLoadDeployMsgFileMissing(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+	cs := newContractStore(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+		},
+		nil,
+	)
+	cs.(*contractStore).abiIndex["abi1"] = &abiInfo{}
+	_, _, err := cs.loadDeployMsgByID("abi1")
+	assert.Regexp("Failed to load ABI with ID abi1", err.Error())
+}
+
 func TestLoadDeployMsgFailure(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
@@ -217,4 +232,21 @@ func TestCheckNameAvailableRRFail(t *testing.T) {
 
 	err := cs.checkNameAvailable("lobster", true)
 	assert.EqualError(err, "pop")
+}
+
+func TestResolveAddressFail(t *testing.T) {
+	assert := assert.New(t)
+
+	cs := newContractStore(
+		&SmartContractGatewayConf{
+			BaseURL: "http://localhost/api/v1",
+		},
+		nil,
+	)
+
+	deployMsg, name, info, err := cs.resolveAddressOrName("test")
+	assert.Regexp("No contract instance registered with address test", err)
+	assert.Nil(deployMsg)
+	assert.Nil(info)
+	assert.Equal("", name)
 }

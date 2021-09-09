@@ -40,19 +40,17 @@ type ContractResolver interface {
 	lookupContractInstance(addrHex string) (*contractInfo, error)
 	loadDeployMsgByID(abi string) (*messages.DeployContract, *abiInfo, error)
 	checkNameAvailable(name string, isRemote bool) error
+	resolveAddressOrName(id string) (deployMsg *messages.DeployContract, registeredName string, info *contractInfo, err error)
 }
 
 type ContractStore interface {
 	ContractResolver
 	storeNewContractInfo(addrHexNo0x, abiID, pathName, registerAs string) (*contractInfo, error)
 	buildIndex()
-	storeContractInfo(info *contractInfo) error
 	addFileToContractIndex(address, fileName string)
-	addFileToABIIndex(id, fileName string, createdTime time.Time)
 	addToABIIndex(id string, deployMsg *messages.DeployContract, createdTime time.Time) *abiInfo
 	listContracts() []messages.TimeSortable
 	listABIs() []messages.TimeSortable
-	resolveAddressOrName(id string) (deployMsg *messages.DeployContract, registeredName string, info *contractInfo, err error)
 }
 
 type contractStore struct {

@@ -103,6 +103,10 @@ func (m *mockContractResolver) checkNameAvailable(name string, isRemote bool) er
 	return m.nameAvailableError
 }
 
+func (m *mockContractResolver) resolveAddressOrName(id string) (deployMsg *messages.DeployContract, registeredName string, info *contractInfo, err error) {
+	return nil, "", nil, nil
+}
+
 type mockGateway struct {
 	postDeployError error
 }

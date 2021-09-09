@@ -600,86 +600,6 @@ func TestRegisterContractBadABI(t *testing.T) {
 	assert.Regexp("No ABI found with ID BADID", resBody["error"])
 }
 
-func TestLoadDeployMsgOKNoABIInIndex(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: dir,
-		},
-		&tx.TxnProcessorConf{
-			OrionPrivateAPIS: false,
-		},
-		nil, nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-	goodMsg := &messages.DeployContract{}
-	deployBytes, _ := json.Marshal(goodMsg)
-	scgw.cs.(*contractStore).abiIndex["abi1"] = &abiInfo{}
-	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), deployBytes, 0644)
-	_, _, err := scgw.cs.loadDeployMsgByID("abi1")
-	assert.NoError(err)
-}
-
-func TestLoadDeployMsgMissing(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: dir,
-		},
-		&tx.TxnProcessorConf{
-			OrionPrivateAPIS: false,
-		},
-		nil, nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-	_, _, err := scgw.cs.loadDeployMsgByID("abi1")
-	assert.Regexp("No ABI found with ID abi1", err.Error())
-}
-
-func TestLoadDeployMsgFailure(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: dir,
-		},
-		&tx.TxnProcessorConf{
-			OrionPrivateAPIS: false,
-		},
-		nil, nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-	scgw.cs.(*contractStore).abiIndex["abi1"] = &abiInfo{}
-	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), []byte(":bad json"), 0644)
-	_, _, err := scgw.cs.loadDeployMsgByID("abi1")
-	assert.Regexp("Failed to parse ABI with ID abi1", err.Error())
-}
-
-func TestLoadDeployMsgRemoteLookupNotFound(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: dir,
-		},
-		&tx.TxnProcessorConf{
-			OrionPrivateAPIS: false,
-		},
-		nil, nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-	rr := &mockRR{}
-	scgw.rr = rr
-	_, _, err := scgw.cs.loadDeployMsgByID("abi1")
-	assert.EqualError(err, "No ABI found with ID abi1")
-}
-
 func TestPreDeployCompileFailure(t *testing.T) {
 	assert := assert.New(t)
 	s, _ := NewSmartContractGateway(
@@ -756,7 +676,8 @@ func TestPostDeployNoRegisteredName(t *testing.T) {
 	err := scgw.PostDeploy(replyMsg)
 	assert.NoError(err)
 
-	contractInfo := scgw.cs.(*contractStore).contractIndex["0123456789abcdef0123456789abcdef01234567"].(*contractInfo)
+	contractInfo, err := scgw.cs.lookupContractInstance("0123456789abcdef0123456789abcdef01234567")
+	assert.NoError(err)
 	assert.Equal("", contractInfo.RegisteredAs)
 	assert.Equal("/contracts/0123456789abcdef0123456789abcdef01234567", contractInfo.Path)
 }
@@ -880,67 +801,6 @@ func TestPostDeployMissingContractAddress(t *testing.T) {
 	assert.Regexp("message1: Missing contract address in receipt", err.Error())
 }
 
-func TestStoreABIWriteFail(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: path.Join(dir, "badpath"),
-		},
-		&tx.TxnProcessorConf{
-			OrionPrivateAPIS: false,
-		},
-		nil, nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-
-	i := &contractInfo{
-		Address: "req1",
-	}
-	err := scgw.cs.storeContractInfo(i)
-	assert.Regexp("Failed to write ABI JSON", err.Error())
-}
-
-func TestLoadABIForInstanceUnknown(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: path.Join(dir, "badpath"),
-		},
-		&tx.TxnProcessorConf{
-			OrionPrivateAPIS: false,
-		},
-		nil, nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-
-	_, err := scgw.cs.lookupContractInstance("invalid")
-	assert.Regexp("No contract instance registered with address invalid", err.Error())
-}
-
-func TestLoadABIBadData(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: dir,
-		},
-		&tx.TxnProcessorConf{
-			OrionPrivateAPIS: false,
-		},
-		nil, nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-
-	ioutil.WriteFile(path.Join(dir, "badness.abi.json"), []byte(":not json"), 0644)
-	_, _, err := scgw.cs.loadDeployMsgByID("badness")
-	assert.Regexp("No ABI found with ID badness", err.Error())
-}
-
 func TestBuildIndex(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
@@ -1026,8 +886,10 @@ func TestBuildIndex(t *testing.T) {
 	)
 	scgw := s.(*smartContractGW)
 
-	assert.Equal(4, len(scgw.cs.(*contractStore).contractIndex))
-	info := scgw.cs.(*contractStore).contractIndex["123456789abcdef0123456789abcdef012345678"].(*contractInfo)
+	contracts := scgw.cs.listContracts()
+	assert.Equal(4, len(contracts))
+	info, err := scgw.cs.lookupContractInstance("123456789abcdef0123456789abcdef012345678")
+	assert.NoError(err)
 	assert.Equal("123456789abcdef0123456789abcdef012345678", info.Address)
 
 	req := httptest.NewRequest("GET", "/contracts", bytes.NewReader([]byte{}))
@@ -1036,7 +898,7 @@ func TestBuildIndex(t *testing.T) {
 	scgw.listContractsOrABIs(res, req, params)
 	assert.Equal(200, res.Result().StatusCode)
 	var contractInfos []*contractInfo
-	err := json.NewDecoder(res.Body).Decode(&contractInfos)
+	err = json.NewDecoder(res.Body).Decode(&contractInfos)
 	assert.NoError(err)
 	assert.Equal(4, len(contractInfos))
 	assert.Equal("123456789abcdef0123456789abcdef012345678", contractInfos[0].Address)
@@ -1612,62 +1474,6 @@ func TestStoreDeployableABIMissingABI(t *testing.T) {
 	assert.EqualError(err, "Must supply ABI to install an existing ABI into the REST Gateway")
 }
 
-func TestAddFileToContractIndexBadFileSwallowsError(t *testing.T) {
-	dir := tempdir()
-	defer cleanup(dir)
-
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: dir,
-		},
-		&tx.TxnProcessorConf{
-			OrionPrivateAPIS: true,
-		},
-		nil, nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-
-	scgw.cs.addFileToContractIndex("", "badness")
-}
-
-func TestAddFileToContractIndexBadDataSwallowsError(t *testing.T) {
-	dir := tempdir()
-	defer cleanup(dir)
-
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: dir,
-		},
-		&tx.TxnProcessorConf{
-			OrionPrivateAPIS: true,
-		},
-		nil, nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-
-	fileName := path.Join(dir, "badness")
-	ioutil.WriteFile(fileName, []byte("!JSON"), 0644)
-	scgw.cs.addFileToContractIndex("", fileName)
-}
-
-func TestAddFileToABIIndexBadFileSwallowsError(t *testing.T) {
-	dir := tempdir()
-	defer cleanup(dir)
-
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: dir,
-		},
-		&tx.TxnProcessorConf{
-			OrionPrivateAPIS: true,
-		},
-		nil, nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-
-	scgw.cs.addFileToABIIndex("", "badness", time.Now().UTC())
-}
-
 func testGWPath(method, path string, results interface{}, sm *mockSubMgr) (res *httptest.ResponseRecorder) {
 	return testGWPathBody(method, path, results, sm, nil)
 }
@@ -2042,52 +1848,6 @@ func TestSuspendNoSubMgr(t *testing.T) {
 
 	res := testGWPath("POST", events.StreamPathPrefix+"/123/resume", nil, nil)
 	assert.Equal(405, res.Result().StatusCode)
-}
-
-func TestCheckNameAvailableRRDuplicate(t *testing.T) {
-	assert := assert.New(t)
-
-	scgw, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			BaseURL: "http://localhost/api/v1",
-		},
-		&tx.TxnProcessorConf{
-			OrionPrivateAPIS: false,
-		},
-		nil, nil, nil, nil,
-	)
-	rr := &mockRR{
-		deployMsg: newTestDeployMsg(t, "12345"),
-	}
-	s := scgw.(*smartContractGW)
-	s.rr = rr
-	s.cs.(*contractStore).rr = rr
-
-	err := s.cs.checkNameAvailable("lobster", true)
-	assert.EqualError(err, "Contract address 12345 is already registered for name 'lobster'")
-}
-
-func TestCheckNameAvailableRRFail(t *testing.T) {
-	assert := assert.New(t)
-
-	scgw, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			BaseURL: "http://localhost/api/v1",
-		},
-		&tx.TxnProcessorConf{
-			OrionPrivateAPIS: false,
-		},
-		nil, nil, nil, nil,
-	)
-	rr := &mockRR{
-		err: fmt.Errorf("pop"),
-	}
-	s := scgw.(*smartContractGW)
-	s.rr = rr
-	s.cs.(*contractStore).rr = rr
-
-	err := s.cs.checkNameAvailable("lobster", true)
-	assert.EqualError(err, "pop")
 }
 
 func TestWithEventsAuthRequiresAuth(t *testing.T) {

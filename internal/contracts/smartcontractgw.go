@@ -40,13 +40,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/contractregistry"
 	ethconnecterrors "github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/events"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/openapi"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/remoteregistry"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/tx"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/ws"
@@ -57,6 +57,13 @@ const (
 	maxFormParsingMemory   = 32 << 20 // 32 MB
 	errEventSupportMissing = "Event support is not configured on this gateway"
 )
+
+// remoteContractInfo is the ABI raw data back out of the REST API gateway with bytecode
+type remoteContractInfo struct {
+	ID      string                   `json:"id"`
+	Address string                   `json:"address,omitempty"`
+	ABI     ethbinding.ABIMarshaling `json:"abi"`
+}
 
 // SmartContractGateway provides gateway functions for OpenAPI 2.0 processing of Solidity contracts
 type SmartContractGateway interface {
@@ -70,9 +77,9 @@ type SmartContractGateway interface {
 // SmartContractGatewayConf configuration
 type SmartContractGatewayConf struct {
 	events.SubscriptionManagerConf
-	StoragePath    string                            `json:"storagePath"`
-	BaseURL        string                            `json:"baseURL"`
-	RemoteRegistry remoteregistry.RemoteRegistryConf `json:"registry,omitempty"` // JSON only config - no commandline
+	StoragePath    string                              `json:"storagePath"`
+	BaseURL        string                              `json:"baseURL"`
+	RemoteRegistry contractregistry.RemoteRegistryConf `json:"registry,omitempty"` // JSON only config - no commandline
 }
 
 // CobraInitContractGateway standard naming for contract gateway command params
@@ -136,10 +143,10 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 		baseURL, _ = url.Parse("http://localhost:8080")
 	}
 	log.Infof("OpenAPI Smart Contract Gateway configured with base URL '%s'", baseURL.String())
-	rr := remoteregistry.NewRemoteRegistry(&conf.RemoteRegistry)
+	rr := contractregistry.NewRemoteRegistry(&conf.RemoteRegistry)
 	gw := &smartContractGW{
 		conf: conf,
-		cs:   newContractStore(conf, rr),
+		cs:   contractregistry.NewContractStore(conf.BaseURL, conf.StoragePath, rr),
 		rr:   rr,
 		baseSwaggerConf: &openapi.ABI2SwaggerConf{
 			ExternalHost:     baseURL.Host,
@@ -162,15 +169,15 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 		}
 	}
 	gw.r2e = newREST2eth(gw, gw.cs, rpc, gw.sm, gw.rr, processor, asyncDispatcher, syncDispatcher)
-	gw.cs.buildIndex()
+	gw.cs.BuildIndex()
 	return gw, nil
 }
 
 type smartContractGW struct {
 	conf            *SmartContractGatewayConf
 	sm              events.SubscriptionManager
-	cs              ContractStore
-	rr              remoteregistry.RemoteRegistry
+	cs              contractregistry.ContractStore
+	rr              contractregistry.RemoteRegistry
 	r2e             *rest2eth
 	ws              ws.WebSocketChannels
 	baseSwaggerConf *openapi.ABI2SwaggerConf
@@ -190,7 +197,7 @@ func (g *smartContractGW) PostDeploy(msg *messages.TransactionReceipt) error {
 
 	// Generate and store the swagger
 	basePath := "/contracts/"
-	isRemote := isRemote(msg.Headers.CommonHeaders)
+	isRemote := contractregistry.IsRemote(msg.Headers.CommonHeaders)
 	if isRemote {
 		basePath = "/instances/"
 	}
@@ -209,7 +216,7 @@ func (g *smartContractGW) PostDeploy(msg *messages.TransactionReceipt) error {
 				err = g.rr.RegisterInstance(msg.RegisterAs, "0x"+addrHexNo0x)
 			}
 		} else {
-			_, err = g.cs.storeNewContractInfo(addrHexNo0x, requestID, registeredName, msg.RegisterAs)
+			_, err = g.cs.StoreNewContractInfo(addrHexNo0x, requestID, registeredName, msg.RegisterAs)
 		}
 		return err
 	}
@@ -267,13 +274,13 @@ func (g *smartContractGW) PreDeploy(msg *messages.DeployContract) (err error) {
 			return err
 		}
 	}
-	if !isRemote(msg.Headers.CommonHeaders) {
+	if !contractregistry.IsRemote(msg.Headers.CommonHeaders) {
 		_, err = g.storeDeployableABI(msg, compiled)
 	}
 	return err
 }
 
-func (g *smartContractGW) storeDeployableABI(msg *messages.DeployContract, compiled *eth.CompiledSolidity) (*abiInfo, error) {
+func (g *smartContractGW) storeDeployableABI(msg *messages.DeployContract, compiled *eth.CompiledSolidity) (*contractregistry.ABIInfo, error) {
 
 	if compiled != nil {
 		msg.Compiled = compiled.Compiled
@@ -296,7 +303,7 @@ func (g *smartContractGW) storeDeployableABI(msg *messages.DeployContract, compi
 	// Generate and store the swagger
 	swagger := g.swaggerForABI(openapi.NewABI2Swagger(g.baseSwaggerConf), requestID, msg.ContractName, false, runtimeABI, msg.DevDoc, "", "")
 	msg.Description = swagger.Info.Description // Swagger generation parses the devdoc
-	info := g.cs.addToABIIndex(requestID, msg, time.Now().UTC())
+	info := g.cs.AddToABIIndex(requestID, msg, time.Now().UTC())
 
 	g.writeAbiInfo(requestID, msg)
 
@@ -336,9 +343,9 @@ func (g *smartContractGW) listContractsOrABIs(res http.ResponseWriter, req *http
 
 	var retval []messages.TimeSortable
 	if strings.HasSuffix(req.URL.Path, "contracts") {
-		retval = g.cs.listContracts()
+		retval = g.cs.ListContracts()
 	} else {
-		retval = g.cs.listABIs()
+		retval = g.cs.ListABIs()
 	}
 
 	// Do the sort by Title then Address
@@ -647,13 +654,13 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 	var info messages.TimeSortable
 	var abiID string
 	if prefix == "contract" {
-		if deployMsg, registeredName, info, err = g.cs.resolveAddressOrName(params.ByName("address")); err != nil {
+		if deployMsg, registeredName, info, err = g.cs.ResolveAddressOrName(params.ByName("address")); err != nil {
 			g.gatewayErrReply(res, req, err, 404)
 			return
 		}
 	} else {
 		abiID = id
-		deployMsg, info, err = g.cs.loadDeployMsgByID(abiID)
+		deployMsg, info, err = g.cs.LoadDeployMsgByID(abiID)
 		if err != nil {
 			g.gatewayErrReply(res, req, err, 404)
 			return
@@ -712,7 +719,7 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 	} else {
 		prefix = "instance"
 		id = params.ByName("instance_lookup")
-		var msg *remoteregistry.DeployContractWithAddress
+		var msg *contractregistry.DeployContractWithAddress
 		msg, err = g.rr.LoadFactoryForInstance(id, refreshABI)
 		if err != nil {
 			g.gatewayErrReply(res, req, err, 500)
@@ -771,7 +778,7 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 	// Note: there is currently no body payload required for the POST
 
 	abiID := params.ByName("abi")
-	_, _, err := g.cs.loadDeployMsgByID(abiID)
+	_, _, err := g.cs.LoadDeployMsgByID(abiID)
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 404)
 		return
@@ -783,7 +790,7 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 		registeredName = addrHexNo0x
 	}
 
-	contractInfo, err := g.cs.storeNewContractInfo(addrHexNo0x, abiID, registeredName, registerAs)
+	contractInfo, err := g.cs.StoreNewContractInfo(addrHexNo0x, abiID, registeredName, registerAs)
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 409)
 		return

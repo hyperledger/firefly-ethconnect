@@ -27,11 +27,11 @@ import (
 
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth/authtest"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/contractregistry"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/events"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/remoteregistry"
 	"github.com/julienschmidt/httprouter"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	log "github.com/sirupsen/logrus"
@@ -78,32 +78,32 @@ func (m *mockREST2EthDispatcher) DispatchDeployContractSync(ctx context.Context,
 type mockContractResolver struct {
 	loadABIError           error
 	deployMsg              *messages.DeployContract
-	abiInfo                *abiInfo
-	contractInfo           *contractInfo
+	abiInfo                *contractregistry.ABIInfo
+	contractInfo           *contractregistry.ContractInfo
 	registeredContractAddr string
 	resolveContractErr     error
 	nameAvailableError     error
 	capturedAddr           string
 }
 
-func (m *mockContractResolver) lookupContractInstance(addrHex string) (*contractInfo, error) {
+func (m *mockContractResolver) LookupContractInstance(addrHex string) (*contractregistry.ContractInfo, error) {
 	m.capturedAddr = addrHex
 	return m.contractInfo, m.loadABIError
 }
 
-func (m *mockContractResolver) resolveContractAddr(registeredName string) (string, error) {
+func (m *mockContractResolver) ResolveContractAddr(registeredName string) (string, error) {
 	return m.registeredContractAddr, m.resolveContractErr
 }
 
-func (m *mockContractResolver) loadDeployMsgByID(addrHex string) (*messages.DeployContract, *abiInfo, error) {
+func (m *mockContractResolver) LoadDeployMsgByID(addrHex string) (*messages.DeployContract, *contractregistry.ABIInfo, error) {
 	return m.deployMsg, m.abiInfo, m.loadABIError
 }
 
-func (m *mockContractResolver) checkNameAvailable(name string, isRemote bool) error {
+func (m *mockContractResolver) CheckNameAvailable(name string, isRemote bool) error {
 	return m.nameAvailableError
 }
 
-func (m *mockContractResolver) resolveAddressOrName(id string) (deployMsg *messages.DeployContract, registeredName string, info *contractInfo, err error) {
+func (m *mockContractResolver) ResolveAddressOrName(id string) (deployMsg *messages.DeployContract, registeredName string, info *contractregistry.ContractInfo, err error) {
 	return m.deployMsg, "", m.contractInfo, m.resolveContractErr
 }
 
@@ -186,7 +186,7 @@ type mockRR struct {
 	addrCapture    string
 	lookupCapture  string
 	refreshCapture bool
-	deployMsg      *remoteregistry.DeployContractWithAddress
+	deployMsg      *contractregistry.DeployContractWithAddress
 	err            error
 }
 
@@ -198,7 +198,7 @@ func (rr *mockRR) LoadFactoryForGateway(id string, refresh bool) (*messages.Depl
 	}
 	return &rr.deployMsg.DeployContract, rr.err
 }
-func (rr *mockRR) LoadFactoryForInstance(id string, refresh bool) (*remoteregistry.DeployContractWithAddress, error) {
+func (rr *mockRR) LoadFactoryForInstance(id string, refresh bool) (*contractregistry.DeployContractWithAddress, error) {
 	rr.addrCapture = id
 	rr.refreshCapture = refresh
 	return rr.deployMsg, rr.err
@@ -211,10 +211,10 @@ func (rr *mockRR) RegisterInstance(lookupStr, address string) error {
 func (rr *mockRR) Close()      {}
 func (rr *mockRR) Init() error { return nil }
 
-func newTestDeployMsg(t *testing.T, addr string) *remoteregistry.DeployContractWithAddress {
+func newTestDeployMsg(t *testing.T, addr string) *contractregistry.DeployContractWithAddress {
 	compiled, err := eth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")
 	assert.NoError(t, err)
-	return &remoteregistry.DeployContractWithAddress{
+	return &contractregistry.DeployContractWithAddress{
 		DeployContract: messages.DeployContract{ABI: compiled.ABI},
 		Address:        addr,
 	}
@@ -225,7 +225,7 @@ func newTestREST2Eth(t *testing.T, dispatcher *mockREST2EthDispatcher) (*rest2et
 	deployMsg := newTestDeployMsg(t, "")
 	gateway := &mockGateway{}
 	contractResolver := &mockContractResolver{
-		contractInfo: &contractInfo{},
+		contractInfo: &contractregistry.ContractInfo{},
 		deployMsg:    &deployMsg.DeployContract,
 	}
 	mockProcessor := &mockProcessor{}
@@ -240,7 +240,7 @@ func newTestREST2EthCustomGateway(t *testing.T, dispatcher *mockREST2EthDispatch
 	mockRPC := &mockRPC{}
 	deployMsg := newTestDeployMsg(t, "")
 	contractResolver := &mockContractResolver{
-		contractInfo: &contractInfo{},
+		contractInfo: &contractregistry.ContractInfo{},
 		deployMsg:    &deployMsg.DeployContract,
 	}
 	mockProcessor := &mockProcessor{}
@@ -611,7 +611,7 @@ func TestDeployContractSyncRemoteRegitryInstance(t *testing.T) {
 				CommonHeaders: messages.CommonHeaders{
 					MsgType: messages.MsgTypeTransactionSuccess,
 					Context: map[string]interface{}{
-						remoteregistry.RemoteRegistryContextKey: true,
+						contractregistry.RemoteRegistryContextKey: true,
 					},
 				},
 			},
@@ -908,7 +908,7 @@ func TestSendTransactionBadMethodABI(t *testing.T) {
 		},
 	}
 	contractResolver := &mockContractResolver{
-		contractInfo: &contractInfo{},
+		contractInfo: &contractregistry.ContractInfo{},
 		deployMsg: &messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{
 				{
@@ -942,7 +942,7 @@ func TestSendTransactionBadEventABI(t *testing.T) {
 		},
 	}
 	contractResolver := &mockContractResolver{
-		contractInfo: &contractInfo{},
+		contractInfo: &contractregistry.ContractInfo{},
 		deployMsg: &messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{
 				{
@@ -976,7 +976,7 @@ func TestSendTransactionBadConstructorABI(t *testing.T) {
 		},
 	}
 	contractResolver := &mockContractResolver{
-		contractInfo: &contractInfo{},
+		contractInfo: &contractregistry.ContractInfo{},
 		deployMsg: &messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{
 				{
@@ -1010,7 +1010,7 @@ func TestSendTransactionDefaultConstructorABI(t *testing.T) {
 		},
 	}
 	contractResolver := &mockContractResolver{
-		contractInfo: &contractInfo{},
+		contractInfo: &contractregistry.ContractInfo{},
 		deployMsg: &messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{}, // completely empty ABI is ok
 		},
@@ -1034,7 +1034,7 @@ func TestSendTransactionUnnamedParamsABI(t *testing.T) {
 		},
 	}
 	contractResolver := &mockContractResolver{
-		contractInfo: &contractInfo{},
+		contractInfo: &contractregistry.ContractInfo{},
 		deployMsg: &messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{
 				{

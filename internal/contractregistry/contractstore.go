@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package contracts
+package contractregistry
 
 import (
 	"bufio"
@@ -31,50 +31,50 @@ import (
 
 	ethconnecterrors "github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/remoteregistry"
-	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 )
 
 type ContractResolver interface {
-	resolveContractAddr(registeredName string) (string, error)
-	lookupContractInstance(addrHex string) (*contractInfo, error)
-	loadDeployMsgByID(abi string) (*messages.DeployContract, *abiInfo, error)
-	checkNameAvailable(name string, isRemote bool) error
-	resolveAddressOrName(id string) (deployMsg *messages.DeployContract, registeredName string, info *contractInfo, err error)
+	ResolveContractAddr(registeredName string) (string, error)
+	LookupContractInstance(addrHex string) (*ContractInfo, error)
+	LoadDeployMsgByID(abi string) (*messages.DeployContract, *ABIInfo, error)
+	CheckNameAvailable(name string, isRemote bool) error
+	ResolveAddressOrName(id string) (deployMsg *messages.DeployContract, registeredName string, info *ContractInfo, err error)
 }
 
 type ContractStore interface {
 	ContractResolver
-	storeNewContractInfo(addrHexNo0x, abiID, pathName, registerAs string) (*contractInfo, error)
-	buildIndex()
-	addFileToContractIndex(address, fileName string)
-	addToABIIndex(id string, deployMsg *messages.DeployContract, createdTime time.Time) *abiInfo
-	listContracts() []messages.TimeSortable
-	listABIs() []messages.TimeSortable
+	BuildIndex()
+	StoreNewContractInfo(addrHexNo0x, abiID, pathName, registerAs string) (*ContractInfo, error)
+	AddFileToContractIndex(address, fileName string)
+	AddToABIIndex(id string, deployMsg *messages.DeployContract, createdTime time.Time) *ABIInfo
+	ListContracts() []messages.TimeSortable
+	ListABIs() []messages.TimeSortable
 }
 
 type contractStore struct {
-	conf                  *SmartContractGatewayConf
-	rr                    remoteregistry.RemoteRegistry
+	baseURL               string
+	storagePath           string
+	rr                    RemoteRegistry
 	contractIndex         map[string]messages.TimeSortable
-	contractRegistrations map[string]*contractInfo
+	contractRegistrations map[string]*ContractInfo
 	idxLock               sync.Mutex
 	abiIndex              map[string]messages.TimeSortable
 }
 
-func newContractStore(conf *SmartContractGatewayConf, rr remoteregistry.RemoteRegistry) ContractStore {
+func NewContractStore(baseURL, storagePath string, rr RemoteRegistry) ContractStore {
 	return &contractStore{
-		conf:                  conf,
+		baseURL:               baseURL,
+		storagePath:           storagePath,
 		rr:                    rr,
 		contractIndex:         make(map[string]messages.TimeSortable),
-		contractRegistrations: make(map[string]*contractInfo),
+		contractRegistrations: make(map[string]*ContractInfo),
 		abiIndex:              make(map[string]messages.TimeSortable),
 	}
 }
 
-// contractInfo is the minimal data structure we keep in memory, indexed by address
+// ContractInfo is the minimal data structure we keep in memory, indexed by address
 // ONLY used for local registry. Remote registry handles its own storage/caching
-type contractInfo struct {
+type ContractInfo struct {
 	messages.TimeSorted
 	Address      string `json:"address"`
 	Path         string `json:"path"`
@@ -83,8 +83,8 @@ type contractInfo struct {
 	RegisteredAs string `json:"registeredAs"`
 }
 
-// abiInfo is the minimal data structure we keep in memory, indexed by our own UUID
-type abiInfo struct {
+// ABIInfo is the minimal data structure we keep in memory, indexed by our own UUID
+type ABIInfo struct {
 	messages.TimeSorted
 	ID              string `json:"id"`
 	Name            string `json:"name"`
@@ -95,27 +95,20 @@ type abiInfo struct {
 	CompilerVersion string `json:"compilerVersion"`
 }
 
-// remoteContractInfo is the ABI raw data back out of the REST API gateway with bytecode
-type remoteContractInfo struct {
-	ID      string                   `json:"id"`
-	Address string                   `json:"address,omitempty"`
-	ABI     ethbinding.ABIMarshaling `json:"abi"`
-}
-
-func (i *contractInfo) GetID() string {
+func (i *ContractInfo) GetID() string {
 	return i.Address
 }
 
-func (i *abiInfo) GetID() string {
+func (i *ABIInfo) GetID() string {
 	return i.ID
 }
 
-func (g *contractStore) storeNewContractInfo(addrHexNo0x, abiID, pathName, registerAs string) (*contractInfo, error) {
-	contractInfo := &contractInfo{
+func (g *contractStore) StoreNewContractInfo(addrHexNo0x, abiID, pathName, registerAs string) (*ContractInfo, error) {
+	contractInfo := &ContractInfo{
 		Address:      addrHexNo0x,
 		ABI:          abiID,
 		Path:         "/contracts/" + pathName,
-		SwaggerURL:   g.conf.BaseURL + "/contracts/" + pathName + "?swagger",
+		SwaggerURL:   g.baseURL + "/contracts/" + pathName + "?swagger",
 		RegisteredAs: registerAs,
 		TimeSorted: messages.TimeSorted{
 			CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
@@ -127,9 +120,9 @@ func (g *contractStore) storeNewContractInfo(addrHexNo0x, abiID, pathName, regis
 	return contractInfo, nil
 }
 
-func isRemote(msg messages.CommonHeaders) bool {
+func IsRemote(msg messages.CommonHeaders) bool {
 	ctxMap := msg.Context
-	if isRemoteGeneric, ok := ctxMap[remoteregistry.RemoteRegistryContextKey]; ok {
+	if isRemoteGeneric, ok := ctxMap[RemoteRegistryContextKey]; ok {
 		if isRemote, ok := isRemoteGeneric.(bool); ok {
 			return isRemote
 		}
@@ -137,11 +130,11 @@ func isRemote(msg messages.CommonHeaders) bool {
 	return false
 }
 
-func (g *contractStore) storeContractInfo(info *contractInfo) error {
+func (g *contractStore) storeContractInfo(info *ContractInfo) error {
 	if err := g.addToContractIndex(info); err != nil {
 		return err
 	}
-	infoFile := path.Join(g.conf.StoragePath, "contract_"+info.Address+".instance.json")
+	infoFile := path.Join(g.storagePath, "contract_"+info.Address+".instance.json")
 	instanceBytes, _ := json.MarshalIndent(info, "", "  ")
 	log.Infof("%s: Storing contract instance JSON to '%s'", info.ABI, infoFile)
 	if err := ioutil.WriteFile(infoFile, instanceBytes, 0664); err != nil {
@@ -150,7 +143,7 @@ func (g *contractStore) storeContractInfo(info *contractInfo) error {
 	return nil
 }
 
-func (g *contractStore) resolveContractAddr(registeredName string) (string, error) {
+func (g *contractStore) ResolveContractAddr(registeredName string) (string, error) {
 	nameUnescaped, _ := url.QueryUnescape(registeredName)
 	info, exists := g.contractRegistrations[nameUnescaped]
 	if !exists {
@@ -160,24 +153,24 @@ func (g *contractStore) resolveContractAddr(registeredName string) (string, erro
 	return info.Address, nil
 }
 
-func (g *contractStore) lookupContractInstance(addrHex string) (*contractInfo, error) {
+func (g *contractStore) LookupContractInstance(addrHex string) (*ContractInfo, error) {
 	addrHexNo0x := strings.TrimPrefix(strings.ToLower(addrHex), "0x")
 	info, exists := g.contractIndex[addrHexNo0x]
 	if !exists {
 		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreContractNotFound, addrHexNo0x)
 	}
-	return info.(*contractInfo), nil
+	return info.(*ContractInfo), nil
 }
 
-func (g *contractStore) loadDeployMsgByID(id string) (*messages.DeployContract, *abiInfo, error) {
-	var info *abiInfo
+func (g *contractStore) LoadDeployMsgByID(id string) (*messages.DeployContract, *ABIInfo, error) {
+	var info *ABIInfo
 	var msg *messages.DeployContract
 	ts, exists := g.abiIndex[id]
 	if !exists {
 		log.Infof("ABI with ID %s not found locally", id)
 		return nil, nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABINotFound, id)
 	}
-	deployFile := path.Join(g.conf.StoragePath, "abi_"+id+".deploy.json")
+	deployFile := path.Join(g.storagePath, "abi_"+id+".deploy.json")
 	deployBytes, err := ioutil.ReadFile(deployFile)
 	if err != nil {
 		return nil, nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABILoad, id, err)
@@ -186,18 +179,18 @@ func (g *contractStore) loadDeployMsgByID(id string) (*messages.DeployContract, 
 	if err = json.Unmarshal(deployBytes, msg); err != nil {
 		return nil, nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABIParse, id, err)
 	}
-	info = ts.(*abiInfo)
+	info = ts.(*ABIInfo)
 	return msg, info, nil
 }
 
-func (g *contractStore) buildIndex() {
+func (g *contractStore) BuildIndex() {
 	log.Infof("Building installed smart contract index")
 	legacyContractMatcher, _ := regexp.Compile("^contract_([0-9a-z]{40})\\.swagger\\.json$")
 	instanceMatcher, _ := regexp.Compile("^contract_([0-9a-z]{40})\\.instance\\.json$")
 	abiMatcher, _ := regexp.Compile("^abi_([0-9a-z-]+)\\.deploy.json$")
-	files, err := ioutil.ReadDir(g.conf.StoragePath)
+	files, err := ioutil.ReadDir(g.storagePath)
 	if err != nil {
-		log.Errorf("Failed to read directory %s: %s", g.conf.StoragePath, err)
+		log.Errorf("Failed to read directory %s: %s", g.storagePath, err)
 		return
 	}
 	for _, file := range files {
@@ -206,11 +199,11 @@ func (g *contractStore) buildIndex() {
 		abiGroups := abiMatcher.FindStringSubmatch(fileName)
 		instanceGroups := instanceMatcher.FindStringSubmatch(fileName)
 		if legacyContractGroups != nil {
-			g.migrateLegacyContract(legacyContractGroups[1], path.Join(g.conf.StoragePath, fileName), file.ModTime())
+			g.migrateLegacyContract(legacyContractGroups[1], path.Join(g.storagePath, fileName), file.ModTime())
 		} else if instanceGroups != nil {
-			g.addFileToContractIndex(instanceGroups[1], path.Join(g.conf.StoragePath, fileName))
+			g.AddFileToContractIndex(instanceGroups[1], path.Join(g.storagePath, fileName))
 		} else if abiGroups != nil {
-			g.addFileToABIIndex(abiGroups[1], path.Join(g.conf.StoragePath, fileName), file.ModTime())
+			g.addFileToABIIndex(abiGroups[1], path.Join(g.storagePath, fileName), file.ModTime())
 		}
 	}
 	log.Infof("Smart contract index built. %d entries", len(g.contractIndex))
@@ -238,7 +231,7 @@ func (g *contractStore) migrateLegacyContract(address, fileName string, createdT
 		registeredAs = ext.(string)
 	}
 	if ext, exists := swagger.Info.Extensions["x-firefly-deployment-id"]; exists {
-		_, err := g.storeNewContractInfo(address, ext.(string), address, registeredAs)
+		_, err := g.StoreNewContractInfo(address, ext.(string), address, registeredAs)
 		if err != nil {
 			log.Errorf("Failed to write migrated instance file: %s", err)
 			return
@@ -254,14 +247,14 @@ func (g *contractStore) migrateLegacyContract(address, fileName string, createdT
 
 }
 
-func (g *contractStore) addFileToContractIndex(address, fileName string) {
+func (g *contractStore) AddFileToContractIndex(address, fileName string) {
 	contractFile, err := os.OpenFile(fileName, os.O_RDONLY, 0)
 	if err != nil {
 		log.Errorf("Failed to load contract instance file %s: %s", fileName, err)
 		return
 	}
 	defer contractFile.Close()
-	var contractInfo contractInfo
+	var contractInfo ContractInfo
 	err = json.NewDecoder(bufio.NewReader(contractFile)).Decode(&contractInfo)
 	if err != nil {
 		log.Errorf("Failed to parse contract instnace deployment file %s: %s", fileName, err)
@@ -283,10 +276,10 @@ func (g *contractStore) addFileToABIIndex(id, fileName string, createdTime time.
 		log.Errorf("Failed to parse ABI deployment file %s: %s", fileName, err)
 		return
 	}
-	g.addToABIIndex(id, &deployMsg, createdTime)
+	g.AddToABIIndex(id, &deployMsg, createdTime)
 }
 
-func (g *contractStore) checkNameAvailable(registerAs string, isRemote bool) error {
+func (g *contractStore) CheckNameAvailable(registerAs string, isRemote bool) error {
 	if isRemote {
 		msg, err := g.rr.LoadFactoryForInstance(registerAs, false)
 		if err != nil {
@@ -302,12 +295,12 @@ func (g *contractStore) checkNameAvailable(registerAs string, isRemote bool) err
 	return nil
 }
 
-func (g *contractStore) addToContractIndex(info *contractInfo) error {
+func (g *contractStore) addToContractIndex(info *ContractInfo) error {
 	g.idxLock.Lock()
 	defer g.idxLock.Unlock()
 	if info.RegisteredAs != "" {
 		// Protect against overwrite
-		if err := g.checkNameAvailable(info.RegisteredAs, false); err != nil {
+		if err := g.CheckNameAvailable(info.RegisteredAs, false); err != nil {
 			return err
 		}
 		log.Infof("Registering %s as '%s'", info.Address, info.RegisteredAs)
@@ -317,16 +310,16 @@ func (g *contractStore) addToContractIndex(info *contractInfo) error {
 	return nil
 }
 
-func (g *contractStore) addToABIIndex(id string, deployMsg *messages.DeployContract, createdTime time.Time) *abiInfo {
+func (g *contractStore) AddToABIIndex(id string, deployMsg *messages.DeployContract, createdTime time.Time) *ABIInfo {
 	g.idxLock.Lock()
-	info := &abiInfo{
+	info := &ABIInfo{
 		ID:              id,
 		Name:            deployMsg.ContractName,
 		Description:     deployMsg.Description,
 		Deployable:      len(deployMsg.Compiled) > 0,
 		CompilerVersion: deployMsg.CompilerVersion,
 		Path:            "/abis/" + id,
-		SwaggerURL:      g.conf.BaseURL + "/abis/" + id + "?swagger",
+		SwaggerURL:      g.baseURL + "/abis/" + id + "?swagger",
 		TimeSorted: messages.TimeSorted{
 			CreatedISO8601: createdTime.UTC().Format(time.RFC3339),
 		},
@@ -336,7 +329,7 @@ func (g *contractStore) addToABIIndex(id string, deployMsg *messages.DeployContr
 	return info
 }
 
-func (g *contractStore) listContracts() []messages.TimeSortable {
+func (g *contractStore) ListContracts() []messages.TimeSortable {
 	g.idxLock.Lock()
 	retval := make([]messages.TimeSortable, 0, len(g.contractIndex))
 	for _, info := range g.contractIndex {
@@ -346,7 +339,7 @@ func (g *contractStore) listContracts() []messages.TimeSortable {
 	return retval
 }
 
-func (g *contractStore) listABIs() []messages.TimeSortable {
+func (g *contractStore) ListABIs() []messages.TimeSortable {
 	g.idxLock.Lock()
 	retval := make([]messages.TimeSortable, 0, len(g.abiIndex))
 	for _, info := range g.abiIndex {
@@ -356,19 +349,19 @@ func (g *contractStore) listABIs() []messages.TimeSortable {
 	return retval
 }
 
-func (g *contractStore) resolveAddressOrName(id string) (deployMsg *messages.DeployContract, registeredName string, info *contractInfo, err error) {
-	info, err = g.lookupContractInstance(id)
+func (g *contractStore) ResolveAddressOrName(id string) (deployMsg *messages.DeployContract, registeredName string, info *ContractInfo, err error) {
+	info, err = g.LookupContractInstance(id)
 	if err != nil {
 		var origErr = err
 		registeredName = id
-		if id, err = g.resolveContractAddr(registeredName); err != nil {
+		if id, err = g.ResolveContractAddr(registeredName); err != nil {
 			log.Infof("%s is not a friendly name: %s", registeredName, err)
 			return nil, "", nil, origErr
 		}
-		if info, err = g.lookupContractInstance(id); err != nil {
+		if info, err = g.LookupContractInstance(id); err != nil {
 			return nil, "", nil, err
 		}
 	}
-	deployMsg, _, err = g.loadDeployMsgByID(info.ABI)
+	deployMsg, _, err = g.LoadDeployMsgByID(info.ABI)
 	return deployMsg, registeredName, info, err
 }

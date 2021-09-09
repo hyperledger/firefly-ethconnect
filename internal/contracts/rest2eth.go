@@ -27,12 +27,12 @@ import (
 	"sync"
 
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/contractregistry"
 	ethconnecterrors "github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/events"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/remoteregistry"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/tx"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
 	"github.com/julienschmidt/httprouter"
@@ -64,13 +64,13 @@ type rest2EthReplyProcessor interface {
 // rest2eth provides the HTTP <-> messages translation and dispatches for processing
 type rest2eth struct {
 	gw              SmartContractGateway
-	cr              ContractResolver
+	cr              contractregistry.ContractResolver
 	rpc             eth.RPCClient
 	processor       tx.TxnProcessor
 	asyncDispatcher REST2EthAsyncDispatcher
 	syncDispatcher  rest2EthSyncDispatcher
 	subMgr          events.SubscriptionManager
-	rr              remoteregistry.RemoteRegistry
+	rr              contractregistry.RemoteRegistry
 }
 
 type restErrMsg struct {
@@ -141,7 +141,7 @@ func (i *rest2EthSyncResponder) ReplyWithReceipt(receipt messages.ReplyWithHeade
 	return
 }
 
-func newREST2eth(gw SmartContractGateway, cr ContractResolver, rpc eth.RPCClient, subMgr events.SubscriptionManager, rr remoteregistry.RemoteRegistry, processor tx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher, syncDispatcher rest2EthSyncDispatcher) *rest2eth {
+func newREST2eth(gw SmartContractGateway, cr contractregistry.ContractResolver, rpc eth.RPCClient, subMgr events.SubscriptionManager, rr contractregistry.RemoteRegistry, processor tx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher, syncDispatcher rest2EthSyncDispatcher) *rest2eth {
 	return &rest2eth{
 		gw:              gw,
 		cr:              cr,
@@ -222,7 +222,7 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 			return
 		}
 	} else if strings.HasPrefix(req.URL.Path, "/instances/") || strings.HasPrefix(req.URL.Path, "/i/") {
-		var msg *remoteregistry.DeployContractWithAddress
+		var msg *contractregistry.DeployContractWithAddress
 		msg, err = r.rr.LoadFactoryForInstance(params.ByName("instance_lookup"), refresh)
 		if err != nil {
 			r.restErrReply(res, req, err, 500)
@@ -239,7 +239,7 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 		// Local logic
 		abiID := params.ByName("abi")
 		if abiID != "" {
-			c.deployMsg, _, err = r.cr.loadDeployMsgByID(abiID)
+			c.deployMsg, _, err = r.cr.LoadDeployMsgByID(abiID)
 			if err != nil {
 				r.restErrReply(res, req, err, 404)
 				return
@@ -247,19 +247,19 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 		} else {
 			if !validAddress {
 				// Resolve the address as a registered name, to an actual contract address
-				if c.addr, err = r.cr.resolveContractAddr(addrParam); err != nil {
+				if c.addr, err = r.cr.ResolveContractAddr(addrParam); err != nil {
 					r.restErrReply(res, req, err, 404)
 					return
 				}
 				validAddress = true
 				addrParam = c.addr
 			}
-			var info *contractInfo
-			if info, err = r.cr.lookupContractInstance(addrParam); err != nil {
+			var info *contractregistry.ContractInfo
+			if info, err = r.cr.LookupContractInstance(addrParam); err != nil {
 				r.restErrReply(res, req, err, 404)
 				return
 			}
-			if c.deployMsg, _, err = r.cr.loadDeployMsgByID(info.ABI); err != nil {
+			if c.deployMsg, _, err = r.cr.LoadDeployMsgByID(info.ABI); err != nil {
 				r.restErrReply(res, req, err, 404)
 				return
 			}
@@ -561,7 +561,7 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 	}
 	deployMsg.RegisterAs = getFlyParam("register", req)
 	if deployMsg.RegisterAs != "" {
-		if err := r.cr.checkNameAvailable(deployMsg.RegisterAs, isRemote(deployMsg.Headers.CommonHeaders)); err != nil {
+		if err := r.cr.CheckNameAvailable(deployMsg.RegisterAs, contractregistry.IsRemote(deployMsg.Headers.CommonHeaders)); err != nil {
 			r.restErrReply(res, req, err, 409)
 			return
 		}

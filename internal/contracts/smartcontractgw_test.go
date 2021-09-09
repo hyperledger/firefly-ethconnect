@@ -32,10 +32,10 @@ import (
 	"github.com/go-openapi/spec"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth/authtest"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/contractregistry"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/events"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/remoteregistry"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/tx"
 	"github.com/julienschmidt/httprouter"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
@@ -60,20 +60,20 @@ type mockContractStore struct {
 	mockContractResolver
 }
 
-func (cs *mockContractStore) storeNewContractInfo(addrHexNo0x, abiID, pathName, registerAs string) (*contractInfo, error) {
+func (cs *mockContractStore) StoreNewContractInfo(addrHexNo0x, abiID, pathName, registerAs string) (*contractregistry.ContractInfo, error) {
 	return nil, nil
 }
-func (cs *mockContractStore) buildIndex() {
+func (cs *mockContractStore) BuildIndex() {
 }
-func (cs *mockContractStore) addFileToContractIndex(address, fileName string) {
+func (cs *mockContractStore) AddFileToContractIndex(address, fileName string) {
 }
-func (cs *mockContractStore) addToABIIndex(id string, deployMsg *messages.DeployContract, createdTime time.Time) *abiInfo {
+func (cs *mockContractStore) AddToABIIndex(id string, deployMsg *messages.DeployContract, createdTime time.Time) *contractregistry.ABIInfo {
 	return nil
 }
-func (cs *mockContractStore) listContracts() []messages.TimeSortable {
+func (cs *mockContractStore) ListContracts() []messages.TimeSortable {
 	return []messages.TimeSortable{}
 }
-func (cs *mockContractStore) listABIs() []messages.TimeSortable {
+func (cs *mockContractStore) ListABIs() []messages.TimeSortable {
 	return []messages.TimeSortable{}
 }
 
@@ -209,10 +209,10 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	err = scgw.PostDeploy(&receipt)
 	assert.NoError(err)
 
-	info, err := scgw.(*smartContractGW).cs.lookupContractInstance("0123456789abcdef0123456789abcdef01234567")
+	info, err := scgw.(*smartContractGW).cs.LookupContractInstance("0123456789abcdef0123456789abcdef01234567")
 	assert.NoError(err)
 	assert.NotEmpty(info)
-	deployMsg, abiID, err := scgw.(*smartContractGW).cs.loadDeployMsgByID(info.ABI)
+	deployMsg, abiID, err := scgw.(*smartContractGW).cs.LoadDeployMsgByID(info.ABI)
 	assert.NoError(err)
 	assert.NotEmpty(abiID)
 	runtimeABI, err := ethbind.API.ABIMarshalingToABIRuntime(deployMsg.ABI)
@@ -226,7 +226,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(200, res.Result().StatusCode)
-	var body []*contractInfo
+	var body []*contractregistry.ContractInfo
 	err = json.NewDecoder(res.Body).Decode(&body)
 	assert.NoError(err)
 	assert.Equal(1, len(body))
@@ -340,14 +340,14 @@ func TestRegisterExistingContract(t *testing.T) {
 	router.ServeHTTP(res, req)
 	assert.Equal(200, res.Code)
 
-	var abi abiInfo
+	var abi contractregistry.ABIInfo
 	json.NewDecoder(res.Body).Decode(&abi)
 	assert.NotEmpty(abi.ID)
 
 	req = httptest.NewRequest("POST", "/abis/"+abi.ID+"/0x0123456789abcdef0123456789abcdef01234567?fly-register=testcontract", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
-	var contract contractInfo
+	var contract contractregistry.ContractInfo
 	json.NewDecoder(res.Body).Decode(&contract)
 	assert.Equal(201, res.Code)
 	assert.Equal("/contracts/testcontract", contract.Path)
@@ -580,14 +580,14 @@ func TestRegisterContractNoRegisteredName(t *testing.T) {
 	router.ServeHTTP(res, req)
 	assert.Equal(200, res.Code)
 
-	var abi abiInfo
+	var abi contractregistry.ABIInfo
 	json.NewDecoder(res.Body).Decode(&abi)
 	assert.NotEmpty(abi.ID)
 
 	req = httptest.NewRequest("POST", "/abis/"+abi.ID+"/0x0123456789abcdef0123456789abcdef01234567", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
-	var contract contractInfo
+	var contract contractregistry.ContractInfo
 	json.NewDecoder(res.Body).Decode(&contract)
 	assert.Equal(201, res.Code)
 	assert.Equal("/contracts/0123456789abcdef0123456789abcdef01234567", contract.Path)
@@ -697,7 +697,7 @@ func TestPostDeployNoRegisteredName(t *testing.T) {
 	err := scgw.PostDeploy(replyMsg)
 	assert.NoError(err)
 
-	contractInfo, err := scgw.cs.lookupContractInstance("0123456789abcdef0123456789abcdef01234567")
+	contractInfo, err := scgw.cs.LookupContractInstance("0123456789abcdef0123456789abcdef01234567")
 	assert.NoError(err)
 	assert.Equal("", contractInfo.RegisteredAs)
 	assert.Equal("/contracts/0123456789abcdef0123456789abcdef01234567", contractInfo.Path)
@@ -727,7 +727,7 @@ func TestPostDeployRemoteRegisteredName(t *testing.T) {
 			Headers: messages.ReplyHeaders{
 				CommonHeaders: messages.CommonHeaders{
 					Context: map[string]interface{}{
-						remoteregistry.RemoteRegistryContextKey: true,
+						contractregistry.RemoteRegistryContextKey: true,
 					},
 					MsgType: messages.MsgTypeTransactionSuccess,
 				},
@@ -773,7 +773,7 @@ func TestPostDeployRemoteRegisteredNameNotSuccess(t *testing.T) {
 			Headers: messages.ReplyHeaders{
 				CommonHeaders: messages.CommonHeaders{
 					Context: map[string]interface{}{
-						remoteregistry.RemoteRegistryContextKey: true,
+						contractregistry.RemoteRegistryContextKey: true,
 					},
 					MsgType: messages.MsgTypeTransactionFailure,
 				},
@@ -863,7 +863,7 @@ func TestBuildIndex(t *testing.T) {
 	ioutil.WriteFile(path.Join(dir, "contract_3456789abcdef0123456789abcdef01234567890.swagger.json"), []byte(":bad swagger"), 0644)
 
 	// New contract interfaces
-	info1 := &contractInfo{
+	info1 := &contractregistry.ContractInfo{
 		Address:      "456789abcdef0123456789abcdef012345678901",
 		ABI:          "840b629f-2e46-413b-9671-553a886ca7bb",
 		Path:         "/contracts/456789abcdef0123456789abcdef012345678901",
@@ -875,7 +875,7 @@ func TestBuildIndex(t *testing.T) {
 	}
 	info1Bytes, _ := json.Marshal(info1)
 	ioutil.WriteFile(path.Join(dir, "contract_456789abcdef0123456789abcdef012345678901.instance.json"), info1Bytes, 0644)
-	info2 := &contractInfo{
+	info2 := &contractregistry.ContractInfo{
 		Address:      "56789abcdef0123456789abcdef0123456789012",
 		ABI:          "840b629f-2e46-413b-9671-553a886ca7bb",
 		Path:         "/contracts/somecontract",
@@ -907,9 +907,9 @@ func TestBuildIndex(t *testing.T) {
 	)
 	scgw := s.(*smartContractGW)
 
-	contracts := scgw.cs.listContracts()
+	contracts := scgw.cs.ListContracts()
 	assert.Equal(4, len(contracts))
-	info, err := scgw.cs.lookupContractInstance("123456789abcdef0123456789abcdef012345678")
+	info, err := scgw.cs.LookupContractInstance("123456789abcdef0123456789abcdef012345678")
 	assert.NoError(err)
 	assert.Equal("123456789abcdef0123456789abcdef012345678", info.Address)
 
@@ -918,7 +918,7 @@ func TestBuildIndex(t *testing.T) {
 	params := httprouter.Params{}
 	scgw.listContractsOrABIs(res, req, params)
 	assert.Equal(200, res.Result().StatusCode)
-	var contractInfos []*contractInfo
+	var contractInfos []*contractregistry.ContractInfo
 	err = json.NewDecoder(res.Body).Decode(&contractInfos)
 	assert.NoError(err)
 	assert.Equal(4, len(contractInfos))
@@ -927,11 +927,11 @@ func TestBuildIndex(t *testing.T) {
 	assert.Equal("456789abcdef0123456789abcdef012345678901", contractInfos[2].Address)
 	assert.Equal("56789abcdef0123456789abcdef0123456789012", contractInfos[3].Address)
 
-	somecontractAddr, err := scgw.cs.resolveContractAddr("somecontract")
+	somecontractAddr, err := scgw.cs.ResolveContractAddr("somecontract")
 	assert.NoError(err)
 	assert.Equal("56789abcdef0123456789abcdef0123456789012", somecontractAddr)
 
-	migratedcontractAddr, err := scgw.cs.resolveContractAddr("migratedcontract")
+	migratedcontractAddr, err := scgw.cs.ResolveContractAddr("migratedcontract")
 	assert.NoError(err)
 	assert.Equal("23456789abcdef0123456789abcdef0123456789", migratedcontractAddr)
 
@@ -940,7 +940,7 @@ func TestBuildIndex(t *testing.T) {
 	params = httprouter.Params{}
 	scgw.listContractsOrABIs(res, req, params)
 	assert.Equal(200, res.Result().StatusCode)
-	var abiInfos []*abiInfo
+	var abiInfos []*contractregistry.ABIInfo
 	err = json.NewDecoder(res.Body).Decode(&abiInfos)
 	assert.NoError(err)
 	assert.Equal(2, len(abiInfos))
@@ -1005,7 +1005,7 @@ func TestGetContractUI(t *testing.T) {
 	scgw := s.(*smartContractGW)
 	scgw.cs = cs
 
-	cs.contractInfo = &contractInfo{
+	cs.contractInfo = &contractregistry.ContractInfo{
 		ABI:     "abi1",
 		Address: "123456789abcdef0123456789abcdef012345678",
 	}
@@ -1052,7 +1052,7 @@ func TestAddABISingleSolidity(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(200, res.Result().StatusCode)
-	info := &abiInfo{}
+	info := &contractregistry.ABIInfo{}
 	err := json.NewDecoder(res.Body).Decode(info)
 	assert.NoError(err)
 	assert.Equal("SimpleEvents", info.Name)
@@ -1125,7 +1125,7 @@ func TestAddABIZipNested(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(200, res.Result().StatusCode)
-	info := &abiInfo{}
+	info := &contractregistry.ABIInfo{}
 	err := json.NewDecoder(res.Body).Decode(info)
 	assert.NoError(err)
 	assert.Equal("SimpleEvents", info.Name)

@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/contracts"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/contractgateway"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
@@ -48,10 +48,10 @@ type ReceiptStorePersistence interface {
 type receiptStore struct {
 	conf            *ReceiptStoreConf
 	persistence     ReceiptStorePersistence
-	smartContractGW contracts.SmartContractGateway
+	smartContractGW contractgateway.SmartContractGateway
 }
 
-func newReceiptStore(conf *ReceiptStoreConf, persistence ReceiptStorePersistence, smartContractGW contracts.SmartContractGateway) *receiptStore {
+func newReceiptStore(conf *ReceiptStoreConf, persistence ReceiptStorePersistence, smartContractGW contractgateway.SmartContractGateway) *receiptStore {
 	if conf.RetryTimeoutMS <= 0 {
 		conf.RetryTimeoutMS = defaultRetryTimeout
 	}

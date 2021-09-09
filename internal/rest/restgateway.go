@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/contracts"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/contractgateway"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/kafka"
@@ -72,11 +72,11 @@ type LevelDBReceiptStoreConf struct {
 
 // RESTGatewayConf defines the YAML config structure for a webhooks bridge instance
 type RESTGatewayConf struct {
-	Kafka    kafka.KafkaCommonConf              `json:"kafka"`
-	MongoDB  MongoDBReceiptStoreConf            `json:"mongodb"`
-	LevelDB  LevelDBReceiptStoreConf            `json:"leveldb"`
-	MemStore ReceiptStoreConf                   `json:"memstore"`
-	OpenAPI  contracts.SmartContractGatewayConf `json:"openapi"`
+	Kafka    kafka.KafkaCommonConf                    `json:"kafka"`
+	MongoDB  MongoDBReceiptStoreConf                  `json:"mongodb"`
+	LevelDB  LevelDBReceiptStoreConf                  `json:"leveldb"`
+	MemStore ReceiptStoreConf                         `json:"memstore"`
+	OpenAPI  contractgateway.SmartContractGatewayConf `json:"openapi"`
 	HTTP     struct {
 		LocalAddr string          `json:"localAddr"`
 		Port      int             `json:"port"`
@@ -97,7 +97,7 @@ type RESTGateway struct {
 	failedMsgs      map[string]error
 	receipts        *receiptStore
 	webhooks        *webhooks
-	smartContractGW contracts.SmartContractGateway
+	smartContractGW contractgateway.SmartContractGateway
 	ws              ws.WebSocketServer
 }
 
@@ -175,7 +175,7 @@ func (g *RESTGateway) CobraInit(cmdName string) (cmd *cobra.Command) {
 	kafka.KafkaCommonCobraInit(cmd, &g.conf.Kafka)
 	eth.CobraInitRPC(cmd, &g.conf.RPCConf)
 	tx.CobraInitTxnProcessor(cmd, &g.conf.TxnProcessorConf)
-	contracts.CobraInitContractGateway(cmd, &g.conf.OpenAPI)
+	contractgateway.CobraInitContractGateway(cmd, &g.conf.OpenAPI)
 	cmd.Flags().IntVarP(&g.conf.MaxInFlight, "maxinflight", "m", utils.DefInt("WEBHOOKS_MAX_INFLIGHT", 0), "Maximum messages to hold in-flight")
 	cmd.Flags().StringVarP(&g.conf.HTTP.LocalAddr, "listen-addr", "L", os.Getenv("WEBHOOKS_LISTEN_ADDR"), "Local address to listen on")
 	cmd.Flags().IntVarP(&g.conf.HTTP.Port, "listen-port", "l", utils.DefInt("WEBHOOKS_LISTEN_PORT", 8080), "Port to listen on")
@@ -270,7 +270,7 @@ func (g *RESTGateway) Start() (err error) {
 	g.ws.AddRoutes(router)
 
 	if g.conf.OpenAPI.StoragePath != "" {
-		g.smartContractGW, err = contracts.NewSmartContractGateway(&g.conf.OpenAPI, &g.conf.TxnProcessorConf, rpcClient, processor, g, g.ws)
+		g.smartContractGW, err = contractgateway.NewSmartContractGateway(&g.conf.OpenAPI, &g.conf.TxnProcessorConf, rpcClient, processor, g, g.ws)
 		if err != nil {
 			return err
 		}

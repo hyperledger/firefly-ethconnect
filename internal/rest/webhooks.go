@@ -20,7 +20,7 @@ import (
 	"net/http"
 	"reflect"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/contracts"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/contractgateway"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
@@ -36,11 +36,11 @@ type webhooksHandler interface {
 
 // webhooks provides the async HTTP to eth TX bridge
 type webhooks struct {
-	smartContractGW contracts.SmartContractGateway
+	smartContractGW contractgateway.SmartContractGateway
 	handler         webhooksHandler
 }
 
-func newWebhooks(handler webhooksHandler, smartContractGW contracts.SmartContractGateway) *webhooks {
+func newWebhooks(handler webhooksHandler, smartContractGW contractgateway.SmartContractGateway) *webhooks {
 	return &webhooks{
 		handler:         handler,
 		smartContractGW: smartContractGW,

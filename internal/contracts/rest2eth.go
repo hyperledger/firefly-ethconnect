@@ -63,7 +63,8 @@ type rest2EthReplyProcessor interface {
 
 // rest2eth provides the HTTP <-> messages translation and dispatches for processing
 type rest2eth struct {
-	gw              smartContractGatewayInt
+	gw              SmartContractGateway
+	cr              ContractResolver
 	rpc             eth.RPCClient
 	processor       tx.TxnProcessor
 	asyncDispatcher REST2EthAsyncDispatcher
@@ -140,9 +141,10 @@ func (i *rest2EthSyncResponder) ReplyWithReceipt(receipt messages.ReplyWithHeade
 	return
 }
 
-func newREST2eth(gw smartContractGatewayInt, rpc eth.RPCClient, subMgr events.SubscriptionManager, rr remoteregistry.RemoteRegistry, processor tx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher, syncDispatcher rest2EthSyncDispatcher) *rest2eth {
+func newREST2eth(gw SmartContractGateway, cr ContractResolver, rpc eth.RPCClient, subMgr events.SubscriptionManager, rr remoteregistry.RemoteRegistry, processor tx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher, syncDispatcher rest2EthSyncDispatcher) *rest2eth {
 	return &rest2eth{
 		gw:              gw,
+		cr:              cr,
 		processor:       processor,
 		syncDispatcher:  syncDispatcher,
 		asyncDispatcher: asyncDispatcher,
@@ -237,7 +239,7 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 		// Local logic
 		abiID := params.ByName("abi")
 		if abiID != "" {
-			c.deployMsg, _, err = r.gw.loadDeployMsgByID(abiID)
+			c.deployMsg, _, err = r.cr.loadDeployMsgByID(abiID)
 			if err != nil {
 				r.restErrReply(res, req, err, 404)
 				return
@@ -245,7 +247,7 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 		} else {
 			if !validAddress {
 				// Resolve the address as a registered name, to an actual contract address
-				if c.addr, err = r.gw.resolveContractAddr(addrParam); err != nil {
+				if c.addr, err = r.cr.resolveContractAddr(addrParam); err != nil {
 					r.restErrReply(res, req, err, 404)
 					return
 				}
@@ -253,11 +255,11 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 				addrParam = c.addr
 			}
 			var info *contractInfo
-			if info, err = r.gw.lookupContractInstance(addrParam); err != nil {
+			if info, err = r.cr.lookupContractInstance(addrParam); err != nil {
 				r.restErrReply(res, req, err, 404)
 				return
 			}
-			if c.deployMsg, _, err = r.gw.loadDeployMsgByID(info.ABI); err != nil {
+			if c.deployMsg, _, err = r.cr.loadDeployMsgByID(info.ABI); err != nil {
 				r.restErrReply(res, req, err, 404)
 				return
 			}
@@ -559,7 +561,7 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 	}
 	deployMsg.RegisterAs = getFlyParam("register", req)
 	if deployMsg.RegisterAs != "" {
-		if err := r.gw.checkNameAvailable(deployMsg.RegisterAs, isRemote(deployMsg.Headers.CommonHeaders)); err != nil {
+		if err := r.cr.checkNameAvailable(deployMsg.RegisterAs, isRemote(deployMsg.Headers.CommonHeaders)); err != nil {
 			r.restErrReply(res, req, err, 409)
 			return
 		}

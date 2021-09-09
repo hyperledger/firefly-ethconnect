@@ -15,7 +15,6 @@
 package contracts
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
@@ -32,7 +31,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-openapi/spec"
@@ -67,14 +65,6 @@ type SmartContractGateway interface {
 	AddRoutes(router *httprouter.Router)
 	SendReply(message interface{})
 	Shutdown()
-}
-
-type smartContractGatewayInt interface {
-	SmartContractGateway
-	resolveContractAddr(registeredName string) (string, error)
-	lookupContractInstance(addrHex string) (*contractInfo, error)
-	loadDeployMsgByID(abi string) (*messages.DeployContract, *abiInfo, error)
-	checkNameAvailable(name string, isRemote bool) error
 }
 
 // SmartContractGatewayConf configuration
@@ -146,12 +136,11 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 		baseURL, _ = url.Parse("http://localhost:8080")
 	}
 	log.Infof("OpenAPI Smart Contract Gateway configured with base URL '%s'", baseURL.String())
+	rr := remoteregistry.NewRemoteRegistry(&conf.RemoteRegistry)
 	gw := &smartContractGW{
-		conf:                  conf,
-		rr:                    remoteregistry.NewRemoteRegistry(&conf.RemoteRegistry),
-		contractIndex:         make(map[string]messages.TimeSortable),
-		contractRegistrations: make(map[string]*contractInfo),
-		abiIndex:              make(map[string]messages.TimeSortable),
+		conf: conf,
+		cs:   newContractStore(conf, rr),
+		rr:   rr,
 		baseSwaggerConf: &openapi.ABI2SwaggerConf{
 			ExternalHost:     baseURL.Host,
 			ExternalRootPath: baseURL.Path,
@@ -172,87 +161,19 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 			return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayEventManagerInitFailed, err)
 		}
 	}
-	gw.r2e = newREST2eth(gw, rpc, gw.sm, gw.rr, processor, asyncDispatcher, syncDispatcher)
-	gw.buildIndex()
+	gw.r2e = newREST2eth(gw, gw.cs, rpc, gw.sm, gw.rr, processor, asyncDispatcher, syncDispatcher)
+	gw.cs.buildIndex()
 	return gw, nil
 }
 
 type smartContractGW struct {
-	conf                  *SmartContractGatewayConf
-	sm                    events.SubscriptionManager
-	rr                    remoteregistry.RemoteRegistry
-	r2e                   *rest2eth
-	ws                    ws.WebSocketChannels
-	contractIndex         map[string]messages.TimeSortable
-	contractRegistrations map[string]*contractInfo
-	idxLock               sync.Mutex
-	abiIndex              map[string]messages.TimeSortable
-	baseSwaggerConf       *openapi.ABI2SwaggerConf
-}
-
-// contractInfo is the minimal data structure we keep in memory, indexed by address
-// ONLY used for local registry. Remote registry handles its own storage/caching
-type contractInfo struct {
-	messages.TimeSorted
-	Address      string `json:"address"`
-	Path         string `json:"path"`
-	ABI          string `json:"abi"`
-	SwaggerURL   string `json:"openapi"`
-	RegisteredAs string `json:"registeredAs"`
-}
-
-// abiInfo is the minimal data structure we keep in memory, indexed by our own UUID
-type abiInfo struct {
-	messages.TimeSorted
-	ID              string `json:"id"`
-	Name            string `json:"name"`
-	Description     string `json:"description"`
-	Path            string `json:"path"`
-	Deployable      bool   `json:"deployable"`
-	SwaggerURL      string `json:"openapi"`
-	CompilerVersion string `json:"compilerVersion"`
-}
-
-// remoteContractInfo is the ABI raw data back out of the REST API gateway with bytecode
-type remoteContractInfo struct {
-	ID      string                   `json:"id"`
-	Address string                   `json:"address,omitempty"`
-	ABI     ethbinding.ABIMarshaling `json:"abi"`
-}
-
-func (i *contractInfo) GetID() string {
-	return i.Address
-}
-
-func (i *abiInfo) GetID() string {
-	return i.ID
-}
-
-func (g *smartContractGW) storeNewContractInfo(addrHexNo0x, abiID, pathName, registerAs string) (*contractInfo, error) {
-	contractInfo := &contractInfo{
-		Address:      addrHexNo0x,
-		ABI:          abiID,
-		Path:         "/contracts/" + pathName,
-		SwaggerURL:   g.conf.BaseURL + "/contracts/" + pathName + "?swagger",
-		RegisteredAs: registerAs,
-		TimeSorted: messages.TimeSorted{
-			CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
-		},
-	}
-	if err := g.storeContractInfo(contractInfo); err != nil {
-		return nil, err
-	}
-	return contractInfo, nil
-}
-
-func isRemote(msg messages.CommonHeaders) bool {
-	ctxMap := msg.Context
-	if isRemoteGeneric, ok := ctxMap[remoteregistry.RemoteRegistryContextKey]; ok {
-		if isRemote, ok := isRemoteGeneric.(bool); ok {
-			return isRemote
-		}
-	}
-	return false
+	conf            *SmartContractGatewayConf
+	sm              events.SubscriptionManager
+	cs              ContractStore
+	rr              remoteregistry.RemoteRegistry
+	r2e             *rest2eth
+	ws              ws.WebSocketChannels
+	baseSwaggerConf *openapi.ABI2SwaggerConf
 }
 
 // PostDeploy callback processes the transaction receipt and generates the Swagger
@@ -288,7 +209,7 @@ func (g *smartContractGW) PostDeploy(msg *messages.TransactionReceipt) error {
 				err = g.rr.RegisterInstance(msg.RegisterAs, "0x"+addrHexNo0x)
 			}
 		} else {
-			_, err = g.storeNewContractInfo(addrHexNo0x, requestID, registeredName, msg.RegisterAs)
+			_, err = g.cs.storeNewContractInfo(addrHexNo0x, requestID, registeredName, msg.RegisterAs)
 		}
 		return err
 	}
@@ -333,59 +254,6 @@ func (g *smartContractGW) swaggerForABI(swaggerGen *openapi.ABI2Swagger, abiID, 
 	return swagger
 }
 
-func (g *smartContractGW) storeContractInfo(info *contractInfo) error {
-	if err := g.addToContractIndex(info); err != nil {
-		return err
-	}
-	infoFile := path.Join(g.conf.StoragePath, "contract_"+info.Address+".instance.json")
-	instanceBytes, _ := json.MarshalIndent(info, "", "  ")
-	log.Infof("%s: Storing contract instance JSON to '%s'", info.ABI, infoFile)
-	if err := ioutil.WriteFile(infoFile, instanceBytes, 0664); err != nil {
-		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreContractSave, err)
-	}
-	return nil
-}
-
-func (g *smartContractGW) resolveContractAddr(registeredName string) (string, error) {
-	nameUnescaped, _ := url.QueryUnescape(registeredName)
-	info, exists := g.contractRegistrations[nameUnescaped]
-	if !exists {
-		return "", ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreContractLoad, registeredName)
-	}
-	log.Infof("%s -> 0x%s", registeredName, info.Address)
-	return info.Address, nil
-}
-
-func (g *smartContractGW) lookupContractInstance(addrHex string) (*contractInfo, error) {
-	addrHexNo0x := strings.TrimPrefix(strings.ToLower(addrHex), "0x")
-	info, exists := g.contractIndex[addrHexNo0x]
-	if !exists {
-		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreContractNotFound, addrHexNo0x)
-	}
-	return info.(*contractInfo), nil
-}
-
-func (g *smartContractGW) loadDeployMsgByID(id string) (*messages.DeployContract, *abiInfo, error) {
-	var info *abiInfo
-	var msg *messages.DeployContract
-	ts, exists := g.abiIndex[id]
-	if !exists {
-		log.Infof("ABI with ID %s not found locally", id)
-		return nil, nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABINotFound, id)
-	}
-	deployFile := path.Join(g.conf.StoragePath, "abi_"+id+".deploy.json")
-	deployBytes, err := ioutil.ReadFile(deployFile)
-	if err != nil {
-		return nil, nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABILoad, id, err)
-	}
-	msg = &messages.DeployContract{}
-	if err = json.Unmarshal(deployBytes, msg); err != nil {
-		return nil, nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABIParse, id, err)
-	}
-	info = ts.(*abiInfo)
-	return msg, info, nil
-}
-
 // PreDeploy
 // - compiles the Solidity (if not precomplied),
 // - puts the code into the message to avoid a recompile later
@@ -428,7 +296,7 @@ func (g *smartContractGW) storeDeployableABI(msg *messages.DeployContract, compi
 	// Generate and store the swagger
 	swagger := g.swaggerForABI(openapi.NewABI2Swagger(g.baseSwaggerConf), requestID, msg.ContractName, false, runtimeABI, msg.DevDoc, "", "")
 	msg.Description = swagger.Info.Description // Swagger generation parses the devdoc
-	info := g.addToABIIndex(requestID, msg, time.Now().UTC())
+	info := g.cs.addToABIIndex(requestID, msg, time.Now().UTC())
 
 	g.writeAbiInfo(requestID, msg)
 
@@ -462,170 +330,16 @@ func (g *smartContractGW) writeAbiInfo(requestID string, msg *messages.DeployCon
 	return nil
 }
 
-func (g *smartContractGW) buildIndex() {
-	log.Infof("Building installed smart contract index")
-	legacyContractMatcher, _ := regexp.Compile("^contract_([0-9a-z]{40})\\.swagger\\.json$")
-	instanceMatcher, _ := regexp.Compile("^contract_([0-9a-z]{40})\\.instance\\.json$")
-	abiMatcher, _ := regexp.Compile("^abi_([0-9a-z-]+)\\.deploy.json$")
-	files, err := ioutil.ReadDir(g.conf.StoragePath)
-	if err != nil {
-		log.Errorf("Failed to read directory %s: %s", g.conf.StoragePath, err)
-		return
-	}
-	for _, file := range files {
-		fileName := file.Name()
-		legacyContractGroups := legacyContractMatcher.FindStringSubmatch(fileName)
-		abiGroups := abiMatcher.FindStringSubmatch(fileName)
-		instanceGroups := instanceMatcher.FindStringSubmatch(fileName)
-		if legacyContractGroups != nil {
-			g.migrateLegacyContract(legacyContractGroups[1], path.Join(g.conf.StoragePath, fileName), file.ModTime())
-		} else if instanceGroups != nil {
-			g.addFileToContractIndex(instanceGroups[1], path.Join(g.conf.StoragePath, fileName))
-		} else if abiGroups != nil {
-			g.addFileToABIIndex(abiGroups[1], path.Join(g.conf.StoragePath, fileName), file.ModTime())
-		}
-	}
-	log.Infof("Smart contract index built. %d entries", len(g.contractIndex))
-}
-
-func (g *smartContractGW) migrateLegacyContract(address, fileName string, createdTime time.Time) {
-	swaggerFile, err := os.OpenFile(fileName, os.O_RDONLY, 0)
-	if err != nil {
-		log.Errorf("Failed to load Swagger file %s: %s", fileName, err)
-		return
-	}
-	defer swaggerFile.Close()
-	var swagger spec.Swagger
-	err = json.NewDecoder(bufio.NewReader(swaggerFile)).Decode(&swagger)
-	if err != nil {
-		log.Errorf("Failed to parse Swagger file %s: %s", fileName, err)
-		return
-	}
-	if swagger.Info == nil {
-		log.Errorf("Failed to migrate invalid Swagger file %s", fileName)
-		return
-	}
-	var registeredAs string
-	if ext, exists := swagger.Info.Extensions["x-firefly-registered-name"]; exists {
-		registeredAs = ext.(string)
-	}
-	if ext, exists := swagger.Info.Extensions["x-firefly-deployment-id"]; exists {
-		_, err := g.storeNewContractInfo(address, ext.(string), address, registeredAs)
-		if err != nil {
-			log.Errorf("Failed to write migrated instance file: %s", err)
-			return
-		}
-
-		if err := os.Remove(fileName); err != nil {
-			log.Errorf("Failed to clean-up migrated file %s: %s", fileName, err)
-		}
-
-	} else {
-		log.Warnf("Swagger cannot be migrated due to missing 'x-firefly-deployment-id' extension: %s", fileName)
-	}
-
-}
-
-func (g *smartContractGW) addFileToContractIndex(address, fileName string) {
-	contractFile, err := os.OpenFile(fileName, os.O_RDONLY, 0)
-	if err != nil {
-		log.Errorf("Failed to load contract instance file %s: %s", fileName, err)
-		return
-	}
-	defer contractFile.Close()
-	var contractInfo contractInfo
-	err = json.NewDecoder(bufio.NewReader(contractFile)).Decode(&contractInfo)
-	if err != nil {
-		log.Errorf("Failed to parse contract instnace deployment file %s: %s", fileName, err)
-		return
-	}
-	g.addToContractIndex(&contractInfo)
-}
-
-func (g *smartContractGW) addFileToABIIndex(id, fileName string, createdTime time.Time) {
-	deployFile, err := os.OpenFile(fileName, os.O_RDONLY, 0)
-	if err != nil {
-		log.Errorf("Failed to load ABI deployment file %s: %s", fileName, err)
-		return
-	}
-	defer deployFile.Close()
-	var deployMsg messages.DeployContract
-	err = json.NewDecoder(bufio.NewReader(deployFile)).Decode(&deployMsg)
-	if err != nil {
-		log.Errorf("Failed to parse ABI deployment file %s: %s", fileName, err)
-		return
-	}
-	g.addToABIIndex(id, &deployMsg, createdTime)
-}
-
-func (g *smartContractGW) checkNameAvailable(registerAs string, isRemote bool) error {
-	if isRemote {
-		msg, err := g.rr.LoadFactoryForInstance(registerAs, false)
-		if err != nil {
-			return err
-		} else if msg != nil {
-			return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayFriendlyNameClash, msg.Address, registerAs)
-		}
-		return nil
-	}
-	if existing, exists := g.contractRegistrations[registerAs]; exists {
-		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayFriendlyNameClash, existing.Address, registerAs)
-	}
-	return nil
-}
-
-func (g *smartContractGW) addToContractIndex(info *contractInfo) error {
-	g.idxLock.Lock()
-	defer g.idxLock.Unlock()
-	if info.RegisteredAs != "" {
-		// Protect against overwrite
-		if err := g.checkNameAvailable(info.RegisteredAs, false); err != nil {
-			return err
-		}
-		log.Infof("Registering %s as '%s'", info.Address, info.RegisteredAs)
-		g.contractRegistrations[info.RegisteredAs] = info
-	}
-	g.contractIndex[info.Address] = info
-	return nil
-}
-
-func (g *smartContractGW) addToABIIndex(id string, deployMsg *messages.DeployContract, createdTime time.Time) *abiInfo {
-	g.idxLock.Lock()
-	info := &abiInfo{
-		ID:              id,
-		Name:            deployMsg.ContractName,
-		Description:     deployMsg.Description,
-		Deployable:      len(deployMsg.Compiled) > 0,
-		CompilerVersion: deployMsg.CompilerVersion,
-		Path:            "/abis/" + id,
-		SwaggerURL:      g.conf.BaseURL + "/abis/" + id + "?swagger",
-		TimeSorted: messages.TimeSorted{
-			CreatedISO8601: createdTime.UTC().Format(time.RFC3339),
-		},
-	}
-	g.abiIndex[id] = info
-	g.idxLock.Unlock()
-	return info
-}
-
 // listContracts sorts by Title then Address and returns an array
 func (g *smartContractGW) listContractsOrABIs(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
 
-	var index map[string]messages.TimeSortable
+	var retval []messages.TimeSortable
 	if strings.HasSuffix(req.URL.Path, "contracts") {
-		index = g.contractIndex
+		retval = g.cs.listContracts()
 	} else {
-		index = g.abiIndex
+		retval = g.cs.listABIs()
 	}
-
-	// Get an array copy of the current list
-	g.idxLock.Lock()
-	retval := make([]messages.TimeSortable, 0, len(index))
-	for _, info := range index {
-		retval = append(retval, info)
-	}
-	g.idxLock.Unlock()
 
 	// Do the sort by Title then Address
 	sort.Slice(retval, func(i, j int) bool {
@@ -853,23 +567,6 @@ func (g *smartContractGW) suspendOrResumeStream(res http.ResponseWriter, req *ht
 	res.WriteHeader(status)
 }
 
-func (g *smartContractGW) resolveAddressOrName(id string) (deployMsg *messages.DeployContract, registeredName string, info *contractInfo, err error) {
-	info, err = g.lookupContractInstance(id)
-	if err != nil {
-		var origErr = err
-		registeredName = id
-		if id, err = g.resolveContractAddr(registeredName); err != nil {
-			log.Infof("%s is not a friendly name: %s", registeredName, err)
-			return nil, "", nil, origErr
-		}
-		if info, err = g.lookupContractInstance(id); err != nil {
-			return nil, "", nil, err
-		}
-	}
-	deployMsg, _, err = g.loadDeployMsgByID(info.ABI)
-	return deployMsg, registeredName, info, err
-}
-
 func (g *smartContractGW) isSwaggerRequest(req *http.Request) (swaggerGen *openapi.ABI2Swagger, uiRequest, factoryOnly, abiRequest, refreshABI bool, from string) {
 	req.ParseForm()
 	var swaggerRequest bool
@@ -950,13 +647,13 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 	var info messages.TimeSortable
 	var abiID string
 	if prefix == "contract" {
-		if deployMsg, registeredName, info, err = g.resolveAddressOrName(params.ByName("address")); err != nil {
+		if deployMsg, registeredName, info, err = g.cs.resolveAddressOrName(params.ByName("address")); err != nil {
 			g.gatewayErrReply(res, req, err, 404)
 			return
 		}
 	} else {
 		abiID = id
-		deployMsg, info, err = g.loadDeployMsgByID(abiID)
+		deployMsg, info, err = g.cs.loadDeployMsgByID(abiID)
 		if err != nil {
 			g.gatewayErrReply(res, req, err, 404)
 			return
@@ -1074,7 +771,7 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 	// Note: there is currently no body payload required for the POST
 
 	abiID := params.ByName("abi")
-	_, _, err := g.loadDeployMsgByID(abiID)
+	_, _, err := g.cs.loadDeployMsgByID(abiID)
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 404)
 		return
@@ -1086,7 +783,7 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 		registeredName = addrHexNo0x
 	}
 
-	contractInfo, err := g.storeNewContractInfo(addrHexNo0x, abiID, registeredName, registerAs)
+	contractInfo, err := g.cs.storeNewContractInfo(addrHexNo0x, abiID, registeredName, registerAs)
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 409)
 		return

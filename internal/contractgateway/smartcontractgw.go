@@ -337,7 +337,7 @@ func (g *smartContractGW) writeAbiInfo(requestID string, msg *messages.DeployCon
 	return nil
 }
 
-// listContracts sorts by Title then Address and returns an array
+// listContractsOrABIs sorts by Title then Address and returns an array
 func (g *smartContractGW) listContractsOrABIs(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
 
@@ -347,11 +347,6 @@ func (g *smartContractGW) listContractsOrABIs(res http.ResponseWriter, req *http
 	} else {
 		retval = g.cs.ListABIs()
 	}
-
-	// Do the sort by Title then Address
-	sort.Slice(retval, func(i, j int) bool {
-		return retval[i].IsLessThan(retval[i], retval[j])
-	})
 
 	status := 200
 	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)

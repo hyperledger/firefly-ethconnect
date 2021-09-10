@@ -22,6 +22,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -337,6 +338,11 @@ func (cs *contractStore) ListContracts() []messages.TimeSortable {
 		retval = append(retval, info)
 	}
 	cs.idxLock.Unlock()
+
+	// Do the sort by Title then Address
+	sort.Slice(retval, func(i, j int) bool {
+		return retval[i].IsLessThan(retval[i], retval[j])
+	})
 	return retval
 }
 
@@ -347,5 +353,10 @@ func (cs *contractStore) ListABIs() []messages.TimeSortable {
 		retval = append(retval, info)
 	}
 	cs.idxLock.Unlock()
+
+	// Do the sort by Title then Address
+	sort.Slice(retval, func(i, j int) bool {
+		return retval[i].IsLessThan(retval[i], retval[j])
+	})
 	return retval
 }

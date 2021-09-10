@@ -86,25 +86,21 @@ type mockContractResolver struct {
 	capturedAddr           string
 }
 
-func (m *mockContractResolver) LookupContractInstance(addrHex string) (*contractregistry.ContractInfo, error) {
+func (m *mockContractResolver) GetContractByAddress(addrHex string) (*contractregistry.ContractInfo, error) {
 	m.capturedAddr = addrHex
 	return m.contractInfo, m.loadABIError
 }
 
-func (m *mockContractResolver) ResolveContractAddr(registeredName string) (string, error) {
+func (m *mockContractResolver) ResolveContractAddress(registeredName string) (string, error) {
 	return m.registeredContractAddr, m.resolveContractErr
 }
 
-func (m *mockContractResolver) LoadDeployMsgByID(addrHex string) (*messages.DeployContract, *contractregistry.ABIInfo, error) {
+func (m *mockContractResolver) GetABIByID(addrHex string) (*messages.DeployContract, *contractregistry.ABIInfo, error) {
 	return m.deployMsg, m.abiInfo, m.loadABIError
 }
 
 func (m *mockContractResolver) CheckNameAvailable(name string, isRemote bool) error {
 	return m.nameAvailableError
-}
-
-func (m *mockContractResolver) ResolveAddressOrName(id string) (deployMsg *messages.DeployContract, registeredName string, info *contractregistry.ContractInfo, err error) {
-	return m.deployMsg, "", m.contractInfo, m.resolveContractErr
 }
 
 type mockGateway struct {

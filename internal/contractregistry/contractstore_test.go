@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-openapi/spec"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
 	"github.com/stretchr/testify/assert"
@@ -75,7 +76,7 @@ func TestLoadDeployMsgOKNoABIInIndex(t *testing.T) {
 	deployBytes, _ := json.Marshal(goodMsg)
 	cs.(*contractStore).abiIndex["abi1"] = &ABIInfo{}
 	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), deployBytes, 0644)
-	_, _, err := cs.LoadDeployMsgByID("abi1")
+	_, _, err := cs.GetABIByID("abi1")
 	assert.NoError(err)
 }
 
@@ -84,7 +85,7 @@ func TestLoadDeployMsgMissing(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 	cs := NewContractStore("", dir, nil)
-	_, _, err := cs.LoadDeployMsgByID("abi1")
+	_, _, err := cs.GetABIByID("abi1")
 	assert.Regexp("No ABI found with ID abi1", err.Error())
 }
 
@@ -94,7 +95,7 @@ func TestLoadDeployMsgFileMissing(t *testing.T) {
 	defer cleanup(dir)
 	cs := NewContractStore("", dir, nil)
 	cs.(*contractStore).abiIndex["abi1"] = &ABIInfo{}
-	_, _, err := cs.LoadDeployMsgByID("abi1")
+	_, _, err := cs.GetABIByID("abi1")
 	assert.Regexp("Failed to load ABI with ID abi1", err.Error())
 }
 
@@ -105,7 +106,7 @@ func TestLoadDeployMsgFailure(t *testing.T) {
 	cs := NewContractStore("", dir, nil)
 	cs.(*contractStore).abiIndex["abi1"] = &ABIInfo{}
 	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), []byte(":bad json"), 0644)
-	_, _, err := cs.LoadDeployMsgByID("abi1")
+	_, _, err := cs.GetABIByID("abi1")
 	assert.Regexp("Failed to parse ABI with ID abi1", err.Error())
 }
 
@@ -116,7 +117,7 @@ func TestLoadDeployMsgRemoteLookupNotFound(t *testing.T) {
 	cs := NewContractStore("", dir, nil)
 	rr := &mockRR{}
 	cs.(*contractStore).rr = rr
-	_, _, err := cs.LoadDeployMsgByID("abi1")
+	_, _, err := cs.GetABIByID("abi1")
 	assert.EqualError(err, "No ABI found with ID abi1")
 }
 
@@ -139,7 +140,7 @@ func TestLoadABIForInstanceUnknown(t *testing.T) {
 	defer cleanup(dir)
 	cs := NewContractStore("", path.Join(dir, "badpath"), nil)
 
-	_, err := cs.LookupContractInstance("invalid")
+	_, err := cs.GetContractByAddress("invalid")
 	assert.Regexp("No contract instance registered with address invalid", err.Error())
 }
 
@@ -150,7 +151,7 @@ func TestLoadABIBadData(t *testing.T) {
 	cs := NewContractStore("", dir, nil)
 
 	ioutil.WriteFile(path.Join(dir, "badness.abi.json"), []byte(":not json"), 0644)
-	_, _, err := cs.LoadDeployMsgByID("badness")
+	_, _, err := cs.GetABIByID("badness")
 	assert.Regexp("No ABI found with ID badness", err.Error())
 }
 
@@ -160,7 +161,7 @@ func TestAddFileToContractIndexBadFileSwallowsError(t *testing.T) {
 
 	cs := NewContractStore("", dir, nil)
 
-	cs.AddFileToContractIndex("", "badness")
+	cs.(*contractStore).addFileToContractIndex("", "badness")
 }
 
 func TestAddFileToContractIndexBadDataSwallowsError(t *testing.T) {
@@ -171,7 +172,7 @@ func TestAddFileToContractIndexBadDataSwallowsError(t *testing.T) {
 
 	fileName := path.Join(dir, "badness")
 	ioutil.WriteFile(fileName, []byte("!JSON"), 0644)
-	cs.AddFileToContractIndex("", fileName)
+	cs.(*contractStore).addFileToContractIndex("", fileName)
 }
 
 func TestAddFileToABIIndexBadFileSwallowsError(t *testing.T) {
@@ -209,14 +210,104 @@ func TestCheckNameAvailableRRFail(t *testing.T) {
 	assert.EqualError(err, "pop")
 }
 
-func TestResolveAddressFail(t *testing.T) {
+func TestBuildIndex(t *testing.T) {
 	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
 
-	cs := NewContractStore("http://localhost/api/v1", "", nil)
+	// Migration of legacy contract interfaces
 
-	deployMsg, name, info, err := cs.ResolveAddressOrName("test")
-	assert.Regexp("No contract instance registered with address test", err)
-	assert.Nil(deployMsg)
-	assert.Nil(info)
-	assert.Equal("", name)
+	var emptySwagger spec.Swagger
+	swaggerBytes, _ := json.Marshal(&emptySwagger)
+	ioutil.WriteFile(path.Join(dir, "contract_0123456789abcdef0123456789abcdef01234567.swagger.json"), swaggerBytes, 0644)
+
+	okSwagger := spec.Swagger{
+		SwaggerProps: spec.SwaggerProps{
+			Info: &spec.Info{
+				InfoProps: spec.InfoProps{
+					Title: "good one",
+				},
+			},
+		},
+	}
+	okSwagger.Info.AddExtension("x-firefly-deployment-id", "840b629f-2e46-413b-9671-553a886ca7bb")
+	swaggerBytes, _ = json.Marshal(&okSwagger)
+	ioutil.WriteFile(path.Join(dir, "contract_123456789abcdef0123456789abcdef012345678.swagger.json"), swaggerBytes, 0644)
+
+	regSwagger := spec.Swagger{
+		SwaggerProps: spec.SwaggerProps{
+			Info: &spec.Info{
+				InfoProps: spec.InfoProps{
+					Title: "good one",
+				},
+			},
+		},
+	}
+	regSwagger.Info.AddExtension("x-firefly-deployment-id", "840b629f-2e46-413b-9671-553a886ca7bb")
+	regSwagger.Info.AddExtension("x-firefly-registered-name", "migratedcontract")
+	swaggerBytes, _ = json.Marshal(&regSwagger)
+	ioutil.WriteFile(path.Join(dir, "contract_23456789abcdef0123456789abcdef0123456789.swagger.json"), swaggerBytes, 0644)
+
+	ioutil.WriteFile(path.Join(dir, "contract_3456789abcdef0123456789abcdef01234567890.swagger.json"), []byte(":bad swagger"), 0644)
+
+	// New contract interfaces
+	info1 := &ContractInfo{
+		Address:      "456789abcdef0123456789abcdef012345678901",
+		ABI:          "840b629f-2e46-413b-9671-553a886ca7bb",
+		Path:         "/contracts/456789abcdef0123456789abcdef012345678901",
+		SwaggerURL:   "http://localhost:8080/contracts/456789abcdef0123456789abcdef012345678901?swagger",
+		RegisteredAs: "",
+		TimeSorted: messages.TimeSorted{
+			CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
+		},
+	}
+	info1Bytes, _ := json.Marshal(info1)
+	ioutil.WriteFile(path.Join(dir, "contract_456789abcdef0123456789abcdef012345678901.instance.json"), info1Bytes, 0644)
+	info2 := &ContractInfo{
+		Address:      "56789abcdef0123456789abcdef0123456789012",
+		ABI:          "840b629f-2e46-413b-9671-553a886ca7bb",
+		Path:         "/contracts/somecontract",
+		SwaggerURL:   "http://localhost:8080/contracts/somecontract?swagger",
+		RegisteredAs: "somecontract",
+		TimeSorted: messages.TimeSorted{
+			CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
+		},
+	}
+	info2Bytes, _ := json.Marshal(info2)
+	ioutil.WriteFile(path.Join(dir, "contract_56789abcdef0123456789abcdef0123456789012.instance.json"), info2Bytes, 0644)
+
+	deployMsg := &messages.DeployContract{
+		ContractName: "abideployable",
+	}
+	deployBytes, _ := json.Marshal(&deployMsg)
+	ioutil.WriteFile(path.Join(dir, "abi_840b629f-2e46-413b-9671-553a886ca7bb.deploy.json"), deployBytes, 0644)
+	ioutil.WriteFile(path.Join(dir, "abi_e27be4cf-6ae2-411e-8088-db2992618938.deploy.json"), deployBytes, 0644)
+	ioutil.WriteFile(path.Join(dir, "abi_519526b2-0879-41f4-93c0-09acaa62e2da.deploy.json"), []byte(":bad json"), 0644)
+
+	cs := NewContractStore("", dir, nil)
+	cs.Init()
+
+	contracts := cs.ListContracts()
+	assert.Equal(4, len(contracts))
+	assert.Equal("123456789abcdef0123456789abcdef012345678", contracts[0].(*ContractInfo).Address)
+	assert.Equal("23456789abcdef0123456789abcdef0123456789", contracts[1].(*ContractInfo).Address)
+	assert.Equal("456789abcdef0123456789abcdef012345678901", contracts[2].(*ContractInfo).Address)
+	assert.Equal("56789abcdef0123456789abcdef0123456789012", contracts[3].(*ContractInfo).Address)
+
+	info, err := cs.GetContractByAddress("123456789abcdef0123456789abcdef012345678")
+	assert.NoError(err)
+	assert.Equal("123456789abcdef0123456789abcdef012345678", info.Address)
+
+	somecontractAddr, err := cs.ResolveContractAddress("somecontract")
+	assert.NoError(err)
+	assert.Equal("56789abcdef0123456789abcdef0123456789012", somecontractAddr)
+
+	migratedcontractAddr, err := cs.ResolveContractAddress("migratedcontract")
+	assert.NoError(err)
+	assert.Equal("23456789abcdef0123456789abcdef0123456789", migratedcontractAddr)
+
+	abis := cs.ListABIs()
+	assert.Equal(2, len(abis))
+	assert.Equal("840b629f-2e46-413b-9671-553a886ca7bb", abis[0].(*ABIInfo).ID)
+	assert.Equal("e27be4cf-6ae2-411e-8088-db2992618938", abis[1].(*ABIInfo).ID)
 }

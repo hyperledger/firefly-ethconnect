@@ -168,7 +168,7 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 			return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayEventManagerInitFailed, err)
 		}
 	}
-	gw.r2e = newREST2eth(gw, gw.cs, rpc, gw.sm, gw.rr, processor, asyncDispatcher, syncDispatcher)
+	gw.r2e = newREST2eth(gw, gw.cs, rpc, gw.sm, processor, asyncDispatcher, syncDispatcher)
 	gw.cs.Init()
 	return gw, nil
 }

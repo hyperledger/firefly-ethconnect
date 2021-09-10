@@ -311,3 +311,68 @@ func TestBuildIndex(t *testing.T) {
 	assert.Equal("840b629f-2e46-413b-9671-553a886ca7bb", abis[0].(*ABIInfo).ID)
 	assert.Equal("e27be4cf-6ae2-411e-8088-db2992618938", abis[1].(*ABIInfo).ID)
 }
+
+func TestGetABIRemoteGateway(t *testing.T) {
+	assert := assert.New(t)
+
+	cs := NewContractStore("", "", nil)
+	cs.(*contractStore).rr = &mockRR{
+		deployMsg: &DeployContractWithAddress{
+			DeployContract: messages.DeployContract{
+				Description: "description",
+			},
+			Address: "address",
+		},
+	}
+
+	location := &ABILocation{ABIType: RemoteGateway}
+	deployMsg, address, err := cs.GetABI(location, false)
+	assert.NoError(err)
+	assert.Equal("", address)
+	assert.Equal("description", deployMsg.Description)
+}
+
+func TestGetABIRemoteInstance(t *testing.T) {
+	assert := assert.New(t)
+
+	cs := NewContractStore("", "", nil)
+	cs.(*contractStore).rr = &mockRR{
+		deployMsg: &DeployContractWithAddress{
+			DeployContract: messages.DeployContract{
+				Description: "description",
+			},
+			Address: "address",
+		},
+	}
+
+	location := &ABILocation{ABIType: RemoteInstance}
+	deployMsg, address, err := cs.GetABI(location, false)
+	assert.NoError(err)
+	assert.Equal("address", address)
+	assert.Equal("description", deployMsg.Description)
+}
+
+func TestGetABIRemoteInstanceFail(t *testing.T) {
+	assert := assert.New(t)
+
+	cs := NewContractStore("", "", nil)
+	cs.(*contractStore).rr = &mockRR{}
+
+	location := &ABILocation{ABIType: RemoteInstance}
+	deployMsg, address, err := cs.GetABI(location, false)
+	assert.NoError(err)
+	assert.Equal("", address)
+	assert.Nil(deployMsg)
+}
+
+func TestGetABILocal(t *testing.T) {
+	assert := assert.New(t)
+
+	cs := NewContractStore("", "", nil)
+
+	location := &ABILocation{ABIType: LocalABI, Name: "test"}
+	deployMsg, address, err := cs.GetABI(location, false)
+	assert.Regexp("No ABI found with ID test", err)
+	assert.Equal("", address)
+	assert.Nil(deployMsg)
+}

@@ -56,6 +56,36 @@ func (m *mockWebSocketServer) SendReply(message interface{}) {
 	m.testChan <- message
 }
 
+type mockRR struct {
+	idCapture      string
+	addrCapture    string
+	lookupCapture  string
+	refreshCapture bool
+	deployMsg      *contractregistry.DeployContractWithAddress
+	err            error
+}
+
+func (rr *mockRR) LoadFactoryForGateway(id string, refresh bool) (*messages.DeployContract, error) {
+	rr.idCapture = id
+	rr.refreshCapture = refresh
+	if rr.deployMsg == nil {
+		return nil, rr.err
+	}
+	return &rr.deployMsg.DeployContract, rr.err
+}
+func (rr *mockRR) LoadFactoryForInstance(id string, refresh bool) (*contractregistry.DeployContractWithAddress, error) {
+	rr.addrCapture = id
+	rr.refreshCapture = refresh
+	return rr.deployMsg, rr.err
+}
+func (rr *mockRR) RegisterInstance(lookupStr, address string) error {
+	rr.lookupCapture = lookupStr
+	rr.addrCapture = address
+	return rr.err
+}
+func (rr *mockRR) Close()      {}
+func (rr *mockRR) Init() error { return nil }
+
 type mockContractStore struct {
 	mockContractResolver
 }

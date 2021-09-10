@@ -78,6 +78,7 @@ func (m *mockREST2EthDispatcher) DispatchDeployContractSync(ctx context.Context,
 type mockContractResolver struct {
 	loadABIError           error
 	deployMsg              *messages.DeployContract
+	contractAddress        string
 	abiInfo                *contractregistry.ABIInfo
 	contractInfo           *contractregistry.ContractInfo
 	registeredContractAddr string
@@ -95,7 +96,11 @@ func (m *mockContractResolver) ResolveContractAddress(registeredName string) (st
 	return m.registeredContractAddr, m.resolveContractErr
 }
 
-func (m *mockContractResolver) GetABIByID(addrHex string) (*messages.DeployContract, *contractregistry.ABIInfo, error) {
+func (m *mockContractResolver) GetABI(location *contractregistry.ABILocation, refresh bool) (*messages.DeployContract, string, error) {
+	return m.deployMsg, m.contractAddress, m.loadABIError
+}
+
+func (m *mockContractResolver) GetABIByID(abiID string) (*messages.DeployContract, *contractregistry.ABIInfo, error) {
 	return m.deployMsg, m.abiInfo, m.loadABIError
 }
 
@@ -177,36 +182,6 @@ func (m *mockSubMgr) ResetSubscription(ctx context.Context, id, initialBlock str
 }
 func (m *mockSubMgr) Close() {}
 
-type mockRR struct {
-	idCapture      string
-	addrCapture    string
-	lookupCapture  string
-	refreshCapture bool
-	deployMsg      *contractregistry.DeployContractWithAddress
-	err            error
-}
-
-func (rr *mockRR) LoadFactoryForGateway(id string, refresh bool) (*messages.DeployContract, error) {
-	rr.idCapture = id
-	rr.refreshCapture = refresh
-	if rr.deployMsg == nil {
-		return nil, rr.err
-	}
-	return &rr.deployMsg.DeployContract, rr.err
-}
-func (rr *mockRR) LoadFactoryForInstance(id string, refresh bool) (*contractregistry.DeployContractWithAddress, error) {
-	rr.addrCapture = id
-	rr.refreshCapture = refresh
-	return rr.deployMsg, rr.err
-}
-func (rr *mockRR) RegisterInstance(lookupStr, address string) error {
-	rr.lookupCapture = lookupStr
-	rr.addrCapture = address
-	return rr.err
-}
-func (rr *mockRR) Close()      {}
-func (rr *mockRR) Init() error { return nil }
-
 func newTestDeployMsg(t *testing.T, addr string) *contractregistry.DeployContractWithAddress {
 	compiled, err := eth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")
 	assert.NoError(t, err)
@@ -225,7 +200,7 @@ func newTestREST2Eth(t *testing.T, dispatcher *mockREST2EthDispatcher) (*rest2et
 		deployMsg:    &deployMsg.DeployContract,
 	}
 	mockProcessor := &mockProcessor{}
-	r := newREST2eth(gateway, contractResolver, mockRPC, nil, nil, mockProcessor, dispatcher, dispatcher)
+	r := newREST2eth(gateway, contractResolver, mockRPC, nil, mockProcessor, dispatcher, dispatcher)
 	router := &httprouter.Router{}
 	r.addRoutes(router)
 
@@ -240,7 +215,7 @@ func newTestREST2EthCustomGateway(t *testing.T, dispatcher *mockREST2EthDispatch
 		deployMsg:    &deployMsg.DeployContract,
 	}
 	mockProcessor := &mockProcessor{}
-	r := newREST2eth(gateway, contractResolver, mockRPC, nil, nil, mockProcessor, dispatcher, dispatcher)
+	r := newREST2eth(gateway, contractResolver, mockRPC, nil, mockProcessor, dispatcher, dispatcher)
 	router := &httprouter.Router{}
 	r.addRoutes(router)
 
@@ -251,7 +226,7 @@ func newTestREST2EthCustomContractResolver(dispatcher *mockREST2EthDispatcher, c
 	mockRPC := &mockRPC{}
 	gateway := &mockGateway{}
 	mockProcessor := &mockProcessor{}
-	r := newREST2eth(gateway, contractResolver, mockRPC, nil, nil, mockProcessor, dispatcher, dispatcher)
+	r := newREST2eth(gateway, contractResolver, mockRPC, nil, mockProcessor, dispatcher, dispatcher)
 	router := &httprouter.Router{}
 	r.addRoutes(router)
 
@@ -591,7 +566,7 @@ func TestDeployContractSyncSuccess(t *testing.T) {
 	assert.Equal(from, dispatcher.deployContractMsg.From)
 }
 
-func TestDeployContractSyncRemoteRegitryInstance(t *testing.T) {
+func TestDeployContractSyncRemoteRegistryInstance(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
@@ -617,9 +592,7 @@ func TestDeployContractSyncRemoteRegitryInstance(t *testing.T) {
 		sendTransactionSyncReceipt: receipt,
 	}
 	r, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
-	r.rr = &mockRR{
-		deployMsg: newTestDeployMsg(t, strings.TrimPrefix(to, "0x")),
-	}
+	r.cr.(*mockContractResolver).contractAddress = strings.TrimPrefix(to, "0x")
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?fly-sync", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
@@ -630,16 +603,14 @@ func TestDeployContractSyncRemoteRegitryInstance(t *testing.T) {
 	assert.Equal(from, dispatcher.sendTransactionMsg.From)
 }
 
-func TestDeployContractSyncRemoteRegitryInstance500(t *testing.T) {
+func TestDeployContractSyncRemoteRegistryInstance500(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
 
 	bodyMap := make(map[string]interface{})
 	r, _, router, res, _ := newTestREST2EthAndMsg(t, &mockREST2EthDispatcher{}, "", "", bodyMap)
-	r.rr = &mockRR{
-		err: fmt.Errorf("pop"),
-	}
+	r.cr.(*mockContractResolver).loadABIError = fmt.Errorf("pop")
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?fly-sync", bytes.NewReader(body))
 	router.ServeHTTP(res, req)
@@ -647,14 +618,14 @@ func TestDeployContractSyncRemoteRegitryInstance500(t *testing.T) {
 	assert.Equal(500, res.Result().StatusCode)
 }
 
-func TestDeployContractSyncRemoteRegitryInstance404(t *testing.T) {
+func TestDeployContractSyncRemoteRegistryInstance404(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
 
 	bodyMap := make(map[string]interface{})
 	r, _, router, res, _ := newTestREST2EthAndMsg(t, &mockREST2EthDispatcher{}, "", "", bodyMap)
-	r.rr = &mockRR{}
+	r.cr.(*mockContractResolver).deployMsg = nil
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?fly-sync", bytes.NewReader(body))
 	router.ServeHTTP(res, req)
@@ -662,16 +633,14 @@ func TestDeployContractSyncRemoteRegitryInstance404(t *testing.T) {
 	assert.Equal(404, res.Result().StatusCode)
 }
 
-func TestDeployContractSyncRemoteRegitryGateway500(t *testing.T) {
+func TestDeployContractSyncRemoteRegistryGateway500(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
 
 	bodyMap := make(map[string]interface{})
 	r, _, router, res, _ := newTestREST2EthAndMsg(t, &mockREST2EthDispatcher{}, "", "", bodyMap)
-	r.rr = &mockRR{
-		err: fmt.Errorf("pop"),
-	}
+	r.cr.(*mockContractResolver).loadABIError = fmt.Errorf("pop")
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygw?fly-sync", bytes.NewReader(body))
 	router.ServeHTTP(res, req)
@@ -679,14 +648,14 @@ func TestDeployContractSyncRemoteRegitryGateway500(t *testing.T) {
 	assert.Equal(500, res.Result().StatusCode)
 }
 
-func TestDeployContractSyncRemoteRegitryGateway404(t *testing.T) {
+func TestDeployContractSyncRemoteRegistryGateway404(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
 
 	bodyMap := make(map[string]interface{})
 	r, _, router, res, _ := newTestREST2EthAndMsg(t, &mockREST2EthDispatcher{}, "", "", bodyMap)
-	r.rr = &mockRR{}
+	r.cr.(*mockContractResolver).deployMsg = nil
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygw?fly-sync", bytes.NewReader(body))
 	router.ServeHTTP(res, req)
@@ -716,10 +685,7 @@ func TestDeployContractSyncRemoteRegistryGateway(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
 	}
-	r, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
-	r.rr = &mockRR{
-		deployMsg: newTestDeployMsg(t, strings.TrimPrefix(to, "0x")),
-	}
+	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygateway/567a417717cb6c59ddc1035705f02c0fd1ab1872/set?fly-sync", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
@@ -868,6 +834,29 @@ func TestSendTransactionUnknownRegisteredName(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("unregistered", reply.Message)
+}
+
+func TestSendTransactionContractNotFound(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	bodyMap["i"] = 12345
+	bodyMap["s"] = "testing"
+	to := "random"
+	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
+	dispatcher := &mockREST2EthDispatcher{}
+	r, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
+	contractResolver := r.cr.(*mockContractResolver)
+	contractResolver.loadABIError = fmt.Errorf("not found")
+	router.ServeHTTP(res, req)
+
+	assert.Equal(404, res.Result().StatusCode)
+	reply := restErrMsg{}
+	err := json.NewDecoder(res.Result().Body).Decode(&reply)
+	assert.NoError(err)
+	assert.Equal("not found", reply.Message)
 }
 
 func TestSendTransactionMissingContract(t *testing.T) {
@@ -1094,14 +1083,13 @@ func TestSendTransactionInvalidContract(t *testing.T) {
 	}
 	r, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
 	contractResolver := r.cr.(*mockContractResolver)
-	contractResolver.loadABIError = fmt.Errorf("pop")
+	contractResolver.deployMsg = nil
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
 	reply := restErrMsg{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
-	assert.Equal("pop", reply.Message)
 }
 
 func TestDeployContractInvalidABI(t *testing.T) {
@@ -1124,14 +1112,13 @@ func TestDeployContractInvalidABI(t *testing.T) {
 	req := httptest.NewRequest("POST", "/abis/abi1?fly-sync", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
 	contractResolver := r.cr.(*mockContractResolver)
-	contractResolver.loadABIError = fmt.Errorf("pop")
+	contractResolver.deployMsg = nil
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
 	reply := restErrMsg{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
-	assert.Equal("pop", reply.Message)
 }
 func TestSendTransactionInvalidMethod(t *testing.T) {
 	assert := assert.New(t)

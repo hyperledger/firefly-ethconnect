@@ -70,7 +70,6 @@ type rest2eth struct {
 	asyncDispatcher REST2EthAsyncDispatcher
 	syncDispatcher  rest2EthSyncDispatcher
 	subMgr          events.SubscriptionManager
-	rr              contractregistry.RemoteRegistry
 }
 
 type restErrMsg struct {
@@ -141,7 +140,7 @@ func (i *rest2EthSyncResponder) ReplyWithReceipt(receipt messages.ReplyWithHeade
 	return
 }
 
-func newREST2eth(gw SmartContractGateway, cr contractregistry.ContractResolver, rpc eth.RPCClient, subMgr events.SubscriptionManager, rr contractregistry.RemoteRegistry, processor tx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher, syncDispatcher rest2EthSyncDispatcher) *rest2eth {
+func newREST2eth(gw SmartContractGateway, cr contractregistry.ContractResolver, rpc eth.RPCClient, subMgr events.SubscriptionManager, processor tx.TxnProcessor, asyncDispatcher REST2EthAsyncDispatcher, syncDispatcher rest2EthSyncDispatcher) *rest2eth {
 	return &rest2eth{
 		gw:              gw,
 		cr:              cr,
@@ -150,7 +149,6 @@ func newREST2eth(gw SmartContractGateway, cr contractregistry.ContractResolver, 
 		asyncDispatcher: asyncDispatcher,
 		rpc:             rpc,
 		subMgr:          subMgr,
-		rr:              rr,
 	}
 }
 
@@ -203,6 +201,7 @@ type restCmd struct {
 func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params httprouter.Params, c *restCmd, addrParam string, refresh bool) (a ethbinding.ABIMarshaling, validAddress bool, err error) {
 	c.addr = strings.ToLower(strings.TrimPrefix(addrParam, "0x"))
 	validAddress = addrCheck.MatchString(c.addr)
+	var location contractregistry.ABILocation
 
 	// There are multiple ways we resolve the path into an ABI
 	// 1. we lookup it up remotely in a REST attached contract registry (the newer option)
@@ -212,40 +211,22 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 	//    - /abis      is for factory interfaces installed into ethconnect by uploading the Solidity
 	//    - /contracts is for individual instances deployed via ethconnect factory interfaces
 	if strings.HasPrefix(req.URL.Path, "/gateways/") || strings.HasPrefix(req.URL.Path, "/g/") {
-		c.deployMsg, err = r.rr.LoadFactoryForGateway(params.ByName("gateway_lookup"), refresh)
-		if err != nil {
-			r.restErrReply(res, req, err, 500)
-			return
-		} else if c.deployMsg == nil {
-			err = ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayGatewayNotFound)
-			r.restErrReply(res, req, err, 404)
-			return
-		}
+		location.ABIType = contractregistry.RemoteGateway
+		location.Name = params.ByName("gateway_lookup")
 	} else if strings.HasPrefix(req.URL.Path, "/instances/") || strings.HasPrefix(req.URL.Path, "/i/") {
-		var msg *contractregistry.DeployContractWithAddress
-		msg, err = r.rr.LoadFactoryForInstance(params.ByName("instance_lookup"), refresh)
-		if err != nil {
-			r.restErrReply(res, req, err, 500)
-			return
-		} else if msg == nil {
-			err = ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayInstanceNotFound)
-			r.restErrReply(res, req, err, 404)
-			return
-		}
-		c.deployMsg = &msg.DeployContract
-		c.addr = msg.Address
+		location.ABIType = contractregistry.RemoteInstance
+		location.Name = params.ByName("instance_lookup")
 		validAddress = true // assume registry only returns valid addresses
 	} else {
 		// Local logic
+		location.ABIType = contractregistry.LocalABI
 		abiID := params.ByName("abi")
 		if abiID != "" {
-			c.deployMsg, _, err = r.cr.GetABIByID(abiID)
-			if err != nil {
-				r.restErrReply(res, req, err, 404)
-				return
-			}
+			location.Name = abiID
 		} else {
-			if !validAddress {
+			if validAddress {
+				location.Name = addrParam
+			} else {
 				// Resolve the address as a registered name, to an actual contract address
 				if c.addr, err = r.cr.ResolveContractAddress(addrParam); err != nil {
 					r.restErrReply(res, req, err, 404)
@@ -253,17 +234,30 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 				}
 				validAddress = true
 				addrParam = c.addr
-			}
-			var info *contractregistry.ContractInfo
-			if info, err = r.cr.GetContractByAddress(addrParam); err != nil {
-				r.restErrReply(res, req, err, 404)
-				return
-			}
-			if c.deployMsg, _, err = r.cr.GetABIByID(info.ABI); err != nil {
-				r.restErrReply(res, req, err, 404)
-				return
+				var info *contractregistry.ContractInfo
+				if info, err = r.cr.GetContractByAddress(addrParam); err != nil {
+					r.restErrReply(res, req, err, 404)
+					return
+				}
+				location.Name = info.ABI
 			}
 		}
+	}
+
+	var address string
+	c.deployMsg, address, err = r.cr.GetABI(&location, refresh)
+	if err != nil {
+		r.restErrReply(res, req, err, 500)
+		return
+	} else if c.deployMsg == nil {
+		if err == nil {
+			err = ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayInstanceNotFound)
+		}
+		r.restErrReply(res, req, err, 404)
+		return
+	}
+	if address != "" {
+		c.addr = address
 	}
 	a = c.deployMsg.ABI
 	return

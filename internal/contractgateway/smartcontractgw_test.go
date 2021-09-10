@@ -60,14 +60,12 @@ type mockContractStore struct {
 	mockContractResolver
 }
 
-func (cs *mockContractStore) StoreNewContractInfo(addrHexNo0x, abiID, pathName, registerAs string) (*contractregistry.ContractInfo, error) {
+func (cs *mockContractStore) Init() {
+}
+func (cs *mockContractStore) AddContract(addrHexNo0x, abiID, pathName, registerAs string) (*contractregistry.ContractInfo, error) {
 	return nil, nil
 }
-func (cs *mockContractStore) BuildIndex() {
-}
-func (cs *mockContractStore) AddFileToContractIndex(address, fileName string) {
-}
-func (cs *mockContractStore) AddToABIIndex(id string, deployMsg *messages.DeployContract, createdTime time.Time) *contractregistry.ABIInfo {
+func (cs *mockContractStore) AddABI(id string, deployMsg *messages.DeployContract, createdTime time.Time) *contractregistry.ABIInfo {
 	return nil
 }
 func (cs *mockContractStore) ListContracts() []messages.TimeSortable {
@@ -209,10 +207,10 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	err = scgw.PostDeploy(&receipt)
 	assert.NoError(err)
 
-	info, err := scgw.(*smartContractGW).cs.LookupContractInstance("0123456789abcdef0123456789abcdef01234567")
+	info, err := scgw.(*smartContractGW).cs.GetContractByAddress("0123456789abcdef0123456789abcdef01234567")
 	assert.NoError(err)
 	assert.NotEmpty(info)
-	deployMsg, abiID, err := scgw.(*smartContractGW).cs.LoadDeployMsgByID(info.ABI)
+	deployMsg, abiID, err := scgw.(*smartContractGW).cs.GetABIByID(info.ABI)
 	assert.NoError(err)
 	assert.NotEmpty(abiID)
 	runtimeABI, err := ethbind.API.ABIMarshalingToABIRuntime(deployMsg.ABI)
@@ -697,7 +695,7 @@ func TestPostDeployNoRegisteredName(t *testing.T) {
 	err := scgw.PostDeploy(replyMsg)
 	assert.NoError(err)
 
-	contractInfo, err := scgw.cs.LookupContractInstance("0123456789abcdef0123456789abcdef01234567")
+	contractInfo, err := scgw.cs.GetContractByAddress("0123456789abcdef0123456789abcdef01234567")
 	assert.NoError(err)
 	assert.Equal("", contractInfo.RegisteredAs)
 	assert.Equal("/contracts/0123456789abcdef0123456789abcdef01234567", contractInfo.Path)
@@ -909,7 +907,7 @@ func TestBuildIndex(t *testing.T) {
 
 	contracts := scgw.cs.ListContracts()
 	assert.Equal(4, len(contracts))
-	info, err := scgw.cs.LookupContractInstance("123456789abcdef0123456789abcdef012345678")
+	info, err := scgw.cs.GetContractByAddress("123456789abcdef0123456789abcdef012345678")
 	assert.NoError(err)
 	assert.Equal("123456789abcdef0123456789abcdef012345678", info.Address)
 
@@ -927,11 +925,11 @@ func TestBuildIndex(t *testing.T) {
 	assert.Equal("456789abcdef0123456789abcdef012345678901", contractInfos[2].Address)
 	assert.Equal("56789abcdef0123456789abcdef0123456789012", contractInfos[3].Address)
 
-	somecontractAddr, err := scgw.cs.ResolveContractAddr("somecontract")
+	somecontractAddr, err := scgw.cs.ResolveContractAddress("somecontract")
 	assert.NoError(err)
 	assert.Equal("56789abcdef0123456789abcdef0123456789012", somecontractAddr)
 
-	migratedcontractAddr, err := scgw.cs.ResolveContractAddr("migratedcontract")
+	migratedcontractAddr, err := scgw.cs.ResolveContractAddress("migratedcontract")
 	assert.NoError(err)
 	assert.Equal("23456789abcdef0123456789abcdef0123456789", migratedcontractAddr)
 
@@ -966,25 +964,24 @@ func TestGetContractOrABIFail(t *testing.T) {
 	scgw := s.(*smartContractGW)
 	scgw.cs = cs
 
-	// Contract that does not exist in the index
+	cs.mockContractResolver.loadABIError = fmt.Errorf("pop")
 	cs.mockContractResolver.resolveContractErr = fmt.Errorf("pop")
+
+	// Contract that does not exist in the index
 	req := httptest.NewRequest("GET", "/contracts/nonexistent?openapi", bytes.NewReader([]byte{}))
 	res := httptest.NewRecorder()
 	router := &httprouter.Router{}
 	scgw.AddRoutes(router)
 	router.ServeHTTP(res, req)
 	assert.Equal(404, res.Result().StatusCode)
-	cs.mockContractResolver.resolveContractErr = nil
 
 	// ABI that does not exist in the index
-	cs.mockContractResolver.loadABIError = fmt.Errorf("pop")
 	req = httptest.NewRequest("GET", "/abis/23456789abcdef0123456789abcdef0123456789?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router = &httprouter.Router{}
 	scgw.AddRoutes(router)
 	router.ServeHTTP(res, req)
 	assert.Equal(404, res.Result().StatusCode)
-	cs.mockContractResolver.loadABIError = nil
 }
 
 func TestGetContractUI(t *testing.T) {
@@ -2027,4 +2024,27 @@ func TestPublishPreCompiled(t *testing.T) {
 	assert.NoError(err)
 	assert.NotEmpty(deployStash.ABI)
 	assert.NotEmpty(deployStash.Compiled)
+}
+
+func TestResolveAddressFail(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	scgw, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+			BaseURL:     "http://localhost/api/v1",
+		},
+		&tx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
+		nil, nil, nil, nil,
+	)
+
+	deployMsg, name, info, err := scgw.(*smartContractGW).resolveAddressOrName("test")
+	assert.Regexp("No contract instance registered with address test", err)
+	assert.Nil(deployMsg)
+	assert.Nil(info)
+	assert.Equal("", name)
 }

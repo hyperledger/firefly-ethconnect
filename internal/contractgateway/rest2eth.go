@@ -239,7 +239,7 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 		// Local logic
 		abiID := params.ByName("abi")
 		if abiID != "" {
-			c.deployMsg, _, err = r.cr.LoadDeployMsgByID(abiID)
+			c.deployMsg, _, err = r.cr.GetABIByID(abiID)
 			if err != nil {
 				r.restErrReply(res, req, err, 404)
 				return
@@ -247,7 +247,7 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 		} else {
 			if !validAddress {
 				// Resolve the address as a registered name, to an actual contract address
-				if c.addr, err = r.cr.ResolveContractAddr(addrParam); err != nil {
+				if c.addr, err = r.cr.ResolveContractAddress(addrParam); err != nil {
 					r.restErrReply(res, req, err, 404)
 					return
 				}
@@ -255,11 +255,11 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 				addrParam = c.addr
 			}
 			var info *contractregistry.ContractInfo
-			if info, err = r.cr.LookupContractInstance(addrParam); err != nil {
+			if info, err = r.cr.GetContractByAddress(addrParam); err != nil {
 				r.restErrReply(res, req, err, 404)
 				return
 			}
-			if c.deployMsg, _, err = r.cr.LoadDeployMsgByID(info.ABI); err != nil {
+			if c.deployMsg, _, err = r.cr.GetABIByID(info.ABI); err != nil {
 				r.restErrReply(res, req, err, 404)
 				return
 			}

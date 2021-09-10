@@ -34,19 +34,17 @@ import (
 )
 
 type ContractResolver interface {
-	ResolveContractAddr(registeredName string) (string, error)
-	LookupContractInstance(addrHex string) (*ContractInfo, error)
-	LoadDeployMsgByID(abi string) (*messages.DeployContract, *ABIInfo, error)
+	ResolveContractAddress(registeredName string) (string, error)
+	GetContractByAddress(addrHex string) (*ContractInfo, error)
+	GetABIByID(abi string) (*messages.DeployContract, *ABIInfo, error)
 	CheckNameAvailable(name string, isRemote bool) error
-	ResolveAddressOrName(id string) (deployMsg *messages.DeployContract, registeredName string, info *ContractInfo, err error)
 }
 
 type ContractStore interface {
 	ContractResolver
-	BuildIndex()
-	StoreNewContractInfo(addrHexNo0x, abiID, pathName, registerAs string) (*ContractInfo, error)
-	AddFileToContractIndex(address, fileName string)
-	AddToABIIndex(id string, deployMsg *messages.DeployContract, createdTime time.Time) *ABIInfo
+	Init()
+	AddContract(addrHexNo0x, abiID, pathName, registerAs string) (*ContractInfo, error)
+	AddABI(id string, deployMsg *messages.DeployContract, createdTime time.Time) *ABIInfo
 	ListContracts() []messages.TimeSortable
 	ListABIs() []messages.TimeSortable
 }
@@ -103,7 +101,7 @@ func (i *ABIInfo) GetID() string {
 	return i.ID
 }
 
-func (g *contractStore) StoreNewContractInfo(addrHexNo0x, abiID, pathName, registerAs string) (*ContractInfo, error) {
+func (g *contractStore) AddContract(addrHexNo0x, abiID, pathName, registerAs string) (*ContractInfo, error) {
 	contractInfo := &ContractInfo{
 		Address:      addrHexNo0x,
 		ABI:          abiID,
@@ -143,7 +141,7 @@ func (g *contractStore) storeContractInfo(info *ContractInfo) error {
 	return nil
 }
 
-func (g *contractStore) ResolveContractAddr(registeredName string) (string, error) {
+func (g *contractStore) ResolveContractAddress(registeredName string) (string, error) {
 	nameUnescaped, _ := url.QueryUnescape(registeredName)
 	info, exists := g.contractRegistrations[nameUnescaped]
 	if !exists {
@@ -153,7 +151,7 @@ func (g *contractStore) ResolveContractAddr(registeredName string) (string, erro
 	return info.Address, nil
 }
 
-func (g *contractStore) LookupContractInstance(addrHex string) (*ContractInfo, error) {
+func (g *contractStore) GetContractByAddress(addrHex string) (*ContractInfo, error) {
 	addrHexNo0x := strings.TrimPrefix(strings.ToLower(addrHex), "0x")
 	info, exists := g.contractIndex[addrHexNo0x]
 	if !exists {
@@ -162,7 +160,7 @@ func (g *contractStore) LookupContractInstance(addrHex string) (*ContractInfo, e
 	return info.(*ContractInfo), nil
 }
 
-func (g *contractStore) LoadDeployMsgByID(id string) (*messages.DeployContract, *ABIInfo, error) {
+func (g *contractStore) GetABIByID(id string) (*messages.DeployContract, *ABIInfo, error) {
 	var info *ABIInfo
 	var msg *messages.DeployContract
 	ts, exists := g.abiIndex[id]
@@ -183,11 +181,11 @@ func (g *contractStore) LoadDeployMsgByID(id string) (*messages.DeployContract, 
 	return msg, info, nil
 }
 
-func (g *contractStore) BuildIndex() {
+func (g *contractStore) Init() {
 	log.Infof("Building installed smart contract index")
-	legacyContractMatcher, _ := regexp.Compile("^contract_([0-9a-z]{40})\\.swagger\\.json$")
-	instanceMatcher, _ := regexp.Compile("^contract_([0-9a-z]{40})\\.instance\\.json$")
-	abiMatcher, _ := regexp.Compile("^abi_([0-9a-z-]+)\\.deploy.json$")
+	legacyContractMatcher, _ := regexp.Compile(`^contract_([0-9a-z]{40})\.swagger\.json$`)
+	instanceMatcher, _ := regexp.Compile(`^contract_([0-9a-z]{40})\.instance\.json$`)
+	abiMatcher, _ := regexp.Compile(`^abi_([0-9a-z-]+)\.deploy.json$`)
 	files, err := ioutil.ReadDir(g.storagePath)
 	if err != nil {
 		log.Errorf("Failed to read directory %s: %s", g.storagePath, err)
@@ -201,7 +199,7 @@ func (g *contractStore) BuildIndex() {
 		if legacyContractGroups != nil {
 			g.migrateLegacyContract(legacyContractGroups[1], path.Join(g.storagePath, fileName), file.ModTime())
 		} else if instanceGroups != nil {
-			g.AddFileToContractIndex(instanceGroups[1], path.Join(g.storagePath, fileName))
+			g.addFileToContractIndex(instanceGroups[1], path.Join(g.storagePath, fileName))
 		} else if abiGroups != nil {
 			g.addFileToABIIndex(abiGroups[1], path.Join(g.storagePath, fileName), file.ModTime())
 		}
@@ -231,7 +229,7 @@ func (g *contractStore) migrateLegacyContract(address, fileName string, createdT
 		registeredAs = ext.(string)
 	}
 	if ext, exists := swagger.Info.Extensions["x-firefly-deployment-id"]; exists {
-		_, err := g.StoreNewContractInfo(address, ext.(string), address, registeredAs)
+		_, err := g.AddContract(address, ext.(string), address, registeredAs)
 		if err != nil {
 			log.Errorf("Failed to write migrated instance file: %s", err)
 			return
@@ -247,7 +245,7 @@ func (g *contractStore) migrateLegacyContract(address, fileName string, createdT
 
 }
 
-func (g *contractStore) AddFileToContractIndex(address, fileName string) {
+func (g *contractStore) addFileToContractIndex(address, fileName string) {
 	contractFile, err := os.OpenFile(fileName, os.O_RDONLY, 0)
 	if err != nil {
 		log.Errorf("Failed to load contract instance file %s: %s", fileName, err)
@@ -257,10 +255,13 @@ func (g *contractStore) AddFileToContractIndex(address, fileName string) {
 	var contractInfo ContractInfo
 	err = json.NewDecoder(bufio.NewReader(contractFile)).Decode(&contractInfo)
 	if err != nil {
-		log.Errorf("Failed to parse contract instnace deployment file %s: %s", fileName, err)
+		log.Errorf("Failed to parse contract instance deployment file %s: %s", fileName, err)
 		return
 	}
-	g.addToContractIndex(&contractInfo)
+	err = g.addToContractIndex(&contractInfo)
+	if err != nil {
+		log.Errorf("Failed to add to contract index %s: %s", fileName, err)
+	}
 }
 
 func (g *contractStore) addFileToABIIndex(id, fileName string, createdTime time.Time) {
@@ -276,7 +277,7 @@ func (g *contractStore) addFileToABIIndex(id, fileName string, createdTime time.
 		log.Errorf("Failed to parse ABI deployment file %s: %s", fileName, err)
 		return
 	}
-	g.AddToABIIndex(id, &deployMsg, createdTime)
+	g.AddABI(id, &deployMsg, createdTime)
 }
 
 func (g *contractStore) CheckNameAvailable(registerAs string, isRemote bool) error {
@@ -310,7 +311,7 @@ func (g *contractStore) addToContractIndex(info *ContractInfo) error {
 	return nil
 }
 
-func (g *contractStore) AddToABIIndex(id string, deployMsg *messages.DeployContract, createdTime time.Time) *ABIInfo {
+func (g *contractStore) AddABI(id string, deployMsg *messages.DeployContract, createdTime time.Time) *ABIInfo {
 	g.idxLock.Lock()
 	info := &ABIInfo{
 		ID:              id,
@@ -347,21 +348,4 @@ func (g *contractStore) ListABIs() []messages.TimeSortable {
 	}
 	g.idxLock.Unlock()
 	return retval
-}
-
-func (g *contractStore) ResolveAddressOrName(id string) (deployMsg *messages.DeployContract, registeredName string, info *ContractInfo, err error) {
-	info, err = g.LookupContractInstance(id)
-	if err != nil {
-		var origErr = err
-		registeredName = id
-		if id, err = g.ResolveContractAddr(registeredName); err != nil {
-			log.Infof("%s is not a friendly name: %s", registeredName, err)
-			return nil, "", nil, origErr
-		}
-		if info, err = g.LookupContractInstance(id); err != nil {
-			return nil, "", nil, err
-		}
-	}
-	deployMsg, _, err = g.LoadDeployMsgByID(info.ABI)
-	return deployMsg, registeredName, info, err
 }

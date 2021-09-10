@@ -169,7 +169,7 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 		}
 	}
 	gw.r2e = newREST2eth(gw, gw.cs, rpc, gw.sm, gw.rr, processor, asyncDispatcher, syncDispatcher)
-	gw.cs.BuildIndex()
+	gw.cs.Init()
 	return gw, nil
 }
 
@@ -216,7 +216,7 @@ func (g *smartContractGW) PostDeploy(msg *messages.TransactionReceipt) error {
 				err = g.rr.RegisterInstance(msg.RegisterAs, "0x"+addrHexNo0x)
 			}
 		} else {
-			_, err = g.cs.StoreNewContractInfo(addrHexNo0x, requestID, registeredName, msg.RegisterAs)
+			_, err = g.cs.AddContract(addrHexNo0x, requestID, registeredName, msg.RegisterAs)
 		}
 		return err
 	}
@@ -303,7 +303,7 @@ func (g *smartContractGW) storeDeployableABI(msg *messages.DeployContract, compi
 	// Generate and store the swagger
 	swagger := g.swaggerForABI(openapi.NewABI2Swagger(g.baseSwaggerConf), requestID, msg.ContractName, false, runtimeABI, msg.DevDoc, "", "")
 	msg.Description = swagger.Info.Description // Swagger generation parses the devdoc
-	info := g.cs.AddToABIIndex(requestID, msg, time.Now().UTC())
+	info := g.cs.AddABI(requestID, msg, time.Now().UTC())
 
 	g.writeAbiInfo(requestID, msg)
 
@@ -654,13 +654,13 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 	var info messages.TimeSortable
 	var abiID string
 	if prefix == "contract" {
-		if deployMsg, registeredName, info, err = g.cs.ResolveAddressOrName(params.ByName("address")); err != nil {
+		if deployMsg, registeredName, info, err = g.resolveAddressOrName(params.ByName("address")); err != nil {
 			g.gatewayErrReply(res, req, err, 404)
 			return
 		}
 	} else {
 		abiID = id
-		deployMsg, info, err = g.cs.LoadDeployMsgByID(abiID)
+		deployMsg, info, err = g.cs.GetABIByID(abiID)
 		if err != nil {
 			g.gatewayErrReply(res, req, err, 404)
 			return
@@ -778,7 +778,7 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 	// Note: there is currently no body payload required for the POST
 
 	abiID := params.ByName("abi")
-	_, _, err := g.cs.LoadDeployMsgByID(abiID)
+	_, _, err := g.cs.GetABIByID(abiID)
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 404)
 		return
@@ -790,7 +790,7 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 		registeredName = addrHexNo0x
 	}
 
-	contractInfo, err := g.cs.StoreNewContractInfo(addrHexNo0x, abiID, registeredName, registerAs)
+	contractInfo, err := g.cs.AddContract(addrHexNo0x, abiID, registeredName, registerAs)
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 409)
 		return
@@ -1145,4 +1145,21 @@ func (g *smartContractGW) Shutdown() {
 	if g.rr != nil {
 		g.rr.Close()
 	}
+}
+
+func (g *smartContractGW) resolveAddressOrName(id string) (deployMsg *messages.DeployContract, registeredName string, info *contractregistry.ContractInfo, err error) {
+	info, err = g.cs.GetContractByAddress(id)
+	if err != nil {
+		var origErr = err
+		registeredName = id
+		if id, err = g.cs.ResolveContractAddress(registeredName); err != nil {
+			log.Infof("%s is not a friendly name: %s", registeredName, err)
+			return nil, "", nil, origErr
+		}
+		if info, err = g.cs.GetContractByAddress(id); err != nil {
+			return nil, "", nil, err
+		}
+	}
+	deployMsg, _, err = g.cs.GetABIByID(info.ABI)
+	return deployMsg, registeredName, info, err
 }

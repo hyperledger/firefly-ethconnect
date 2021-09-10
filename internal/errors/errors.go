@@ -320,6 +320,11 @@ const (
 	// SecurityModuleNoAuthContext missing auth context in context object at point security module is invoked
 	SecurityModuleNoAuthContext = "No auth context"
 
+	// TransactionQueryFailed transaction lookup failed
+	TransactionQueryFailed = "Failed to query transaction"
+	// TransactionQueryMethodMismatch transaction input did not match the method queried
+	TransactionQueryMethodMismatch = "Method signature did not match: %s != %s"
+
 	// TransactionSendConstructorPackArgs RLP encoding failure for a constructor
 	TransactionSendConstructorPackArgs = "Packing arguments for constructor: %s"
 	// TransactionSendMethodPackArgs RLP encoding failure for a method

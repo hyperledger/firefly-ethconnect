@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/contractregistry"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
@@ -52,6 +53,7 @@ type SubscriptionInfo struct {
 	Filter    persistedFilter                  `json:"filter"`
 	Event     *ethbinding.ABIElementMarshaling `json:"event"`
 	FromBlock string                           `json:"fromBlock,omitempty"`
+	ABI       *contractregistry.ABILocation    `json:"abi,omitempty"`
 }
 
 // subscription is the runtime that manages the subscription

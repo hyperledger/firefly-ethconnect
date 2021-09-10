@@ -187,6 +187,7 @@ type restCmd struct {
 	from          string
 	addr          string
 	value         json.Number
+	abiLocation   *contractregistry.ABILocation
 	abiMethod     *ethbinding.ABIMethod
 	abiMethodElem *ethbinding.ABIElementMarshaling
 	abiEvent      *ethbinding.ABIEvent
@@ -256,6 +257,7 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 		r.restErrReply(res, req, err, 404)
 		return
 	}
+	c.abiLocation = &location
 	if address != "" {
 		c.addr = address
 	}
@@ -454,7 +456,7 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 	}
 
 	if c.abiEvent != nil {
-		r.subscribeEvent(res, req, c.addr, c.abiEventElem, c.body)
+		r.subscribeEvent(res, req, c.addr, c.abiLocation, c.abiEventElem, c.body)
 	} else if (req.Method == http.MethodPost && !c.abiMethod.IsConstant()) && !getFlyParamBool("call", req) {
 		if c.from == "" {
 			err = ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayMissingFromAddress, utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly"), utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly"))
@@ -478,7 +480,7 @@ func (r *rest2eth) fromBodyOrForm(req *http.Request, body map[string]interface{}
 	return req.FormValue(param)
 }
 
-func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, addrStr string, abiEvent *ethbinding.ABIElementMarshaling, body map[string]interface{}) {
+func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, addrStr string, abi *contractregistry.ABILocation, abiEvent *ethbinding.ABIElementMarshaling, body map[string]interface{}) {
 
 	err := auth.AuthEventStreams(req.Context())
 	if err != nil {
@@ -505,7 +507,7 @@ func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, ad
 	// if the end user provided a name for the subscription, use it
 	// If not provided, it will be set to a system-generated summary
 	name := r.fromBodyOrForm(req, body, "name")
-	sub, err := r.subMgr.AddSubscription(req.Context(), addr, abiEvent, streamID, fromBlock, name)
+	sub, err := r.subMgr.AddSubscription(req.Context(), addr, abi, abiEvent, streamID, fromBlock, name)
 	if err != nil {
 		r.restErrReply(res, req, err, 400)
 		return

@@ -168,7 +168,7 @@ func (m *mockSubMgr) ResumeStream(ctx context.Context, id string) error {
 	return m.err
 }
 func (m *mockSubMgr) DeleteStream(ctx context.Context, id string) error { return m.err }
-func (m *mockSubMgr) AddSubscription(ctx context.Context, addr *ethbinding.Address, event *ethbinding.ABIElementMarshaling, streamID, initialBlock, name string) (*events.SubscriptionInfo, error) {
+func (m *mockSubMgr) AddSubscription(ctx context.Context, addr *ethbinding.Address, abi *contractregistry.ABILocation, event *ethbinding.ABIElementMarshaling, streamID, initialBlock, name string) (*events.SubscriptionInfo, error) {
 	m.capturedAddr = addr
 	return m.sub, m.err
 }

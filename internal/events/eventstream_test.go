@@ -480,7 +480,7 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 	}
 	addr := ethbind.API.HexToAddress("0x167f57a13a9c35ff92f0649d2be0e52b4f8ac3ca")
 	ctx := context.Background()
-	s, _ := sm.AddSubscription(ctx, &addr, event, stream.spec.ID, "", subscriptionName)
+	s, _ := sm.AddSubscription(ctx, &addr, nil, event, stream.spec.ID, "", subscriptionName)
 	return s
 }
 
@@ -557,7 +557,7 @@ func setupCatchupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR
 	}
 	addr := ethbind.API.HexToAddress("0x167f57a13a9c35ff92f0649d2be0e52b4f8ac3ca")
 	ctx := context.Background()
-	s, _ := sm.AddSubscription(ctx, &addr, event, stream.spec.ID, "0", subscriptionName)
+	s, _ := sm.AddSubscription(ctx, &addr, nil, event, stream.spec.ID, "0", subscriptionName)
 	return s
 }
 

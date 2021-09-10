@@ -198,7 +198,7 @@ func TestProcessEventsCannotProcess(t *testing.T) {
 				Data: "0x no hex here sorry",
 			})
 		}),
-		lp: newLogProcessor("", &ethbinding.ABIEvent{}, newTestStream()),
+		lp: newLogProcessor("", nil, newTestStream()),
 	}
 	err := s.processNewEvents(context.Background())
 	// We swallow the error in this case - as we simply couldn't read the event

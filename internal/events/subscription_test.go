@@ -96,11 +96,11 @@ func TestCreateWebhookSub(t *testing.T) {
 	}
 
 	i := testSubInfo(event)
-	s, err := newSubscription(m, rpc, nil, i)
+	s, err := newSubscription(m, rpc, nil, nil, i)
 	assert.NoError(err)
 	assert.NotEmpty(s.info.ID)
 
-	s1, err := restoreSubscription(m, rpc, i)
+	s1, err := restoreSubscription(m, rpc, nil, i)
 	assert.NoError(err)
 
 	assert.Equal(s.info.ID, s1.info.ID)
@@ -123,7 +123,7 @@ func TestCreateWebhookSubWithAddr(t *testing.T) {
 	addr := ethbind.API.HexToAddress("0x0123456789abcDEF0123456789abCDef01234567")
 	subInfo := testSubInfo(event)
 	subInfo.Name = "mySubscription"
-	s, err := newSubscription(m, rpc, &addr, subInfo)
+	s, err := newSubscription(m, rpc, nil, &addr, subInfo)
 	assert.NoError(err)
 	assert.NotEmpty(s.info.ID)
 	// common.BytesToHash(crypto.Keccak256([]byte("devcon()"))).Hex()
@@ -136,7 +136,7 @@ func TestCreateSubscriptionNoEvent(t *testing.T) {
 	assert := assert.New(t)
 	event := &ethbinding.ABIElementMarshaling{}
 	m := &mockSubMgr{stream: newTestStream()}
-	_, err := newSubscription(m, nil, nil, testSubInfo(event))
+	_, err := newSubscription(m, nil, nil, nil, testSubInfo(event))
 	assert.EqualError(err, "Solidity event name must be specified")
 }
 
@@ -148,7 +148,7 @@ func TestCreateSubscriptionBadABI(t *testing.T) {
 		},
 	}
 	m := &mockSubMgr{stream: newTestStream()}
-	_, err := newSubscription(m, nil, nil, testSubInfo(event))
+	_, err := newSubscription(m, nil, nil, nil, testSubInfo(event))
 	assert.EqualError(err, "invalid type '-1'")
 }
 
@@ -156,14 +156,14 @@ func TestCreateSubscriptionMissingAction(t *testing.T) {
 	assert := assert.New(t)
 	event := &ethbinding.ABIElementMarshaling{Name: "party"}
 	m := &mockSubMgr{err: fmt.Errorf("nope")}
-	_, err := newSubscription(m, nil, nil, testSubInfo(event))
+	_, err := newSubscription(m, nil, nil, nil, testSubInfo(event))
 	assert.EqualError(err, "nope")
 }
 
 func TestRestoreSubscriptionMissingAction(t *testing.T) {
 	assert := assert.New(t)
 	m := &mockSubMgr{err: fmt.Errorf("nope")}
-	_, err := restoreSubscription(m, nil, testSubInfo(&ethbinding.ABIElementMarshaling{}))
+	_, err := restoreSubscription(m, nil, nil, testSubInfo(&ethbinding.ABIElementMarshaling{}))
 	assert.EqualError(err, "nope")
 }
 
@@ -175,7 +175,7 @@ func TestRestoreSubscriptionBadType(t *testing.T) {
 		},
 	}
 	m := &mockSubMgr{stream: newTestStream()}
-	_, err := restoreSubscription(m, nil, testSubInfo(event))
+	_, err := restoreSubscription(m, nil, nil, testSubInfo(event))
 	assert.EqualError(err, "invalid type '-1'")
 }
 

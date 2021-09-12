@@ -28,13 +28,15 @@ import (
 )
 
 type logEntry struct {
-	Address          ethbinding.Address   `json:"address"`
-	BlockNumber      ethbinding.HexBigInt `json:"blockNumber"`
-	TransactionIndex ethbinding.HexUint   `json:"transactionIndex"`
-	TransactionHash  ethbinding.Hash      `json:"transactionHash"`
-	Data             string               `json:"data"`
-	Topics           []*ethbinding.Hash   `json:"topics"`
-	Timestamp        uint64               `json:"timestamp,omitempty"`
+	Address          ethbinding.Address     `json:"address"`
+	BlockNumber      ethbinding.HexBigInt   `json:"blockNumber"`
+	TransactionIndex ethbinding.HexUint     `json:"transactionIndex"`
+	TransactionHash  ethbinding.Hash        `json:"transactionHash"`
+	Data             string                 `json:"data"`
+	Topics           []*ethbinding.Hash     `json:"topics"`
+	Timestamp        uint64                 `json:"timestamp,omitempty"`
+	InputMethod      string                 `json:"inputMethod,omitempty"`
+	InputArgs        map[string]interface{} `json:"inputArgs,omitempty"`
 }
 
 type eventData struct {
@@ -47,6 +49,8 @@ type eventData struct {
 	Signature        string                 `json:"signature"`
 	LogIndex         string                 `json:"logIndex"`
 	Timestamp        string                 `json:"timestamp,omitempty"`
+	InputMethod      string                 `json:"inputMethod,omitempty"`
+	InputArgs        map[string]interface{} `json:"inputArgs,omitempty"`
 	// Used for callback handling
 	batchComplete func(*eventData)
 }
@@ -123,6 +127,8 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 		Data:             make(map[string]interface{}),
 		SubID:            lp.subID,
 		LogIndex:         strconv.Itoa(idx),
+		InputMethod:      entry.InputMethod,
+		InputArgs:        entry.InputArgs,
 		batchComplete:    lp.batchComplete,
 	}
 	if lp.stream.spec.Timestamps {

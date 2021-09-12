@@ -162,7 +162,7 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 	}
 	syncDispatcher := newSyncDispatcher(processor)
 	if conf.EventLevelDBPath != "" {
-		gw.sm = events.NewSubscriptionManager(&conf.SubscriptionManagerConf, rpc, gw.ws)
+		gw.sm = events.NewSubscriptionManager(&conf.SubscriptionManagerConf, rpc, gw.cs, gw.ws)
 		err = gw.sm.Init()
 		if err != nil {
 			return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayEventManagerInitFailed, err)

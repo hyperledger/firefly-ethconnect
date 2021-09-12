@@ -60,6 +60,7 @@ type SubscriptionInfo struct {
 type subscription struct {
 	info                *SubscriptionInfo
 	rpc                 eth.RPCClient
+	cr                  contractregistry.ContractResolver
 	lp                  *logProcessor
 	logName             string
 	filterID            ethbinding.HexBigInt
@@ -72,7 +73,7 @@ type subscription struct {
 	catchupModePageSize int64
 }
 
-func newSubscription(sm subscriptionManager, rpc eth.RPCClient, addr *ethbinding.Address, i *SubscriptionInfo) (*subscription, error) {
+func newSubscription(sm subscriptionManager, rpc eth.RPCClient, cr contractregistry.ContractResolver, addr *ethbinding.Address, i *SubscriptionInfo) (*subscription, error) {
 	stream, err := sm.streamByID(i.Stream)
 	if err != nil {
 		return nil, err
@@ -84,6 +85,7 @@ func newSubscription(sm subscriptionManager, rpc eth.RPCClient, addr *ethbinding
 	s := &subscription{
 		info:                i,
 		rpc:                 rpc,
+		cr:                  cr,
 		lp:                  newLogProcessor(i.ID, event, stream),
 		logName:             i.ID + ":" + ethbind.API.ABIEventSignature(event),
 		filterStale:         true,
@@ -116,7 +118,18 @@ func (info *SubscriptionInfo) GetID() string {
 	return info.ID
 }
 
-func restoreSubscription(sm subscriptionManager, rpc eth.RPCClient, i *SubscriptionInfo) (*subscription, error) {
+func loadABI(cr contractregistry.ContractResolver, location *contractregistry.ABILocation) (abi *ethbinding.RuntimeABI, err error) {
+	if location == nil {
+		return nil, nil
+	}
+	deployMsg, _, err := cr.GetABI(location, false)
+	if err != nil {
+		return nil, err
+	}
+	return ethbind.API.ABIMarshalingToABIRuntime(deployMsg.ABI)
+}
+
+func restoreSubscription(sm subscriptionManager, rpc eth.RPCClient, cr contractregistry.ContractResolver, i *SubscriptionInfo) (*subscription, error) {
 	if i.GetID() == "" {
 		return nil, errors.Errorf(errors.EventStreamsNoID)
 	}
@@ -130,6 +143,7 @@ func restoreSubscription(sm subscriptionManager, rpc eth.RPCClient, i *Subscript
 	}
 	s := &subscription{
 		rpc:                 rpc,
+		cr:                  cr,
 		info:                i,
 		lp:                  newLogProcessor(i.ID, event, stream),
 		logName:             i.ID + ":" + ethbind.API.ABIEventSignature(event),
@@ -239,6 +253,29 @@ func (s *subscription) getEventTimestamp(ctx context.Context, l *logEntry) {
 	s.lp.stream.blockTimestampCache.Add(blockNumber, l.Timestamp)
 }
 
+func (s *subscription) getTransactionInputs(ctx context.Context, l *logEntry) {
+	abi, err := loadABI(s.cr, s.info.ABI)
+	if err != nil {
+		return
+	}
+	if abi == nil {
+		return
+	}
+	info, err := eth.GetTransactionInfo(ctx, s.rpc, l.TransactionHash.String())
+	if err != nil {
+		log.Infof("%s: error querying transaction info", s.logName)
+		return
+	}
+	for name, method := range abi.Methods {
+		args, err := eth.DecodeInputs(&method, info.Input)
+		if err == nil {
+			l.InputMethod = name
+			l.InputArgs = args
+			break
+		}
+	}
+}
+
 func (s *subscription) processCatchupBlocks(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -273,6 +310,9 @@ func (s *subscription) processLogs(ctx context.Context, rpcMethod string, logs [
 	for idx, logEntry := range logs {
 		if s.lp.stream.spec.Timestamps {
 			s.getEventTimestamp(context.Background(), logEntry)
+		}
+		if s.lp.stream.spec.Inputs {
+			s.getTransactionInputs(ctx, logEntry)
 		}
 		if err := s.lp.processLogEntry(s.logName, logEntry, idx); err != nil {
 			log.Errorf("Failed to process event: %s", err)

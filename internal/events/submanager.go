@@ -92,6 +92,7 @@ type subscriptionMGR struct {
 	subscriptions map[string]*subscription
 	streams       map[string]*eventStream
 	closed        bool
+	cr            contractregistry.ContractResolver
 	wsChannels    ws.WebSocketChannels
 }
 
@@ -103,12 +104,13 @@ func CobraInitSubscriptionManager(cmd *cobra.Command, conf *SubscriptionManagerC
 }
 
 // NewSubscriptionManager constructor
-func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc eth.RPCClient, wsChannels ws.WebSocketChannels) SubscriptionManager {
+func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc eth.RPCClient, cr contractregistry.ContractResolver, wsChannels ws.WebSocketChannels) SubscriptionManager {
 	sm := &subscriptionMGR{
 		conf:          conf,
 		rpc:           rpc,
 		subscriptions: make(map[string]*subscription),
 		streams:       make(map[string]*eventStream),
+		cr:            cr,
 		wsChannels:    wsChannels,
 	}
 	if conf.EventPollingIntervalSec <= 0 {
@@ -176,7 +178,7 @@ func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *ethbinding.
 		return nil, err
 	}
 	// Create it
-	sub, err := newSubscription(s, s.rpc, addr, i)
+	sub, err := newSubscription(s, s.rpc, s.cr, addr, i)
 	if err != nil {
 		return nil, err
 	}
@@ -437,7 +439,7 @@ func (s *subscriptionMGR) recoverSubscriptions() {
 				log.Errorf("Failed to recover subscription '%s': %s", string(iSub.Value()), err)
 				continue
 			}
-			sub, err := restoreSubscription(s, s.rpc, &subInfo)
+			sub, err := restoreSubscription(s, s.rpc, s.cr, &subInfo)
 			if err != nil {
 				log.Errorf("Failed to recover subscription '%s': %s", subInfo.ID, err)
 			} else {

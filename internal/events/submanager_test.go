@@ -70,7 +70,7 @@ func newMockWebSocket() *mockWebSocket {
 
 func newTestSubscriptionManager() *subscriptionMGR {
 	smconf := &SubscriptionManagerConf{}
-	sm := NewSubscriptionManager(smconf, nil, newMockWebSocket()).(*subscriptionMGR)
+	sm := NewSubscriptionManager(smconf, nil, nil, newMockWebSocket()).(*subscriptionMGR)
 	sm.rpc = eth.NewMockRPCClientForSync(nil, nil)
 	sm.db = kvstore.NewMockKV(nil)
 	sm.config().WebhooksAllowPrivateIPs = true

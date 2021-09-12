@@ -401,14 +401,14 @@ func TestBuildup(t *testing.T) {
 
 func TestWebSocketUnconfigured(t *testing.T) {
 	assert := assert.New(t)
-	sm := NewSubscriptionManager(&SubscriptionManagerConf{}, nil, nil).(*subscriptionMGR)
+	sm := NewSubscriptionManager(&SubscriptionManagerConf{}, nil, nil, nil).(*subscriptionMGR)
 	_, err := sm.AddStream(context.Background(), &StreamInfo{Type: "websocket"})
 	assert.EqualError(err, "WebSocket listener not configured")
 }
 
 func TestBadTimestampCacheSize(t *testing.T) {
 	assert := assert.New(t)
-	sm := NewSubscriptionManager(&SubscriptionManagerConf{}, nil, nil).(*subscriptionMGR)
+	sm := NewSubscriptionManager(&SubscriptionManagerConf{}, nil, nil, nil).(*subscriptionMGR)
 	_, err := sm.AddStream(context.Background(), &StreamInfo{
 		TimestampCacheSize: -1,
 	})

@@ -1629,8 +1629,6 @@ func TestSendTransactionWithIDAsyncSuccess(t *testing.T) {
 		},
 	}
 	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
-	req.Header.Set("X-Firefly-PrivateFrom", "0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90")
-	req.Header.Set("X-Firefly-PrivateFor", "0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745,0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C")
 	req.Header.Set("X-Firefly-ID", "my-id")
 	router.ServeHTTP(res, req)
 
@@ -1644,8 +1642,56 @@ func TestSendTransactionWithIDAsyncSuccess(t *testing.T) {
 	assert.Equal(true, dispatcher.asyncDispatchAck)
 	assert.Equal(from, dispatcher.asyncDispatchMsg["from"])
 	assert.Equal(to, dispatcher.asyncDispatchMsg["to"])
-	assert.Equal("0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90", dispatcher.asyncDispatchMsg["privateFrom"])
-	assert.Equal("0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745", dispatcher.asyncDispatchMsg["privateFor"].([]interface{})[0])
-	assert.Equal("0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C", dispatcher.asyncDispatchMsg["privateFor"].([]interface{})[1])
 	assert.Equal("my-id", dispatcher.asyncDispatchMsg["headers"].(map[string]interface{})["id"])
+}
+
+func TestGetTransactionInfoSuccess(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	dispatcher := &mockREST2EthDispatcher{}
+	_, rpc, router, res, req := newTestREST2EthAndMsg(t, dispatcher, "", "", nil)
+	rpc.result = eth.TxnInfo{Input: &ethbinding.HexBytes{
+		0x09, 0x23, 0xf7, 0x0f,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}}
+	req.Header.Set("X-Firefly-Transaction", "0x9999")
+	router.ServeHTTP(res, req)
+
+	assert.Equal(200, res.Result().StatusCode)
+	var resultBody map[string]interface{}
+	err := json.NewDecoder(res.Result().Body).Decode(&resultBody)
+	assert.NoError(err)
+	assert.Equal(map[string]interface{}{"i": "0", "s": ""}, resultBody["inputArgs"])
+}
+
+func TestGetTransactionInfoFail(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	dispatcher := &mockREST2EthDispatcher{}
+	_, rpc, router, res, req := newTestREST2EthAndMsg(t, dispatcher, "", "", nil)
+	rpc.result = eth.TxnInfo{}
+	rpc.mockError = fmt.Errorf("pop")
+	req.Header.Set("X-Firefly-Transaction", "0x9999")
+	router.ServeHTTP(res, req)
+
+	assert.Equal(500, res.Result().StatusCode)
+}
+
+func TestGetTransactionInfoDecodeFail(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	dispatcher := &mockREST2EthDispatcher{}
+	_, rpc, router, res, req := newTestREST2EthAndMsg(t, dispatcher, "", "", nil)
+	rpc.result = eth.TxnInfo{Input: &ethbinding.HexBytes{}}
+	req.Header.Set("X-Firefly-Transaction", "0x9999")
+	router.ServeHTTP(res, req)
+
+	assert.Equal(500, res.Result().StatusCode)
 }

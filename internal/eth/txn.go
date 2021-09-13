@@ -173,8 +173,11 @@ func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr 
 // Decode the "input" bytes from a transaction, which are composed of a method ID + encoded arguments
 func DecodeInputs(method *ethbinding.ABIMethod, inputs *ethbinding.HexBytes) (map[string]interface{}, error) {
 	methodIDLen := len(method.ID)
-	inputMethod := hex.EncodeToString((*inputs)[:methodIDLen])
 	expectedMethod := hex.EncodeToString(method.ID)
+	if len(*inputs) < methodIDLen {
+		return nil, fmt.Errorf(errors.TransactionQueryMethodMismatch, "unknown", expectedMethod)
+	}
+	inputMethod := hex.EncodeToString((*inputs)[:methodIDLen])
 	if inputMethod != expectedMethod {
 		log.Infof("Method did not match: %s != %s", inputMethod, expectedMethod)
 		return nil, fmt.Errorf(errors.TransactionQueryMethodMismatch, inputMethod, expectedMethod)

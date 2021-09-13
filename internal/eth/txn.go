@@ -171,15 +171,15 @@ func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr 
 }
 
 // Decode the "input" bytes from a transaction, which are composed of a method ID + encoded arguments
-func DecodeInputs(method *ethbinding.ABIMethod, txn *TxnInfo) (map[string]interface{}, error) {
+func DecodeInputs(method *ethbinding.ABIMethod, inputs *ethbinding.HexBytes) (map[string]interface{}, error) {
 	methodIDLen := len(method.ID)
-	inputMethod := hex.EncodeToString((*txn.Input)[:methodIDLen])
+	inputMethod := hex.EncodeToString((*inputs)[:methodIDLen])
 	expectedMethod := hex.EncodeToString(method.ID)
 	if inputMethod != expectedMethod {
 		log.Infof("Method did not match: %s != %s", inputMethod, expectedMethod)
 		return nil, fmt.Errorf(errors.TransactionQueryMethodMismatch, inputMethod, expectedMethod)
 	}
-	return ProcessRLPBytes(method.Inputs, (*txn.Input)[methodIDLen:]), nil
+	return ProcessRLPBytes(method.Inputs, (*inputs)[methodIDLen:]), nil
 }
 
 func GetTransactionInfo(ctx context.Context, rpc RPCClient, txHash string) (*TxnInfo, error) {
@@ -189,7 +189,7 @@ func GetTransactionInfo(ctx context.Context, rpc RPCClient, txHash string) (*Txn
 		return nil, fmt.Errorf(errors.RPCCallReturnedError, "eth_getTransactionByHash", err)
 	}
 	if txn.Input == nil {
-		return nil, fmt.Errorf(errors.TransactionQueryFailed)
+		return nil, fmt.Errorf(errors.TransactionQueryFailed, txHash)
 	}
 	return &txn, nil
 }

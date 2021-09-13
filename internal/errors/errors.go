@@ -321,7 +321,7 @@ const (
 	SecurityModuleNoAuthContext = "No auth context"
 
 	// TransactionQueryFailed transaction lookup failed
-	TransactionQueryFailed = "Failed to query transaction"
+	TransactionQueryFailed = "Failed to query transaction: %s"
 	// TransactionQueryMethodMismatch transaction input did not match the method queried
 	TransactionQueryMethodMismatch = "Method signature did not match: %s != %s"
 

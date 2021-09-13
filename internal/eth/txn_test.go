@@ -1828,3 +1828,83 @@ func TestProcessOutputsBadArgs(t *testing.T) {
 	err := processOutputs(methodABI.Outputs, []interface{}{"arg1"}, make(map[string]interface{}))
 	assert.EqualError(err, "Expected slice type in JSON/RPC response for retval1 (int32[]). Received string")
 }
+
+func TestGetTransactionInfoFail(t *testing.T) {
+	assert := assert.New(t)
+	rpc := testRPCClient{}
+
+	info, err := GetTransactionInfo(context.Background(), &rpc, "0x12345")
+	assert.Regexp("Failed to query transaction: 0x12345", err)
+	assert.Nil(info)
+}
+
+func TestGetTransactionInfoError(t *testing.T) {
+	assert := assert.New(t)
+	rpc := testRPCClient{
+		mockError: fmt.Errorf("pop"),
+	}
+
+	info, err := GetTransactionInfo(context.Background(), &rpc, "0x12345")
+	assert.Regexp("pop", err)
+	assert.Nil(info)
+}
+
+func TestGetTransactionInfo(t *testing.T) {
+	assert := assert.New(t)
+	rpc := testRPCClient{
+		resultWrangler: func(txn interface{}) {
+			json.Unmarshal([]byte(`{"input":"0x01"}`), &txn)
+		},
+	}
+
+	info, err := GetTransactionInfo(context.Background(), &rpc, "0x12345")
+	assert.NoError(err)
+	assert.NotNil(info)
+	assert.Equal(ethbinding.HexBytes{1}, *info.Input)
+}
+
+func TestDecodeInputsBadSignature(t *testing.T) {
+	assert := assert.New(t)
+	method := ethbinding.ABIMethod{
+		ID:     []byte{1, 2, 3, 4},
+		Inputs: ethbinding.ABIArguments{},
+	}
+	inputs := ethbinding.HexBytes{1}
+
+	args, err := DecodeInputs(&method, &inputs)
+	assert.Regexp("Method signature did not match", err)
+	assert.Nil(args)
+}
+
+func TestDecodeInputsNoMatch(t *testing.T) {
+	assert := assert.New(t)
+	method := ethbinding.ABIMethod{
+		ID:     []byte{1, 2, 3, 4},
+		Inputs: ethbinding.ABIArguments{},
+	}
+	inputs := ethbinding.HexBytes{1, 2, 3, 5}
+
+	args, err := DecodeInputs(&method, &inputs)
+	assert.Regexp("Method signature did not match", err)
+	assert.Nil(args)
+}
+
+func TestDecodeInputs(t *testing.T) {
+	assert := assert.New(t)
+	method := ethbinding.ABIMethod{
+		ID: []byte{1, 2, 3, 4},
+		Inputs: ethbinding.ABIArguments{
+			{
+				Name: "arg1",
+				Type: ethbinding.ABIType{},
+			},
+		},
+	}
+	inputs := ethbinding.HexBytes{1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
+	expectedArgs := make(map[string]interface{}, 0)
+	expectedArgs["arg1"] = "1"
+
+	args, err := DecodeInputs(&method, &inputs)
+	assert.NoError(err)
+	assert.Equal(expectedArgs, args)
+}

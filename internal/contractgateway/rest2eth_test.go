@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -1650,13 +1651,25 @@ func TestGetTransactionInfoSuccess(t *testing.T) {
 	dir := tempdir()
 	defer cleanup(dir)
 
+	gas := uint64(5000)
+	nonce := uint64(12)
+	txindex := uint64(0)
+
 	dispatcher := &mockREST2EthDispatcher{}
 	_, rpc, router, res, req := newTestREST2EthAndMsg(t, dispatcher, "", "", nil)
-	rpc.result = eth.TxnInfo{Input: &ethbinding.HexBytes{
-		0x09, 0x23, 0xf7, 0x0f,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-	}}
+	rpc.result = eth.TxnInfo{
+		BlockNumber:      (*ethbinding.HexBigInt)(big.NewInt(15)),
+		Gas:              (*ethbinding.HexUint64)(&gas),
+		GasPrice:         (*ethbinding.HexBigInt)(big.NewInt(0)),
+		Nonce:            (*ethbinding.HexUint64)(&nonce),
+		TransactionIndex: (*ethbinding.HexUint64)(&txindex),
+		Value:            (*ethbinding.HexBigInt)(big.NewInt(10)),
+		Input: &ethbinding.HexBytes{
+			0x09, 0x23, 0xf7, 0x0f,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		},
+	}
 	req.Header.Set("X-Firefly-Transaction", "0x9999")
 	router.ServeHTTP(res, req)
 

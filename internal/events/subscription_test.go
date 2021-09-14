@@ -20,12 +20,13 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/kvstore"
+	"github.com/hyperledger-labs/firefly-ethconnect/mocks/ethmocks"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 type mockSubMgr struct {
@@ -73,7 +74,7 @@ func testSubInfo(event *ethbinding.ABIElementMarshaling) *SubscriptionInfo {
 func TestCreateWebhookSub(t *testing.T) {
 	assert := assert.New(t)
 
-	rpc := eth.NewMockRPCClientForSync(nil, nil)
+	rpc := &ethmocks.RPCClient{}
 	event := &ethbinding.ABIElementMarshaling{
 		Name: "glastonbury",
 		Inputs: []ethbinding.ABIArgumentMarshaling{
@@ -113,7 +114,7 @@ func TestCreateWebhookSub(t *testing.T) {
 func TestCreateWebhookSubWithAddr(t *testing.T) {
 	assert := assert.New(t)
 
-	rpc := eth.NewMockRPCClientForSync(nil, nil)
+	rpc := &ethmocks.RPCClient{}
 	m := &mockSubMgr{stream: newTestStream()}
 	event := &ethbinding.ABIElementMarshaling{
 		Name:      "devcon",
@@ -181,9 +182,11 @@ func TestRestoreSubscriptionBadType(t *testing.T) {
 
 func TestProcessEventsStaleFilter(t *testing.T) {
 	assert := assert.New(t)
-	s := &subscription{
-		rpc: eth.NewMockRPCClientForSync(fmt.Errorf("filter not found"), nil),
-	}
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterLogs", mock.Anything).
+		Return(fmt.Errorf("filter not found"))
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_uninstallFilter", mock.Anything).Return(nil)
+	s := &subscription{rpc: rpc}
 	err := s.processNewEvents(context.Background())
 	assert.EqualError(err, "filter not found")
 	assert.True(s.filterStale)
@@ -191,14 +194,20 @@ func TestProcessEventsStaleFilter(t *testing.T) {
 
 func TestProcessEventsCannotProcess(t *testing.T) {
 	assert := assert.New(t)
-	s := &subscription{
-		rpc: eth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterLogs", mock.Anything).
+		Run(func(args mock.Arguments) {
+			res := args[1]
 			les := res.(*[]*logEntry)
 			*les = append(*les, &logEntry{
 				Data: "0x no hex here sorry",
 			})
-		}),
-		lp: newLogProcessor("", &ethbinding.ABIEvent{}, newTestStream()),
+		}).
+		Return(nil)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_uninstallFilter", mock.Anything).Return(nil)
+	s := &subscription{
+		rpc: rpc,
+		lp:  newLogProcessor("", &ethbinding.ABIEvent{}, newTestStream()),
 	}
 	err := s.processNewEvents(context.Background())
 	// We swallow the error in this case - as we simply couldn't read the event
@@ -207,12 +216,16 @@ func TestProcessEventsCannotProcess(t *testing.T) {
 
 func TestInitialFilterFail(t *testing.T) {
 	assert := assert.New(t)
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_blockNumber").
+		Return(fmt.Errorf("pop"))
 	s := &subscription{
 		info: &SubscriptionInfo{},
-		rpc:  eth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
+		rpc:  rpc,
 	}
 	_, err := s.setInitialBlockHeight(context.Background())
 	assert.EqualError(err, "eth_blockNumber returned: pop")
+	rpc.AssertExpectations(t)
 }
 
 func TestInitialFilterBadInitialBlock(t *testing.T) {
@@ -221,7 +234,7 @@ func TestInitialFilterBadInitialBlock(t *testing.T) {
 		info: &SubscriptionInfo{
 			FromBlock: "!integer",
 		},
-		rpc: eth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
+		rpc: &ethmocks.RPCClient{},
 	}
 	_, err := s.setInitialBlockHeight(context.Background())
 	assert.EqualError(err, "FromBlock cannot be parsed as a BigInt")
@@ -241,60 +254,77 @@ func TestInitialFilterCustomInitialBlock(t *testing.T) {
 
 func TestRestartFilterFail(t *testing.T) {
 	assert := assert.New(t)
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_blockNumber").
+		Return(fmt.Errorf("pop"))
 	s := &subscription{
 		info: &SubscriptionInfo{},
-		rpc:  eth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
+		rpc:  rpc,
 	}
 	err := s.restartFilter(context.Background(), big.NewInt(0))
 	assert.EqualError(err, "eth_blockNumber returned: pop")
+	rpc.AssertExpectations(t)
 }
 
 func TestCreateFilterFail(t *testing.T) {
 	assert := assert.New(t)
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newFilter", mock.Anything).
+		Return(fmt.Errorf("pop"))
 	s := &subscription{
 		info: &SubscriptionInfo{},
-		rpc:  eth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
+		rpc:  rpc,
 	}
 	err := s.createFilter(context.Background(), big.NewInt(0))
 	assert.EqualError(err, "eth_newFilter returned: pop")
+	rpc.AssertExpectations(t)
 }
 
 func TestProcessCatchupBlocksFail(t *testing.T) {
 	assert := assert.New(t)
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getLogs", mock.Anything).
+		Return(fmt.Errorf("pop"))
 	s := &subscription{
 		info:         &SubscriptionInfo{},
-		rpc:          eth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
+		rpc:          rpc,
 		catchupBlock: big.NewInt(12345),
 	}
 	err := s.processCatchupBlocks(context.Background())
 	assert.EqualError(err, "eth_getLogs returned: pop")
+	rpc.AssertExpectations(t)
 }
 
 func TestEventTimestampFail(t *testing.T) {
 	assert := assert.New(t)
 	stream := newTestStream()
 	lp := &logProcessor{stream: stream}
-
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getBlockByNumber", mock.Anything, mock.Anything).
+		Return(fmt.Errorf("pop"))
 	s := &subscription{
 		lp:   lp,
 		info: &SubscriptionInfo{},
-		rpc:  eth.NewMockRPCClientForSync(fmt.Errorf("pop"), nil),
+		rpc:  rpc,
 	}
 	l := &logEntry{Timestamp: 100} // set it to a fake value, should get overwritten
 	s.getEventTimestamp(context.Background(), l)
 	assert.Equal(l.Timestamp, uint64(0))
+	rpc.AssertExpectations(t)
 }
 
 func TestUnsubscribe(t *testing.T) {
 	assert := assert.New(t)
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_uninstallFilter", mock.Anything).
+		Return(fmt.Errorf("pop"))
 	s := &subscription{
-		rpc: eth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
-			*(res.(*bool)) = true
-		}),
+		rpc: rpc,
 	}
 	err := s.unsubscribe(context.Background(), true)
 	assert.NoError(err)
 	assert.True(s.filterStale)
+	rpc.AssertExpectations(t)
 }
 
 func TestLoadCheckpointBadJSON(t *testing.T) {

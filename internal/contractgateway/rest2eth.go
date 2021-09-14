@@ -95,11 +95,6 @@ type rest2EthSyncResponder struct {
 	waiter *sync.Cond
 }
 
-type txnInfoDecoded struct {
-	eth.TxnInfo
-	InputArgs map[string]interface{} `json:"inputArgs"`
-}
-
 var addrCheck = regexp.MustCompile("^(0x)?[0-9a-z]{40}$")
 
 func (i *rest2EthSyncResponder) ReplyWithError(err error) {
@@ -675,17 +670,49 @@ func (r *rest2eth) callContract(res http.ResponseWriter, req *http.Request, from
 }
 
 func (r *rest2eth) lookupTransaction(res http.ResponseWriter, req *http.Request, txHash string, abiMethod *ethbinding.ABIMethod) {
-	var resBody txnInfoDecoded
 	info, err := eth.GetTransactionInfo(req.Context(), r.rpc, txHash)
 	if err != nil {
 		r.restErrReply(res, req, err, 500)
 		return
 	}
-	resBody.TxnInfo = *info
-	resBody.InputArgs, err = eth.DecodeInputs(abiMethod, info.Input)
+	inputArgs, err := eth.DecodeInputs(abiMethod, info.Input)
 	if err != nil {
 		r.restErrReply(res, req, err, 500)
 		return
+	}
+
+	resBody := messages.TransactionInfo{
+		BlockHash:           info.BlockHash,
+		BlockNumberHex:      info.BlockNumber,
+		From:                info.From,
+		To:                  info.To,
+		GasHex:              info.Gas,
+		GasPriceHex:         info.GasPrice,
+		Hash:                info.Hash,
+		NonceHex:            info.Nonce,
+		TransactionIndexHex: info.TransactionIndex,
+		ValueHex:            info.Value,
+		Input:               info.Input,
+		InputArgs:           inputArgs,
+	}
+
+	if info.BlockNumber != nil {
+		resBody.BlockNumberStr = info.BlockNumber.ToInt().Text(10)
+	}
+	if info.Gas != nil {
+		resBody.GasStr = strconv.FormatUint(uint64(*info.Gas), 10)
+	}
+	if info.GasPrice != nil {
+		resBody.GasPriceStr = info.GasPrice.ToInt().Text(10)
+	}
+	if info.Nonce != nil {
+		resBody.NonceStr = strconv.FormatUint(uint64(*info.Nonce), 10)
+	}
+	if info.TransactionIndex != nil {
+		resBody.TransactionIndexStr = strconv.FormatUint(uint64(*info.TransactionIndex), 10)
+	}
+	if info.Value != nil {
+		resBody.ValueStr = info.Value.ToInt().Text(10)
 	}
 
 	resBytes, _ := json.MarshalIndent(&resBody, "", "  ")

@@ -7,6 +7,8 @@ BINARY_WIN=$(BINARY_NAME)-win
 GOBIN := $(shell $(VGO) env GOPATH)/bin
 MOCKERY := $(GOBIN)/mockery
 
+SARAMA_PATH := $(shell $(VGO) list -f '{{.Dir}}' github.com/Shopify/sarama)
+
 .DELETE_ON_ERROR:
 GOFILES := $(shell find . -name '*.go' -print)
 
@@ -26,8 +28,6 @@ coverage.txt: $(GOFILES)
 		$(VGO) test  ./... -cover -coverprofile=coverage.txt -covermode=atomic -timeout 30s
 coverage.html:
 	  $(VGO) tool cover -html=coverage.txt
-mocks:
-	  mockgen github.com/Shopify/sarama Client,ConsumerGroup,ConsumerGroupSession,ConsumerGroupClaim > internal/kafka/mock_sarama/sarama_mocks.go
 test: coverage.txt
 coverage: coverage.txt coverage.html
 clean: force
@@ -58,5 +58,9 @@ mocks-$(strip $(1))-$(strip $(2)): ${MOCKERY}
 	${MOCKERY} --case underscore --dir $(1) --name $(2) --outpkg $(3) --output mocks/$(strip $(3))
 endef
 
-$(eval $(call makemock, internal/contractregistry, ContractStore,  contractregistrymocks))
-$(eval $(call makemock, internal/contractregistry, RemoteRegistry, contractregistrymocks))
+$(eval $(call makemock, internal/contractregistry, ContractStore,        contractregistrymocks))
+$(eval $(call makemock, internal/contractregistry, RemoteRegistry,       contractregistrymocks))
+$(eval $(call makemock, $(SARAMA_PATH),            Client,               saramamocks))
+$(eval $(call makemock, $(SARAMA_PATH),            ConsumerGroup,        saramamocks))
+$(eval $(call makemock, $(SARAMA_PATH),            ConsumerGroupSession, saramamocks))
+$(eval $(call makemock, $(SARAMA_PATH),            ConsumerGroupClaim,   saramamocks))

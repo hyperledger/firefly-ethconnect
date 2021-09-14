@@ -8,7 +8,6 @@ require (
 	github.com/go-openapi/jsonreference v0.19.5
 	github.com/go-openapi/spec v0.20.3
 	github.com/go-openapi/swag v0.19.15 // indirect
-	github.com/golang/mock v1.6.0
 	github.com/gorilla/websocket v1.4.2
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d
 	github.com/icza/dyno v0.0.0-20200205103839-49cb13720835

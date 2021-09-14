@@ -58,4 +58,5 @@ mocks-$(strip $(1))-$(strip $(2)): ${MOCKERY}
 	${MOCKERY} --case underscore --dir $(1) --name $(2) --outpkg $(3) --output mocks/$(strip $(3))
 endef
 
-$(eval $(call makemock, internal/contractregistry, ContractStore, contractregistrymocks))
+$(eval $(call makemock, internal/contractregistry, ContractStore,  contractregistrymocks))
+$(eval $(call makemock, internal/contractregistry, RemoteRegistry, contractregistrymocks))

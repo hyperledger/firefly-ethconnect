@@ -150,36 +150,6 @@ func (m *mockSubMgr) ResetSubscription(ctx context.Context, id, initialBlock str
 }
 func (m *mockSubMgr) Close() {}
 
-type mockRR struct {
-	idCapture      string
-	addrCapture    string
-	lookupCapture  string
-	refreshCapture bool
-	deployMsg      *contractregistry.DeployContractWithAddress
-	err            error
-}
-
-func (rr *mockRR) LoadFactoryForGateway(id string, refresh bool) (*messages.DeployContract, error) {
-	rr.idCapture = id
-	rr.refreshCapture = refresh
-	if rr.deployMsg == nil {
-		return nil, rr.err
-	}
-	return &rr.deployMsg.DeployContract, rr.err
-}
-func (rr *mockRR) LoadFactoryForInstance(id string, refresh bool) (*contractregistry.DeployContractWithAddress, error) {
-	rr.addrCapture = id
-	rr.refreshCapture = refresh
-	return rr.deployMsg, rr.err
-}
-func (rr *mockRR) RegisterInstance(lookupStr, address string) error {
-	rr.lookupCapture = lookupStr
-	rr.addrCapture = address
-	return rr.err
-}
-func (rr *mockRR) Close()      {}
-func (rr *mockRR) Init() error { return nil }
-
 func newTestDeployMsg(t *testing.T, addr string) *contractregistry.DeployContractWithAddress {
 	compiled, err := eth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")
 	assert.NoError(t, err)
@@ -193,8 +163,9 @@ func newTestREST2Eth(dispatcher *mockREST2EthDispatcher) (*rest2eth, *mockRPC, *
 	mockRPC := &mockRPC{}
 	gateway := &mockGateway{}
 	contractResolver := &contractregistrymocks.ContractStore{}
+	remoteRegistry := &contractregistrymocks.RemoteRegistry{}
 	mockProcessor := &mockProcessor{}
-	r := newREST2eth(gateway, contractResolver, mockRPC, nil, nil, mockProcessor, dispatcher, dispatcher)
+	r := newREST2eth(gateway, contractResolver, mockRPC, nil, remoteRegistry, mockProcessor, dispatcher, dispatcher)
 	router := &httprouter.Router{}
 	r.addRoutes(router)
 
@@ -606,10 +577,12 @@ func TestDeployContractSyncRemoteRegistryInstance(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
 	}
+
 	r, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
-	r.rr = &mockRR{
-		deployMsg: newTestDeployMsg(t, strings.TrimPrefix(to, "0x")),
-	}
+	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
+	mrr.On("LoadFactoryForInstance", "myinstance", false).
+		Return(newTestDeployMsg(t, strings.TrimPrefix(to, "0x")), nil)
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?fly-sync", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
@@ -618,70 +591,88 @@ func TestDeployContractSyncRemoteRegistryInstance(t *testing.T) {
 	assert.Equal(200, res.Result().StatusCode)
 	assert.Equal(to, dispatcher.sendTransactionMsg.To)
 	assert.Equal(from, dispatcher.sendTransactionMsg.From)
+
+	mrr.AssertExpectations(t)
 }
 
-func TestDeployContractSyncRemoteRegitryInstance500(t *testing.T) {
+func TestDeployContractSyncRemoteRegistryInstance500(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
 
 	bodyMap := make(map[string]interface{})
+
 	r, _, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
-	r.rr = &mockRR{
-		err: fmt.Errorf("pop"),
-	}
+	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
+	mrr.On("LoadFactoryForInstance", "myinstance", false).Return(nil, fmt.Errorf("pop"))
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?fly-sync", bytes.NewReader(body))
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
+
+	mrr.AssertExpectations(t)
 }
 
-func TestDeployContractSyncRemoteRegitryInstance404(t *testing.T) {
+func TestDeployContractSyncRemoteRegistryInstance404(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
 
 	bodyMap := make(map[string]interface{})
+
 	r, _, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
-	r.rr = &mockRR{}
+	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
+	mrr.On("LoadFactoryForInstance", "myinstance", false).Return(nil, nil)
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?fly-sync", bytes.NewReader(body))
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
+
+	mrr.AssertExpectations(t)
 }
 
-func TestDeployContractSyncRemoteRegitryGateway500(t *testing.T) {
+func TestDeployContractSyncRemoteRegistryGateway500(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
 
 	bodyMap := make(map[string]interface{})
+
 	r, _, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
-	r.rr = &mockRR{
-		err: fmt.Errorf("pop"),
-	}
+	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
+	mrr.On("LoadFactoryForGateway", "mygw", false).Return(nil, fmt.Errorf("pop"))
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygw?fly-sync", bytes.NewReader(body))
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
+
+	mrr.AssertExpectations(t)
 }
 
-func TestDeployContractSyncRemoteRegitryGateway404(t *testing.T) {
+func TestDeployContractSyncRemoteRegistryGateway404(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
 
 	bodyMap := make(map[string]interface{})
+
 	r, _, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
-	r.rr = &mockRR{}
+	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
+	mrr.On("LoadFactoryForGateway", "mygw", false).Return(nil, nil)
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygw?fly-sync", bytes.NewReader(body))
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
+
+	mrr.AssertExpectations(t)
 }
 
 func TestDeployContractSyncRemoteRegistryGateway(t *testing.T) {
@@ -706,10 +697,12 @@ func TestDeployContractSyncRemoteRegistryGateway(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
 	}
+
 	r, _, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
-	r.rr = &mockRR{
-		deployMsg: newTestDeployMsg(t, strings.TrimPrefix(to, "0x")),
-	}
+	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
+	mrr.On("LoadFactoryForGateway", "mygateway", false).
+		Return(&newTestDeployMsg(t, strings.TrimPrefix(to, "0x")).DeployContract, nil)
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygateway/567a417717cb6c59ddc1035705f02c0fd1ab1872/set?fly-sync", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
@@ -718,6 +711,8 @@ func TestDeployContractSyncRemoteRegistryGateway(t *testing.T) {
 	assert.Equal(200, res.Result().StatusCode)
 	assert.Equal(to, dispatcher.sendTransactionMsg.To)
 	assert.Equal(from, dispatcher.sendTransactionMsg.From)
+
+	mrr.AssertExpectations(t)
 }
 
 func TestSendTransactionSyncFail(t *testing.T) {

@@ -266,13 +266,15 @@ func (s *subscription) getTransactionInputs(ctx context.Context, l *logEntry) {
 		log.Infof("%s: error querying transaction info", s.logName)
 		return
 	}
-	for name, method := range abi.Methods {
-		args, err := eth.DecodeInputs(&method, info.Input)
-		if err == nil {
-			l.InputMethod = name
-			l.InputArgs = args
-			break
-		}
+	method, err := abi.MethodById(*info.Input)
+	if err != nil {
+		log.Infof("%s: could not find matching method", s.logName)
+		return
+	}
+	args, err := eth.DecodeInputs(method, info.Input)
+	if err == nil {
+		l.InputMethod = method.Name
+		l.InputArgs = args
 	}
 }
 

@@ -37,7 +37,7 @@ func (rr *mockRR) LoadFactoryForGateway(id string, refresh bool) (*messages.Depl
 	if rr.deployMsg == nil {
 		return nil, rr.err
 	}
-	return &rr.deployMsg.DeployContract, rr.err
+	return rr.deployMsg.Contract, rr.err
 }
 func (rr *mockRR) LoadFactoryForInstance(id string, refresh bool) (*DeployContractWithAddress, error) {
 	return rr.deployMsg, rr.err
@@ -62,8 +62,8 @@ func newTestDeployMsg(t *testing.T, addr string) *DeployContractWithAddress {
 	compiled, err := eth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")
 	assert.NoError(t, err)
 	return &DeployContractWithAddress{
-		DeployContract: messages.DeployContract{ABI: compiled.ABI},
-		Address:        addr,
+		Contract: &messages.DeployContract{ABI: compiled.ABI},
+		Address:  addr,
 	}
 }
 
@@ -318,7 +318,7 @@ func TestGetABIRemoteGateway(t *testing.T) {
 	cs := NewContractStore("", "", nil)
 	cs.(*contractStore).rr = &mockRR{
 		deployMsg: &DeployContractWithAddress{
-			DeployContract: messages.DeployContract{
+			Contract: &messages.DeployContract{
 				Description: "description",
 			},
 			Address: "address",
@@ -338,7 +338,7 @@ func TestGetABIRemoteInstance(t *testing.T) {
 	cs := NewContractStore("", "", nil)
 	cs.(*contractStore).rr = &mockRR{
 		deployMsg: &DeployContractWithAddress{
-			DeployContract: messages.DeployContract{
+			Contract: &messages.DeployContract{
 				Description: "description",
 			},
 			Address: "address",

@@ -724,7 +724,7 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 			g.gatewayErrReply(res, req, err, 404)
 			return
 		}
-		deployMsg = &msg.DeployContract
+		deployMsg = msg.Contract
 		addr = msg.Address
 	}
 

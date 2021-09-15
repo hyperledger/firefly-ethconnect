@@ -71,7 +71,7 @@ func (rr *mockRR) LoadFactoryForGateway(id string, refresh bool) (*messages.Depl
 	if rr.deployMsg == nil {
 		return nil, rr.err
 	}
-	return &rr.deployMsg.DeployContract, rr.err
+	return rr.deployMsg.Contract, rr.err
 }
 func (rr *mockRR) LoadFactoryForInstance(id string, refresh bool) (*contractregistry.DeployContractWithAddress, error) {
 	rr.addrCapture = id
@@ -412,7 +412,7 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 		nil, nil, nil, nil,
 	)
 	iMsg := newTestDeployMsg(t, "0123456789abcdef0123456789abcdef01234567")
-	iMsg.Headers.ID = "xyz12345"
+	iMsg.Contract.Headers.ID = "xyz12345"
 	rr := &mockRR{
 		deployMsg: iMsg,
 	}
@@ -520,12 +520,12 @@ func TestRemoteRegistryBadBI(t *testing.T) {
 		nil, nil, nil, nil,
 	)
 	iMsg := newTestDeployMsg(t, "0123456789abcdef0123456789abcdef01234567")
-	iMsg.Headers.ID = "xyz12345"
+	iMsg.Contract.Headers.ID = "xyz12345"
 	// Append two fallback methods - that is invalid
-	iMsg.ABI = append(iMsg.ABI, ethbinding.ABIElementMarshaling{
+	iMsg.Contract.ABI = append(iMsg.Contract.ABI, ethbinding.ABIElementMarshaling{
 		Type: "fallback",
 	})
-	iMsg.ABI = append(iMsg.ABI, ethbinding.ABIElementMarshaling{
+	iMsg.Contract.ABI = append(iMsg.Contract.ABI, ethbinding.ABIElementMarshaling{
 		Type: "fallback",
 	})
 	rr := &mockRR{

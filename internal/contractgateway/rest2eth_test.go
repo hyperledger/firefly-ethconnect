@@ -186,8 +186,8 @@ func newTestDeployMsg(t *testing.T, addr string) *contractregistry.DeployContrac
 	compiled, err := eth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")
 	assert.NoError(t, err)
 	return &contractregistry.DeployContractWithAddress{
-		DeployContract: messages.DeployContract{ABI: compiled.ABI},
-		Address:        addr,
+		Contract: &messages.DeployContract{ABI: compiled.ABI},
+		Address:  addr,
 	}
 }
 
@@ -197,7 +197,7 @@ func newTestREST2Eth(t *testing.T, dispatcher *mockREST2EthDispatcher) (*rest2et
 	gateway := &mockGateway{}
 	contractResolver := &mockContractResolver{
 		contractInfo: &contractregistry.ContractInfo{},
-		deployMsg:    &deployMsg.DeployContract,
+		deployMsg:    deployMsg.Contract,
 	}
 	mockProcessor := &mockProcessor{}
 	r := newREST2eth(gateway, contractResolver, mockRPC, nil, mockProcessor, dispatcher, dispatcher)
@@ -212,7 +212,7 @@ func newTestREST2EthCustomGateway(t *testing.T, dispatcher *mockREST2EthDispatch
 	deployMsg := newTestDeployMsg(t, "")
 	contractResolver := &mockContractResolver{
 		contractInfo: &contractregistry.ContractInfo{},
-		deployMsg:    &deployMsg.DeployContract,
+		deployMsg:    deployMsg.Contract,
 	}
 	mockProcessor := &mockProcessor{}
 	r := newREST2eth(gateway, contractResolver, mockRPC, nil, mockProcessor, dispatcher, dispatcher)

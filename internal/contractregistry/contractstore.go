@@ -176,23 +176,26 @@ func (cs *contractStore) GetContractByAddress(addrHex string) (*ContractInfo, er
 }
 
 func (cs *contractStore) GetABI(location *ABILocation, refresh bool) (*messages.DeployContract, string, error) {
+	var result *DeployContractWithAddress
+	var err error
+
 	switch location.ABIType {
 	case RemoteGateway:
-		contract, err := cs.rr.LoadFactoryForGateway(location.Name, refresh)
-		return contract, "", err
+		result = &DeployContractWithAddress{}
+		result.Contract, err = cs.rr.LoadFactoryForGateway(location.Name, refresh)
 	case RemoteInstance:
-		contract, err := cs.rr.LoadFactoryForInstance(location.Name, refresh)
-		if contract == nil {
-			return nil, "", err
-		} else {
-			return &contract.DeployContract, contract.Address, err
-		}
+		result, err = cs.rr.LoadFactoryForInstance(location.Name, refresh)
 	case LocalABI:
-		contract, _, err := cs.GetABIByID(location.Name)
-		return contract, "", err
+		result = &DeployContractWithAddress{}
+		result.Contract, _, err = cs.GetABIByID(location.Name)
 	default:
 		panic("unknown ABI type") // should not happen
 	}
+
+	if err != nil || result == nil || result.Contract == nil {
+		return nil, "", err
+	}
+	return result.Contract, result.Address, nil
 }
 
 func (cs *contractStore) GetABIByID(abiID string) (*messages.DeployContract, *ABIInfo, error) {

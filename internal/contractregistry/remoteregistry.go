@@ -41,8 +41,8 @@ const (
 )
 
 type DeployContractWithAddress struct {
-	messages.DeployContract
-	Address string `json:"address"`
+	Contract *messages.DeployContract
+	Address  string
 }
 
 // RemoteRegistry lookup of ABI, ByteCode and DevDocs against a conformant REST API
@@ -168,7 +168,7 @@ func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string, refr
 	}
 	addr, _ := rr.hr.GetResponseString(jsonRes, rr.conf.PropNames.Address, false)
 	msg = &DeployContractWithAddress{
-		DeployContract: messages.DeployContract{
+		Contract: &messages.DeployContract{
 			TransactionCommon: messages.TransactionCommon{
 				RequestCommon: messages.RequestCommon{
 					Headers: messages.RequestHeaders{
@@ -226,7 +226,7 @@ func (rr *remoteRegistry) LoadFactoryForGateway(lookupStr string, refresh bool) 
 	msg, err := rr.loadFactoryFromURL(rr.conf.GatewayURLPrefix, "gateways", lookupStr, refresh)
 	if msg != nil {
 		// There is no address on a gateway, so we just return the DeployMsg
-		return &msg.DeployContract, err
+		return msg.Contract, err
 	}
 	return nil, err
 }

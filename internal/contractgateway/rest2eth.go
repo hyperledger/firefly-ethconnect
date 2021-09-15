@@ -225,23 +225,21 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 		if abiID != "" {
 			location.Name = abiID
 		} else {
-			if validAddress {
-				location.Name = addrParam
-			} else {
+			if !validAddress {
 				// Resolve the address as a registered name, to an actual contract address
 				if c.addr, err = r.cr.ResolveContractAddress(addrParam); err != nil {
 					r.restErrReply(res, req, err, 404)
 					return
 				}
-				validAddress = true
-				addrParam = c.addr
-				var info *contractregistry.ContractInfo
-				if info, err = r.cr.GetContractByAddress(addrParam); err != nil {
-					r.restErrReply(res, req, err, 404)
-					return
-				}
-				location.Name = info.ABI
 			}
+			validAddress = true
+			addrParam = c.addr
+			var info *contractregistry.ContractInfo
+			if info, err = r.cr.GetContractByAddress(addrParam); err != nil {
+				r.restErrReply(res, req, err, 404)
+				return
+			}
+			location.Name = info.ABI
 		}
 	}
 

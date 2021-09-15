@@ -43,7 +43,7 @@ const (
 type ContractResolver interface {
 	ResolveContractAddress(registeredName string) (string, error)
 	GetContractByAddress(addrHex string) (*ContractInfo, error)
-	GetABI(location *ABILocation, refresh bool) (*messages.DeployContract, string, error)
+	GetABI(location ABILocation, refresh bool) (*messages.DeployContract, string, error)
 	GetABIByID(abiID string) (*messages.DeployContract, *ABIInfo, error)
 	CheckNameAvailable(name string, isRemote bool) error
 }
@@ -116,6 +116,8 @@ func (i *ABIInfo) GetID() string {
 
 type abiType int
 
+// These values will be saved with existing subscriptions.
+// Do not remove or reorder them (only add new ones to the end).
 const (
 	RemoteGateway abiType = iota
 	RemoteInstance
@@ -186,8 +188,8 @@ func (cs *contractStore) GetContractByAddress(addrHex string) (*ContractInfo, er
 	return info.(*ContractInfo), nil
 }
 
-func (cs *contractStore) GetABI(location *ABILocation, refresh bool) (*messages.DeployContract, string, error) {
-	if cached, ok := cs.abiCache.Get(*location); ok {
+func (cs *contractStore) GetABI(location ABILocation, refresh bool) (*messages.DeployContract, string, error) {
+	if cached, ok := cs.abiCache.Get(location); ok {
 		result := cached.(*DeployContractWithAddress)
 		return result.Contract, result.Address, nil
 	}
@@ -211,7 +213,7 @@ func (cs *contractStore) GetABI(location *ABILocation, refresh bool) (*messages.
 	if err != nil || result == nil || result.Contract == nil {
 		return nil, "", err
 	}
-	cs.abiCache.Add(*location, result)
+	cs.abiCache.Add(location, result)
 	return result.Contract, result.Address, nil
 }
 

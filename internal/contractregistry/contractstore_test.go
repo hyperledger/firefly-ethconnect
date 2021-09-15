@@ -346,7 +346,7 @@ func TestGetABIRemoteGateway(t *testing.T) {
 		},
 	}
 
-	location := &ABILocation{ABIType: RemoteGateway}
+	location := ABILocation{ABIType: RemoteGateway}
 	deployMsg, address, err := cs.GetABI(location, false)
 	assert.NoError(err)
 	assert.Equal("", address)
@@ -368,7 +368,7 @@ func TestGetABIRemoteInstance(t *testing.T) {
 		},
 	}
 
-	location := &ABILocation{ABIType: RemoteInstance}
+	location := ABILocation{ABIType: RemoteInstance}
 	deployMsg, address, err := cs.GetABI(location, false)
 	assert.NoError(err)
 	assert.Equal("address", address)
@@ -383,7 +383,7 @@ func TestGetABIRemoteInstanceFail(t *testing.T) {
 
 	cs.(*contractStore).rr = &mockRR{}
 
-	location := &ABILocation{ABIType: RemoteInstance}
+	location := ABILocation{ABIType: RemoteInstance}
 	deployMsg, address, err := cs.GetABI(location, false)
 	assert.NoError(err)
 	assert.Equal("", address)
@@ -396,7 +396,7 @@ func TestGetABILocal(t *testing.T) {
 	cs, err := NewContractStore("", "", nil)
 	assert.NoError(err)
 
-	location := &ABILocation{ABIType: LocalABI, Name: "test"}
+	location := ABILocation{ABIType: LocalABI, Name: "test"}
 	deployMsg, address, err := cs.GetABI(location, false)
 	assert.Regexp("No ABI found with ID test", err)
 	assert.Equal("", address)

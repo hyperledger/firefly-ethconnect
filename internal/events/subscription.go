@@ -122,7 +122,7 @@ func loadABI(cr contractregistry.ContractResolver, location *contractregistry.AB
 	if location == nil {
 		return nil, nil
 	}
-	deployMsg, _, err := cr.GetABI(location, false)
+	deployMsg, _, err := cr.GetABI(*location, false)
 	if err != nil {
 		return nil, err
 	}

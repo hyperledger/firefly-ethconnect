@@ -96,7 +96,7 @@ func (m *mockContractResolver) ResolveContractAddress(registeredName string) (st
 	return m.registeredContractAddr, m.resolveContractErr
 }
 
-func (m *mockContractResolver) GetABI(location *contractregistry.ABILocation, refresh bool) (*messages.DeployContract, string, error) {
+func (m *mockContractResolver) GetABI(location contractregistry.ABILocation, refresh bool) (*messages.DeployContract, string, error) {
 	return m.deployMsg, m.contractAddress, m.loadABIError
 }
 

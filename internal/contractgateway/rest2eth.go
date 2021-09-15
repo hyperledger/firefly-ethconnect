@@ -244,7 +244,7 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 	}
 
 	var address string
-	c.deployMsg, address, err = r.cr.GetABI(&location, refresh)
+	c.deployMsg, address, err = r.cr.GetABI(location, refresh)
 	if err != nil {
 		r.restErrReply(res, req, err, 500)
 		return

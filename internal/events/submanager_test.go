@@ -27,6 +27,7 @@ import (
 
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/kvstore"
+	"github.com/hyperledger-labs/firefly-ethconnect/mocks/contractregistrymocks"
 	"github.com/hyperledger-labs/firefly-ethconnect/mocks/ethmocks"
 	"github.com/julienschmidt/httprouter"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
@@ -72,8 +73,9 @@ func newMockWebSocket() *mockWebSocket {
 
 func newTestSubscriptionManager() *subscriptionMGR {
 	smconf := &SubscriptionManagerConf{}
-	sm := NewSubscriptionManager(smconf, nil, nil, newMockWebSocket()).(*subscriptionMGR)
-	sm.rpc = &ethmocks.RPCClient{}
+	rpc := &ethmocks.RPCClient{}
+	cr := &contractregistrymocks.ContractStore{}
+	sm := NewSubscriptionManager(smconf, rpc, cr, newMockWebSocket()).(*subscriptionMGR)
 	sm.db = kvstore.NewMockKV(nil)
 	sm.config().WebhooksAllowPrivateIPs = true
 	sm.config().EventPollingIntervalSec = 0

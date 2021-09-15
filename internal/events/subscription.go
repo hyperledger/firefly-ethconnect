@@ -123,7 +123,7 @@ func loadABI(cr contractregistry.ContractResolver, location *contractregistry.AB
 		return nil, nil
 	}
 	deployMsg, _, err := cr.GetABI(*location, false)
-	if err != nil {
+	if err != nil || deployMsg == nil {
 		return nil, err
 	}
 	return ethbind.API.ABIMarshalingToABIRuntime(deployMsg.ABI)
@@ -255,10 +255,7 @@ func (s *subscription) getEventTimestamp(ctx context.Context, l *logEntry) {
 
 func (s *subscription) getTransactionInputs(ctx context.Context, l *logEntry) {
 	abi, err := loadABI(s.cr, s.info.ABI)
-	if err != nil {
-		return
-	}
-	if abi == nil {
+	if err != nil || abi == nil {
 		return
 	}
 	info, err := eth.GetTransactionInfo(ctx, s.rpc, l.TransactionHash.String())

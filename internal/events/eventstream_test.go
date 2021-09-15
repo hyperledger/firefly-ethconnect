@@ -26,9 +26,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/contractregistry"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/kvstore"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger-labs/firefly-ethconnect/mocks/contractregistrymocks"
 	"github.com/hyperledger-labs/firefly-ethconnect/mocks/ethmocks"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	log "github.com/sirupsen/logrus"
@@ -417,6 +421,10 @@ func TestBadTimestampCacheSize(t *testing.T) {
 }
 
 func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, stream *eventStream, subscriptionName string) *SubscriptionInfo {
+	return setupTestSubscriptionWithRPCHandler(assert, sm, stream, subscriptionName, nil)
+}
+
+func setupTestSubscriptionWithRPCHandler(assert *assert.Assertions, sm *subscriptionMGR, stream *eventStream, subscriptionName string, rpcHandler func(method string, result interface{})) *SubscriptionInfo {
 	log.SetLevel(log.DebugLevel)
 	testDataBytes, err := ioutil.ReadFile("../../test/simplevents_logs.json")
 	assert.NoError(err)
@@ -455,6 +463,10 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 				filterChangeCalls++
 			case "eth_getBlockByNumber":
 				*(res.(*ethbinding.Header)) = *testBlock
+			default:
+				if rpcHandler != nil {
+					rpcHandler(method, res)
+				}
 			}
 		}).
 		Return(nil)
@@ -490,7 +502,11 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 	}
 	addr := ethbind.API.HexToAddress("0x167f57a13a9c35ff92f0649d2be0e52b4f8ac3ca")
 	ctx := context.Background()
-	s, _ := sm.AddSubscription(ctx, &addr, nil, event, stream.spec.ID, "", subscriptionName)
+	loc := &contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    "test-abi",
+	}
+	s, _ := sm.AddSubscription(ctx, &addr, loc, event, stream.spec.ID, "", subscriptionName)
 	return s
 }
 
@@ -767,6 +783,93 @@ func TestProcessEventsEnd2EndWithTimestamps(t *testing.T) {
 		assert.Equal("1.21 Gigawatts!", e3s[0].Data["m"])
 		assert.Equal("150721", e3s[0].BlockNumber)
 		assert.Equal("1588748143", e3s[0].Timestamp)
+		wg.Done()
+	}()
+	wg.Wait()
+
+	ctx := context.Background()
+	err := sm.DeleteSubscription(ctx, s.ID)
+	assert.NoError(err)
+	err = sm.DeleteStream(ctx, stream.spec.ID)
+	assert.NoError(err)
+	sm.Close()
+}
+
+func TestProcessEventsEnd2EndWithInputs(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	db, _ := kvstore.NewLDBKeyValueStore(dir)
+	sm, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			BatchSize: 1,
+			Webhook:   &webhookActionInfo{},
+			Inputs:    true,
+		}, db, 200)
+	defer svr.Close()
+
+	deployMsg := &messages.DeployContract{
+		ABI: ethbinding.ABIMarshaling{
+			{
+				Type: "function",
+				Name: "method1",
+				Inputs: []ethbinding.ABIArgumentMarshaling{
+					{
+						Name: "arg1",
+						Type: "int32",
+					},
+				},
+			},
+		},
+	}
+	methodInput := &ethbinding.HexBytes{
+		0xf4, 0xe1, 0x3d, 0xc5, // ID of method1
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, // "1" as int32
+	}
+	expectedArgs := map[string]interface{}{"arg1": "1"}
+
+	s := setupTestSubscriptionWithRPCHandler(assert, sm, stream, "mySubName", func(method string, result interface{}) {
+		if method == "eth_getTransactionByHash" {
+			*(result.(*eth.TxnInfo)) = eth.TxnInfo{
+				Input: methodInput,
+			}
+		}
+	})
+	assert.Equal("mySubName", s.Name)
+
+	mcr := sm.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    "test-abi",
+	}, false).Return(deployMsg, "", nil)
+
+	// We expect three events to be sent to the webhook
+	// With the default batch size of 1, that means three separate requests
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		e1s := <-eventStream
+		assert.Equal(1, len(e1s))
+		assert.Equal("42", e1s[0].Data["i"])
+		assert.Equal("But what is the question?", e1s[0].Data["m"])
+		assert.Equal("150665", e1s[0].BlockNumber)
+		assert.Equal("method1", e1s[0].InputMethod)
+		assert.Equal(expectedArgs, e1s[0].InputArgs)
+		e2s := <-eventStream
+		assert.Equal(1, len(e2s))
+		assert.Equal("1977", e2s[0].Data["i"])
+		assert.Equal("A long time ago in a galaxy far, far away....", e2s[0].Data["m"])
+		assert.Equal("150665", e2s[0].BlockNumber)
+		assert.Equal("method1", e2s[0].InputMethod)
+		assert.Equal(expectedArgs, e2s[0].InputArgs)
+		e3s := <-eventStream
+		assert.Equal(1, len(e3s))
+		assert.Equal("20151021", e3s[0].Data["i"])
+		assert.Equal("1.21 Gigawatts!", e3s[0].Data["m"])
+		assert.Equal("150721", e3s[0].BlockNumber)
+		assert.Equal("method1", e3s[0].InputMethod)
+		assert.Equal(expectedArgs, e3s[0].InputArgs)
 		wg.Done()
 	}()
 	wg.Wait()
@@ -1182,10 +1285,12 @@ func TestUpdateStream(t *testing.T) {
 			RequestTimeoutSec: 0,
 		},
 		Timestamps: true,
+		Inputs:     true,
 	}
 	updatedStream, err := sm.UpdateStream(ctx, stream.spec.ID, updateSpec)
 	assert.Equal(updatedStream.Name, "new-name")
 	assert.Equal(updatedStream.Timestamps, true)
+	assert.Equal(updatedStream.Inputs, true)
 	assert.Equal(updatedStream.BatchSize, uint64(4))
 	assert.Equal(updatedStream.BatchTimeoutMS, uint64(10000))
 	assert.Equal(updatedStream.BlockedRetryDelaySec, uint64(5))
@@ -1194,6 +1299,15 @@ func TestUpdateStream(t *testing.T) {
 	assert.Equal(updatedStream.Webhook.Headers["test-h1"], "val1")
 
 	assert.NoError(err)
+}
+
+func TestUpdateStreamFail(t *testing.T) {
+	assert := assert.New(t)
+
+	sm := newTestSubscriptionManager()
+	updatedStream, err := sm.UpdateStream(context.Background(), "1", &StreamInfo{})
+	assert.Regexp("Stream with ID '1' not found", err)
+	assert.Nil(updatedStream)
 }
 
 func TestUpdateStreamSwapType(t *testing.T) {

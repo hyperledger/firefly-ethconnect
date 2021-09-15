@@ -146,7 +146,6 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 	rr := contractregistry.NewRemoteRegistry(&conf.RemoteRegistry)
 	gw := &smartContractGW{
 		conf: conf,
-		cs:   contractregistry.NewContractStore(conf.BaseURL, conf.StoragePath, rr),
 		rr:   rr,
 		baseSwaggerConf: &openapi.ABI2SwaggerConf{
 			ExternalHost:     baseURL.Host,
@@ -156,6 +155,10 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 			BasicAuth:        true,
 		},
 		ws: ws,
+	}
+	gw.cs, err = contractregistry.NewContractStore(conf.BaseURL, conf.StoragePath, rr)
+	if err != nil {
+		return nil, err
 	}
 	if err = gw.rr.Init(); err != nil {
 		return nil, err

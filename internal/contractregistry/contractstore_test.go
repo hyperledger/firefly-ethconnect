@@ -71,12 +71,13 @@ func TestLoadDeployMsgOKNoABIInIndex(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	cs := NewContractStore("", dir, nil)
+	cs, err := NewContractStore("", dir, nil)
+	assert.NoError(err)
 	goodMsg := &messages.DeployContract{}
 	deployBytes, _ := json.Marshal(goodMsg)
 	cs.(*contractStore).abiIndex["abi1"] = &ABIInfo{}
 	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), deployBytes, 0644)
-	_, _, err := cs.GetABIByID("abi1")
+	_, _, err = cs.GetABIByID("abi1")
 	assert.NoError(err)
 }
 
@@ -84,8 +85,9 @@ func TestLoadDeployMsgMissing(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	cs := NewContractStore("", dir, nil)
-	_, _, err := cs.GetABIByID("abi1")
+	cs, err := NewContractStore("", dir, nil)
+	assert.NoError(err)
+	_, _, err = cs.GetABIByID("abi1")
 	assert.Regexp("No ABI found with ID abi1", err.Error())
 }
 
@@ -93,9 +95,10 @@ func TestLoadDeployMsgFileMissing(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	cs := NewContractStore("", dir, nil)
+	cs, err := NewContractStore("", dir, nil)
+	assert.NoError(err)
 	cs.(*contractStore).abiIndex["abi1"] = &ABIInfo{}
-	_, _, err := cs.GetABIByID("abi1")
+	_, _, err = cs.GetABIByID("abi1")
 	assert.Regexp("Failed to load ABI with ID abi1", err.Error())
 }
 
@@ -103,10 +106,11 @@ func TestLoadDeployMsgFailure(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	cs := NewContractStore("", dir, nil)
+	cs, err := NewContractStore("", dir, nil)
+	assert.NoError(err)
 	cs.(*contractStore).abiIndex["abi1"] = &ABIInfo{}
 	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), []byte(":bad json"), 0644)
-	_, _, err := cs.GetABIByID("abi1")
+	_, _, err = cs.GetABIByID("abi1")
 	assert.Regexp("Failed to parse ABI with ID abi1", err.Error())
 }
 
@@ -114,10 +118,11 @@ func TestLoadDeployMsgRemoteLookupNotFound(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	cs := NewContractStore("", dir, nil)
+	cs, err := NewContractStore("", dir, nil)
+	assert.NoError(err)
 	rr := &mockRR{}
 	cs.(*contractStore).rr = rr
-	_, _, err := cs.GetABIByID("abi1")
+	_, _, err = cs.GetABIByID("abi1")
 	assert.EqualError(err, "No ABI found with ID abi1")
 }
 
@@ -125,12 +130,13 @@ func TestStoreABIWriteFail(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	cs := NewContractStore("", path.Join(dir, "badpath"), nil)
+	cs, err := NewContractStore("", path.Join(dir, "badpath"), nil)
+	assert.NoError(err)
 
 	i := &ContractInfo{
 		Address: "req1",
 	}
-	err := cs.(*contractStore).storeContractInfo(i)
+	err = cs.(*contractStore).storeContractInfo(i)
 	assert.Regexp("Failed to write ABI JSON", err.Error())
 }
 
@@ -138,9 +144,10 @@ func TestLoadABIForInstanceUnknown(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	cs := NewContractStore("", path.Join(dir, "badpath"), nil)
+	cs, err := NewContractStore("", path.Join(dir, "badpath"), nil)
+	assert.NoError(err)
 
-	_, err := cs.GetContractByAddress("invalid")
+	_, err = cs.GetContractByAddress("invalid")
 	assert.Regexp("No contract instance registered with address invalid", err.Error())
 }
 
@@ -148,27 +155,32 @@ func TestLoadABIBadData(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
-	cs := NewContractStore("", dir, nil)
+	cs, err := NewContractStore("", dir, nil)
+	assert.NoError(err)
 
 	ioutil.WriteFile(path.Join(dir, "badness.abi.json"), []byte(":not json"), 0644)
-	_, _, err := cs.GetABIByID("badness")
+	_, _, err = cs.GetABIByID("badness")
 	assert.Regexp("No ABI found with ID badness", err.Error())
 }
 
 func TestAddFileToContractIndexBadFileSwallowsError(t *testing.T) {
+	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
 
-	cs := NewContractStore("", dir, nil)
+	cs, err := NewContractStore("", dir, nil)
+	assert.NoError(err)
 
 	cs.(*contractStore).addFileToContractIndex("", "badness")
 }
 
 func TestAddFileToContractIndexBadDataSwallowsError(t *testing.T) {
+	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
 
-	cs := NewContractStore("", dir, nil)
+	cs, err := NewContractStore("", dir, nil)
+	assert.NoError(err)
 
 	fileName := path.Join(dir, "badness")
 	ioutil.WriteFile(fileName, []byte("!JSON"), 0644)
@@ -176,10 +188,12 @@ func TestAddFileToContractIndexBadDataSwallowsError(t *testing.T) {
 }
 
 func TestAddFileToABIIndexBadFileSwallowsError(t *testing.T) {
+	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
 
-	cs := NewContractStore("", dir, nil)
+	cs, err := NewContractStore("", dir, nil)
+	assert.NoError(err)
 
 	cs.(*contractStore).addFileToABIIndex("", "badness", time.Now().UTC())
 }
@@ -187,26 +201,30 @@ func TestAddFileToABIIndexBadFileSwallowsError(t *testing.T) {
 func TestCheckNameAvailableRRDuplicate(t *testing.T) {
 	assert := assert.New(t)
 
-	cs := NewContractStore("http://localhost/api/v1", "", nil)
+	cs, err := NewContractStore("http://localhost/api/v1", "", nil)
+	assert.NoError(err)
+
 	rr := &mockRR{
 		deployMsg: newTestDeployMsg(t, "12345"),
 	}
 	cs.(*contractStore).rr = rr
 
-	err := cs.CheckNameAvailable("lobster", true)
+	err = cs.CheckNameAvailable("lobster", true)
 	assert.EqualError(err, "Contract address 12345 is already registered for name 'lobster'")
 }
 
 func TestCheckNameAvailableRRFail(t *testing.T) {
 	assert := assert.New(t)
 
-	cs := NewContractStore("http://localhost/api/v1", "", nil)
+	cs, err := NewContractStore("http://localhost/api/v1", "", nil)
+	assert.NoError(err)
+
 	rr := &mockRR{
 		err: fmt.Errorf("pop"),
 	}
 	cs.(*contractStore).rr = rr
 
-	err := cs.CheckNameAvailable("lobster", true)
+	err = cs.CheckNameAvailable("lobster", true)
 	assert.EqualError(err, "pop")
 }
 
@@ -284,7 +302,8 @@ func TestBuildIndex(t *testing.T) {
 	ioutil.WriteFile(path.Join(dir, "abi_e27be4cf-6ae2-411e-8088-db2992618938.deploy.json"), deployBytes, 0644)
 	ioutil.WriteFile(path.Join(dir, "abi_519526b2-0879-41f4-93c0-09acaa62e2da.deploy.json"), []byte(":bad json"), 0644)
 
-	cs := NewContractStore("", dir, nil)
+	cs, err := NewContractStore("", dir, nil)
+	assert.NoError(err)
 	cs.Init()
 
 	contracts := cs.ListContracts()
@@ -315,7 +334,9 @@ func TestBuildIndex(t *testing.T) {
 func TestGetABIRemoteGateway(t *testing.T) {
 	assert := assert.New(t)
 
-	cs := NewContractStore("", "", nil)
+	cs, err := NewContractStore("", "", nil)
+	assert.NoError(err)
+
 	cs.(*contractStore).rr = &mockRR{
 		deployMsg: &DeployContractWithAddress{
 			Contract: &messages.DeployContract{
@@ -335,7 +356,9 @@ func TestGetABIRemoteGateway(t *testing.T) {
 func TestGetABIRemoteInstance(t *testing.T) {
 	assert := assert.New(t)
 
-	cs := NewContractStore("", "", nil)
+	cs, err := NewContractStore("", "", nil)
+	assert.NoError(err)
+
 	cs.(*contractStore).rr = &mockRR{
 		deployMsg: &DeployContractWithAddress{
 			Contract: &messages.DeployContract{
@@ -355,7 +378,9 @@ func TestGetABIRemoteInstance(t *testing.T) {
 func TestGetABIRemoteInstanceFail(t *testing.T) {
 	assert := assert.New(t)
 
-	cs := NewContractStore("", "", nil)
+	cs, err := NewContractStore("", "", nil)
+	assert.NoError(err)
+
 	cs.(*contractStore).rr = &mockRR{}
 
 	location := &ABILocation{ABIType: RemoteInstance}
@@ -368,7 +393,8 @@ func TestGetABIRemoteInstanceFail(t *testing.T) {
 func TestGetABILocal(t *testing.T) {
 	assert := assert.New(t)
 
-	cs := NewContractStore("", "", nil)
+	cs, err := NewContractStore("", "", nil)
+	assert.NoError(err)
 
 	location := &ABILocation{ABIType: LocalABI, Name: "test"}
 	deployMsg, address, err := cs.GetABI(location, false)

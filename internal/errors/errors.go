@@ -307,6 +307,8 @@ const (
 	RESTGatewayLocalStoreContractSavePostDeploy = "%s: Failed to write deployment details: %s"
 	// RESTGatewayFriendlyNameClash duplicate friendly name when reigstering
 	RESTGatewayFriendlyNameClash = "Contract address %s is already registered for name '%s'"
+	// RESTGatewayResourceErr problem creating a resource required by the gateway
+	RESTGatewayResourceErr = "Failed to create a resource for the REST Gateway: %s"
 
 	// RPCCallReturnedError specified RPC call returned error
 	RPCCallReturnedError = "%s returned: %s"

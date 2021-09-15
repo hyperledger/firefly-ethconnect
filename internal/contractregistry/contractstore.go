@@ -28,10 +28,16 @@ import (
 	"time"
 
 	"github.com/go-openapi/spec"
+	lru "github.com/hashicorp/golang-lru"
 	log "github.com/sirupsen/logrus"
 
 	ethconnecterrors "github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
+)
+
+const (
+	// DefaultABICacheSize is the number of entries we will hold in a LRU cache for ABIs
+	DefaultABICacheSize = 25
 )
 
 type ContractResolver interface {
@@ -59,10 +65,11 @@ type contractStore struct {
 	contractRegistrations map[string]*ContractInfo
 	idxLock               sync.Mutex
 	abiIndex              map[string]messages.TimeSortable
+	abiCache              *lru.Cache
 }
 
-func NewContractStore(baseURL, storagePath string, rr RemoteRegistry) ContractStore {
-	return &contractStore{
+func NewContractStore(baseURL, storagePath string, rr RemoteRegistry) (cs ContractStore, err error) {
+	c := &contractStore{
 		baseURL:               baseURL,
 		storagePath:           storagePath,
 		rr:                    rr,
@@ -70,6 +77,10 @@ func NewContractStore(baseURL, storagePath string, rr RemoteRegistry) ContractSt
 		contractRegistrations: make(map[string]*ContractInfo),
 		abiIndex:              make(map[string]messages.TimeSortable),
 	}
+	if c.abiCache, err = lru.New(DefaultABICacheSize); err != nil {
+		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayResourceErr, err)
+	}
+	return c, nil
 }
 
 // ContractInfo is the minimal data structure we keep in memory, indexed by address
@@ -176,6 +187,11 @@ func (cs *contractStore) GetContractByAddress(addrHex string) (*ContractInfo, er
 }
 
 func (cs *contractStore) GetABI(location *ABILocation, refresh bool) (*messages.DeployContract, string, error) {
+	if cached, ok := cs.abiCache.Get(*location); ok {
+		result := cached.(*DeployContractWithAddress)
+		return result.Contract, result.Address, nil
+	}
+
 	var result *DeployContractWithAddress
 	var err error
 
@@ -195,6 +211,7 @@ func (cs *contractStore) GetABI(location *ABILocation, refresh bool) (*messages.
 	if err != nil || result == nil || result.Contract == nil {
 		return nil, "", err
 	}
+	cs.abiCache.Add(*location, result)
 	return result.Contract, result.Address, nil
 }
 

@@ -27,10 +27,12 @@ import (
 
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/kvstore"
+	"github.com/hyperledger-labs/firefly-ethconnect/mocks/ethmocks"
 	"github.com/julienschmidt/httprouter"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 type mockWebSocket struct {
@@ -71,7 +73,7 @@ func newMockWebSocket() *mockWebSocket {
 func newTestSubscriptionManager() *subscriptionMGR {
 	smconf := &SubscriptionManagerConf{}
 	sm := NewSubscriptionManager(smconf, nil, nil, newMockWebSocket()).(*subscriptionMGR)
-	sm.rpc = eth.NewMockRPCClientForSync(nil, nil)
+	sm.rpc = &ethmocks.RPCClient{}
 	sm.db = kvstore.NewMockKV(nil)
 	sm.config().WebhooksAllowPrivateIPs = true
 	sm.config().EventPollingIntervalSec = 0
@@ -119,8 +121,16 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	dir := tempdir(t)
 	subscriptionName := "testSub"
 	defer cleanup(t, dir)
+
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_blockNumber").Return(nil)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newFilter", mock.Anything).Return(nil)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterLogs", mock.Anything).Return(nil)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_uninstallFilter", mock.Anything).Return(nil)
+
 	sm := newTestSubscriptionManager()
-	sm.rpc = eth.NewMockRPCClientForSync(nil, nil)
+	sm.rpc = rpc
+
 	sm.db, _ = kvstore.NewLDBKeyValueStore(path.Join(dir, "db"))
 	defer sm.db.Close()
 
@@ -174,6 +184,7 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	defer svr.Close()
 	sm = newTestSubscriptionManager()
 	sm.conf.EventLevelDBPath = path.Join(dir, "db")
+	sm.rpc = rpc
 	sm.rpcConf = &eth.RPCConnOpts{URL: svr.URL}
 	err = sm.Init()
 	assert.NoError(err)
@@ -198,7 +209,7 @@ func TestActionChildCleanup(t *testing.T) {
 	dir := tempdir(t)
 	defer cleanup(t, dir)
 	sm := newTestSubscriptionManager()
-	sm.rpc = eth.NewMockRPCClientForSync(nil, nil)
+	sm.rpc = &ethmocks.RPCClient{}
 	sm.db, _ = kvstore.NewLDBKeyValueStore(path.Join(dir, "db"))
 	defer sm.db.Close()
 
@@ -224,7 +235,7 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	subscriptionName := "testSub"
 	defer cleanup(t, dir)
 	sm := newTestSubscriptionManager()
-	sm.rpc = eth.NewMockRPCClientForSync(nil, nil)
+	sm.rpc = &ethmocks.RPCClient{}
 	sm.db, _ = kvstore.NewLDBKeyValueStore(path.Join(dir, "db"))
 	defer sm.db.Close()
 
@@ -256,7 +267,11 @@ func TestResetSubscriptionErrors(t *testing.T) {
 	dir := tempdir(t)
 	defer cleanup(t, dir)
 	sm := newTestSubscriptionManager()
-	sm.rpc = eth.NewMockRPCClientForSync(nil, nil)
+
+	rpc := &ethmocks.RPCClient{}
+	sm.rpc = rpc
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_uninstallFilter", mock.Anything).Return(nil)
+
 	sm.db = kvstore.NewMockKV(fmt.Errorf("pop"))
 	defer sm.db.Close()
 
@@ -311,5 +326,4 @@ func TestRecoverErrors(t *testing.T) {
 
 	assert.Equal(0, len(sm.streams))
 	assert.Equal(0, len(sm.subscriptions))
-
 }

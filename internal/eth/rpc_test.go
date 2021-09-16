@@ -41,6 +41,25 @@ func (w *mockEthClient) Subscribe(ctx context.Context, namespace string, channel
 }
 func (w *mockEthClient) Close() {}
 
+// mockRPCSubscription is used internally within this class for testing the wrapping layer itself
+type mockRPCSubscription struct {
+	Namespace  string
+	Args       []interface{}
+	ErrChan    chan error
+	MsgChan    chan<- interface{}
+	Subscribed bool
+}
+
+// Err returns the configured mock error channel
+func (ms *mockRPCSubscription) Err() <-chan error {
+	return ms.ErrChan
+}
+
+// Unsubscribe captures the unsubscribe call
+func (ms *mockRPCSubscription) Unsubscribe() {
+	ms.Subscribed = false
+}
+
 func TestRPCWrapperConformsToInterface(t *testing.T) {
 	// This test doesn't verify any interesting function, simply that the rpcWrapper
 	// type mapper can be invoked without panics
@@ -96,37 +115,14 @@ func TestRPCConnectFail(t *testing.T) {
 
 func TestSubscribeWrapper(t *testing.T) {
 	assert := assert.New(t)
-
-	mockRPC := NewMockRPCClientForAsync(nil)
-	var iRPC RPCClientAsync
-	iRPC = mockRPC
-	c := make(chan interface{})
-	sub, err := iRPC.Subscribe(context.Background(), "testns", c, "arg1")
-	assert.NoError(err)
-	assert.Equal("testns", mockRPC.SubResult.Namespace)
-	assert.Equal([]interface{}{"arg1"}, mockRPC.SubResult.Args)
-	assert.True(mockRPC.SubResult.Subscribed)
-	assert.NotNil(sub.Err())
-	sub.Unsubscribe()
-	assert.False(mockRPC.SubResult.Subscribed)
-	iRPC.(RPCClosable).Close()
-	assert.True(mockRPC.Closed)
-}
-
-func TestCallContextWrapper(t *testing.T) {
-	assert := assert.New(t)
-
-	mockRPC := NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
-		*(res.(*string)) = "mock result"
-	})
-	var iRPC RPCClient
-	iRPC = mockRPC
-	var strRetval string
-	err := iRPC.CallContext(context.Background(), &strRetval, "rpcmethod1", "arg1", "arg2")
-	assert.NoError(err)
-	assert.Equal("mock result", strRetval)
-	assert.Equal("rpcmethod1", mockRPC.MethodCapture)
-	assert.Equal([]interface{}{"arg1", "arg2"}, mockRPC.ArgsCapture)
+	ms := &mockRPCSubscription{
+		ErrChan:    make(chan error),
+		Subscribed: true,
+	}
+	w := &subWrapper{s: ms}
+	assert.NotNil(w.Err())
+	w.Unsubscribe()
+	assert.Equal(false, ms.Subscribed)
 }
 
 func TestCallContextWrapperAuth(t *testing.T) {

@@ -27,12 +27,13 @@ import (
 	"time"
 
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/kvstore"
+	"github.com/hyperledger-labs/firefly-ethconnect/mocks/ethmocks"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestConstructorNoSpec(t *testing.T) {
@@ -431,23 +432,32 @@ func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, strea
 
 	callCount := 0
 	filterChangeCalls := 0
-	rpc := eth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
-		callCount++
-		log.Infof("UT %s call=%d", method, callCount)
-		if method == "eth_blockNumber" || method == "eth_newFilter" {
-		} else if method == "eth_getFilterLogs" {
-			*(res.(*[]*logEntry)) = testData[0:2]
-		} else if method == "eth_getFilterChanges" {
-			if filterChangeCalls == 0 {
-				*(res.(*[]*logEntry)) = testData[2:]
-			} else {
-				*(res.(*[]*logEntry)) = []*logEntry{}
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			res := args[1]
+			method := args[2].(string)
+			callCount++
+			log.Infof("UT %s call=%d", method, callCount)
+			switch method {
+			case "eth_blockNumber":
+				// ignore
+			case "eth_newFilter":
+				// ignore
+			case "eth_getFilterLogs":
+				*(res.(*[]*logEntry)) = testData[0:2]
+			case "eth_getFilterChanges":
+				if filterChangeCalls == 0 {
+					*(res.(*[]*logEntry)) = testData[2:]
+				} else {
+					*(res.(*[]*logEntry)) = []*logEntry{}
+				}
+				filterChangeCalls++
+			case "eth_getBlockByNumber":
+				*(res.(*ethbinding.Header)) = *testBlock
 			}
-			filterChangeCalls++
-		} else if method == "eth_getBlockByNumber" {
-			*(res.(*ethbinding.Header)) = *testBlock
-		}
-	})
+		}).
+		Return(nil)
 	sm.rpc = rpc
 
 	event := &ethbinding.ABIElementMarshaling{
@@ -500,31 +510,37 @@ func setupCatchupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR
 
 	callCount := 0
 	getLogsCalls := 0
-	rpc := eth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
-		callCount++
-		log.Infof("UT %s call=%d", method, callCount)
-		if method == "eth_blockNumber" {
-			(*(res.(*ethbinding.HexBigInt))).ToInt().SetString("501", 10)
-		} else if method == "eth_getLogs" {
-			if getLogsCalls == 0 {
-				// Catchup page with data
-				*(res.(*[]*logEntry)) = testData[0:2]
-			} else {
-				// Catchup page with no data
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			res := args[1]
+			method := args[2].(string)
+			callCount++
+			log.Infof("UT %s call=%d", method, callCount)
+			switch method {
+			case "eth_blockNumber":
+				(*(res.(*ethbinding.HexBigInt))).ToInt().SetString("501", 10)
+			case "eth_getLogs":
+				if getLogsCalls == 0 {
+					// Catchup page with data
+					*(res.(*[]*logEntry)) = testData[0:2]
+				} else {
+					// Catchup page with no data
+					*(res.(*[]*logEntry)) = []*logEntry{}
+				}
+				getLogsCalls++
+				assert.LessOrEqual(getLogsCalls, 2)
+			case "eth_getFilterLogs":
+				// First page after catchup
+				*(res.(*[]*logEntry)) = testData[2:]
+			case "eth_getFilterChanges":
+				// No further updates
 				*(res.(*[]*logEntry)) = []*logEntry{}
+			case "eth_getBlockByNumber":
+				*(res.(*ethbinding.Header)) = *testBlock
 			}
-			getLogsCalls++
-			assert.LessOrEqual(getLogsCalls, 2)
-		} else if method == "eth_getFilterLogs" {
-			// First page after catchup
-			*(res.(*[]*logEntry)) = testData[2:]
-		} else if method == "eth_getFilterChanges" {
-			// No further updates
-			*(res.(*[]*logEntry)) = []*logEntry{}
-		} else if method == "eth_getBlockByNumber" {
-			*(res.(*ethbinding.Header)) = *testBlock
-		}
-	})
+		}).
+		Return(nil)
 	sm.rpc = rpc
 
 	event := &ethbinding.ABIElementMarshaling{
@@ -941,16 +957,22 @@ func TestCheckpointRecovery(t *testing.T) {
 	var newFilterBlock uint64
 	sub := sm.subscriptions[s.ID]
 	sub.filterStale = true
-	sub.rpc = eth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
-		if method == "eth_newFilter" {
-			newFilterBlock = args[0].(*ethFilter).FromBlock.ToInt().Uint64()
-			t.Logf("New filter block after checkpoint recovery: %d", newFilterBlock)
-		} else if method == "eth_getFilterChanges" {
-			*(res.(*[]*logEntry)) = []*logEntry{}
-		} else if method == "eth_uninstallFilter" {
-			*(res.(*bool)) = true
-		}
-	})
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			res := args[1]
+			method := args[2].(string)
+			if method == "eth_newFilter" {
+				newFilterBlock = args[3].(*ethFilter).FromBlock.ToInt().Uint64()
+				t.Logf("New filter block after checkpoint recovery: %d", newFilterBlock)
+			} else if method == "eth_getFilterChanges" {
+				*(res.(*[]*logEntry)) = []*logEntry{}
+			} else if method == "eth_uninstallFilter" {
+				*(res.(*bool)) = true
+			}
+		}).
+		Return(nil)
+	sub.rpc = rpc
 
 	stream.resume()
 	for stream.pollerDone {
@@ -961,6 +983,7 @@ func TestCheckpointRecovery(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
+	rpc.AssertExpectations(t)
 }
 
 func TestWithoutCheckpointRecovery(t *testing.T) {
@@ -984,17 +1007,23 @@ func TestWithoutCheckpointRecovery(t *testing.T) {
 	var initialEndBlock string
 	sub := sm.subscriptions[s.ID]
 	sub.filterStale = true
-	sub.rpc = eth.NewMockRPCClientForSync(nil, func(method string, res interface{}, args ...interface{}) {
-		if method == "eth_blockNumber" {
-		} else if method == "eth_newFilter" {
-			initialEndBlock = args[0].(*ethFilter).ToBlock
-			t.Logf("New filter block after recovery with no checkpoint: %s", initialEndBlock)
-		} else if method == "eth_getFilterChanges" {
-			*(res.(*[]*logEntry)) = []*logEntry{}
-		} else if method == "eth_uninstallFilter" {
-			*(res.(*bool)) = true
-		}
-	})
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			res := args[1]
+			method := args[2].(string)
+			if method == "eth_blockNumber" {
+			} else if method == "eth_newFilter" {
+				initialEndBlock = args[3].(*ethFilter).ToBlock
+				t.Logf("New filter block after recovery with no checkpoint: %s", initialEndBlock)
+			} else if method == "eth_getFilterChanges" {
+				*(res.(*[]*logEntry)) = []*logEntry{}
+			} else if method == "eth_uninstallFilter" {
+				*(res.(*bool)) = true
+			}
+		}).
+		Return(nil)
+	sub.rpc = rpc
 
 	stream.resume()
 	for stream.pollerDone {
@@ -1004,6 +1033,7 @@ func TestWithoutCheckpointRecovery(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
+	rpc.AssertExpectations(t)
 }
 
 func TestMarkStaleOnError(t *testing.T) {
@@ -1026,7 +1056,12 @@ func TestMarkStaleOnError(t *testing.T) {
 	sm.subscriptions[s.ID].filterStale = false
 
 	sub := sm.subscriptions[s.ID]
-	sub.rpc = eth.NewMockRPCClientForSync(fmt.Errorf("filter not found"), nil)
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterLogs", mock.Anything).
+		Return(fmt.Errorf("filter not found"))
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_uninstallFilter", mock.Anything).
+		Return(nil)
+	sub.rpc = rpc
 
 	stream.resume()
 	for stream.pollerDone {
@@ -1036,6 +1071,7 @@ func TestMarkStaleOnError(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
+	rpc.AssertExpectations(t)
 }
 
 func TestStoreCheckpointLoadError(t *testing.T) {

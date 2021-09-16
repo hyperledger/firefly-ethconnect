@@ -125,8 +125,8 @@ const (
 )
 
 type ABILocation struct {
-	ABIType abiType
-	Name    string
+	ABIType abiType `json:"type"`
+	Name    string  `json:"name"`
 }
 
 func IsRemote(msg messages.CommonHeaders) bool {

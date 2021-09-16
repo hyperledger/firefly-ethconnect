@@ -98,6 +98,9 @@ func (cs *mockContractStore) AddContract(addrHexNo0x, abiID, pathName, registerA
 func (cs *mockContractStore) AddABI(id string, deployMsg *messages.DeployContract, createdTime time.Time) *contractregistry.ABIInfo {
 	return nil
 }
+func (m *mockContractStore) GetLocalABI(abiID string) (*messages.DeployContract, *contractregistry.ABIInfo, error) {
+	return m.deployMsg, m.abiInfo, m.loadABIError
+}
 func (cs *mockContractStore) ListContracts() []messages.TimeSortable {
 	return []messages.TimeSortable{}
 }
@@ -240,7 +243,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	info, err := scgw.(*smartContractGW).cs.GetContractByAddress("0123456789abcdef0123456789abcdef01234567")
 	assert.NoError(err)
 	assert.NotEmpty(info)
-	deployMsg, abiID, err := scgw.(*smartContractGW).cs.GetABIByID(info.ABI)
+	deployMsg, abiID, err := scgw.(*smartContractGW).cs.GetLocalABI(info.ABI)
 	assert.NoError(err)
 	assert.NotEmpty(abiID)
 	runtimeABI, err := ethbind.API.ABIMarshalingToABIRuntime(deployMsg.ABI)

@@ -77,7 +77,7 @@ func TestLoadDeployMsgOKNoABIInIndex(t *testing.T) {
 	deployBytes, _ := json.Marshal(goodMsg)
 	cs.(*contractStore).abiIndex["abi1"] = &ABIInfo{}
 	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), deployBytes, 0644)
-	_, _, err = cs.GetABIByID("abi1")
+	_, _, err = cs.GetLocalABI("abi1")
 	assert.NoError(err)
 }
 
@@ -87,7 +87,7 @@ func TestLoadDeployMsgMissing(t *testing.T) {
 	defer cleanup(dir)
 	cs, err := NewContractStore("", dir, nil)
 	assert.NoError(err)
-	_, _, err = cs.GetABIByID("abi1")
+	_, _, err = cs.GetLocalABI("abi1")
 	assert.Regexp("No ABI found with ID abi1", err.Error())
 }
 
@@ -98,7 +98,7 @@ func TestLoadDeployMsgFileMissing(t *testing.T) {
 	cs, err := NewContractStore("", dir, nil)
 	assert.NoError(err)
 	cs.(*contractStore).abiIndex["abi1"] = &ABIInfo{}
-	_, _, err = cs.GetABIByID("abi1")
+	_, _, err = cs.GetLocalABI("abi1")
 	assert.Regexp("Failed to load ABI with ID abi1", err.Error())
 }
 
@@ -110,7 +110,7 @@ func TestLoadDeployMsgFailure(t *testing.T) {
 	assert.NoError(err)
 	cs.(*contractStore).abiIndex["abi1"] = &ABIInfo{}
 	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), []byte(":bad json"), 0644)
-	_, _, err = cs.GetABIByID("abi1")
+	_, _, err = cs.GetLocalABI("abi1")
 	assert.Regexp("Failed to parse ABI with ID abi1", err.Error())
 }
 
@@ -122,7 +122,7 @@ func TestLoadDeployMsgRemoteLookupNotFound(t *testing.T) {
 	assert.NoError(err)
 	rr := &mockRR{}
 	cs.(*contractStore).rr = rr
-	_, _, err = cs.GetABIByID("abi1")
+	_, _, err = cs.GetLocalABI("abi1")
 	assert.EqualError(err, "No ABI found with ID abi1")
 }
 
@@ -159,7 +159,7 @@ func TestLoadABIBadData(t *testing.T) {
 	assert.NoError(err)
 
 	ioutil.WriteFile(path.Join(dir, "badness.abi.json"), []byte(":not json"), 0644)
-	_, _, err = cs.GetABIByID("badness")
+	_, _, err = cs.GetLocalABI("badness")
 	assert.Regexp("No ABI found with ID badness", err.Error())
 }
 

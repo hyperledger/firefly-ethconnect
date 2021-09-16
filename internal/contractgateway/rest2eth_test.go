@@ -100,10 +100,6 @@ func (m *mockContractResolver) GetABI(location contractregistry.ABILocation, ref
 	return m.deployMsg, m.contractAddress, m.loadABIError
 }
 
-func (m *mockContractResolver) GetABIByID(abiID string) (*messages.DeployContract, *contractregistry.ABIInfo, error) {
-	return m.deployMsg, m.abiInfo, m.loadABIError
-}
-
 func (m *mockContractResolver) CheckNameAvailable(name string, isRemote bool) error {
 	return m.nameAvailableError
 }

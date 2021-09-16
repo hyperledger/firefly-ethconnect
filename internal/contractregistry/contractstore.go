@@ -44,7 +44,6 @@ type ContractResolver interface {
 	ResolveContractAddress(registeredName string) (string, error)
 	GetContractByAddress(addrHex string) (*ContractInfo, error)
 	GetABI(location ABILocation, refresh bool) (*messages.DeployContract, string, error)
-	GetABIByID(abiID string) (*messages.DeployContract, *ABIInfo, error)
 	CheckNameAvailable(name string, isRemote bool) error
 }
 
@@ -53,6 +52,7 @@ type ContractStore interface {
 	Init()
 	AddContract(addrHexNo0x, abiID, pathName, registerAs string) (*ContractInfo, error)
 	AddABI(id string, deployMsg *messages.DeployContract, createdTime time.Time) *ABIInfo
+	GetLocalABI(abiID string) (*messages.DeployContract, *ABIInfo, error)
 	ListContracts() []messages.TimeSortable
 	ListABIs() []messages.TimeSortable
 }
@@ -205,7 +205,7 @@ func (cs *contractStore) GetABI(location ABILocation, refresh bool) (*messages.D
 		result, err = cs.rr.LoadFactoryForInstance(location.Name, refresh)
 	case LocalABI:
 		result = &DeployContractWithAddress{}
-		result.Contract, _, err = cs.GetABIByID(location.Name)
+		result.Contract, _, err = cs.GetLocalABI(location.Name)
 	default:
 		panic("unknown ABI type") // should not happen
 	}
@@ -217,7 +217,7 @@ func (cs *contractStore) GetABI(location ABILocation, refresh bool) (*messages.D
 	return result.Contract, result.Address, nil
 }
 
-func (cs *contractStore) GetABIByID(abiID string) (*messages.DeployContract, *ABIInfo, error) {
+func (cs *contractStore) GetLocalABI(abiID string) (*messages.DeployContract, *ABIInfo, error) {
 	var info *ABIInfo
 	var msg *messages.DeployContract
 	ts, exists := cs.abiIndex[abiID]

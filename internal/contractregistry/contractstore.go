@@ -43,7 +43,7 @@ const (
 type ContractResolver interface {
 	ResolveContractAddress(registeredName string) (string, error)
 	GetContractByAddress(addrHex string) (*ContractInfo, error)
-	GetABI(location ABILocation, refresh bool) (*messages.DeployContract, string, error)
+	GetABI(location ABILocation, refresh bool) (deployMsg *messages.DeployContract, address string, err error)
 	CheckNameAvailable(name string, isRemote bool) error
 }
 
@@ -188,15 +188,18 @@ func (cs *contractStore) GetContractByAddress(addrHex string) (*ContractInfo, er
 	return info.(*ContractInfo), nil
 }
 
-func (cs *contractStore) GetABI(location ABILocation, refresh bool) (*messages.DeployContract, string, error) {
+func (cs *contractStore) GetABI(location ABILocation, refresh bool) (deployMsg *messages.DeployContract, address string, err error) {
+	if location.ABIType == LocalABI {
+		msg, _, err := cs.GetLocalABI(location.Name)
+		return msg, "", err
+	}
+
 	if cached, ok := cs.abiCache.Get(location); ok {
 		result := cached.(*DeployContractWithAddress)
 		return result.Contract, result.Address, nil
 	}
 
 	var result *DeployContractWithAddress
-	var err error
-
 	switch location.ABIType {
 	case RemoteGateway:
 		result = &DeployContractWithAddress{}
@@ -204,8 +207,7 @@ func (cs *contractStore) GetABI(location ABILocation, refresh bool) (*messages.D
 	case RemoteInstance:
 		result, err = cs.rr.LoadFactoryForInstance(location.Name, refresh)
 	case LocalABI:
-		result = &DeployContractWithAddress{}
-		result.Contract, _, err = cs.GetLocalABI(location.Name)
+		// handled above
 	default:
 		panic("unknown ABI type") // should not happen
 	}
@@ -218,24 +220,46 @@ func (cs *contractStore) GetABI(location ABILocation, refresh bool) (*messages.D
 }
 
 func (cs *contractStore) GetLocalABI(abiID string) (*messages.DeployContract, *ABIInfo, error) {
-	var info *ABIInfo
-	var msg *messages.DeployContract
+	info, err := cs.getABIInfo(abiID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	location := ABILocation{ABIType: LocalABI, Name: abiID}
+	if cached, ok := cs.abiCache.Get(location); ok {
+		result := cached.(*DeployContractWithAddress)
+		return result.Contract, info, nil
+	}
+
+	msg, err := cs.loadDeployMsg(abiID)
+	if err != nil || msg == nil {
+		return nil, nil, err
+	}
+
+	cs.abiCache.Add(location, &DeployContractWithAddress{Contract: msg})
+	return msg, info, nil
+}
+
+func (cs *contractStore) getABIInfo(abiID string) (*ABIInfo, error) {
 	ts, exists := cs.abiIndex[abiID]
 	if !exists {
 		log.Infof("ABI with ID %s not found locally", abiID)
-		return nil, nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABINotFound, abiID)
+		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABINotFound, abiID)
 	}
+	return ts.(*ABIInfo), nil
+}
+
+func (cs *contractStore) loadDeployMsg(abiID string) (*messages.DeployContract, error) {
 	deployFile := path.Join(cs.storagePath, "abi_"+abiID+".deploy.json")
 	deployBytes, err := ioutil.ReadFile(deployFile)
 	if err != nil {
-		return nil, nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABILoad, abiID, err)
+		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABILoad, abiID, err)
 	}
-	msg = &messages.DeployContract{}
+	msg := &messages.DeployContract{}
 	if err = json.Unmarshal(deployBytes, msg); err != nil {
-		return nil, nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABIParse, abiID, err)
+		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABIParse, abiID, err)
 	}
-	info = ts.(*ABIInfo)
-	return msg, info, nil
+	return msg, nil
 }
 
 func (cs *contractStore) Init() {

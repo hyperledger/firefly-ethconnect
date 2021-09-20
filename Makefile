@@ -7,8 +7,6 @@ BINARY_WIN=$(BINARY_NAME)-win
 GOBIN := $(shell $(VGO) env GOPATH)/bin
 MOCKERY := $(GOBIN)/mockery
 
-SARAMA_PATH := $(shell $(VGO) list -f '{{.Dir}}' github.com/Shopify/sarama)
-
 .DELETE_ON_ERROR:
 GOFILES := $(shell find . -name '*.go' -print)
 
@@ -51,17 +49,19 @@ build-win:
 
 ${MOCKERY}:
 		$(VGO) install github.com/vektra/mockery/cmd/mockery@latest
+sarama:
+		$(eval SARAMA_PATH := $(shell $(VGO) list -f '{{.Dir}}' github.com/Shopify/sarama))
 
 define makemock
 mocks: mocks-$(strip $(1))-$(strip $(2))
-mocks-$(strip $(1))-$(strip $(2)): ${MOCKERY}
+mocks-$(strip $(1))-$(strip $(2)): ${MOCKERY} sarama
 	${MOCKERY} --case underscore --dir $(1) --name $(2) --outpkg $(3) --output mocks/$(strip $(3))
 endef
 
 $(eval $(call makemock, internal/contractregistry, ContractStore,        contractregistrymocks))
 $(eval $(call makemock, internal/contractregistry, RemoteRegistry,       contractregistrymocks))
 $(eval $(call makemock, internal/eth,              RPCClient,            ethmocks))
-$(eval $(call makemock, $(SARAMA_PATH),            Client,               saramamocks))
-$(eval $(call makemock, $(SARAMA_PATH),            ConsumerGroup,        saramamocks))
-$(eval $(call makemock, $(SARAMA_PATH),            ConsumerGroupSession, saramamocks))
-$(eval $(call makemock, $(SARAMA_PATH),            ConsumerGroupClaim,   saramamocks))
+$(eval $(call makemock, $$(SARAMA_PATH),           Client,               saramamocks))
+$(eval $(call makemock, $$(SARAMA_PATH),           ConsumerGroup,        saramamocks))
+$(eval $(call makemock, $$(SARAMA_PATH),           ConsumerGroupSession, saramamocks))
+$(eval $(call makemock, $$(SARAMA_PATH),           ConsumerGroupClaim,   saramamocks))

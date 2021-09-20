@@ -162,6 +162,30 @@ type TransactionReceipt struct {
 	RegisterAs           string                `json:"registerAs,omitempty"`
 }
 
+// TransactionInfo is the detailed transaction info returned by eth_getTransactionByXXXXX
+// For the big numbers, we pass a simple string as well as a full
+// ethereum hex encoding version
+type TransactionInfo struct {
+	BlockHash           *ethbinding.Hash       `json:"blockHash,omitempty"`
+	BlockNumberStr      string                 `json:"blockNumber,omitempty"`
+	BlockNumberHex      *ethbinding.HexBigInt  `json:"blockNumberHex,omitempty"`
+	From                *ethbinding.Address    `json:"from,omitempty"`
+	To                  *ethbinding.Address    `json:"to,omitempty"`
+	GasStr              string                 `json:"gas"`
+	GasHex              *ethbinding.HexUint64  `json:"gasHex"`
+	GasPriceStr         string                 `json:"gasPrice"`
+	GasPriceHex         *ethbinding.HexBigInt  `json:"gasPriceHex"`
+	Hash                *ethbinding.Hash       `json:"hash"`
+	NonceStr            string                 `json:"nonce"`
+	NonceHex            *ethbinding.HexUint64  `json:"nonceHex"`
+	TransactionIndexStr string                 `json:"transactionIndex"`
+	TransactionIndexHex *ethbinding.HexUint64  `json:"transactionIndexHex"`
+	ValueStr            string                 `json:"value"`
+	ValueHex            *ethbinding.HexBigInt  `json:"valueHex"`
+	Input               *ethbinding.HexBytes   `json:"input"`
+	InputArgs           map[string]interface{} `json:"inputArgs"`
+}
+
 // ErrorReply is
 type ErrorReply struct {
 	ReplyCommon

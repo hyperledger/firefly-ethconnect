@@ -22,7 +22,6 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -33,10 +32,13 @@ import (
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/events"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger-labs/firefly-ethconnect/mocks/contractregistrymocks"
+	"github.com/hyperledger-labs/firefly-ethconnect/mocks/ethmocks"
 	"github.com/julienschmidt/httprouter"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 type mockREST2EthDispatcher struct {
@@ -76,34 +78,6 @@ func (m *mockREST2EthDispatcher) DispatchDeployContractSync(ctx context.Context,
 	}
 }
 
-type mockContractResolver struct {
-	loadABIError           error
-	deployMsg              *messages.DeployContract
-	abiInfo                *contractregistry.ABIInfo
-	contractInfo           *contractregistry.ContractInfo
-	registeredContractAddr string
-	resolveContractErr     error
-	nameAvailableError     error
-	capturedAddr           string
-}
-
-func (m *mockContractResolver) GetContractByAddress(addrHex string) (*contractregistry.ContractInfo, error) {
-	m.capturedAddr = addrHex
-	return m.contractInfo, m.loadABIError
-}
-
-func (m *mockContractResolver) ResolveContractAddress(registeredName string) (string, error) {
-	return m.registeredContractAddr, m.resolveContractErr
-}
-
-func (m *mockContractResolver) GetABIByID(addrHex string) (*messages.DeployContract, *contractregistry.ABIInfo, error) {
-	return m.deployMsg, m.abiInfo, m.loadABIError
-}
-
-func (m *mockContractResolver) CheckNameAvailable(name string, isRemote bool) error {
-	return m.nameAvailableError
-}
-
 type mockGateway struct {
 	postDeployError error
 }
@@ -116,21 +90,6 @@ func (m *mockGateway) PostDeploy(msg *messages.TransactionReceipt) error {
 }
 func (m *mockGateway) AddRoutes(router *httprouter.Router) { return }
 func (m *mockGateway) Shutdown()                           { return }
-
-type mockRPC struct {
-	capturedMethod string
-	capturedArgs   []interface{}
-	mockError      error
-	result         interface{}
-}
-
-func (m *mockRPC) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
-	m.capturedMethod = method
-	m.capturedArgs = args
-	v := reflect.ValueOf(result)
-	v.Elem().Set(reflect.ValueOf(m.result))
-	return m.mockError
-}
 
 type mockSubMgr struct {
 	err             error
@@ -178,36 +137,6 @@ func (m *mockSubMgr) ResetSubscription(ctx context.Context, id, initialBlock str
 }
 func (m *mockSubMgr) Close() {}
 
-type mockRR struct {
-	idCapture      string
-	addrCapture    string
-	lookupCapture  string
-	refreshCapture bool
-	deployMsg      *contractregistry.DeployContractWithAddress
-	err            error
-}
-
-func (rr *mockRR) LoadFactoryForGateway(id string, refresh bool) (*messages.DeployContract, error) {
-	rr.idCapture = id
-	rr.refreshCapture = refresh
-	if rr.deployMsg == nil {
-		return nil, rr.err
-	}
-	return &rr.deployMsg.DeployContract, rr.err
-}
-func (rr *mockRR) LoadFactoryForInstance(id string, refresh bool) (*contractregistry.DeployContractWithAddress, error) {
-	rr.addrCapture = id
-	rr.refreshCapture = refresh
-	return rr.deployMsg, rr.err
-}
-func (rr *mockRR) RegisterInstance(lookupStr, address string) error {
-	rr.lookupCapture = lookupStr
-	rr.addrCapture = address
-	return rr.err
-}
-func (rr *mockRR) Close()      {}
-func (rr *mockRR) Init() error { return nil }
-
 func newTestDeployMsg(t *testing.T, addr string) *contractregistry.DeployContractWithAddress {
 	compiled, err := eth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")
 	assert.NoError(t, err)
@@ -217,71 +146,36 @@ func newTestDeployMsg(t *testing.T, addr string) *contractregistry.DeployContrac
 	}
 }
 
-func newTestREST2Eth(t *testing.T, dispatcher *mockREST2EthDispatcher) (*rest2eth, *mockRPC, *httprouter.Router) {
-	mockRPC := &mockRPC{}
-	deployMsg := newTestDeployMsg(t, "")
+func newTestREST2Eth(dispatcher *mockREST2EthDispatcher) (*rest2eth, *httprouter.Router) {
+	mockRPC := &ethmocks.RPCClient{}
 	gateway := &mockGateway{}
-	contractResolver := &mockContractResolver{
-		contractInfo: &contractregistry.ContractInfo{},
-		deployMsg:    &deployMsg.DeployContract,
-	}
+	contractResolver := &contractregistrymocks.ContractStore{}
+	remoteRegistry := &contractregistrymocks.RemoteRegistry{}
 	mockProcessor := &mockProcessor{}
-	r := newREST2eth(gateway, contractResolver, mockRPC, nil, nil, mockProcessor, dispatcher, dispatcher)
+	r := newREST2eth(gateway, contractResolver, mockRPC, nil, remoteRegistry, mockProcessor, dispatcher, dispatcher)
 	router := &httprouter.Router{}
 	r.addRoutes(router)
 
-	return r, mockRPC, router
+	return r, router
 }
 
-func newTestREST2EthCustomGateway(t *testing.T, dispatcher *mockREST2EthDispatcher, gateway *mockGateway) (*rest2eth, *mockRPC, *httprouter.Router) {
-	mockRPC := &mockRPC{}
-	deployMsg := newTestDeployMsg(t, "")
-	contractResolver := &mockContractResolver{
-		contractInfo: &contractregistry.ContractInfo{},
-		deployMsg:    &deployMsg.DeployContract,
-	}
-	mockProcessor := &mockProcessor{}
-	r := newREST2eth(gateway, contractResolver, mockRPC, nil, nil, mockProcessor, dispatcher, dispatcher)
-	router := &httprouter.Router{}
-	r.addRoutes(router)
-
-	return r, mockRPC, router
-}
-
-func newTestREST2EthCustomContractResolver(dispatcher *mockREST2EthDispatcher, contractResolver *mockContractResolver) (*rest2eth, *mockRPC, *httprouter.Router) {
-	mockRPC := &mockRPC{}
-	gateway := &mockGateway{}
-	mockProcessor := &mockProcessor{}
-	r := newREST2eth(gateway, contractResolver, mockRPC, nil, nil, mockProcessor, dispatcher, dispatcher)
-	router := &httprouter.Router{}
-	r.addRoutes(router)
-
-	return r, mockRPC, router
-}
-
-func newTestREST2EthAndMsg(t *testing.T, dispatcher *mockREST2EthDispatcher, from, to string, bodyMap map[string]interface{}) (*rest2eth, *mockRPC, *httprouter.Router, *httptest.ResponseRecorder, *http.Request) {
+func newTestREST2EthAndMsg(dispatcher *mockREST2EthDispatcher, from, to string, bodyMap map[string]interface{}) (*rest2eth, *httprouter.Router, *httptest.ResponseRecorder, *http.Request) {
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/set", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
 	res := httptest.NewRecorder()
 
-	r, mockRPC, router := newTestREST2Eth(t, dispatcher)
-
-	return r, mockRPC, router, res, req
+	r, router := newTestREST2Eth(dispatcher)
+	return r, router, res, req
 }
 
-func newTestREST2EthAndMsgPostDeployError(t *testing.T, dispatcher *mockREST2EthDispatcher, from, to string, bodyMap map[string]interface{}) (*rest2eth, *mockRPC, *httprouter.Router, *httptest.ResponseRecorder, *http.Request) {
-	gateway := &mockGateway{
-		postDeployError: fmt.Errorf("pop"),
-	}
-	body, _ := json.Marshal(&bodyMap)
-	req := httptest.NewRequest("POST", "/contracts/"+to+"/set", bytes.NewReader(body))
-	req.Header.Add("x-firefly-from", from)
-	res := httptest.NewRecorder()
+func expectContractSuccess(t *testing.T, mcr *contractregistrymocks.ContractStore, address string) {
+	mcr.On("GetContractByAddress", address).Return(&contractregistry.ContractInfo{ABI: "abi1"}, nil)
+	expectABISuccess(t, mcr, "abi1")
+}
 
-	r, mockRPC, router := newTestREST2EthCustomGateway(t, dispatcher, gateway)
-
-	return r, mockRPC, router, res, req
+func expectABISuccess(t *testing.T, mcr *contractregistrymocks.ContractStore, abiID string) {
+	mcr.On("GetABIByID", abiID).Return(&newTestDeployMsg(t, "").DeployContract, nil, nil)
 }
 
 func TestSendTransactionAsyncSuccess(t *testing.T) {
@@ -300,7 +194,11 @@ func TestSendTransactionAsyncSuccess(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
+
+	r, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
 	req.Header.Set("X-Firefly-PrivateFrom", "0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90")
 	req.Header.Set("X-Firefly-PrivateFor", "0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745,0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C")
 	router.ServeHTTP(res, req)
@@ -318,6 +216,8 @@ func TestSendTransactionAsyncSuccess(t *testing.T) {
 	assert.Equal("0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90", dispatcher.asyncDispatchMsg["privateFrom"])
 	assert.Equal("0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745", dispatcher.asyncDispatchMsg["privateFor"].([]interface{})[0])
 	assert.Equal("0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C", dispatcher.asyncDispatchMsg["privateFor"].([]interface{})[1])
+
+	mcr.AssertExpectations(t)
 }
 
 func TestDeployContractAsyncSuccess(t *testing.T) {
@@ -335,7 +235,11 @@ func TestDeployContractAsyncSuccess(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectABISuccess(t, mcr, "abi1")
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/abis/abi1?fly-privateFrom=0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90&fly-privateFor=0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745&fly-privateFor=0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
@@ -353,6 +257,8 @@ func TestDeployContractAsyncSuccess(t *testing.T) {
 	assert.Equal("0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90", dispatcher.asyncDispatchMsg["privateFrom"])
 	assert.Equal("0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745", dispatcher.asyncDispatchMsg["privateFor"].([]interface{})[0])
 	assert.Equal("0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C", dispatcher.asyncDispatchMsg["privateFor"].([]interface{})[1])
+
+	mcr.AssertExpectations(t)
 }
 
 func TestDeployContractAsyncHDWallet(t *testing.T) {
@@ -370,7 +276,11 @@ func TestDeployContractAsyncHDWallet(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectABISuccess(t, mcr, "abi1")
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/abis/abi1", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
@@ -385,6 +295,8 @@ func TestDeployContractAsyncHDWallet(t *testing.T) {
 
 	assert.Equal(true, dispatcher.asyncDispatchAck)
 	assert.Equal(strings.ToLower(from), dispatcher.asyncDispatchMsg["from"])
+
+	mcr.AssertExpectations(t)
 }
 
 func TestDeployContractAsyncDuplicate(t *testing.T) {
@@ -402,9 +314,12 @@ func TestDeployContractAsyncDuplicate(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	r, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
-	contractResolver := r.cr.(*mockContractResolver)
-	contractResolver.nameAvailableError = fmt.Errorf("spent already")
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectABISuccess(t, mcr, "abi1")
+	mcr.On("CheckNameAvailable", "random", false).Return(fmt.Errorf("spent already"))
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/abis/abi1?fly-privateFrom=0xdC416B907857Fa8c0e0d55ec21766Ee3546D5f90&fly-privateFor=0xE7E32f0d5A2D55B2aD27E0C2d663807F28f7c745&fly-privateFor=0xB92F8CebA52fFb5F08f870bd355B1d32f0fd9f7C", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
@@ -415,6 +330,8 @@ func TestDeployContractAsyncDuplicate(t *testing.T) {
 	var resBody map[string]interface{}
 	json.NewDecoder(res.Body).Decode(&resBody)
 	assert.Equal("spent already", resBody["error"])
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionSyncSuccess(t *testing.T) {
@@ -439,7 +356,11 @@ func TestSendTransactionSyncSuccess(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?fly-sync&fly-ethvalue=1234", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
@@ -450,6 +371,8 @@ func TestSendTransactionSyncSuccess(t *testing.T) {
 	assert.Equal(200, res.Result().StatusCode)
 	assert.Equal(from, dispatcher.sendTransactionMsg.From)
 	assert.Equal(to, dispatcher.sendTransactionMsg.To)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionSyncFailure(t *testing.T) {
@@ -474,7 +397,11 @@ func TestSendTransactionSyncFailure(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?fly-sync&fly-ethvalue=1234", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
@@ -485,6 +412,8 @@ func TestSendTransactionSyncFailure(t *testing.T) {
 	assert.Equal(500, res.Result().StatusCode)
 	assert.Equal(from, dispatcher.sendTransactionMsg.From)
 	assert.Equal(to, dispatcher.sendTransactionMsg.To)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionSyncPostDeployErr(t *testing.T) {
@@ -511,10 +440,18 @@ func TestSendTransactionSyncPostDeployErr(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsgPostDeployError(t, dispatcher, from, to, bodyMap)
+
+	r, router := newTestREST2Eth(dispatcher)
+	r.gw = &mockGateway{
+		postDeployError: fmt.Errorf("pop"),
+	}
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?fly-sync&fly-ethvalue=1234", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
+	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 
 	assert.Equal(json.Number("1234"), dispatcher.sendTransactionMsg.Value)
@@ -523,6 +460,8 @@ func TestSendTransactionSyncPostDeployErr(t *testing.T) {
 	assert.Equal(from, dispatcher.sendTransactionMsg.From)
 	assert.Equal(to, dispatcher.sendTransactionMsg.To)
 	assert.Equal(contractAddr, *dispatcher.sendTransactionSyncReceipt.ContractAddress)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionSyncViaABISuccess(t *testing.T) {
@@ -548,7 +487,11 @@ func TestSendTransactionSyncViaABISuccess(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectABISuccess(t, mcr, abi)
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/abis/"+abi+"/"+to+"/set?fly-sync&fly-ethvalue=1234", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
@@ -559,6 +502,8 @@ func TestSendTransactionSyncViaABISuccess(t *testing.T) {
 	assert.Equal(200, res.Result().StatusCode)
 	assert.Equal(from, dispatcher.sendTransactionMsg.From)
 	assert.Equal(to, dispatcher.sendTransactionMsg.To)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestDeployContractSyncSuccess(t *testing.T) {
@@ -582,7 +527,11 @@ func TestDeployContractSyncSuccess(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		deployContractSyncReceipt: receipt,
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectABISuccess(t, mcr, "abi1")
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/abis/abi1?fly-sync", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
@@ -590,9 +539,11 @@ func TestDeployContractSyncSuccess(t *testing.T) {
 
 	assert.Equal(200, res.Result().StatusCode)
 	assert.Equal(from, dispatcher.deployContractMsg.From)
+
+	mcr.AssertExpectations(t)
 }
 
-func TestDeployContractSyncRemoteRegitryInstance(t *testing.T) {
+func TestDeployContractSyncRemoteRegistryInstance(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
@@ -617,10 +568,12 @@ func TestDeployContractSyncRemoteRegitryInstance(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
 	}
-	r, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
-	r.rr = &mockRR{
-		deployMsg: newTestDeployMsg(t, strings.TrimPrefix(to, "0x")),
-	}
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
+	mrr.On("LoadFactoryForInstance", "myinstance", false).
+		Return(newTestDeployMsg(t, strings.TrimPrefix(to, "0x")), nil)
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?fly-sync", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
@@ -629,70 +582,88 @@ func TestDeployContractSyncRemoteRegitryInstance(t *testing.T) {
 	assert.Equal(200, res.Result().StatusCode)
 	assert.Equal(to, dispatcher.sendTransactionMsg.To)
 	assert.Equal(from, dispatcher.sendTransactionMsg.From)
+
+	mrr.AssertExpectations(t)
 }
 
-func TestDeployContractSyncRemoteRegitryInstance500(t *testing.T) {
+func TestDeployContractSyncRemoteRegistryInstance500(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
 
 	bodyMap := make(map[string]interface{})
-	r, _, router, res, _ := newTestREST2EthAndMsg(t, &mockREST2EthDispatcher{}, "", "", bodyMap)
-	r.rr = &mockRR{
-		err: fmt.Errorf("pop"),
-	}
+
+	r, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
+	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
+	mrr.On("LoadFactoryForInstance", "myinstance", false).Return(nil, fmt.Errorf("pop"))
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?fly-sync", bytes.NewReader(body))
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
+
+	mrr.AssertExpectations(t)
 }
 
-func TestDeployContractSyncRemoteRegitryInstance404(t *testing.T) {
+func TestDeployContractSyncRemoteRegistryInstance404(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
 
 	bodyMap := make(map[string]interface{})
-	r, _, router, res, _ := newTestREST2EthAndMsg(t, &mockREST2EthDispatcher{}, "", "", bodyMap)
-	r.rr = &mockRR{}
+
+	r, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
+	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
+	mrr.On("LoadFactoryForInstance", "myinstance", false).Return(nil, nil)
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?fly-sync", bytes.NewReader(body))
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
+
+	mrr.AssertExpectations(t)
 }
 
-func TestDeployContractSyncRemoteRegitryGateway500(t *testing.T) {
+func TestDeployContractSyncRemoteRegistryGateway500(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
 
 	bodyMap := make(map[string]interface{})
-	r, _, router, res, _ := newTestREST2EthAndMsg(t, &mockREST2EthDispatcher{}, "", "", bodyMap)
-	r.rr = &mockRR{
-		err: fmt.Errorf("pop"),
-	}
+
+	r, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
+	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
+	mrr.On("LoadFactoryForGateway", "mygw", false).Return(nil, fmt.Errorf("pop"))
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygw?fly-sync", bytes.NewReader(body))
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
+
+	mrr.AssertExpectations(t)
 }
 
-func TestDeployContractSyncRemoteRegitryGateway404(t *testing.T) {
+func TestDeployContractSyncRemoteRegistryGateway404(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
 
 	bodyMap := make(map[string]interface{})
-	r, _, router, res, _ := newTestREST2EthAndMsg(t, &mockREST2EthDispatcher{}, "", "", bodyMap)
-	r.rr = &mockRR{}
+
+	r, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
+	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
+	mrr.On("LoadFactoryForGateway", "mygw", false).Return(nil, nil)
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygw?fly-sync", bytes.NewReader(body))
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
+
+	mrr.AssertExpectations(t)
 }
 
 func TestDeployContractSyncRemoteRegistryGateway(t *testing.T) {
@@ -717,10 +688,12 @@ func TestDeployContractSyncRemoteRegistryGateway(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
 	}
-	r, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
-	r.rr = &mockRR{
-		deployMsg: newTestDeployMsg(t, strings.TrimPrefix(to, "0x")),
-	}
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
+	mrr.On("LoadFactoryForGateway", "mygateway", false).
+		Return(&newTestDeployMsg(t, strings.TrimPrefix(to, "0x")).DeployContract, nil)
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygateway/567a417717cb6c59ddc1035705f02c0fd1ab1872/set?fly-sync", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
@@ -729,6 +702,8 @@ func TestDeployContractSyncRemoteRegistryGateway(t *testing.T) {
 	assert.Equal(200, res.Result().StatusCode)
 	assert.Equal(to, dispatcher.sendTransactionMsg.To)
 	assert.Equal(from, dispatcher.sendTransactionMsg.From)
+
+	mrr.AssertExpectations(t)
 }
 
 func TestSendTransactionSyncFail(t *testing.T) {
@@ -744,7 +719,11 @@ func TestSendTransactionSyncFail(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncError: fmt.Errorf("pop"),
 	}
-	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
+
+	r, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
 	req.Header.Set("x-firefly-sync", "true")
 	router.ServeHTTP(res, req)
 
@@ -753,6 +732,8 @@ func TestSendTransactionSyncFail(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("pop", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionAsyncFail(t *testing.T) {
@@ -768,7 +749,11 @@ func TestSendTransactionAsyncFail(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		asyncDispatchError: fmt.Errorf("pop"),
 	}
-	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
+
+	r, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
@@ -776,6 +761,8 @@ func TestSendTransactionAsyncFail(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("pop", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestDeployContractAsyncFail(t *testing.T) {
@@ -790,7 +777,11 @@ func TestDeployContractAsyncFail(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		asyncDispatchError: fmt.Errorf("pop"),
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectABISuccess(t, mcr, "abi1")
+
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/abis/abi1", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
@@ -801,6 +792,8 @@ func TestDeployContractAsyncFail(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("pop", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionAsyncBadMethod(t *testing.T) {
@@ -816,7 +809,11 @@ func TestSendTransactionAsyncBadMethod(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		asyncDispatchError: fmt.Errorf("pop"),
 	}
-	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
+
+	r, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
@@ -824,7 +821,10 @@ func TestSendTransactionAsyncBadMethod(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("pop", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
+
 func TestSendTransactionBadContract(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
@@ -838,7 +838,12 @@ func TestSendTransactionBadContract(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		asyncDispatchError: fmt.Errorf("pop"),
 	}
-	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
+
+	r, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("ResolveContractAddress", "badness").Return("my-contract", nil)
+	expectContractSuccess(t, mcr, "my-contract")
+
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
@@ -846,6 +851,8 @@ func TestSendTransactionBadContract(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("pop", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionUnknownRegisteredName(t *testing.T) {
@@ -859,9 +866,11 @@ func TestSendTransactionUnknownRegisteredName(t *testing.T) {
 	to := "random"
 	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
 	dispatcher := &mockREST2EthDispatcher{}
-	r, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
-	contractResolver := r.cr.(*mockContractResolver)
-	contractResolver.resolveContractErr = fmt.Errorf("unregistered")
+
+	r, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("ResolveContractAddress", "random").Return("", fmt.Errorf("unregistered"))
+
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
@@ -869,6 +878,8 @@ func TestSendTransactionUnknownRegisteredName(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("unregistered", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionMissingContract(t *testing.T) {
@@ -884,7 +895,11 @@ func TestSendTransactionMissingContract(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		asyncDispatchError: fmt.Errorf("pop"),
 	}
-	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
+
+	r, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
 	router.ServeHTTP(res, req)
 
 	assert.Equal(400, res.Result().StatusCode)
@@ -892,6 +907,8 @@ func TestSendTransactionMissingContract(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("Please specify a valid address in the 'fly-from' query string parameter or x-firefly-from HTTP header", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionBadMethodABI(t *testing.T) {
@@ -904,9 +921,13 @@ func TestSendTransactionBadMethodABI(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	contractResolver := &mockContractResolver{
-		contractInfo: &contractregistry.ContractInfo{},
-		deployMsg: &messages.DeployContract{
+
+	r, router := newTestREST2Eth(dispatcher)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("GetContractByAddress", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8").
+		Return(&contractregistry.ContractInfo{ABI: "abi-id"}, nil)
+	mcr.On("GetABIByID", "abi-id").
+		Return(&messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{
 				{
 					Name: "badmethod", Type: "function", Inputs: []ethbinding.ABIArgumentMarshaling{
@@ -914,9 +935,8 @@ func TestSendTransactionBadMethodABI(t *testing.T) {
 					},
 				},
 			},
-		},
-	}
-	_, _, router := newTestREST2EthCustomContractResolver(dispatcher, contractResolver)
+		}, &contractregistry.ABIInfo{}, nil)
+
 	req := httptest.NewRequest("GET", "/contracts/0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8/badmethod", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
 	res := httptest.NewRecorder()
@@ -926,6 +946,8 @@ func TestSendTransactionBadMethodABI(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("Invalid method 'badmethod' in ABI: unsupported arg type: badness", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionBadEventABI(t *testing.T) {
@@ -938,9 +960,13 @@ func TestSendTransactionBadEventABI(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	contractResolver := &mockContractResolver{
-		contractInfo: &contractregistry.ContractInfo{},
-		deployMsg: &messages.DeployContract{
+
+	r, router := newTestREST2Eth(dispatcher)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("GetContractByAddress", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8").
+		Return(&contractregistry.ContractInfo{ABI: "abi-id"}, nil)
+	mcr.On("GetABIByID", "abi-id").
+		Return(&messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{
 				{
 					Name: "badevent", Type: "event", Inputs: []ethbinding.ABIArgumentMarshaling{
@@ -948,9 +974,8 @@ func TestSendTransactionBadEventABI(t *testing.T) {
 					},
 				},
 			},
-		},
-	}
-	_, _, router := newTestREST2EthCustomContractResolver(dispatcher, contractResolver)
+		}, &contractregistry.ABIInfo{}, nil)
+
 	req := httptest.NewRequest("POST", "/contracts/0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8/badevent/subscribe", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
 	res := httptest.NewRecorder()
@@ -960,6 +985,8 @@ func TestSendTransactionBadEventABI(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("Invalid event 'badevent' in ABI: unsupported arg type: badness", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionBadConstructorABI(t *testing.T) {
@@ -972,9 +999,11 @@ func TestSendTransactionBadConstructorABI(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	contractResolver := &mockContractResolver{
-		contractInfo: &contractregistry.ContractInfo{},
-		deployMsg: &messages.DeployContract{
+
+	r, router := newTestREST2Eth(dispatcher)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("GetABIByID", "testabi").
+		Return(&messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{
 				{
 					Name: "badevent", Type: "constructor", Inputs: []ethbinding.ABIArgumentMarshaling{
@@ -982,9 +1011,8 @@ func TestSendTransactionBadConstructorABI(t *testing.T) {
 					},
 				},
 			},
-		},
-	}
-	_, _, router := newTestREST2EthCustomContractResolver(dispatcher, contractResolver)
+		}, &contractregistry.ABIInfo{}, nil)
+
 	req := httptest.NewRequest("POST", "/abis/testabi", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
 	res := httptest.NewRecorder()
@@ -994,6 +1022,8 @@ func TestSendTransactionBadConstructorABI(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("Invalid method 'constructor' in ABI: unsupported arg type: badness", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionDefaultConstructorABI(t *testing.T) {
@@ -1006,18 +1036,21 @@ func TestSendTransactionDefaultConstructorABI(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	contractResolver := &mockContractResolver{
-		contractInfo: &contractregistry.ContractInfo{},
-		deployMsg: &messages.DeployContract{
+
+	r, router := newTestREST2Eth(dispatcher)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("GetABIByID", "testabi").
+		Return(&messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{}, // completely empty ABI is ok
-		},
-	}
-	_, _, router := newTestREST2EthCustomContractResolver(dispatcher, contractResolver)
+		}, &contractregistry.ABIInfo{}, nil)
+
 	req := httptest.NewRequest("POST", "/abis/testabi", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(202, res.Result().StatusCode)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionUnnamedParamsABI(t *testing.T) {
@@ -1030,9 +1063,11 @@ func TestSendTransactionUnnamedParamsABI(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	contractResolver := &mockContractResolver{
-		contractInfo: &contractregistry.ContractInfo{},
-		deployMsg: &messages.DeployContract{
+
+	r, router := newTestREST2Eth(dispatcher)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("GetABIByID", "testabi").
+		Return(&messages.DeployContract{
 			ABI: ethbinding.ABIMarshaling{
 				{
 					Name: "unnamedparamsmethod", Type: "function", Inputs: []ethbinding.ABIArgumentMarshaling{
@@ -1041,9 +1076,8 @@ func TestSendTransactionUnnamedParamsABI(t *testing.T) {
 					},
 				},
 			},
-		},
-	}
-	_, _, router := newTestREST2EthCustomContractResolver(dispatcher, contractResolver)
+		}, &contractregistry.ABIInfo{}, nil)
+
 	req := httptest.NewRequest("POST", "/abis/testabi/0x29fb3f4f7cc82a1456903a506e88cdd63b1d74e8/unnamedparamsmethod", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
 	q := req.URL.Query()
@@ -1053,6 +1087,8 @@ func TestSendTransactionUnnamedParamsABI(t *testing.T) {
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(202, res.Result().StatusCode)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionBadFrom(t *testing.T) {
@@ -1068,7 +1104,11 @@ func TestSendTransactionBadFrom(t *testing.T) {
 	dispatcher := &mockREST2EthDispatcher{
 		asyncDispatchError: fmt.Errorf("pop"),
 	}
-	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
+
+	r, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
@@ -1076,6 +1116,8 @@ func TestSendTransactionBadFrom(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("From Address must be a 40 character hex string (0x prefix is optional)", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionInvalidContract(t *testing.T) {
@@ -1093,9 +1135,11 @@ func TestSendTransactionInvalidContract(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	r, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
-	contractResolver := r.cr.(*mockContractResolver)
-	contractResolver.loadABIError = fmt.Errorf("pop")
+
+	r, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("GetContractByAddress", to).Return(nil, fmt.Errorf("pop"))
+
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
@@ -1103,6 +1147,8 @@ func TestSendTransactionInvalidContract(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("pop", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestDeployContractInvalidABI(t *testing.T) {
@@ -1120,12 +1166,15 @@ func TestDeployContractInvalidABI(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	r, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, "", bodyMap)
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/abis/abi1?fly-sync", bytes.NewReader(body))
 	req.Header.Add("x-firefly-from", from)
-	contractResolver := r.cr.(*mockContractResolver)
-	contractResolver.loadABIError = fmt.Errorf("pop")
+
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("GetABIByID", "abi1").Return(nil, nil, fmt.Errorf("pop"))
+
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
@@ -1133,7 +1182,10 @@ func TestDeployContractInvalidABI(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("pop", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
+
 func TestSendTransactionInvalidMethod(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
@@ -1150,7 +1202,11 @@ func TestSendTransactionInvalidMethod(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/shazaam", bytes.NewReader([]byte("{}")))
 	req.Header.Set("x-firefly-from", from)
 	router.ServeHTTP(res, req)
@@ -1160,6 +1216,8 @@ func TestSendTransactionInvalidMethod(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("Method or Event 'shazaam' is not declared in the ABI of contract '567a417717cb6c59ddc1035705f02c0fd1ab1872'", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionParamInQuery(t *testing.T) {
@@ -1176,12 +1234,18 @@ func TestSendTransactionParamInQuery(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?i=999&s=msg&fly-ethvalue=12345", bytes.NewReader([]byte("{}")))
 	req.Header.Set("x-firefly-from", from)
 	router.ServeHTTP(res, req)
 
 	assert.Equal(202, res.Result().StatusCode)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionRegisteredName(t *testing.T) {
@@ -1198,16 +1262,21 @@ func TestSendTransactionRegisteredName(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	r, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
-	contractResolver := r.cr.(*mockContractResolver)
-	contractResolver.registeredContractAddr = "c6c572a18d31ff36d661d680c0060307e038dc47"
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("ResolveContractAddress", "transponster").Return("c6c572a18d31ff36d661d680c0060307e038dc47", nil)
+	expectContractSuccess(t, mcr, "c6c572a18d31ff36d661d680c0060307e038dc47")
+
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?i=999&s=msg&fly-ethvalue=12345", bytes.NewReader([]byte("{}")))
 	req.Header.Set("x-firefly-from", from)
 	router.ServeHTTP(res, req)
 
-	assert.Equal("c6c572a18d31ff36d661d680c0060307e038dc47", contractResolver.capturedAddr)
 	assert.Equal(202, res.Result().StatusCode)
+
+	mcr.AssertExpectations(t)
 }
+
 func TestSendTransactionMissingParam(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
@@ -1222,7 +1291,11 @@ func TestSendTransactionMissingParam(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
+
+	r, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
 	router.ServeHTTP(res, req)
 
 	assert.Equal(400, res.Result().StatusCode)
@@ -1230,6 +1303,8 @@ func TestSendTransactionMissingParam(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("Parameter 'i' of method 'set' was not specified in body or query parameters", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionBadBody(t *testing.T) {
@@ -1246,7 +1321,11 @@ func TestSendTransactionBadBody(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?x=999", bytes.NewReader([]byte(":not json or yaml")))
 	req.Header.Set("x-firefly-from", from)
 	router.ServeHTTP(res, req)
@@ -1256,6 +1335,8 @@ func TestSendTransactionBadBody(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Regexp("Unable to parse as YAML or JSON", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestCallMethodSuccess(t *testing.T) {
@@ -1266,14 +1347,23 @@ func TestCallMethodSuccess(t *testing.T) {
 
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	dispatcher := &mockREST2EthDispatcher{}
-	_, mockRPC, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
+	mockRPC := r.rpc.(*ethmocks.RPCClient)
+	mockRPC.On("CallContext", mock.Anything, mock.Anything, "eth_call", mock.Anything, "latest").
+		Run(func(args mock.Arguments) {
+			result := args[1].(*string)
+			*result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
+		}).
+		Return(nil)
+
 	req := httptest.NewRequest("GET", "/contracts/"+to+"/get", bytes.NewReader([]byte{}))
-	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
 	router.ServeHTTP(res, req)
 
 	assert.Equal(200, res.Result().StatusCode)
-	assert.Equal("eth_call", mockRPC.capturedMethod)
-	assert.Equal("latest", mockRPC.capturedArgs[1])
 	var reply map[string]interface{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
@@ -1281,6 +1371,9 @@ func TestCallMethodSuccess(t *testing.T) {
 	assert.Nil(reply["error"])
 	assert.Equal("123456", reply["i"])
 	assert.Equal("testing", reply["s"])
+
+	mcr.AssertExpectations(t)
+	mockRPC.AssertExpectations(t)
 }
 
 func TestCallMethodHDWalletSuccess(t *testing.T) {
@@ -1292,15 +1385,24 @@ func TestCallMethodHDWalletSuccess(t *testing.T) {
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	dispatcher := &mockREST2EthDispatcher{}
 	from := "HD-u01234abcd-u01234abcd-12345"
-	r, mockRPC, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
+	mockRPC := r.rpc.(*ethmocks.RPCClient)
+	mockRPC.On("CallContext", mock.Anything, mock.Anything, "eth_call", mock.Anything, "latest").
+		Run(func(args mock.Arguments) {
+			result := args[1].(*string)
+			*result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
+		}).
+		Return(nil)
+
 	r.processor.(*mockProcessor).resolvedFrom = "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
 	req := httptest.NewRequest("GET", "/contracts/"+to+"/get?fly-from="+from, bytes.NewReader([]byte{}))
-	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
 	router.ServeHTTP(res, req)
 
 	assert.Equal(200, res.Result().StatusCode)
-	assert.Equal("eth_call", mockRPC.capturedMethod)
-	assert.Equal("latest", mockRPC.capturedArgs[1])
 	var reply map[string]interface{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
@@ -1308,6 +1410,9 @@ func TestCallMethodHDWalletSuccess(t *testing.T) {
 	assert.Nil(reply["error"])
 	assert.Equal("123456", reply["i"])
 	assert.Equal("testing", reply["s"])
+
+	mcr.AssertExpectations(t)
+	mockRPC.AssertExpectations(t)
 }
 
 func TestCallMethodHDWalletFail(t *testing.T) {
@@ -1319,17 +1424,22 @@ func TestCallMethodHDWalletFail(t *testing.T) {
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	dispatcher := &mockREST2EthDispatcher{}
 	from := "HD-u01234abcd-u01234abcd-12345"
-	r, mockRPC, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
 	r.processor.(*mockProcessor).resolvedFrom = "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
 	r.processor.(*mockProcessor).err = fmt.Errorf("pop")
 	req := httptest.NewRequest("GET", "/contracts/"+to+"/get?fly-from="+from, bytes.NewReader([]byte{}))
-	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
 	var reply map[string]interface{}
 	json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.Equal("pop", reply["error"])
+
+	mcr.AssertExpectations(t)
 }
 
 func TestCallReadOnlyMethodViaPOSTSuccess(t *testing.T) {
@@ -1340,14 +1450,23 @@ func TestCallReadOnlyMethodViaPOSTSuccess(t *testing.T) {
 
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	dispatcher := &mockREST2EthDispatcher{}
-	_, mockRPC, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
+	mockRPC := r.rpc.(*ethmocks.RPCClient)
+	mockRPC.On("CallContext", mock.Anything, mock.Anything, "eth_call", mock.Anything, "0x3039").
+		Run(func(args mock.Arguments) {
+			result := args[1].(*string)
+			*result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
+		}).
+		Return(nil)
+
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/get?fly-blocknumber=12345", bytes.NewReader([]byte{}))
-	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
 	router.ServeHTTP(res, req)
 
 	assert.Equal(200, res.Result().StatusCode)
-	assert.Equal("eth_call", mockRPC.capturedMethod)
-	assert.Equal("0x3039", mockRPC.capturedArgs[1])
 	var reply map[string]interface{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
@@ -1356,25 +1475,52 @@ func TestCallReadOnlyMethodViaPOSTSuccess(t *testing.T) {
 	assert.Equal("123456", reply["i"])
 	assert.Equal("testing", reply["s"])
 
-	to = "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
-	dispatcher = &mockREST2EthDispatcher{}
-	_, mockRPC, router, res, _ = newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
-	req = httptest.NewRequest("POST", "/contracts/"+to+"/get?fly-blocknumber=0xab1234", bytes.NewReader([]byte{}))
-	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
-	router.ServeHTTP(res, req)
-	assert.Equal(200, res.Result().StatusCode)
-	assert.Equal("eth_call", mockRPC.capturedMethod)
-	assert.Equal("0xab1234", mockRPC.capturedArgs[1])
+	mcr.AssertExpectations(t)
+	mockRPC.AssertExpectations(t)
 
 	to = "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	dispatcher = &mockREST2EthDispatcher{}
-	_, mockRPC, router, res, _ = newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
-	req = httptest.NewRequest("POST", "/contracts/"+to+"/get?fly-blocknumber=pending", bytes.NewReader([]byte{}))
-	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
+
+	r, router, res, _ = newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	mcr = r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
+	mockRPC = r.rpc.(*ethmocks.RPCClient)
+	mockRPC.On("CallContext", mock.Anything, mock.Anything, "eth_call", mock.Anything, "0xab1234").
+		Run(func(args mock.Arguments) {
+			result := args[1].(*string)
+			*result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
+		}).
+		Return(nil)
+
+	req = httptest.NewRequest("POST", "/contracts/"+to+"/get?fly-blocknumber=0xab1234", bytes.NewReader([]byte{}))
 	router.ServeHTTP(res, req)
 	assert.Equal(200, res.Result().StatusCode)
-	assert.Equal("eth_call", mockRPC.capturedMethod)
-	assert.Equal("pending", mockRPC.capturedArgs[1])
+
+	mcr.AssertExpectations(t)
+	mockRPC.AssertExpectations(t)
+
+	to = "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
+	dispatcher = &mockREST2EthDispatcher{}
+
+	r, router, res, _ = newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	mcr = r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
+	mockRPC = r.rpc.(*ethmocks.RPCClient)
+	mockRPC.On("CallContext", mock.Anything, mock.Anything, "eth_call", mock.Anything, "pending").
+		Run(func(args mock.Arguments) {
+			result := args[1].(*string)
+			*result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
+		}).
+		Return(nil)
+
+	req = httptest.NewRequest("POST", "/contracts/"+to+"/get?fly-blocknumber=pending", bytes.NewReader([]byte{}))
+	router.ServeHTTP(res, req)
+	assert.Equal(200, res.Result().StatusCode)
+
+	mcr.AssertExpectations(t)
+	mockRPC.AssertExpectations(t)
 }
 
 func TestCallMethodFail(t *testing.T) {
@@ -1384,9 +1530,15 @@ func TestCallMethodFail(t *testing.T) {
 
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	dispatcher := &mockREST2EthDispatcher{}
-	_, mockRPC, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
-	mockRPC.result = ""
-	mockRPC.mockError = fmt.Errorf("pop")
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
+	mockRPC := r.rpc.(*ethmocks.RPCClient)
+	mockRPC.On("CallContext", mock.Anything, mock.Anything, "eth_call", mock.Anything, "latest").
+		Return(fmt.Errorf("pop"))
+
 	req := httptest.NewRequest("GET", "/contracts/"+to+"/get", bytes.NewReader([]byte{}))
 	router.ServeHTTP(res, req)
 
@@ -1396,13 +1548,21 @@ func TestCallMethodFail(t *testing.T) {
 	assert.NoError(err)
 	assert.Regexp("Call failed: pop", reply.Message)
 
+	mcr.AssertExpectations(t)
+	mockRPC.AssertExpectations(t)
+
 	to = "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	dispatcher = &mockREST2EthDispatcher{}
-	_, mockRPC, router, res, _ = newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
+
+	r, router, res, _ = newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	mcr = r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
 	req = httptest.NewRequest("POST", "/contracts/"+to+"/get?fly-blocknumber=ab1234", bytes.NewReader([]byte{}))
-	mockRPC.result = "0x000000000000000000000000000000000000000000000000000000000001e2400000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000000774657374696e6700000000000000000000000000000000000000000000000000"
 	router.ServeHTTP(res, req)
 	assert.Equal(500, res.Result().StatusCode)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestCallMethodViaABIBadAddress(t *testing.T) {
@@ -1412,7 +1572,11 @@ func TestCallMethodViaABIBadAddress(t *testing.T) {
 
 	to := "badness"
 	dispatcher := &mockREST2EthDispatcher{}
-	_, _, router, res, _ := newTestREST2EthAndMsg(t, dispatcher, "", to, map[string]interface{}{})
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, "", to, map[string]interface{}{})
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectABISuccess(t, mcr, "ABI1")
+
 	req := httptest.NewRequest("GET", "/abis/ABI1/badaddress/get", bytes.NewReader([]byte{}))
 	router.ServeHTTP(res, req)
 
@@ -1421,6 +1585,8 @@ func TestCallMethodViaABIBadAddress(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("To Address must be a 40 character hex string (0x prefix is optional)", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSubscribeNoAddressNoSubMgr(t *testing.T) {
@@ -1429,7 +1595,11 @@ func TestSubscribeNoAddressNoSubMgr(t *testing.T) {
 	defer cleanup(dir)
 
 	dispatcher := &mockREST2EthDispatcher{}
-	_, _, router := newTestREST2Eth(t, dispatcher)
+
+	r, router := newTestREST2Eth(dispatcher)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectABISuccess(t, mcr, "ABI1")
+
 	bodyBytes, _ := json.Marshal(&map[string]string{
 		"stream": "stream1",
 	})
@@ -1442,6 +1612,8 @@ func TestSubscribeNoAddressNoSubMgr(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("Event support is not configured on this gateway", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSubscribeNoAddressUnknownEvent(t *testing.T) {
@@ -1450,7 +1622,11 @@ func TestSubscribeNoAddressUnknownEvent(t *testing.T) {
 	defer cleanup(dir)
 
 	dispatcher := &mockREST2EthDispatcher{}
-	_, _, router := newTestREST2Eth(t, dispatcher)
+
+	r, router := newTestREST2Eth(dispatcher)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectABISuccess(t, mcr, "ABI1")
+
 	bodyBytes, _ := json.Marshal(&map[string]string{
 		"stream": "stream1",
 	})
@@ -1463,6 +1639,8 @@ func TestSubscribeNoAddressUnknownEvent(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("Event 'subscribe' is not declared in the ABI", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSubscribeUnauthorized(t *testing.T) {
@@ -1473,7 +1651,10 @@ func TestSubscribeUnauthorized(t *testing.T) {
 	auth.RegisterSecurityModule(&authtest.TestSecurityModule{})
 
 	dispatcher := &mockREST2EthDispatcher{}
-	_, _, router := newTestREST2Eth(t, dispatcher)
+	r, router := newTestREST2Eth(dispatcher)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectABISuccess(t, mcr, "ABI1")
+
 	bodyBytes, _ := json.Marshal(&map[string]string{
 		"stream": "stream1",
 	})
@@ -1488,6 +1669,7 @@ func TestSubscribeUnauthorized(t *testing.T) {
 	assert.Equal("Unauthorized", reply.Message)
 
 	auth.RegisterSecurityModule(nil)
+	mcr.AssertExpectations(t)
 }
 
 func TestSubscribeNoAddressMissingStream(t *testing.T) {
@@ -1496,7 +1678,10 @@ func TestSubscribeNoAddressMissingStream(t *testing.T) {
 	defer cleanup(dir)
 
 	dispatcher := &mockREST2EthDispatcher{}
-	r, _, router := newTestREST2Eth(t, dispatcher)
+	r, router := newTestREST2Eth(dispatcher)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectABISuccess(t, mcr, "ABI1")
+
 	r.subMgr = &mockSubMgr{}
 	bodyBytes, _ := json.Marshal(&map[string]string{})
 	req := httptest.NewRequest("POST", "/abis/ABI1/Changed/subscribe", bytes.NewReader(bodyBytes))
@@ -1508,6 +1693,8 @@ func TestSubscribeNoAddressMissingStream(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("Must supply a 'stream' parameter in the body or query", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSubscribeNoAddressSuccess(t *testing.T) {
@@ -1516,7 +1703,10 @@ func TestSubscribeNoAddressSuccess(t *testing.T) {
 	defer cleanup(dir)
 
 	dispatcher := &mockREST2EthDispatcher{}
-	r, _, router := newTestREST2Eth(t, dispatcher)
+	r, router := newTestREST2Eth(dispatcher)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectABISuccess(t, mcr, "ABI1")
+
 	sm := &mockSubMgr{
 		sub: &events.SubscriptionInfo{ID: "sub1", Name: "stream-without-address"},
 	}
@@ -1535,6 +1725,8 @@ func TestSubscribeNoAddressSuccess(t *testing.T) {
 	assert.Equal("sub1", reply.ID)
 	assert.Equal("stream-without-address", reply.Name)
 	assert.Nil(sm.capturedAddr)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSubscribeWithAddressSuccess(t *testing.T) {
@@ -1543,7 +1735,10 @@ func TestSubscribeWithAddressSuccess(t *testing.T) {
 	defer cleanup(dir)
 
 	dispatcher := &mockREST2EthDispatcher{}
-	r, _, router := newTestREST2Eth(t, dispatcher)
+	r, router := newTestREST2Eth(dispatcher)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
+
 	sm := &mockSubMgr{
 		sub: &events.SubscriptionInfo{ID: "sub1"},
 	}
@@ -1561,6 +1756,8 @@ func TestSubscribeWithAddressSuccess(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal("sub1", reply.ID)
 	assert.Equal("0x66C5fE653e7A9EBB628a6D40f0452d1e358BaEE8", sm.capturedAddr.Hex())
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSubscribeWithAddressBadAddress(t *testing.T) {
@@ -1569,9 +1766,11 @@ func TestSubscribeWithAddressBadAddress(t *testing.T) {
 	defer cleanup(dir)
 
 	dispatcher := &mockREST2EthDispatcher{}
-	r, _, router := newTestREST2Eth(t, dispatcher)
-	contractResolver := r.cr.(*mockContractResolver)
-	contractResolver.resolveContractErr = fmt.Errorf("unregistered")
+
+	r, router := newTestREST2Eth(dispatcher)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("ResolveContractAddress", "badness").Return("", fmt.Errorf("unregistered"))
+
 	r.subMgr = &mockSubMgr{
 		sub: &events.SubscriptionInfo{ID: "sub1"},
 	}
@@ -1587,6 +1786,8 @@ func TestSubscribeWithAddressBadAddress(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("unregistered", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSubscribeWithAddressSubmgrFailure(t *testing.T) {
@@ -1595,7 +1796,10 @@ func TestSubscribeWithAddressSubmgrFailure(t *testing.T) {
 	defer cleanup(dir)
 
 	dispatcher := &mockREST2EthDispatcher{}
-	r, _, router := newTestREST2Eth(t, dispatcher)
+	r, router := newTestREST2Eth(dispatcher)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
+
 	r.subMgr = &mockSubMgr{
 		err: fmt.Errorf("pop"),
 	}
@@ -1611,6 +1815,8 @@ func TestSubscribeWithAddressSubmgrFailure(t *testing.T) {
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("pop", reply.Message)
+
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionWithIDAsyncSuccess(t *testing.T) {
@@ -1629,7 +1835,11 @@ func TestSendTransactionWithIDAsyncSuccess(t *testing.T) {
 			Request: "request1",
 		},
 	}
-	_, _, router, res, req := newTestREST2EthAndMsg(t, dispatcher, from, to, bodyMap)
+
+	r, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	expectContractSuccess(t, mcr, to)
+
 	req.Header.Set("X-Firefly-ID", "my-id")
 	router.ServeHTTP(res, req)
 
@@ -1644,6 +1854,8 @@ func TestSendTransactionWithIDAsyncSuccess(t *testing.T) {
 	assert.Equal(from, dispatcher.asyncDispatchMsg["from"])
 	assert.Equal(to, dispatcher.asyncDispatchMsg["to"])
 	assert.Equal("my-id", dispatcher.asyncDispatchMsg["headers"].(map[string]interface{})["id"])
+
+	mcr.AssertExpectations(t)
 }
 
 func TestGetTransactionInfoSuccess(t *testing.T) {
@@ -1656,20 +1868,30 @@ func TestGetTransactionInfoSuccess(t *testing.T) {
 	txindex := uint64(0)
 
 	dispatcher := &mockREST2EthDispatcher{}
-	_, rpc, router, res, req := newTestREST2EthAndMsg(t, dispatcher, "", "", nil)
-	rpc.result = eth.TxnInfo{
-		BlockNumber:      (*ethbinding.HexBigInt)(big.NewInt(15)),
-		Gas:              (*ethbinding.HexUint64)(&gas),
-		GasPrice:         (*ethbinding.HexBigInt)(big.NewInt(0)),
-		Nonce:            (*ethbinding.HexUint64)(&nonce),
-		TransactionIndex: (*ethbinding.HexUint64)(&txindex),
-		Value:            (*ethbinding.HexBigInt)(big.NewInt(10)),
-		Input: &ethbinding.HexBytes{
-			0x09, 0x23, 0xf7, 0x0f,
-			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		},
-	}
+	r, router, res, req := newTestREST2EthAndMsg(dispatcher, "", "contract-name", nil)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("ResolveContractAddress", "contract-name").Return("contract-address", nil)
+	expectContractSuccess(t, mcr, "contract-address")
+	mockRPC := r.rpc.(*ethmocks.RPCClient)
+	mockRPC.On("CallContext", context.Background(), mock.Anything, "eth_getTransactionByHash", "0x9999").
+		Run(func(args mock.Arguments) {
+			result := args[1].(*eth.TxnInfo)
+			*result = eth.TxnInfo{
+				BlockNumber:      (*ethbinding.HexBigInt)(big.NewInt(15)),
+				Gas:              (*ethbinding.HexUint64)(&gas),
+				GasPrice:         (*ethbinding.HexBigInt)(big.NewInt(0)),
+				Nonce:            (*ethbinding.HexUint64)(&nonce),
+				TransactionIndex: (*ethbinding.HexUint64)(&txindex),
+				Value:            (*ethbinding.HexBigInt)(big.NewInt(10)),
+				Input: &ethbinding.HexBytes{
+					0x09, 0x23, 0xf7, 0x0f,
+					0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+					0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+				},
+			}
+		}).
+		Return(nil)
+
 	req.Header.Set("X-Firefly-Transaction", "0x9999")
 	router.ServeHTTP(res, req)
 
@@ -1686,9 +1908,14 @@ func TestGetTransactionInfoFail(t *testing.T) {
 	defer cleanup(dir)
 
 	dispatcher := &mockREST2EthDispatcher{}
-	_, rpc, router, res, req := newTestREST2EthAndMsg(t, dispatcher, "", "", nil)
-	rpc.result = eth.TxnInfo{}
-	rpc.mockError = fmt.Errorf("pop")
+	r, router, res, req := newTestREST2EthAndMsg(dispatcher, "", "contract-name", nil)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("ResolveContractAddress", "contract-name").Return("contract-address", nil)
+	expectContractSuccess(t, mcr, "contract-address")
+	mockRPC := r.rpc.(*ethmocks.RPCClient)
+	mockRPC.On("CallContext", context.Background(), mock.Anything, "eth_getTransactionByHash", "0x9999").
+		Return(fmt.Errorf("pop"))
+
 	req.Header.Set("X-Firefly-Transaction", "0x9999")
 	router.ServeHTTP(res, req)
 
@@ -1701,8 +1928,20 @@ func TestGetTransactionInfoDecodeFail(t *testing.T) {
 	defer cleanup(dir)
 
 	dispatcher := &mockREST2EthDispatcher{}
-	_, rpc, router, res, req := newTestREST2EthAndMsg(t, dispatcher, "", "", nil)
-	rpc.result = eth.TxnInfo{Input: &ethbinding.HexBytes{}}
+	r, router, res, req := newTestREST2EthAndMsg(dispatcher, "", "contract-name", nil)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("ResolveContractAddress", "contract-name").Return("contract-address", nil)
+	expectContractSuccess(t, mcr, "contract-address")
+	mockRPC := r.rpc.(*ethmocks.RPCClient)
+	mockRPC.On("CallContext", context.Background(), mock.Anything, "eth_getTransactionByHash", "0x9999").
+		Run(func(args mock.Arguments) {
+			result := args[1].(*eth.TxnInfo)
+			*result = eth.TxnInfo{
+				Input: &ethbinding.HexBytes{},
+			}
+		}).
+		Return(nil)
+
 	req.Header.Set("X-Firefly-Transaction", "0x9999")
 	router.ServeHTTP(res, req)
 

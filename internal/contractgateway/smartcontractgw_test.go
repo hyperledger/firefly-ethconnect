@@ -37,6 +37,7 @@ import (
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/events"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/tx"
+	"github.com/hyperledger-labs/firefly-ethconnect/mocks/contractregistrymocks"
 	"github.com/julienschmidt/httprouter"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	log "github.com/sirupsen/logrus"
@@ -54,25 +55,6 @@ func (m *mockWebSocketServer) GetChannels(topic string) (chan<- interface{}, cha
 
 func (m *mockWebSocketServer) SendReply(message interface{}) {
 	m.testChan <- message
-}
-
-type mockContractStore struct {
-	mockContractResolver
-}
-
-func (cs *mockContractStore) Init() {
-}
-func (cs *mockContractStore) AddContract(addrHexNo0x, abiID, pathName, registerAs string) (*contractregistry.ContractInfo, error) {
-	return nil, nil
-}
-func (cs *mockContractStore) AddABI(id string, deployMsg *messages.DeployContract, createdTime time.Time) *contractregistry.ABIInfo {
-	return nil
-}
-func (cs *mockContractStore) ListContracts() []messages.TimeSortable {
-	return []messages.TimeSortable{}
-}
-func (cs *mockContractStore) ListABIs() []messages.TimeSortable {
-	return []messages.TimeSortable{}
 }
 
 type SolcJson struct {
@@ -383,14 +365,13 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	)
 	iMsg := newTestDeployMsg(t, "0123456789abcdef0123456789abcdef01234567")
 	iMsg.Headers.ID = "xyz12345"
-	rr := &mockRR{
-		deployMsg: iMsg,
-	}
-	scgw.(*smartContractGW).rr = rr
+	mrr := &contractregistrymocks.RemoteRegistry{}
+	scgw.(*smartContractGW).rr = mrr
 
 	router := &httprouter.Router{}
 	scgw.AddRoutes(router)
 
+	mrr.On("LoadFactoryForGateway", "test", false).Return(&iMsg.DeployContract, nil).Once()
 	req := httptest.NewRequest("GET", "/g/test?swagger", bytes.NewReader([]byte{}))
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
@@ -399,6 +380,7 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	json.NewDecoder(res.Body).Decode(&returnedSwagger)
 	assert.Equal("/api/v1/g/test", returnedSwagger.BasePath)
 
+	mrr.On("LoadFactoryForGateway", "test", false).Return(&iMsg.DeployContract, nil).Once()
 	req = httptest.NewRequest("GET", "/g/test?abi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
@@ -406,8 +388,8 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	assert.Equal(200, res.Code)
 	json.NewDecoder(res.Body).Decode(&returnedABI)
 	assert.Equal("set", returnedABI.Methods["set"].Name)
-	assert.False(rr.refreshCapture)
 
+	mrr.On("LoadFactoryForInstance", "test", true).Return(iMsg, nil).Once()
 	req = httptest.NewRequest("GET", "/i/test?openapi&refresh", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
@@ -415,8 +397,8 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	assert.Equal(200, res.Code)
 	json.NewDecoder(res.Body).Decode(&returnedSwagger)
 	assert.Equal("/api/v1/i/test", returnedSwagger.BasePath)
-	assert.True(rr.refreshCapture)
 
+	mrr.On("LoadFactoryForInstance", "test", false).Return(iMsg, nil).Once()
 	req = httptest.NewRequest("GET", "/instances/test", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
@@ -426,6 +408,7 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	assert.Equal("xyz12345", jsonRes["id"].(string))
 	assert.Equal("0123456789abcdef0123456789abcdef01234567", jsonRes["address"].(string))
 
+	mrr.On("LoadFactoryForInstance", "test", false).Return(iMsg, nil).Once()
 	req = httptest.NewRequest("GET", "/i/test?ui", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
@@ -434,6 +417,7 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	assert.Contains(string(html), "<html>")
 	assert.Contains(string(html), "/instances/test?swagger")
 
+	mrr.On("LoadFactoryForGateway", "test", false).Return(&iMsg.DeployContract, nil).Once()
 	req = httptest.NewRequest("GET", "/g/test?ui&from=0x12345", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
@@ -443,6 +427,7 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	assert.Contains(string(html), "/gateways/test?swagger")
 	assert.Contains(string(html), "0x12345")
 
+	mrr.On("LoadFactoryForGateway", "test", false).Return(&iMsg.DeployContract, nil).Once()
 	req = httptest.NewRequest("GET", "/g/test?ui&from=0x12345&factory", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
@@ -451,33 +436,36 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	assert.Contains(string(html), "<html>")
 	assert.Contains(string(html), "Factory API")
 
-	rr.deployMsg = nil
-
+	mrr.On("LoadFactoryForInstance", "test", false).Return(nil, nil).Once()
 	req = httptest.NewRequest("GET", "/instances/test?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(404, res.Code)
 
+	mrr.On("LoadFactoryForGateway", "test", false).Return(nil, nil).Once()
 	req = httptest.NewRequest("GET", "/gateways/test?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(404, res.Code)
 
-	rr.err = fmt.Errorf("pop")
+	mrr.On("LoadFactoryForInstance", "test", false).Return(nil, fmt.Errorf("pop")).Once()
 	req = httptest.NewRequest("GET", "/instances/test?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(500, res.Code)
 
+	mrr.On("LoadFactoryForGateway", "test", false).Return(nil, fmt.Errorf("pop")).Once()
 	req = httptest.NewRequest("GET", "/gateways/test?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(500, res.Code)
 
+	mrr.On("Close").Return()
 	scgw.Shutdown()
+	mrr.AssertExpectations(t)
 }
 
-func TestRemoteRegistryBadBI(t *testing.T) {
+func TestRemoteRegistryBadABI(t *testing.T) {
 	assert := assert.New(t)
 
 	scgw, _ := NewSmartContractGateway(
@@ -498,15 +486,13 @@ func TestRemoteRegistryBadBI(t *testing.T) {
 	iMsg.ABI = append(iMsg.ABI, ethbinding.ABIElementMarshaling{
 		Type: "fallback",
 	})
-	rr := &mockRR{
-		deployMsg: iMsg,
-	}
-
-	scgw.(*smartContractGW).rr = rr
+	mrr := &contractregistrymocks.RemoteRegistry{}
+	scgw.(*smartContractGW).rr = mrr
 
 	router := &httprouter.Router{}
 	scgw.AddRoutes(router)
 
+	mrr.On("LoadFactoryForGateway", "test", false).Return(&iMsg.DeployContract, nil)
 	req := httptest.NewRequest("GET", "/g/test?swagger", bytes.NewReader([]byte{}))
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
@@ -515,7 +501,9 @@ func TestRemoteRegistryBadBI(t *testing.T) {
 	json.NewDecoder(res.Body).Decode(&msg)
 	assert.Regexp("Invalid ABI", msg["error"])
 
+	mrr.On("Close").Return()
 	scgw.Shutdown()
+	mrr.AssertExpectations(t)
 }
 
 func TestRegisterContractBadAddress(t *testing.T) {
@@ -715,8 +703,8 @@ func TestPostDeployRemoteRegisteredName(t *testing.T) {
 		},
 		nil, nil, nil, nil,
 	)
-	rr := &mockRR{}
-	s.(*smartContractGW).rr = rr
+	mrr := &contractregistrymocks.RemoteRegistry{}
+	s.(*smartContractGW).rr = mrr
 
 	contractAddr := ethbind.API.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	scgw := s.(*smartContractGW)
@@ -736,6 +724,8 @@ func TestPostDeployRemoteRegisteredName(t *testing.T) {
 		RegisterAs:      "lobster",
 	}
 
+	mrr.On("RegisterInstance", "lobster", "0x0123456789abcdef0123456789abcdef01234567").Return(nil)
+
 	deployFile := path.Join(dir, "abi_message1.deploy.json")
 	deployMsg := &messages.DeployContract{}
 	deployBytes, _ := json.Marshal(deployMsg)
@@ -743,8 +733,9 @@ func TestPostDeployRemoteRegisteredName(t *testing.T) {
 	err := scgw.PostDeploy(replyMsg)
 	assert.NoError(err)
 
-	assert.Equal("0x0123456789abcdef0123456789abcdef01234567", rr.addrCapture)
 	assert.Equal("http://localhost/api/v1/instances/lobster?openapi", replyMsg.ContractSwagger)
+
+	mrr.AssertExpectations(t)
 }
 
 func TestPostDeployRemoteRegisteredNameNotSuccess(t *testing.T) {
@@ -761,8 +752,8 @@ func TestPostDeployRemoteRegisteredNameNotSuccess(t *testing.T) {
 		},
 		nil, nil, nil, nil,
 	)
-	rr := &mockRR{}
-	s.(*smartContractGW).rr = rr
+	mrr := &contractregistrymocks.RemoteRegistry{}
+	s.(*smartContractGW).rr = mrr
 
 	contractAddr := ethbind.API.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	scgw := s.(*smartContractGW)
@@ -789,8 +780,9 @@ func TestPostDeployRemoteRegisteredNameNotSuccess(t *testing.T) {
 	err := scgw.PostDeploy(replyMsg)
 	assert.NoError(err)
 
-	assert.Empty(rr.addrCapture)
 	assert.Empty(replyMsg.ContractSwagger)
+
+	mrr.AssertExpectations(t)
 }
 
 func TestPostDeployMissingContractAddress(t *testing.T) {
@@ -834,14 +826,13 @@ func TestGetContractOrABIFail(t *testing.T) {
 		},
 		nil, nil, nil, nil,
 	)
-	cs := &mockContractStore{}
+	mcs := &contractregistrymocks.ContractStore{}
 	scgw := s.(*smartContractGW)
-	scgw.cs = cs
-
-	cs.mockContractResolver.loadABIError = fmt.Errorf("pop")
-	cs.mockContractResolver.resolveContractErr = fmt.Errorf("pop")
+	scgw.cs = mcs
 
 	// Contract that does not exist in the index
+	mcs.On("GetContractByAddress", "nonexistent").Return(nil, fmt.Errorf("pop")).Once()
+	mcs.On("ResolveContractAddress", "nonexistent").Return("", fmt.Errorf("pop")).Once()
 	req := httptest.NewRequest("GET", "/contracts/nonexistent?openapi", bytes.NewReader([]byte{}))
 	res := httptest.NewRecorder()
 	router := &httprouter.Router{}
@@ -850,12 +841,15 @@ func TestGetContractOrABIFail(t *testing.T) {
 	assert.Equal(404, res.Result().StatusCode)
 
 	// ABI that does not exist in the index
+	mcs.On("GetABIByID", "23456789abcdef0123456789abcdef0123456789").Return(nil, nil, fmt.Errorf("pop")).Once()
 	req = httptest.NewRequest("GET", "/abis/23456789abcdef0123456789abcdef0123456789?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router = &httprouter.Router{}
 	scgw.AddRoutes(router)
 	router.ServeHTTP(res, req)
 	assert.Equal(404, res.Result().StatusCode)
+
+	mcs.AssertExpectations(t)
 }
 
 func TestGetContractUI(t *testing.T) {
@@ -872,15 +866,15 @@ func TestGetContractUI(t *testing.T) {
 		},
 		nil, nil, nil, nil,
 	)
-	cs := &mockContractStore{}
+	mcs := &contractregistrymocks.ContractStore{}
 	scgw := s.(*smartContractGW)
-	scgw.cs = cs
+	scgw.cs = mcs
 
-	cs.contractInfo = &contractregistry.ContractInfo{
+	mcs.On("GetContractByAddress", "123456789abcdef0123456789abcdef012345678").Return(&contractregistry.ContractInfo{
 		ABI:     "abi1",
 		Address: "123456789abcdef0123456789abcdef012345678",
-	}
-	cs.deployMsg = &messages.DeployContract{}
+	}, nil)
+	mcs.On("GetABIByID", "abi1").Return(&messages.DeployContract{}, nil, nil)
 
 	req := httptest.NewRequest("GET", "/contracts/123456789abcdef0123456789abcdef012345678?ui", bytes.NewReader([]byte{}))
 	res := httptest.NewRecorder()
@@ -890,6 +884,8 @@ func TestGetContractUI(t *testing.T) {
 	assert.Equal(200, res.Result().StatusCode)
 	body, _ := ioutil.ReadAll(res.Body)
 	assert.Regexp("Ethconnect REST Gateway", string(body))
+
+	mcs.AssertExpectations(t)
 }
 
 func TestAddABISingleSolidity(t *testing.T) {

@@ -63,6 +63,21 @@ type TxnReceipt struct {
 	TransactionIndex  *ethbinding.HexUint   `json:"transactionIndex"`
 }
 
+// TxnInfo is the detailed transaction info returned by eth_getTransactionByXXXXX
+type TxnInfo struct {
+	BlockHash        *ethbinding.Hash      `json:"blockHash,omitempty"`
+	BlockNumber      *ethbinding.HexBigInt `json:"blockNumber,omitempty"`
+	From             *ethbinding.Address   `json:"from,omitempty"`
+	To               *ethbinding.Address   `json:"to,omitempty"`
+	Gas              *ethbinding.HexUint64 `json:"gas"`
+	GasPrice         *ethbinding.HexBigInt `json:"gasPrice"`
+	Hash             *ethbinding.Hash      `json:"hash"`
+	Nonce            *ethbinding.HexUint64 `json:"nonce"`
+	TransactionIndex *ethbinding.HexUint64 `json:"transactionIndex"`
+	Value            *ethbinding.HexBigInt `json:"value"`
+	Input            *ethbinding.HexBytes  `json:"input"`
+}
+
 // NewContractDeployTxn builds a new ethereum transaction from the supplied
 // SendTranasction message
 func NewContractDeployTxn(msg *messages.DeployContract, signer TXSigner) (tx *Txn, err error) {
@@ -153,6 +168,33 @@ func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr 
 		return nil, err
 	}
 	return ProcessRLPBytes(methodABI.Outputs, retBytes), nil
+}
+
+// Decode the "input" bytes from a transaction, which are composed of a method ID + encoded arguments
+func DecodeInputs(method *ethbinding.ABIMethod, inputs *ethbinding.HexBytes) (map[string]interface{}, error) {
+	methodIDLen := len(method.ID)
+	expectedMethod := hex.EncodeToString(method.ID)
+	if len(*inputs) < methodIDLen {
+		return nil, fmt.Errorf(errors.TransactionQueryMethodMismatch, "unknown", expectedMethod)
+	}
+	inputMethod := hex.EncodeToString((*inputs)[:methodIDLen])
+	if inputMethod != expectedMethod {
+		log.Infof("Method did not match: %s != %s", inputMethod, expectedMethod)
+		return nil, fmt.Errorf(errors.TransactionQueryMethodMismatch, inputMethod, expectedMethod)
+	}
+	return ProcessRLPBytes(method.Inputs, (*inputs)[methodIDLen:]), nil
+}
+
+func GetTransactionInfo(ctx context.Context, rpc RPCClient, txHash string) (*TxnInfo, error) {
+	log.Debugf("Retrieving transaction %s", txHash)
+	var txn TxnInfo
+	if err := rpc.CallContext(ctx, &txn, "eth_getTransactionByHash", txHash); err != nil {
+		return nil, fmt.Errorf(errors.RPCCallReturnedError, "eth_getTransactionByHash", err)
+	}
+	if txn.Input == nil {
+		return nil, fmt.Errorf(errors.TransactionQueryFailed, txHash)
+	}
+	return &txn, nil
 }
 
 func addErrorToRetval(retval map[string]interface{}, retBytes []byte, rawRetval interface{}, err error) {

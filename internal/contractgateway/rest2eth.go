@@ -184,19 +184,20 @@ func (r *rest2eth) addRoutes(router *httprouter.Router) {
 }
 
 type restCmd struct {
-	from          string
-	addr          string
-	value         json.Number
-	abiLocation   *contractregistry.ABILocation
-	abiMethod     *ethbinding.ABIMethod
-	abiMethodElem *ethbinding.ABIElementMarshaling
-	abiEvent      *ethbinding.ABIEvent
-	abiEventElem  *ethbinding.ABIElementMarshaling
-	isDeploy      bool
-	deployMsg     *messages.DeployContract
-	body          map[string]interface{}
-	msgParams     []interface{}
-	blocknumber   string
+	from            string
+	addr            string
+	value           json.Number
+	abiLocation     *contractregistry.ABILocation
+	abiMethod       *ethbinding.ABIMethod
+	abiMethodElem   *ethbinding.ABIElementMarshaling
+	abiEvent        *ethbinding.ABIEvent
+	abiEventElem    *ethbinding.ABIElementMarshaling
+	isDeploy        bool
+	deployMsg       *messages.DeployContract
+	body            map[string]interface{}
+	msgParams       []interface{}
+	blocknumber     string
+	transactionHash string
 }
 
 func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params httprouter.Params, c *restCmd, addrParam string, refresh bool) (a ethbinding.ABIMarshaling, validAddress bool, err error) {
@@ -413,7 +414,10 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 		return
 	}
 
-	if c.abiEvent != nil {
+	c.blocknumber = getFlyParam("blocknumber", req)
+	c.transactionHash = getFlyParam("transaction", req)
+
+	if c.abiEvent != nil || c.transactionHash != "" {
 		return
 	}
 
@@ -440,8 +444,6 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 		}
 	}
 
-	c.blocknumber = getFlyParam("blocknumber", req)
-
 	return
 }
 
@@ -455,7 +457,11 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 
 	if c.abiEvent != nil {
 		r.subscribeEvent(res, req, c.addr, c.abiLocation, c.abiEventElem, c.body)
-	} else if (req.Method == http.MethodPost && !c.abiMethod.IsConstant()) && !getFlyParamBool("call", req) {
+	} else if c.transactionHash != "" {
+		r.lookupTransaction(res, req, c.transactionHash, c.abiMethod)
+	} else if req.Method != http.MethodPost || c.abiMethod.IsConstant() || getFlyParamBool("call", req) {
+		r.callContract(res, req, c.from, c.addr, c.value, c.abiMethod, c.msgParams, c.blocknumber)
+	} else {
 		if c.from == "" {
 			err = ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayMissingFromAddress, utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly"), utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly"))
 			r.restErrReply(res, req, err, 400)
@@ -464,8 +470,6 @@ func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, param
 		} else {
 			r.sendTransaction(res, req, c.from, c.addr, c.value, c.abiMethodElem, c.msgParams)
 		}
-	} else {
-		r.callContract(res, req, c.from, c.addr, c.value, c.abiMethod, c.msgParams, c.blocknumber)
 	}
 }
 
@@ -649,6 +653,62 @@ func (r *rest2eth) callContract(res http.ResponseWriter, req *http.Request, from
 		r.restErrReply(res, req, err, 500)
 		return
 	}
+	resBytes, _ := json.MarshalIndent(&resBody, "", "  ")
+	status := 200
+	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
+	log.Debugf("<-- %s", resBytes)
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(status)
+	res.Write(resBytes)
+	return
+}
+
+func (r *rest2eth) lookupTransaction(res http.ResponseWriter, req *http.Request, txHash string, abiMethod *ethbinding.ABIMethod) {
+	info, err := eth.GetTransactionInfo(req.Context(), r.rpc, txHash)
+	if err != nil {
+		r.restErrReply(res, req, err, 500)
+		return
+	}
+	inputArgs, err := eth.DecodeInputs(abiMethod, info.Input)
+	if err != nil {
+		r.restErrReply(res, req, err, 500)
+		return
+	}
+
+	resBody := messages.TransactionInfo{
+		BlockHash:           info.BlockHash,
+		BlockNumberHex:      info.BlockNumber,
+		From:                info.From,
+		To:                  info.To,
+		GasHex:              info.Gas,
+		GasPriceHex:         info.GasPrice,
+		Hash:                info.Hash,
+		NonceHex:            info.Nonce,
+		TransactionIndexHex: info.TransactionIndex,
+		ValueHex:            info.Value,
+		Input:               info.Input,
+		InputArgs:           inputArgs,
+	}
+
+	if info.BlockNumber != nil {
+		resBody.BlockNumberStr = info.BlockNumber.ToInt().Text(10)
+	}
+	if info.Gas != nil {
+		resBody.GasStr = strconv.FormatUint(uint64(*info.Gas), 10)
+	}
+	if info.GasPrice != nil {
+		resBody.GasPriceStr = info.GasPrice.ToInt().Text(10)
+	}
+	if info.Nonce != nil {
+		resBody.NonceStr = strconv.FormatUint(uint64(*info.Nonce), 10)
+	}
+	if info.TransactionIndex != nil {
+		resBody.TransactionIndexStr = strconv.FormatUint(uint64(*info.TransactionIndex), 10)
+	}
+	if info.Value != nil {
+		resBody.ValueStr = info.Value.ToInt().Text(10)
+	}
+
 	resBytes, _ := json.MarshalIndent(&resBody, "", "  ")
 	status := 200
 	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)

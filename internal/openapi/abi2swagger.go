@@ -395,6 +395,18 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 			Type: "string",
 		},
 	}
+	params["transactionParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description:     fmt.Sprintf("Query the details for the provided transaction hash (header: x-%s-transaction)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-transaction", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
+			In:              "query",
+			Required:        false,
+			AllowEmptyValue: true,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "string",
+		},
+	}
 	return params
 }
 
@@ -416,6 +428,7 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 	privacyGroupIDParam, _ := spec.NewRef("#/parameters/privacyGroupIdParam")
 	registerParam, _ := spec.NewRef("#/parameters/registerParam")
 	blocknumberParam, _ := spec.NewRef("#/parameters/blocknumberParam")
+	transactionParam, _ := spec.NewRef("#/parameters/transactionParam")
 	op.Parameters = append(op.Parameters, spec.Parameter{
 		Refable: spec.Refable{
 			Ref: idParam,
@@ -474,6 +487,12 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 				},
 			})
 		}
+	} else {
+		op.Parameters = append(op.Parameters, spec.Parameter{
+			Refable: spec.Refable{
+				Ref: transactionParam,
+			},
+		})
 	}
 	if isConstructor {
 		op.Parameters = append(op.Parameters, spec.Parameter{

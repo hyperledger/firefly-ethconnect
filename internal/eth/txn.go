@@ -69,11 +69,11 @@ type TxnInfo struct {
 	BlockNumber      *ethbinding.HexBigInt `json:"blockNumber,omitempty"`
 	From             *ethbinding.Address   `json:"from,omitempty"`
 	To               *ethbinding.Address   `json:"to,omitempty"`
-	Gas              *ethbinding.HexBigInt `json:"gas"`
+	Gas              *ethbinding.HexUint64 `json:"gas"`
 	GasPrice         *ethbinding.HexBigInt `json:"gasPrice"`
 	Hash             *ethbinding.Hash      `json:"hash"`
-	Nonce            *ethbinding.HexUint   `json:"nonce"`
-	TransactionIndex *ethbinding.HexUint   `json:"transactionIndex"`
+	Nonce            *ethbinding.HexUint64 `json:"nonce"`
+	TransactionIndex *ethbinding.HexUint64 `json:"transactionIndex"`
 	Value            *ethbinding.HexBigInt `json:"value"`
 	Input            *ethbinding.HexBytes  `json:"input"`
 }

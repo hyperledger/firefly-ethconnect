@@ -384,6 +384,9 @@
           },
           {
             "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/transactionParam"
           }
         ],
         "responses": {
@@ -532,6 +535,9 @@
           },
           {
             "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/transactionParam"
           }
         ],
         "responses": {
@@ -673,6 +679,9 @@
           },
           {
             "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/transactionParam"
           }
         ],
         "responses": {
@@ -821,6 +830,9 @@
           },
           {
             "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/transactionParam"
           }
         ],
         "responses": {
@@ -969,6 +981,9 @@
           },
           {
             "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/transactionParam"
           }
         ],
         "responses": {
@@ -1103,6 +1118,9 @@
           },
           {
             "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/transactionParam"
           }
         ],
         "responses": {
@@ -1251,6 +1269,9 @@
           },
           {
             "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/transactionParam"
           }
         ],
         "responses": {
@@ -1406,6 +1427,9 @@
           },
           {
             "$ref": "#/parameters/gaspriceParam"
+          },
+          {
+            "$ref": "#/parameters/transactionParam"
           }
         ],
         "responses": {
@@ -1814,6 +1838,13 @@
       "default": true,
       "description": "Block the HTTP request until the tx is mined (does not store the receipt) (header: x-firefly-sync)",
       "name": "fly-sync",
+      "in": "query",
+      "allowEmptyValue": true
+    },
+    "transactionParam": {
+      "type": "string",
+      "description": "Query the details for the provided transaction hash (header: x-firefly-transaction)",
+      "name": "fly-transaction",
       "in": "query",
       "allowEmptyValue": true
     },

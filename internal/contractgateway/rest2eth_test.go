@@ -123,7 +123,7 @@ func (m *mockSubMgr) ResumeStream(ctx context.Context, id string) error {
 	return m.err
 }
 func (m *mockSubMgr) DeleteStream(ctx context.Context, id string) error { return m.err }
-func (m *mockSubMgr) AddSubscription(ctx context.Context, addr *ethbinding.Address, event *ethbinding.ABIElementMarshaling, streamID, initialBlock, name string) (*events.SubscriptionInfo, error) {
+func (m *mockSubMgr) AddSubscription(ctx context.Context, addr *ethbinding.Address, abi *contractregistry.ABILocation, event *ethbinding.ABIElementMarshaling, streamID, initialBlock, name string) (*events.SubscriptionInfo, error) {
 	m.capturedAddr = addr
 	return m.sub, m.err
 }
@@ -141,8 +141,8 @@ func newTestDeployMsg(t *testing.T, addr string) *contractregistry.DeployContrac
 	compiled, err := eth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")
 	assert.NoError(t, err)
 	return &contractregistry.DeployContractWithAddress{
-		DeployContract: messages.DeployContract{ABI: compiled.ABI},
-		Address:        addr,
+		Contract: &messages.DeployContract{ABI: compiled.ABI},
+		Address:  addr,
 	}
 }
 
@@ -150,9 +150,8 @@ func newTestREST2Eth(dispatcher *mockREST2EthDispatcher) (*rest2eth, *httprouter
 	mockRPC := &ethmocks.RPCClient{}
 	gateway := &mockGateway{}
 	contractResolver := &contractregistrymocks.ContractStore{}
-	remoteRegistry := &contractregistrymocks.RemoteRegistry{}
 	mockProcessor := &mockProcessor{}
-	r := newREST2eth(gateway, contractResolver, mockRPC, nil, remoteRegistry, mockProcessor, dispatcher, dispatcher)
+	r := newREST2eth(gateway, contractResolver, mockRPC, nil, mockProcessor, dispatcher, dispatcher)
 	router := &httprouter.Router{}
 	r.addRoutes(router)
 
@@ -170,12 +169,16 @@ func newTestREST2EthAndMsg(dispatcher *mockREST2EthDispatcher, from, to string, 
 }
 
 func expectContractSuccess(t *testing.T, mcr *contractregistrymocks.ContractStore, address string) {
-	mcr.On("GetContractByAddress", address).Return(&contractregistry.ContractInfo{ABI: "abi1"}, nil)
+	mcr.On("GetContractByAddress", strings.TrimPrefix(strings.ToLower(address), "0x")).
+		Return(&contractregistry.ContractInfo{ABI: "abi1"}, nil)
 	expectABISuccess(t, mcr, "abi1")
 }
 
 func expectABISuccess(t *testing.T, mcr *contractregistrymocks.ContractStore, abiID string) {
-	mcr.On("GetABIByID", abiID).Return(&newTestDeployMsg(t, "").DeployContract, nil, nil)
+	mcr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    abiID,
+	}, false).Return(newTestDeployMsg(t, ""), nil)
 }
 
 func TestSendTransactionAsyncSuccess(t *testing.T) {
@@ -570,9 +573,11 @@ func TestDeployContractSyncRemoteRegistryInstance(t *testing.T) {
 	}
 
 	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
-	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
-	mrr.On("LoadFactoryForInstance", "myinstance", false).
-		Return(newTestDeployMsg(t, strings.TrimPrefix(to, "0x")), nil)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteInstance,
+		Name:    "myinstance",
+	}, false).Return(newTestDeployMsg(t, strings.TrimPrefix(to, "0x")), nil)
 
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?fly-sync", bytes.NewReader(body))
@@ -583,7 +588,7 @@ func TestDeployContractSyncRemoteRegistryInstance(t *testing.T) {
 	assert.Equal(to, dispatcher.sendTransactionMsg.To)
 	assert.Equal(from, dispatcher.sendTransactionMsg.From)
 
-	mrr.AssertExpectations(t)
+	mcr.AssertExpectations(t)
 }
 
 func TestDeployContractSyncRemoteRegistryInstance500(t *testing.T) {
@@ -594,8 +599,11 @@ func TestDeployContractSyncRemoteRegistryInstance500(t *testing.T) {
 	bodyMap := make(map[string]interface{})
 
 	r, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
-	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
-	mrr.On("LoadFactoryForInstance", "myinstance", false).Return(nil, fmt.Errorf("pop"))
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteInstance,
+		Name:    "myinstance",
+	}, false).Return(nil, fmt.Errorf("pop"))
 
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?fly-sync", bytes.NewReader(body))
@@ -603,7 +611,7 @@ func TestDeployContractSyncRemoteRegistryInstance500(t *testing.T) {
 
 	assert.Equal(500, res.Result().StatusCode)
 
-	mrr.AssertExpectations(t)
+	mcr.AssertExpectations(t)
 }
 
 func TestDeployContractSyncRemoteRegistryInstance404(t *testing.T) {
@@ -614,8 +622,11 @@ func TestDeployContractSyncRemoteRegistryInstance404(t *testing.T) {
 	bodyMap := make(map[string]interface{})
 
 	r, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
-	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
-	mrr.On("LoadFactoryForInstance", "myinstance", false).Return(nil, nil)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteInstance,
+		Name:    "myinstance",
+	}, false).Return(nil, nil)
 
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?fly-sync", bytes.NewReader(body))
@@ -623,7 +634,7 @@ func TestDeployContractSyncRemoteRegistryInstance404(t *testing.T) {
 
 	assert.Equal(404, res.Result().StatusCode)
 
-	mrr.AssertExpectations(t)
+	mcr.AssertExpectations(t)
 }
 
 func TestDeployContractSyncRemoteRegistryGateway500(t *testing.T) {
@@ -634,8 +645,11 @@ func TestDeployContractSyncRemoteRegistryGateway500(t *testing.T) {
 	bodyMap := make(map[string]interface{})
 
 	r, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
-	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
-	mrr.On("LoadFactoryForGateway", "mygw", false).Return(nil, fmt.Errorf("pop"))
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteGateway,
+		Name:    "mygw",
+	}, false).Return(nil, fmt.Errorf("pop"))
 
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygw?fly-sync", bytes.NewReader(body))
@@ -643,7 +657,7 @@ func TestDeployContractSyncRemoteRegistryGateway500(t *testing.T) {
 
 	assert.Equal(500, res.Result().StatusCode)
 
-	mrr.AssertExpectations(t)
+	mcr.AssertExpectations(t)
 }
 
 func TestDeployContractSyncRemoteRegistryGateway404(t *testing.T) {
@@ -654,8 +668,11 @@ func TestDeployContractSyncRemoteRegistryGateway404(t *testing.T) {
 	bodyMap := make(map[string]interface{})
 
 	r, router, res, _ := newTestREST2EthAndMsg(&mockREST2EthDispatcher{}, "", "", bodyMap)
-	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
-	mrr.On("LoadFactoryForGateway", "mygw", false).Return(nil, nil)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteGateway,
+		Name:    "mygw",
+	}, false).Return(nil, nil)
 
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygw?fly-sync", bytes.NewReader(body))
@@ -663,7 +680,7 @@ func TestDeployContractSyncRemoteRegistryGateway404(t *testing.T) {
 
 	assert.Equal(404, res.Result().StatusCode)
 
-	mrr.AssertExpectations(t)
+	mcr.AssertExpectations(t)
 }
 
 func TestDeployContractSyncRemoteRegistryGateway(t *testing.T) {
@@ -690,9 +707,11 @@ func TestDeployContractSyncRemoteRegistryGateway(t *testing.T) {
 	}
 
 	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
-	mrr := r.rr.(*contractregistrymocks.RemoteRegistry)
-	mrr.On("LoadFactoryForGateway", "mygateway", false).
-		Return(&newTestDeployMsg(t, strings.TrimPrefix(to, "0x")).DeployContract, nil)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteGateway,
+		Name:    "mygateway",
+	}, false).Return(newTestDeployMsg(t, ""), nil)
 
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygateway/567a417717cb6c59ddc1035705f02c0fd1ab1872/set?fly-sync", bytes.NewReader(body))
@@ -703,7 +722,7 @@ func TestDeployContractSyncRemoteRegistryGateway(t *testing.T) {
 	assert.Equal(to, dispatcher.sendTransactionMsg.To)
 	assert.Equal(from, dispatcher.sendTransactionMsg.From)
 
-	mrr.AssertExpectations(t)
+	mcr.AssertExpectations(t)
 }
 
 func TestSendTransactionSyncFail(t *testing.T) {
@@ -882,6 +901,32 @@ func TestSendTransactionUnknownRegisteredName(t *testing.T) {
 	mcr.AssertExpectations(t)
 }
 
+func TestSendTransactionContractNotFound(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	bodyMap["i"] = 12345
+	bodyMap["s"] = "testing"
+	to := "random"
+	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
+	dispatcher := &mockREST2EthDispatcher{}
+	r, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("ResolveContractAddress", strings.TrimPrefix(to, "0x")).Return("", fmt.Errorf("not found"))
+
+	router.ServeHTTP(res, req)
+
+	assert.Equal(404, res.Result().StatusCode)
+	reply := restErrMsg{}
+	err := json.NewDecoder(res.Result().Body).Decode(&reply)
+	assert.NoError(err)
+	assert.Equal("not found", reply.Message)
+
+	mcr.AssertExpectations(t)
+}
+
 func TestSendTransactionMissingContract(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
@@ -924,18 +969,23 @@ func TestSendTransactionBadMethodABI(t *testing.T) {
 
 	r, router := newTestREST2Eth(dispatcher)
 	mcr := r.cr.(*contractregistrymocks.ContractStore)
-	mcr.On("GetContractByAddress", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8").
+	mcr.On("GetContractByAddress", "66c5fe653e7a9ebb628a6d40f0452d1e358baee8").
 		Return(&contractregistry.ContractInfo{ABI: "abi-id"}, nil)
-	mcr.On("GetABIByID", "abi-id").
-		Return(&messages.DeployContract{
-			ABI: ethbinding.ABIMarshaling{
-				{
-					Name: "badmethod", Type: "function", Inputs: []ethbinding.ABIArgumentMarshaling{
-						{Name: "badness", Type: "badness"},
+	mcr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    "abi-id",
+	}, false).
+		Return(&contractregistry.DeployContractWithAddress{
+			Contract: &messages.DeployContract{
+				ABI: ethbinding.ABIMarshaling{
+					{
+						Name: "badmethod", Type: "function", Inputs: []ethbinding.ABIArgumentMarshaling{
+							{Name: "badness", Type: "badness"},
+						},
 					},
 				},
 			},
-		}, &contractregistry.ABIInfo{}, nil)
+		}, nil)
 
 	req := httptest.NewRequest("GET", "/contracts/0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8/badmethod", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
@@ -963,18 +1013,23 @@ func TestSendTransactionBadEventABI(t *testing.T) {
 
 	r, router := newTestREST2Eth(dispatcher)
 	mcr := r.cr.(*contractregistrymocks.ContractStore)
-	mcr.On("GetContractByAddress", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8").
+	mcr.On("GetContractByAddress", "66c5fe653e7a9ebb628a6d40f0452d1e358baee8").
 		Return(&contractregistry.ContractInfo{ABI: "abi-id"}, nil)
-	mcr.On("GetABIByID", "abi-id").
-		Return(&messages.DeployContract{
-			ABI: ethbinding.ABIMarshaling{
-				{
-					Name: "badevent", Type: "event", Inputs: []ethbinding.ABIArgumentMarshaling{
-						{Name: "badness", Type: "badness"},
+	mcr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    "abi-id",
+	}, false).
+		Return(&contractregistry.DeployContractWithAddress{
+			Contract: &messages.DeployContract{
+				ABI: ethbinding.ABIMarshaling{
+					{
+						Name: "badevent", Type: "event", Inputs: []ethbinding.ABIArgumentMarshaling{
+							{Name: "badness", Type: "badness"},
+						},
 					},
 				},
 			},
-		}, &contractregistry.ABIInfo{}, nil)
+		}, nil)
 
 	req := httptest.NewRequest("POST", "/contracts/0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8/badevent/subscribe", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
@@ -1002,16 +1057,21 @@ func TestSendTransactionBadConstructorABI(t *testing.T) {
 
 	r, router := newTestREST2Eth(dispatcher)
 	mcr := r.cr.(*contractregistrymocks.ContractStore)
-	mcr.On("GetABIByID", "testabi").
-		Return(&messages.DeployContract{
-			ABI: ethbinding.ABIMarshaling{
-				{
-					Name: "badevent", Type: "constructor", Inputs: []ethbinding.ABIArgumentMarshaling{
-						{Name: "badness", Type: "badness"},
+	mcr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    "testabi",
+	}, false).
+		Return(&contractregistry.DeployContractWithAddress{
+			Contract: &messages.DeployContract{
+				ABI: ethbinding.ABIMarshaling{
+					{
+						Name: "badevent", Type: "constructor", Inputs: []ethbinding.ABIArgumentMarshaling{
+							{Name: "badness", Type: "badness"},
+						},
 					},
 				},
 			},
-		}, &contractregistry.ABIInfo{}, nil)
+		}, nil)
 
 	req := httptest.NewRequest("POST", "/abis/testabi", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
@@ -1039,10 +1099,15 @@ func TestSendTransactionDefaultConstructorABI(t *testing.T) {
 
 	r, router := newTestREST2Eth(dispatcher)
 	mcr := r.cr.(*contractregistrymocks.ContractStore)
-	mcr.On("GetABIByID", "testabi").
-		Return(&messages.DeployContract{
-			ABI: ethbinding.ABIMarshaling{}, // completely empty ABI is ok
-		}, &contractregistry.ABIInfo{}, nil)
+	mcr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    "testabi",
+	}, false).
+		Return(&contractregistry.DeployContractWithAddress{
+			Contract: &messages.DeployContract{
+				ABI: ethbinding.ABIMarshaling{}, // completely empty ABI is ok
+			},
+		}, nil)
 
 	req := httptest.NewRequest("POST", "/abis/testabi", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
@@ -1066,17 +1131,22 @@ func TestSendTransactionUnnamedParamsABI(t *testing.T) {
 
 	r, router := newTestREST2Eth(dispatcher)
 	mcr := r.cr.(*contractregistrymocks.ContractStore)
-	mcr.On("GetABIByID", "testabi").
-		Return(&messages.DeployContract{
-			ABI: ethbinding.ABIMarshaling{
-				{
-					Name: "unnamedparamsmethod", Type: "function", Inputs: []ethbinding.ABIArgumentMarshaling{
-						{Name: "", Type: "uint256", InternalType: "uint256"},
-						{Name: "", Type: "uint256", InternalType: "uint256"},
+	mcr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    "testabi",
+	}, false).
+		Return(&contractregistry.DeployContractWithAddress{
+			Contract: &messages.DeployContract{
+				ABI: ethbinding.ABIMarshaling{
+					{
+						Name: "unnamedparamsmethod", Type: "function", Inputs: []ethbinding.ABIArgumentMarshaling{
+							{Name: "", Type: "uint256", InternalType: "uint256"},
+							{Name: "", Type: "uint256", InternalType: "uint256"},
+						},
 					},
 				},
 			},
-		}, &contractregistry.ABIInfo{}, nil)
+		}, nil)
 
 	req := httptest.NewRequest("POST", "/abis/testabi/0x29fb3f4f7cc82a1456903a506e88cdd63b1d74e8/unnamedparamsmethod", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
@@ -1138,7 +1208,7 @@ func TestSendTransactionInvalidContract(t *testing.T) {
 
 	r, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
 	mcr := r.cr.(*contractregistrymocks.ContractStore)
-	mcr.On("GetContractByAddress", to).Return(nil, fmt.Errorf("pop"))
+	mcr.On("GetContractByAddress", strings.TrimPrefix(to, "0x")).Return(nil, fmt.Errorf("pop"))
 
 	router.ServeHTTP(res, req)
 
@@ -1173,11 +1243,14 @@ func TestDeployContractInvalidABI(t *testing.T) {
 	req.Header.Add("x-firefly-from", from)
 
 	mcr := r.cr.(*contractregistrymocks.ContractStore)
-	mcr.On("GetABIByID", "abi1").Return(nil, nil, fmt.Errorf("pop"))
+	mcr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    "abi1",
+	}, false).Return(nil, fmt.Errorf("pop"))
 
 	router.ServeHTTP(res, req)
 
-	assert.Equal(404, res.Result().StatusCode)
+	assert.Equal(500, res.Result().StatusCode)
 	reply := restErrMsg{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)

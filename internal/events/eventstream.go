@@ -74,6 +74,7 @@ type StreamInfo struct {
 	WebSocket            *webSocketActionInfo `json:"websocket,omitempty"`
 	Timestamps           bool                 `json:"timestamps,omitempty"` // Include block timestamps in the events generated
 	TimestampCacheSize   int                  `json:"timestampCacheSize,omitempty"`
+	Inputs               bool                 `json:"inputs,omitempty"` // Include input args in the events generated
 }
 
 type webhookActionInfo struct {
@@ -299,6 +300,9 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 	}
 	if a.spec.Timestamps != newSpec.Timestamps {
 		a.spec.Timestamps = newSpec.Timestamps
+	}
+	if a.spec.Inputs != newSpec.Inputs {
+		a.spec.Inputs = newSpec.Inputs
 	}
 	a.postUpdateStream()
 	return a.spec, nil

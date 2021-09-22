@@ -16,12 +16,17 @@ package events
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"testing"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/contractregistry"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/kvstore"
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger-labs/firefly-ethconnect/mocks/contractregistrymocks"
 	"github.com/hyperledger-labs/firefly-ethconnect/mocks/ethmocks"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 
@@ -97,11 +102,11 @@ func TestCreateWebhookSub(t *testing.T) {
 	}
 
 	i := testSubInfo(event)
-	s, err := newSubscription(m, rpc, nil, i)
+	s, err := newSubscription(m, rpc, nil, nil, i)
 	assert.NoError(err)
 	assert.NotEmpty(s.info.ID)
 
-	s1, err := restoreSubscription(m, rpc, i)
+	s1, err := restoreSubscription(m, rpc, nil, i)
 	assert.NoError(err)
 
 	assert.Equal(s.info.ID, s1.info.ID)
@@ -124,7 +129,7 @@ func TestCreateWebhookSubWithAddr(t *testing.T) {
 	addr := ethbind.API.HexToAddress("0x0123456789abcDEF0123456789abCDef01234567")
 	subInfo := testSubInfo(event)
 	subInfo.Name = "mySubscription"
-	s, err := newSubscription(m, rpc, &addr, subInfo)
+	s, err := newSubscription(m, rpc, nil, &addr, subInfo)
 	assert.NoError(err)
 	assert.NotEmpty(s.info.ID)
 	// common.BytesToHash(crypto.Keccak256([]byte("devcon()"))).Hex()
@@ -137,7 +142,7 @@ func TestCreateSubscriptionNoEvent(t *testing.T) {
 	assert := assert.New(t)
 	event := &ethbinding.ABIElementMarshaling{}
 	m := &mockSubMgr{stream: newTestStream()}
-	_, err := newSubscription(m, nil, nil, testSubInfo(event))
+	_, err := newSubscription(m, nil, nil, nil, testSubInfo(event))
 	assert.EqualError(err, "Solidity event name must be specified")
 }
 
@@ -149,7 +154,7 @@ func TestCreateSubscriptionBadABI(t *testing.T) {
 		},
 	}
 	m := &mockSubMgr{stream: newTestStream()}
-	_, err := newSubscription(m, nil, nil, testSubInfo(event))
+	_, err := newSubscription(m, nil, nil, nil, testSubInfo(event))
 	assert.EqualError(err, "invalid type '-1'")
 }
 
@@ -157,14 +162,14 @@ func TestCreateSubscriptionMissingAction(t *testing.T) {
 	assert := assert.New(t)
 	event := &ethbinding.ABIElementMarshaling{Name: "party"}
 	m := &mockSubMgr{err: fmt.Errorf("nope")}
-	_, err := newSubscription(m, nil, nil, testSubInfo(event))
+	_, err := newSubscription(m, nil, nil, nil, testSubInfo(event))
 	assert.EqualError(err, "nope")
 }
 
 func TestRestoreSubscriptionMissingAction(t *testing.T) {
 	assert := assert.New(t)
 	m := &mockSubMgr{err: fmt.Errorf("nope")}
-	_, err := restoreSubscription(m, nil, testSubInfo(&ethbinding.ABIElementMarshaling{}))
+	_, err := restoreSubscription(m, nil, nil, testSubInfo(&ethbinding.ABIElementMarshaling{}))
 	assert.EqualError(err, "nope")
 }
 
@@ -176,7 +181,7 @@ func TestRestoreSubscriptionBadType(t *testing.T) {
 		},
 	}
 	m := &mockSubMgr{stream: newTestStream()}
-	_, err := restoreSubscription(m, nil, testSubInfo(event))
+	_, err := restoreSubscription(m, nil, nil, testSubInfo(event))
 	assert.EqualError(err, "invalid type '-1'")
 }
 
@@ -335,4 +340,238 @@ func TestLoadCheckpointBadJSON(t *testing.T) {
 	mockKV.KVS[checkpointIDPrefix+"id1"] = []byte(":bad json")
 	_, err := sm.loadCheckpoint("id1")
 	assert.Error(err)
+}
+
+func TestGetTransactionInputsNoABI(t *testing.T) {
+	assert := assert.New(t)
+	rpc := &ethmocks.RPCClient{}
+	cr := &contractregistrymocks.ContractStore{}
+
+	s := &subscription{
+		info: &SubscriptionInfo{},
+		rpc:  rpc,
+		cr:   cr,
+	}
+	l := logEntry{}
+	lCopy := l
+	s.getTransactionInputs(context.Background(), &l)
+
+	result, err := json.Marshal(l)
+	assert.NoError(err)
+	defaultLogEntry, err := json.Marshal(lCopy)
+	assert.NoError(err)
+	assert.Equal(string(defaultLogEntry), string(result))
+}
+
+func TestGetTransactionInputsLoadABIFail(t *testing.T) {
+	assert := assert.New(t)
+	rpc := &ethmocks.RPCClient{}
+	cr := &contractregistrymocks.ContractStore{}
+	cr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    "abi1",
+	}, false).Return(nil, fmt.Errorf("pop"))
+
+	s := &subscription{
+		info: &SubscriptionInfo{
+			ABI: &contractregistry.ABILocation{
+				ABIType: contractregistry.LocalABI,
+				Name:    "abi1",
+			},
+		},
+		rpc: rpc,
+		cr:  cr,
+	}
+	l := logEntry{}
+	lCopy := l
+	s.getTransactionInputs(context.Background(), &l)
+
+	result, err := json.Marshal(l)
+	assert.NoError(err)
+	defaultLogEntry, err := json.Marshal(lCopy)
+	assert.NoError(err)
+	assert.Equal(string(defaultLogEntry), string(result))
+}
+
+func TestGetTransactionInputsMissingABI(t *testing.T) {
+	assert := assert.New(t)
+	rpc := &ethmocks.RPCClient{}
+	cr := &contractregistrymocks.ContractStore{}
+	cr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    "abi1",
+	}, false).Return(nil, nil)
+
+	s := &subscription{
+		info: &SubscriptionInfo{
+			ABI: &contractregistry.ABILocation{
+				ABIType: contractregistry.LocalABI,
+				Name:    "abi1",
+			},
+		},
+		rpc: rpc,
+		cr:  cr,
+	}
+	l := logEntry{}
+	lCopy := l
+	s.getTransactionInputs(context.Background(), &l)
+
+	result, err := json.Marshal(l)
+	assert.NoError(err)
+	defaultLogEntry, err := json.Marshal(&lCopy)
+	assert.NoError(err)
+	assert.Equal(string(defaultLogEntry), string(result))
+}
+
+func TestGetTransactionInputsTxnInfoFail(t *testing.T) {
+	assert := assert.New(t)
+	rpc := &ethmocks.RPCClient{}
+	cr := &contractregistrymocks.ContractStore{}
+
+	deployMsg := contractregistry.DeployContractWithAddress{
+		Contract: &messages.DeployContract{},
+	}
+	cr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    "abi1",
+	}, false).Return(&deployMsg, nil)
+
+	s := &subscription{
+		info: &SubscriptionInfo{
+			ABI: &contractregistry.ABILocation{
+				ABIType: contractregistry.LocalABI,
+				Name:    "abi1",
+			},
+		},
+		rpc: rpc,
+		cr:  cr,
+	}
+	l := logEntry{
+		TransactionHash: [32]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	}
+	lCopy := l
+
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getTransactionByHash", "0x0000000000000000000000000000000000000000000000000000000000000001").
+		Return(fmt.Errorf("pop"))
+
+	s.getTransactionInputs(context.Background(), &l)
+
+	result, err := json.Marshal(l)
+	assert.NoError(err)
+	defaultLogEntry, err := json.Marshal(lCopy)
+	assert.NoError(err)
+	assert.Equal(string(defaultLogEntry), string(result))
+}
+
+func TestGetTransactionInputsBadMethod(t *testing.T) {
+	assert := assert.New(t)
+	rpc := &ethmocks.RPCClient{}
+	cr := &contractregistrymocks.ContractStore{}
+
+	deployMsg := contractregistry.DeployContractWithAddress{
+		Contract: &messages.DeployContract{},
+	}
+	cr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    "abi1",
+	}, false).Return(&deployMsg, nil)
+
+	s := &subscription{
+		info: &SubscriptionInfo{
+			ABI: &contractregistry.ABILocation{
+				ABIType: contractregistry.LocalABI,
+				Name:    "abi1",
+			},
+		},
+		rpc: rpc,
+		cr:  cr,
+	}
+	l := logEntry{
+		TransactionHash: [32]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	}
+	lCopy := l
+
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getTransactionByHash", "0x0000000000000000000000000000000000000000000000000000000000000001").
+		Run(func(args mock.Arguments) {
+			res := args[1]
+			*(res.(*eth.TxnInfo)) = eth.TxnInfo{
+				Input: &ethbinding.HexBytes{},
+			}
+		}).
+		Return(nil)
+
+	s.getTransactionInputs(context.Background(), &l)
+
+	result, err := json.Marshal(l)
+	assert.NoError(err)
+	defaultLogEntry, err := json.Marshal(lCopy)
+	assert.NoError(err)
+	assert.Equal(string(defaultLogEntry), string(result))
+}
+
+func TestGetTransactionInputsSuccess(t *testing.T) {
+	assert := assert.New(t)
+	rpc := &ethmocks.RPCClient{}
+	cr := &contractregistrymocks.ContractStore{}
+
+	deployMsg := &contractregistry.DeployContractWithAddress{
+		Contract: &messages.DeployContract{
+			ABI: ethbinding.ABIMarshaling{
+				{
+					Type: "function",
+					Name: "method1",
+					Inputs: []ethbinding.ABIArgumentMarshaling{
+						{
+							Name: "arg1",
+							Type: "int32",
+						},
+					},
+				},
+			},
+		},
+	}
+	methodInput := &ethbinding.HexBytes{
+		0xf4, 0xe1, 0x3d, 0xc5, // ID of method1
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, // "1" as int32
+	}
+	expectedArgs := map[string]interface{}{"arg1": "1"}
+
+	cr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    "abi1",
+	}, false).Return(deployMsg, nil)
+
+	s := &subscription{
+		info: &SubscriptionInfo{
+			ABI: &contractregistry.ABILocation{
+				ABIType: contractregistry.LocalABI,
+				Name:    "abi1",
+			},
+		},
+		rpc: rpc,
+		cr:  cr,
+	}
+	l := logEntry{
+		TransactionHash: [32]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	}
+	lCopy := l
+
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getTransactionByHash", "0x0000000000000000000000000000000000000000000000000000000000000001").
+		Run(func(args mock.Arguments) {
+			res := args[1]
+			*(res.(*eth.TxnInfo)) = eth.TxnInfo{
+				Input: methodInput,
+			}
+		}).
+		Return(nil)
+
+	s.getTransactionInputs(context.Background(), &l)
+
+	result, err := json.Marshal(l)
+	assert.NoError(err)
+	lCopy.InputMethod = "method1"
+	lCopy.InputArgs = expectedArgs
+	defaultLogEntry, err := json.Marshal(lCopy)
+	assert.NoError(err)
+	assert.Equal(string(defaultLogEntry), string(result))
 }

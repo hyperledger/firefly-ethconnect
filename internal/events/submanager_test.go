@@ -27,6 +27,7 @@ import (
 
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/kvstore"
+	"github.com/hyperledger-labs/firefly-ethconnect/mocks/contractregistrymocks"
 	"github.com/hyperledger-labs/firefly-ethconnect/mocks/ethmocks"
 	"github.com/julienschmidt/httprouter"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
@@ -72,8 +73,9 @@ func newMockWebSocket() *mockWebSocket {
 
 func newTestSubscriptionManager() *subscriptionMGR {
 	smconf := &SubscriptionManagerConf{}
-	sm := NewSubscriptionManager(smconf, nil, newMockWebSocket()).(*subscriptionMGR)
-	sm.rpc = &ethmocks.RPCClient{}
+	rpc := &ethmocks.RPCClient{}
+	cr := &contractregistrymocks.ContractStore{}
+	sm := NewSubscriptionManager(smconf, rpc, cr, newMockWebSocket()).(*subscriptionMGR)
 	sm.db = kvstore.NewMockKV(nil)
 	sm.config().WebhooksAllowPrivateIPs = true
 	sm.config().EventPollingIntervalSec = 0
@@ -144,7 +146,7 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	})
 	assert.NoError(err)
 
-	sub, err := sm.AddSubscription(ctx, nil, &ethbinding.ABIElementMarshaling{Name: "ping"}, stream.ID, "", subscriptionName)
+	sub, err := sm.AddSubscription(ctx, nil, nil, &ethbinding.ABIElementMarshaling{Name: "ping"}, stream.ID, "", subscriptionName)
 	assert.NoError(err)
 	assert.Equal(stream.ID, sub.Stream)
 
@@ -220,7 +222,7 @@ func TestActionChildCleanup(t *testing.T) {
 	})
 	assert.NoError(err)
 
-	sm.AddSubscription(ctx, nil, &ethbinding.ABIElementMarshaling{Name: "ping"}, stream.ID, "12345", "")
+	sm.AddSubscription(ctx, nil, nil, &ethbinding.ABIElementMarshaling{Name: "ping"}, stream.ID, "12345", "")
 	err = sm.DeleteStream(ctx, stream.ID)
 	assert.NoError(err)
 
@@ -249,7 +251,7 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	})
 	assert.NoError(err)
 
-	sub, err := sm.AddSubscription(ctx, nil, &ethbinding.ABIElementMarshaling{Name: "ping"}, stream.ID, "", subscriptionName)
+	sub, err := sm.AddSubscription(ctx, nil, nil, &ethbinding.ABIElementMarshaling{Name: "ping"}, stream.ID, "", subscriptionName)
 	assert.NoError(err)
 
 	err = sm.ResetSubscription(ctx, sub.ID, "badness")
@@ -293,11 +295,11 @@ func TestResetSubscriptionErrors(t *testing.T) {
 	err = sm.DeleteStream(ctx, "teststream")
 	assert.EqualError(err, "pop")
 
-	_, err = sm.AddSubscription(ctx, nil, &ethbinding.ABIElementMarshaling{Name: "any"}, "nope", "", "")
+	_, err = sm.AddSubscription(ctx, nil, nil, &ethbinding.ABIElementMarshaling{Name: "any"}, "nope", "", "")
 	assert.EqualError(err, "Stream with ID 'nope' not found")
-	_, err = sm.AddSubscription(ctx, nil, &ethbinding.ABIElementMarshaling{Name: "any"}, "teststream", "", "test")
+	_, err = sm.AddSubscription(ctx, nil, nil, &ethbinding.ABIElementMarshaling{Name: "any"}, "teststream", "", "test")
 	assert.EqualError(err, "Failed to store subscription: pop")
-	_, err = sm.AddSubscription(ctx, nil, &ethbinding.ABIElementMarshaling{Name: "any"}, "teststream", "!bad integer", "")
+	_, err = sm.AddSubscription(ctx, nil, nil, &ethbinding.ABIElementMarshaling{Name: "any"}, "teststream", "!bad integer", "")
 	assert.EqualError(err, "FromBlock cannot be parsed as a BigInt")
 	sm.subscriptions["testsub"] = &subscription{info: &SubscriptionInfo{}, rpc: sm.rpc}
 	err = sm.ResetSubscription(ctx, "nope", "0")

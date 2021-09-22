@@ -23,6 +23,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/hyperledger-labs/firefly-ethconnect/internal/contractregistry"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/kvstore"
@@ -57,7 +58,7 @@ type SubscriptionManager interface {
 	SuspendStream(ctx context.Context, id string) error
 	ResumeStream(ctx context.Context, id string) error
 	DeleteStream(ctx context.Context, id string) error
-	AddSubscription(ctx context.Context, addr *ethbinding.Address, event *ethbinding.ABIElementMarshaling, streamID, initialBlock, name string) (*SubscriptionInfo, error)
+	AddSubscription(ctx context.Context, addr *ethbinding.Address, abi *contractregistry.ABILocation, event *ethbinding.ABIElementMarshaling, streamID, initialBlock, name string) (*SubscriptionInfo, error)
 	Subscriptions(ctx context.Context) []*SubscriptionInfo
 	SubscriptionByID(ctx context.Context, id string) (*SubscriptionInfo, error)
 	ResetSubscription(ctx context.Context, id, initialBlock string) error
@@ -91,6 +92,7 @@ type subscriptionMGR struct {
 	subscriptions map[string]*subscription
 	streams       map[string]*eventStream
 	closed        bool
+	cr            contractregistry.ContractResolver
 	wsChannels    ws.WebSocketChannels
 }
 
@@ -102,12 +104,13 @@ func CobraInitSubscriptionManager(cmd *cobra.Command, conf *SubscriptionManagerC
 }
 
 // NewSubscriptionManager constructor
-func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc eth.RPCClient, wsChannels ws.WebSocketChannels) SubscriptionManager {
+func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc eth.RPCClient, cr contractregistry.ContractResolver, wsChannels ws.WebSocketChannels) SubscriptionManager {
 	sm := &subscriptionMGR{
 		conf:          conf,
 		rpc:           rpc,
 		subscriptions: make(map[string]*subscription),
 		streams:       make(map[string]*eventStream),
+		cr:            cr,
 		wsChannels:    wsChannels,
 	}
 	if conf.EventPollingIntervalSec <= 0 {
@@ -155,7 +158,7 @@ func (s *subscriptionMGR) setInitialBlock(i *SubscriptionInfo, initialBlock stri
 }
 
 // AddSubscription adds a new subscription
-func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *ethbinding.Address, event *ethbinding.ABIElementMarshaling, streamID, initialBlock, name string) (*SubscriptionInfo, error) {
+func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *ethbinding.Address, abi *contractregistry.ABILocation, event *ethbinding.ABIElementMarshaling, streamID, initialBlock, name string) (*SubscriptionInfo, error) {
 	i := &SubscriptionInfo{
 		TimeSorted: messages.TimeSorted{
 			CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
@@ -163,6 +166,7 @@ func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *ethbinding.
 		ID:     subIDPrefix + utils.UUIDv4(),
 		Event:  event,
 		Stream: streamID,
+		ABI:    abi,
 	}
 	i.Path = SubPathPrefix + "/" + i.ID
 	// Set any user supplied a name for the subscription
@@ -174,7 +178,7 @@ func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *ethbinding.
 		return nil, err
 	}
 	// Create it
-	sub, err := newSubscription(s, s.rpc, addr, i)
+	sub, err := newSubscription(s, s.rpc, s.cr, addr, i)
 	if err != nil {
 		return nil, err
 	}
@@ -435,7 +439,7 @@ func (s *subscriptionMGR) recoverSubscriptions() {
 				log.Errorf("Failed to recover subscription '%s': %s", string(iSub.Value()), err)
 				continue
 			}
-			sub, err := restoreSubscription(s, s.rpc, &subInfo)
+			sub, err := restoreSubscription(s, s.rpc, s.cr, &subInfo)
 			if err != nil {
 				log.Errorf("Failed to recover subscription '%s': %s", subInfo.ID, err)
 			} else {

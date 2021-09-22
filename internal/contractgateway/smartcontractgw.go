@@ -143,11 +143,8 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 		baseURL, _ = url.Parse("http://localhost:8080")
 	}
 	log.Infof("OpenAPI Smart Contract Gateway configured with base URL '%s'", baseURL.String())
-	rr := contractregistry.NewRemoteRegistry(&conf.RemoteRegistry)
 	gw := &smartContractGW{
 		conf: conf,
-		cs:   contractregistry.NewContractStore(conf.BaseURL, conf.StoragePath, rr),
-		rr:   rr,
 		baseSwaggerConf: &openapi.ABI2SwaggerConf{
 			ExternalHost:     baseURL.Host,
 			ExternalRootPath: baseURL.Path,
@@ -157,19 +154,23 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 		},
 		ws: ws,
 	}
-	if err = gw.rr.Init(); err != nil {
+	rr := contractregistry.NewRemoteRegistry(&conf.RemoteRegistry)
+	gw.cs = contractregistry.NewContractStore(&contractregistry.ContractStoreConf{
+		BaseURL:     conf.BaseURL,
+		StoragePath: conf.StoragePath,
+	}, rr)
+	if err = gw.cs.Init(); err != nil {
 		return nil, err
 	}
 	syncDispatcher := newSyncDispatcher(processor)
 	if conf.EventLevelDBPath != "" {
-		gw.sm = events.NewSubscriptionManager(&conf.SubscriptionManagerConf, rpc, gw.ws)
+		gw.sm = events.NewSubscriptionManager(&conf.SubscriptionManagerConf, rpc, gw.cs, gw.ws)
 		err = gw.sm.Init()
 		if err != nil {
 			return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayEventManagerInitFailed, err)
 		}
 	}
-	gw.r2e = newREST2eth(gw, gw.cs, rpc, gw.sm, gw.rr, processor, asyncDispatcher, syncDispatcher)
-	gw.cs.Init()
+	gw.r2e = newREST2eth(gw, gw.cs, rpc, gw.sm, processor, asyncDispatcher, syncDispatcher)
 	return gw, nil
 }
 
@@ -177,7 +178,6 @@ type smartContractGW struct {
 	conf            *SmartContractGatewayConf
 	sm              events.SubscriptionManager
 	cs              contractregistry.ContractStore
-	rr              contractregistry.RemoteRegistry
 	r2e             *rest2eth
 	ws              ws.WebSocketChannels
 	baseSwaggerConf *openapi.ABI2SwaggerConf
@@ -213,7 +213,7 @@ func (g *smartContractGW) PostDeploy(msg *messages.TransactionReceipt) error {
 		var err error
 		if isRemote {
 			if msg.RegisterAs != "" {
-				err = g.rr.RegisterInstance(msg.RegisterAs, "0x"+addrHexNo0x)
+				err = g.cs.AddRemoteInstance(msg.RegisterAs, "0x"+addrHexNo0x)
 			}
 		} else {
 			_, err = g.cs.AddContract(addrHexNo0x, requestID, registeredName, msg.RegisterAs)
@@ -655,7 +655,17 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 		}
 	} else {
 		abiID = id
-		deployMsg, info, err = g.cs.GetABIByID(abiID)
+		info, err = g.cs.GetLocalABIInfo(abiID)
+		if err == nil {
+			var result *contractregistry.DeployContractWithAddress
+			result, err = g.cs.GetABI(contractregistry.ABILocation{
+				ABIType: contractregistry.LocalABI,
+				Name:    abiID,
+			}, false)
+			if result != nil {
+				deployMsg = result.Contract
+			}
+		}
 		if err != nil {
 			g.gatewayErrReply(res, req, err, 404)
 			return
@@ -694,6 +704,7 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 
 	swaggerGen, uiRequest, factoryOnly, abiRequest, refreshABI, from := g.isSwaggerRequest(req)
 
+	var msg *contractregistry.DeployContractWithAddress
 	var deployMsg *messages.DeployContract
 	var err error
 	var isGateway = false
@@ -702,29 +713,35 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 		isGateway = true
 		prefix = "gateway"
 		id = params.ByName("gateway_lookup")
-		deployMsg, err = g.rr.LoadFactoryForGateway(id, refreshABI)
+		msg, err = g.cs.GetABI(contractregistry.ABILocation{
+			ABIType: contractregistry.RemoteGateway,
+			Name:    id,
+		}, refreshABI)
 		if err != nil {
 			g.gatewayErrReply(res, req, err, 500)
 			return
-		} else if deployMsg == nil {
+		} else if msg == nil || msg.Contract == nil {
 			err = ethconnecterrors.Errorf(ethconnecterrors.RemoteRegistryLookupGatewayNotFound)
 			g.gatewayErrReply(res, req, err, 404)
 			return
 		}
+		deployMsg = msg.Contract
 	} else {
 		prefix = "instance"
 		id = params.ByName("instance_lookup")
-		var msg *contractregistry.DeployContractWithAddress
-		msg, err = g.rr.LoadFactoryForInstance(id, refreshABI)
+		msg, err = g.cs.GetABI(contractregistry.ABILocation{
+			ABIType: contractregistry.RemoteInstance,
+			Name:    id,
+		}, refreshABI)
 		if err != nil {
 			g.gatewayErrReply(res, req, err, 500)
 			return
-		} else if msg == nil {
+		} else if msg == nil || msg.Contract == nil {
 			err = ethconnecterrors.Errorf(ethconnecterrors.RemoteRegistryLookupInstanceNotFound)
 			g.gatewayErrReply(res, req, err, 404)
 			return
 		}
-		deployMsg = &msg.DeployContract
+		deployMsg = msg.Contract
 		addr = msg.Address
 	}
 
@@ -773,7 +790,10 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 	// Note: there is currently no body payload required for the POST
 
 	abiID := params.ByName("abi")
-	_, _, err := g.cs.GetABIByID(abiID)
+	_, err := g.cs.GetABI(contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    abiID,
+	}, false)
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 404)
 		return
@@ -1137,8 +1157,8 @@ func (g *smartContractGW) Shutdown() {
 	if g.sm != nil {
 		g.sm.Close()
 	}
-	if g.rr != nil {
-		g.rr.Close()
+	if g.cs != nil {
+		g.cs.Close()
 	}
 }
 
@@ -1155,6 +1175,9 @@ func (g *smartContractGW) resolveAddressOrName(id string) (deployMsg *messages.D
 			return nil, "", nil, err
 		}
 	}
-	deployMsg, _, err = g.cs.GetABIByID(info.ABI)
-	return deployMsg, registeredName, info, err
+	result, err := g.cs.GetABI(contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    info.ABI,
+	}, false)
+	return result.Contract, registeredName, info, err
 }

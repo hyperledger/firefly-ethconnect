@@ -28,42 +28,55 @@ import (
 	"time"
 
 	"github.com/go-openapi/spec"
+	lru "github.com/hashicorp/golang-lru"
 	log "github.com/sirupsen/logrus"
 
 	ethconnecterrors "github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
 )
 
+const (
+	// DefaultABICacheSize is the number of entries we will hold in a LRU cache for ABIs
+	DefaultABICacheSize = 25
+)
+
 type ContractResolver interface {
 	ResolveContractAddress(registeredName string) (string, error)
 	GetContractByAddress(addrHex string) (*ContractInfo, error)
-	GetABIByID(abi string) (*messages.DeployContract, *ABIInfo, error)
+	GetABI(location ABILocation, refresh bool) (deployMsg *DeployContractWithAddress, err error)
 	CheckNameAvailable(name string, isRemote bool) error
 }
 
 type ContractStore interface {
 	ContractResolver
-	Init()
+	Init() error
+	Close()
 	AddContract(addrHexNo0x, abiID, pathName, registerAs string) (*ContractInfo, error)
 	AddABI(id string, deployMsg *messages.DeployContract, createdTime time.Time) *ABIInfo
+	AddRemoteInstance(lookupStr, address string) error
+	GetLocalABIInfo(abiID string) (*ABIInfo, error)
 	ListContracts() []messages.TimeSortable
 	ListABIs() []messages.TimeSortable
 }
 
+type ContractStoreConf struct {
+	StoragePath string `json:"storagePath"`
+	BaseURL     string `json:"baseURL"`
+}
+
 type contractStore struct {
-	baseURL               string
-	storagePath           string
+	conf                  *ContractStoreConf
 	rr                    RemoteRegistry
 	contractIndex         map[string]messages.TimeSortable
 	contractRegistrations map[string]*ContractInfo
 	idxLock               sync.Mutex
 	abiIndex              map[string]messages.TimeSortable
+	abiCache              *lru.Cache
 }
 
-func NewContractStore(baseURL, storagePath string, rr RemoteRegistry) ContractStore {
+func NewContractStore(conf *ContractStoreConf, rr RemoteRegistry) ContractStore {
 	return &contractStore{
-		baseURL:               baseURL,
-		storagePath:           storagePath,
+		conf:                  conf,
 		rr:                    rr,
 		contractIndex:         make(map[string]messages.TimeSortable),
 		contractRegistrations: make(map[string]*ContractInfo),
@@ -102,6 +115,21 @@ func (i *ABIInfo) GetID() string {
 	return i.ID
 }
 
+type abiType int
+
+// These values will be saved with existing subscriptions.
+// Do not remove or reorder them (only add new ones to the end).
+const (
+	RemoteGateway abiType = iota
+	RemoteInstance
+	LocalABI
+)
+
+type ABILocation struct {
+	ABIType abiType `json:"type"`
+	Name    string  `json:"name"`
+}
+
 func IsRemote(msg messages.CommonHeaders) bool {
 	ctxMap := msg.Context
 	if isRemoteGeneric, ok := ctxMap[RemoteRegistryContextKey]; ok {
@@ -117,7 +145,7 @@ func (cs *contractStore) AddContract(addrHexNo0x, abiID, pathName, registerAs st
 		Address:      addrHexNo0x,
 		ABI:          abiID,
 		Path:         "/contracts/" + pathName,
-		SwaggerURL:   cs.baseURL + "/contracts/" + pathName + "?swagger",
+		SwaggerURL:   cs.conf.BaseURL + "/contracts/" + pathName + "?swagger",
 		RegisteredAs: registerAs,
 		TimeSorted: messages.TimeSorted{
 			CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
@@ -133,7 +161,7 @@ func (cs *contractStore) storeContractInfo(info *ContractInfo) error {
 	if err := cs.addToContractIndex(info); err != nil {
 		return err
 	}
-	infoFile := path.Join(cs.storagePath, "contract_"+info.Address+".instance.json")
+	infoFile := path.Join(cs.conf.StoragePath, "contract_"+info.Address+".instance.json")
 	instanceBytes, _ := json.MarshalIndent(info, "", "  ")
 	log.Infof("%s: Storing contract instance JSON to '%s'", info.ABI, infoFile)
 	if err := ioutil.WriteFile(infoFile, instanceBytes, 0664); err != nil {
@@ -161,35 +189,78 @@ func (cs *contractStore) GetContractByAddress(addrHex string) (*ContractInfo, er
 	return info.(*ContractInfo), nil
 }
 
-func (cs *contractStore) GetABIByID(id string) (*messages.DeployContract, *ABIInfo, error) {
-	var info *ABIInfo
-	var msg *messages.DeployContract
-	ts, exists := cs.abiIndex[id]
-	if !exists {
-		log.Infof("ABI with ID %s not found locally", id)
-		return nil, nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABINotFound, id)
+func (cs *contractStore) GetABI(location ABILocation, refresh bool) (deployMsg *DeployContractWithAddress, err error) {
+	if !refresh {
+		if cached, ok := cs.abiCache.Get(location); ok {
+			result := cached.(*DeployContractWithAddress)
+			return result, nil
+		}
 	}
-	deployFile := path.Join(cs.storagePath, "abi_"+id+".deploy.json")
-	deployBytes, err := ioutil.ReadFile(deployFile)
+
+	switch location.ABIType {
+	case RemoteGateway:
+		deployMsg = &DeployContractWithAddress{}
+		deployMsg.Contract, err = cs.rr.LoadFactoryForGateway(location.Name, refresh)
+	case RemoteInstance:
+		deployMsg, err = cs.rr.LoadFactoryForInstance(location.Name, refresh)
+	case LocalABI:
+		deployMsg = &DeployContractWithAddress{}
+		deployMsg.Contract, _, err = cs.getLocalABI(location.Name)
+	default:
+		panic("unknown ABI type") // should not happen
+	}
+
+	if err != nil || deployMsg == nil || deployMsg.Contract == nil {
+		return nil, err
+	}
+	cs.abiCache.Add(location, deployMsg)
+	return deployMsg, nil
+}
+
+func (cs *contractStore) getLocalABI(abiID string) (*messages.DeployContract, *ABIInfo, error) {
+	info, err := cs.GetLocalABIInfo(abiID)
 	if err != nil {
-		return nil, nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABILoad, id, err)
+		return nil, nil, err
 	}
-	msg = &messages.DeployContract{}
-	if err = json.Unmarshal(deployBytes, msg); err != nil {
-		return nil, nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABIParse, id, err)
+
+	msg, err := cs.loadDeployMsg(abiID)
+	if err != nil || msg == nil {
+		return nil, nil, err
 	}
-	info = ts.(*ABIInfo)
+
 	return msg, info, nil
 }
 
-func (cs *contractStore) Init() {
+func (cs *contractStore) GetLocalABIInfo(abiID string) (*ABIInfo, error) {
+	ts, exists := cs.abiIndex[abiID]
+	if !exists {
+		log.Infof("ABI with ID %s not found locally", abiID)
+		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABINotFound, abiID)
+	}
+	return ts.(*ABIInfo), nil
+}
+
+func (cs *contractStore) loadDeployMsg(abiID string) (*messages.DeployContract, error) {
+	deployFile := path.Join(cs.conf.StoragePath, "abi_"+abiID+".deploy.json")
+	deployBytes, err := ioutil.ReadFile(deployFile)
+	if err != nil {
+		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABILoad, abiID, err)
+	}
+	msg := &messages.DeployContract{}
+	if err = json.Unmarshal(deployBytes, msg); err != nil {
+		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABIParse, abiID, err)
+	}
+	return msg, nil
+}
+
+func (cs *contractStore) buildIndex() {
 	log.Infof("Building installed smart contract index")
 	legacyContractMatcher, _ := regexp.Compile(`^contract_([0-9a-z]{40})\.swagger\.json$`)
 	instanceMatcher, _ := regexp.Compile(`^contract_([0-9a-z]{40})\.instance\.json$`)
 	abiMatcher, _ := regexp.Compile(`^abi_([0-9a-z-]+)\.deploy.json$`)
-	files, err := ioutil.ReadDir(cs.storagePath)
+	files, err := ioutil.ReadDir(cs.conf.StoragePath)
 	if err != nil {
-		log.Errorf("Failed to read directory %s: %s", cs.storagePath, err)
+		log.Errorf("Failed to read directory %s: %s", cs.conf.StoragePath, err)
 		return
 	}
 	for _, file := range files {
@@ -198,14 +269,26 @@ func (cs *contractStore) Init() {
 		abiGroups := abiMatcher.FindStringSubmatch(fileName)
 		instanceGroups := instanceMatcher.FindStringSubmatch(fileName)
 		if legacyContractGroups != nil {
-			cs.migrateLegacyContract(legacyContractGroups[1], path.Join(cs.storagePath, fileName), file.ModTime())
+			cs.migrateLegacyContract(legacyContractGroups[1], path.Join(cs.conf.StoragePath, fileName), file.ModTime())
 		} else if instanceGroups != nil {
-			cs.addFileToContractIndex(instanceGroups[1], path.Join(cs.storagePath, fileName))
+			cs.addFileToContractIndex(instanceGroups[1], path.Join(cs.conf.StoragePath, fileName))
 		} else if abiGroups != nil {
-			cs.addFileToABIIndex(abiGroups[1], path.Join(cs.storagePath, fileName), file.ModTime())
+			cs.addFileToABIIndex(abiGroups[1], path.Join(cs.conf.StoragePath, fileName), file.ModTime())
 		}
 	}
 	log.Infof("Smart contract index built. %d entries", len(cs.contractIndex))
+}
+
+func (cs *contractStore) Init() (err error) {
+	if cs.abiCache, err = lru.New(DefaultABICacheSize); err != nil {
+		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayResourceErr, err)
+	}
+	cs.buildIndex()
+	return cs.rr.Init()
+}
+
+func (cs *contractStore) Close() {
+	cs.rr.Close()
 }
 
 func (cs *contractStore) migrateLegacyContract(address, fileName string, createdTime time.Time) {
@@ -321,7 +404,7 @@ func (cs *contractStore) AddABI(id string, deployMsg *messages.DeployContract, c
 		Deployable:      len(deployMsg.Compiled) > 0,
 		CompilerVersion: deployMsg.CompilerVersion,
 		Path:            "/abis/" + id,
-		SwaggerURL:      cs.baseURL + "/abis/" + id + "?swagger",
+		SwaggerURL:      cs.conf.BaseURL + "/abis/" + id + "?swagger",
 		TimeSorted: messages.TimeSorted{
 			CreatedISO8601: createdTime.UTC().Format(time.RFC3339),
 		},
@@ -329,6 +412,10 @@ func (cs *contractStore) AddABI(id string, deployMsg *messages.DeployContract, c
 	cs.abiIndex[id] = info
 	cs.idxLock.Unlock()
 	return info
+}
+
+func (cs *contractStore) AddRemoteInstance(lookupStr, address string) error {
+	return cs.rr.RegisterInstance(lookupStr, address)
 }
 
 func (cs *contractStore) ListContracts() []messages.TimeSortable {

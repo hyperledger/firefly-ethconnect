@@ -156,7 +156,10 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 		},
 		ws: ws,
 	}
-	gw.cs, err = contractregistry.NewContractStore(conf.BaseURL, conf.StoragePath, rr)
+	gw.cs, err = contractregistry.NewContractStore(&contractregistry.ContractStoreConf{
+		BaseURL:     conf.BaseURL,
+		StoragePath: conf.StoragePath,
+	}, rr)
 	if err != nil {
 		return nil, err
 	}

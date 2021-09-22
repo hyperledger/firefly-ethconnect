@@ -57,9 +57,13 @@ type ContractStore interface {
 	ListABIs() []messages.TimeSortable
 }
 
+type ContractStoreConf struct {
+	StoragePath string `json:"storagePath"`
+	BaseURL     string `json:"baseURL"`
+}
+
 type contractStore struct {
-	baseURL               string
-	storagePath           string
+	conf                  *ContractStoreConf
 	rr                    RemoteRegistry
 	contractIndex         map[string]messages.TimeSortable
 	contractRegistrations map[string]*ContractInfo
@@ -68,10 +72,9 @@ type contractStore struct {
 	abiCache              *lru.Cache
 }
 
-func NewContractStore(baseURL, storagePath string, rr RemoteRegistry) (cs ContractStore, err error) {
+func NewContractStore(conf *ContractStoreConf, rr RemoteRegistry) (cs ContractStore, err error) {
 	c := &contractStore{
-		baseURL:               baseURL,
-		storagePath:           storagePath,
+		conf:                  conf,
 		rr:                    rr,
 		contractIndex:         make(map[string]messages.TimeSortable),
 		contractRegistrations: make(map[string]*ContractInfo),
@@ -144,7 +147,7 @@ func (cs *contractStore) AddContract(addrHexNo0x, abiID, pathName, registerAs st
 		Address:      addrHexNo0x,
 		ABI:          abiID,
 		Path:         "/contracts/" + pathName,
-		SwaggerURL:   cs.baseURL + "/contracts/" + pathName + "?swagger",
+		SwaggerURL:   cs.conf.BaseURL + "/contracts/" + pathName + "?swagger",
 		RegisteredAs: registerAs,
 		TimeSorted: messages.TimeSorted{
 			CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
@@ -160,7 +163,7 @@ func (cs *contractStore) storeContractInfo(info *ContractInfo) error {
 	if err := cs.addToContractIndex(info); err != nil {
 		return err
 	}
-	infoFile := path.Join(cs.storagePath, "contract_"+info.Address+".instance.json")
+	infoFile := path.Join(cs.conf.StoragePath, "contract_"+info.Address+".instance.json")
 	instanceBytes, _ := json.MarshalIndent(info, "", "  ")
 	log.Infof("%s: Storing contract instance JSON to '%s'", info.ABI, infoFile)
 	if err := ioutil.WriteFile(infoFile, instanceBytes, 0664); err != nil {
@@ -250,7 +253,7 @@ func (cs *contractStore) getABIInfo(abiID string) (*ABIInfo, error) {
 }
 
 func (cs *contractStore) loadDeployMsg(abiID string) (*messages.DeployContract, error) {
-	deployFile := path.Join(cs.storagePath, "abi_"+abiID+".deploy.json")
+	deployFile := path.Join(cs.conf.StoragePath, "abi_"+abiID+".deploy.json")
 	deployBytes, err := ioutil.ReadFile(deployFile)
 	if err != nil {
 		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABILoad, abiID, err)
@@ -267,9 +270,9 @@ func (cs *contractStore) Init() {
 	legacyContractMatcher, _ := regexp.Compile(`^contract_([0-9a-z]{40})\.swagger\.json$`)
 	instanceMatcher, _ := regexp.Compile(`^contract_([0-9a-z]{40})\.instance\.json$`)
 	abiMatcher, _ := regexp.Compile(`^abi_([0-9a-z-]+)\.deploy.json$`)
-	files, err := ioutil.ReadDir(cs.storagePath)
+	files, err := ioutil.ReadDir(cs.conf.StoragePath)
 	if err != nil {
-		log.Errorf("Failed to read directory %s: %s", cs.storagePath, err)
+		log.Errorf("Failed to read directory %s: %s", cs.conf.StoragePath, err)
 		return
 	}
 	for _, file := range files {
@@ -278,11 +281,11 @@ func (cs *contractStore) Init() {
 		abiGroups := abiMatcher.FindStringSubmatch(fileName)
 		instanceGroups := instanceMatcher.FindStringSubmatch(fileName)
 		if legacyContractGroups != nil {
-			cs.migrateLegacyContract(legacyContractGroups[1], path.Join(cs.storagePath, fileName), file.ModTime())
+			cs.migrateLegacyContract(legacyContractGroups[1], path.Join(cs.conf.StoragePath, fileName), file.ModTime())
 		} else if instanceGroups != nil {
-			cs.addFileToContractIndex(instanceGroups[1], path.Join(cs.storagePath, fileName))
+			cs.addFileToContractIndex(instanceGroups[1], path.Join(cs.conf.StoragePath, fileName))
 		} else if abiGroups != nil {
-			cs.addFileToABIIndex(abiGroups[1], path.Join(cs.storagePath, fileName), file.ModTime())
+			cs.addFileToABIIndex(abiGroups[1], path.Join(cs.conf.StoragePath, fileName), file.ModTime())
 		}
 	}
 	log.Infof("Smart contract index built. %d entries", len(cs.contractIndex))
@@ -401,7 +404,7 @@ func (cs *contractStore) AddABI(id string, deployMsg *messages.DeployContract, c
 		Deployable:      len(deployMsg.Compiled) > 0,
 		CompilerVersion: deployMsg.CompilerVersion,
 		Path:            "/abis/" + id,
-		SwaggerURL:      cs.baseURL + "/abis/" + id + "?swagger",
+		SwaggerURL:      cs.conf.BaseURL + "/abis/" + id + "?swagger",
 		TimeSorted: messages.TimeSorted{
 			CreatedISO8601: createdTime.UTC().Format(time.RFC3339),
 		},

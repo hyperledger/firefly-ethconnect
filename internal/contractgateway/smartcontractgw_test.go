@@ -192,10 +192,15 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	info, err := scgw.(*smartContractGW).cs.GetContractByAddress("0123456789abcdef0123456789abcdef01234567")
 	assert.NoError(err)
 	assert.NotEmpty(info)
-	deployMsg, abiID, err := scgw.(*smartContractGW).cs.GetLocalABI(info.ABI)
+	abiInfo, err := scgw.(*smartContractGW).cs.GetLocalABIInfo(info.ABI)
 	assert.NoError(err)
-	assert.NotEmpty(abiID)
-	runtimeABI, err := ethbind.API.ABIMarshalingToABIRuntime(deployMsg.ABI)
+	assert.NotNil(abiInfo)
+	deployMsg, err := scgw.(*smartContractGW).cs.GetABI(contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    info.ABI,
+	}, false)
+	assert.NoError(err)
+	runtimeABI, err := ethbind.API.ABIMarshalingToABIRuntime(deployMsg.Contract.ABI)
 	assert.NoError(err)
 	assert.Equal("set", runtimeABI.Methods["set"].Name)
 
@@ -852,7 +857,7 @@ func TestGetContractOrABIFail(t *testing.T) {
 	assert.Equal(404, res.Result().StatusCode)
 
 	// ABI that does not exist in the index
-	mcs.On("GetLocalABI", "23456789abcdef0123456789abcdef0123456789").Return(nil, nil, fmt.Errorf("pop")).Once()
+	mcs.On("GetLocalABIInfo", "23456789abcdef0123456789abcdef0123456789").Return(nil, fmt.Errorf("pop")).Once()
 	req = httptest.NewRequest("GET", "/abis/23456789abcdef0123456789abcdef0123456789?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router = &httprouter.Router{}
@@ -885,7 +890,10 @@ func TestGetContractUI(t *testing.T) {
 		ABI:     "abi1",
 		Address: "123456789abcdef0123456789abcdef012345678",
 	}, nil)
-	mcs.On("GetLocalABI", "abi1").Return(&messages.DeployContract{}, nil, nil)
+	mcs.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    "abi1",
+	}, false).Return(&contractregistry.DeployContractWithAddress{}, nil)
 
 	req := httptest.NewRequest("GET", "/contracts/123456789abcdef0123456789abcdef012345678?ui", bytes.NewReader([]byte{}))
 	res := httptest.NewRecorder()

@@ -370,7 +370,7 @@ func TestGetTransactionInputsLoadABIFail(t *testing.T) {
 	cr.On("GetABI", contractregistry.ABILocation{
 		ABIType: contractregistry.LocalABI,
 		Name:    "abi1",
-	}, false).Return(nil, "", fmt.Errorf("pop"))
+	}, false).Return(nil, fmt.Errorf("pop"))
 
 	s := &subscription{
 		info: &SubscriptionInfo{
@@ -400,7 +400,7 @@ func TestGetTransactionInputsMissingABI(t *testing.T) {
 	cr.On("GetABI", contractregistry.ABILocation{
 		ABIType: contractregistry.LocalABI,
 		Name:    "abi1",
-	}, false).Return(nil, "", nil)
+	}, false).Return(nil, nil)
 
 	s := &subscription{
 		info: &SubscriptionInfo{
@@ -428,11 +428,11 @@ func TestGetTransactionInputsTxnInfoFail(t *testing.T) {
 	rpc := &ethmocks.RPCClient{}
 	cr := &contractregistrymocks.ContractStore{}
 
-	deployMsg := messages.DeployContract{}
+	deployMsg := contractregistry.DeployContractWithAddress{}
 	cr.On("GetABI", contractregistry.ABILocation{
 		ABIType: contractregistry.LocalABI,
 		Name:    "abi1",
-	}, false).Return(&deployMsg, "", nil)
+	}, false).Return(&deployMsg, nil)
 
 	s := &subscription{
 		info: &SubscriptionInfo{
@@ -466,11 +466,11 @@ func TestGetTransactionInputsBadMethod(t *testing.T) {
 	rpc := &ethmocks.RPCClient{}
 	cr := &contractregistrymocks.ContractStore{}
 
-	deployMsg := messages.DeployContract{}
+	deployMsg := contractregistry.DeployContractWithAddress{}
 	cr.On("GetABI", contractregistry.ABILocation{
 		ABIType: contractregistry.LocalABI,
 		Name:    "abi1",
-	}, false).Return(&deployMsg, "", nil)
+	}, false).Return(&deployMsg, nil)
 
 	s := &subscription{
 		info: &SubscriptionInfo{
@@ -510,15 +510,17 @@ func TestGetTransactionInputsSuccess(t *testing.T) {
 	rpc := &ethmocks.RPCClient{}
 	cr := &contractregistrymocks.ContractStore{}
 
-	deployMsg := &messages.DeployContract{
-		ABI: ethbinding.ABIMarshaling{
-			{
-				Type: "function",
-				Name: "method1",
-				Inputs: []ethbinding.ABIArgumentMarshaling{
-					{
-						Name: "arg1",
-						Type: "int32",
+	deployMsg := &contractregistry.DeployContractWithAddress{
+		Contract: &messages.DeployContract{
+			ABI: ethbinding.ABIMarshaling{
+				{
+					Type: "function",
+					Name: "method1",
+					Inputs: []ethbinding.ABIArgumentMarshaling{
+						{
+							Name: "arg1",
+							Type: "int32",
+						},
 					},
 				},
 			},
@@ -533,7 +535,7 @@ func TestGetTransactionInputsSuccess(t *testing.T) {
 	cr.On("GetABI", contractregistry.ABILocation{
 		ABIType: contractregistry.LocalABI,
 		Name:    "abi1",
-	}, false).Return(deployMsg, "", nil)
+	}, false).Return(deployMsg, nil)
 
 	s := &subscription{
 		info: &SubscriptionInfo{

@@ -661,7 +661,17 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 		}
 	} else {
 		abiID = id
-		deployMsg, info, err = g.cs.GetLocalABI(abiID)
+		info, err = g.cs.GetLocalABIInfo(abiID)
+		if err == nil {
+			var result *contractregistry.DeployContractWithAddress
+			result, err = g.cs.GetABI(contractregistry.ABILocation{
+				ABIType: contractregistry.LocalABI,
+				Name:    abiID,
+			}, false)
+			if result != nil {
+				deployMsg = result.Contract
+			}
+		}
 		if err != nil {
 			g.gatewayErrReply(res, req, err, 404)
 			return
@@ -779,7 +789,10 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 	// Note: there is currently no body payload required for the POST
 
 	abiID := params.ByName("abi")
-	_, _, err := g.cs.GetLocalABI(abiID)
+	_, err := g.cs.GetABI(contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    abiID,
+	}, false)
 	if err != nil {
 		g.gatewayErrReply(res, req, err, 404)
 		return
@@ -1161,6 +1174,9 @@ func (g *smartContractGW) resolveAddressOrName(id string) (deployMsg *messages.D
 			return nil, "", nil, err
 		}
 	}
-	deployMsg, _, err = g.cs.GetLocalABI(info.ABI)
-	return deployMsg, registeredName, info, err
+	result, err := g.cs.GetABI(contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    info.ABI,
+	}, false)
+	return result.Contract, registeredName, info, err
 }

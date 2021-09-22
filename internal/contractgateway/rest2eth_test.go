@@ -178,7 +178,7 @@ func expectABISuccess(t *testing.T, mcr *contractregistrymocks.ContractStore, ab
 	mcr.On("GetABI", contractregistry.ABILocation{
 		ABIType: contractregistry.LocalABI,
 		Name:    abiID,
-	}, false).Return(newTestDeployMsg(t, "").Contract, "", nil)
+	}, false).Return(newTestDeployMsg(t, ""), nil)
 }
 
 func TestSendTransactionAsyncSuccess(t *testing.T) {
@@ -577,7 +577,7 @@ func TestDeployContractSyncRemoteRegistryInstance(t *testing.T) {
 	mcr.On("GetABI", contractregistry.ABILocation{
 		ABIType: contractregistry.RemoteInstance,
 		Name:    "myinstance",
-	}, false).Return(newTestDeployMsg(t, "").Contract, strings.TrimPrefix(to, "0x"), nil)
+	}, false).Return(newTestDeployMsg(t, strings.TrimPrefix(to, "0x")), nil)
 
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?fly-sync", bytes.NewReader(body))
@@ -603,7 +603,7 @@ func TestDeployContractSyncRemoteRegistryInstance500(t *testing.T) {
 	mcr.On("GetABI", contractregistry.ABILocation{
 		ABIType: contractregistry.RemoteInstance,
 		Name:    "myinstance",
-	}, false).Return(nil, "", fmt.Errorf("pop"))
+	}, false).Return(nil, fmt.Errorf("pop"))
 
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?fly-sync", bytes.NewReader(body))
@@ -626,7 +626,7 @@ func TestDeployContractSyncRemoteRegistryInstance404(t *testing.T) {
 	mcr.On("GetABI", contractregistry.ABILocation{
 		ABIType: contractregistry.RemoteInstance,
 		Name:    "myinstance",
-	}, false).Return(nil, "", nil)
+	}, false).Return(nil, nil)
 
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/instances/myinstance/set?fly-sync", bytes.NewReader(body))
@@ -649,7 +649,7 @@ func TestDeployContractSyncRemoteRegistryGateway500(t *testing.T) {
 	mcr.On("GetABI", contractregistry.ABILocation{
 		ABIType: contractregistry.RemoteGateway,
 		Name:    "mygw",
-	}, false).Return(nil, "", fmt.Errorf("pop"))
+	}, false).Return(nil, fmt.Errorf("pop"))
 
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygw?fly-sync", bytes.NewReader(body))
@@ -672,7 +672,7 @@ func TestDeployContractSyncRemoteRegistryGateway404(t *testing.T) {
 	mcr.On("GetABI", contractregistry.ABILocation{
 		ABIType: contractregistry.RemoteGateway,
 		Name:    "mygw",
-	}, false).Return(nil, "", nil)
+	}, false).Return(nil, nil)
 
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygw?fly-sync", bytes.NewReader(body))
@@ -711,7 +711,7 @@ func TestDeployContractSyncRemoteRegistryGateway(t *testing.T) {
 	mcr.On("GetABI", contractregistry.ABILocation{
 		ABIType: contractregistry.RemoteGateway,
 		Name:    "mygateway",
-	}, false).Return(newTestDeployMsg(t, strings.TrimPrefix(to, "0x")).Contract, "", nil)
+	}, false).Return(newTestDeployMsg(t, ""), nil)
 
 	body, _ := json.Marshal(&bodyMap)
 	req := httptest.NewRequest("POST", "/g/mygateway/567a417717cb6c59ddc1035705f02c0fd1ab1872/set?fly-sync", bytes.NewReader(body))
@@ -975,15 +975,17 @@ func TestSendTransactionBadMethodABI(t *testing.T) {
 		ABIType: contractregistry.LocalABI,
 		Name:    "abi-id",
 	}, false).
-		Return(&messages.DeployContract{
-			ABI: ethbinding.ABIMarshaling{
-				{
-					Name: "badmethod", Type: "function", Inputs: []ethbinding.ABIArgumentMarshaling{
-						{Name: "badness", Type: "badness"},
+		Return(&contractregistry.DeployContractWithAddress{
+			Contract: &messages.DeployContract{
+				ABI: ethbinding.ABIMarshaling{
+					{
+						Name: "badmethod", Type: "function", Inputs: []ethbinding.ABIArgumentMarshaling{
+							{Name: "badness", Type: "badness"},
+						},
 					},
 				},
 			},
-		}, "", nil)
+		}, nil)
 
 	req := httptest.NewRequest("GET", "/contracts/0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8/badmethod", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
@@ -1017,15 +1019,17 @@ func TestSendTransactionBadEventABI(t *testing.T) {
 		ABIType: contractregistry.LocalABI,
 		Name:    "abi-id",
 	}, false).
-		Return(&messages.DeployContract{
-			ABI: ethbinding.ABIMarshaling{
-				{
-					Name: "badevent", Type: "event", Inputs: []ethbinding.ABIArgumentMarshaling{
-						{Name: "badness", Type: "badness"},
+		Return(&contractregistry.DeployContractWithAddress{
+			Contract: &messages.DeployContract{
+				ABI: ethbinding.ABIMarshaling{
+					{
+						Name: "badevent", Type: "event", Inputs: []ethbinding.ABIArgumentMarshaling{
+							{Name: "badness", Type: "badness"},
+						},
 					},
 				},
 			},
-		}, "", nil)
+		}, nil)
 
 	req := httptest.NewRequest("POST", "/contracts/0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8/badevent/subscribe", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
@@ -1057,15 +1061,17 @@ func TestSendTransactionBadConstructorABI(t *testing.T) {
 		ABIType: contractregistry.LocalABI,
 		Name:    "testabi",
 	}, false).
-		Return(&messages.DeployContract{
-			ABI: ethbinding.ABIMarshaling{
-				{
-					Name: "badevent", Type: "constructor", Inputs: []ethbinding.ABIArgumentMarshaling{
-						{Name: "badness", Type: "badness"},
+		Return(&contractregistry.DeployContractWithAddress{
+			Contract: &messages.DeployContract{
+				ABI: ethbinding.ABIMarshaling{
+					{
+						Name: "badevent", Type: "constructor", Inputs: []ethbinding.ABIArgumentMarshaling{
+							{Name: "badness", Type: "badness"},
+						},
 					},
 				},
 			},
-		}, "", nil)
+		}, nil)
 
 	req := httptest.NewRequest("POST", "/abis/testabi", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
@@ -1097,9 +1103,11 @@ func TestSendTransactionDefaultConstructorABI(t *testing.T) {
 		ABIType: contractregistry.LocalABI,
 		Name:    "testabi",
 	}, false).
-		Return(&messages.DeployContract{
-			ABI: ethbinding.ABIMarshaling{}, // completely empty ABI is ok
-		}, "", nil)
+		Return(&contractregistry.DeployContractWithAddress{
+			Contract: &messages.DeployContract{
+				ABI: ethbinding.ABIMarshaling{}, // completely empty ABI is ok
+			},
+		}, nil)
 
 	req := httptest.NewRequest("POST", "/abis/testabi", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
@@ -1127,16 +1135,18 @@ func TestSendTransactionUnnamedParamsABI(t *testing.T) {
 		ABIType: contractregistry.LocalABI,
 		Name:    "testabi",
 	}, false).
-		Return(&messages.DeployContract{
-			ABI: ethbinding.ABIMarshaling{
-				{
-					Name: "unnamedparamsmethod", Type: "function", Inputs: []ethbinding.ABIArgumentMarshaling{
-						{Name: "", Type: "uint256", InternalType: "uint256"},
-						{Name: "", Type: "uint256", InternalType: "uint256"},
+		Return(&contractregistry.DeployContractWithAddress{
+			Contract: &messages.DeployContract{
+				ABI: ethbinding.ABIMarshaling{
+					{
+						Name: "unnamedparamsmethod", Type: "function", Inputs: []ethbinding.ABIArgumentMarshaling{
+							{Name: "", Type: "uint256", InternalType: "uint256"},
+							{Name: "", Type: "uint256", InternalType: "uint256"},
+						},
 					},
 				},
 			},
-		}, "", nil)
+		}, nil)
 
 	req := httptest.NewRequest("POST", "/abis/testabi/0x29fb3f4f7cc82a1456903a506e88cdd63b1d74e8/unnamedparamsmethod", bytes.NewReader([]byte{}))
 	req.Header.Add("x-firefly-from", "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8")
@@ -1236,7 +1246,7 @@ func TestDeployContractInvalidABI(t *testing.T) {
 	mcr.On("GetABI", contractregistry.ABILocation{
 		ABIType: contractregistry.LocalABI,
 		Name:    "abi1",
-	}, false).Return(nil, "", fmt.Errorf("pop"))
+	}, false).Return(nil, fmt.Errorf("pop"))
 
 	router.ServeHTTP(res, req)
 

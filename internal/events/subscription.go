@@ -122,11 +122,11 @@ func loadABI(cr contractregistry.ContractResolver, location *contractregistry.AB
 	if location == nil {
 		return nil, nil
 	}
-	deployMsg, _, err := cr.GetABI(*location, false)
-	if err != nil || deployMsg == nil {
+	deployMsg, err := cr.GetABI(*location, false)
+	if err != nil || deployMsg == nil || deployMsg.Contract == nil {
 		return nil, err
 	}
-	return ethbind.API.ABIMarshalingToABIRuntime(deployMsg.ABI)
+	return ethbind.API.ABIMarshalingToABIRuntime(deployMsg.Contract.ABI)
 }
 
 func restoreSubscription(sm subscriptionManager, rpc eth.RPCClient, cr contractregistry.ContractResolver, i *SubscriptionInfo) (*subscription, error) {

@@ -80,13 +80,19 @@ func TestLoadDeployMsgOK(t *testing.T) {
 	deployBytes, _ := json.Marshal(goodMsg)
 	cs.(*contractStore).abiIndex["abi1"] = &ABIInfo{}
 	ioutil.WriteFile(deployFile, deployBytes, 0644)
-	_, _, err = cs.GetLocalABI("abi1")
+	_, err = cs.GetABI(ABILocation{
+		ABIType: LocalABI,
+		Name:    "abi1",
+	}, false)
 	assert.NoError(err)
 
 	// verify cache hit
 	assert.Equal(1, cs.(*contractStore).abiCache.Len())
 	ioutil.WriteFile(deployFile, []byte{}, 0644)
-	_, _, err = cs.GetLocalABI("abi1")
+	_, err = cs.GetABI(ABILocation{
+		ABIType: LocalABI,
+		Name:    "abi1",
+	}, false)
 	assert.NoError(err)
 }
 
@@ -96,7 +102,10 @@ func TestLoadDeployMsgMissing(t *testing.T) {
 	defer cleanup(dir)
 	cs, err := NewContractStore(&ContractStoreConf{StoragePath: dir}, nil)
 	assert.NoError(err)
-	_, _, err = cs.GetLocalABI("abi1")
+	_, err = cs.GetABI(ABILocation{
+		ABIType: LocalABI,
+		Name:    "abi1",
+	}, false)
 	assert.Regexp("No ABI found with ID abi1", err.Error())
 }
 
@@ -107,7 +116,10 @@ func TestLoadDeployMsgFileMissing(t *testing.T) {
 	cs, err := NewContractStore(&ContractStoreConf{StoragePath: dir}, nil)
 	assert.NoError(err)
 	cs.(*contractStore).abiIndex["abi1"] = &ABIInfo{}
-	_, _, err = cs.GetLocalABI("abi1")
+	_, err = cs.GetABI(ABILocation{
+		ABIType: LocalABI,
+		Name:    "abi1",
+	}, false)
 	assert.Regexp("Failed to load ABI with ID abi1", err.Error())
 }
 
@@ -119,7 +131,10 @@ func TestLoadDeployMsgFailure(t *testing.T) {
 	assert.NoError(err)
 	cs.(*contractStore).abiIndex["abi1"] = &ABIInfo{}
 	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), []byte(":bad json"), 0644)
-	_, _, err = cs.GetLocalABI("abi1")
+	_, err = cs.GetABI(ABILocation{
+		ABIType: LocalABI,
+		Name:    "abi1",
+	}, false)
 	assert.Regexp("Failed to parse ABI with ID abi1", err.Error())
 }
 
@@ -131,7 +146,10 @@ func TestLoadDeployMsgRemoteLookupNotFound(t *testing.T) {
 	assert.NoError(err)
 	rr := &mockRR{}
 	cs.(*contractStore).rr = rr
-	_, _, err = cs.GetLocalABI("abi1")
+	_, err = cs.GetABI(ABILocation{
+		ABIType: LocalABI,
+		Name:    "abi1",
+	}, false)
 	assert.EqualError(err, "No ABI found with ID abi1")
 }
 
@@ -168,7 +186,10 @@ func TestLoadABIBadData(t *testing.T) {
 	assert.NoError(err)
 
 	ioutil.WriteFile(path.Join(dir, "badness.abi.json"), []byte(":not json"), 0644)
-	_, _, err = cs.GetLocalABI("badness")
+	_, err = cs.GetABI(ABILocation{
+		ABIType: LocalABI,
+		Name:    "badness",
+	}, false)
 	assert.Regexp("No ABI found with ID badness", err.Error())
 }
 
@@ -356,10 +377,10 @@ func TestGetABIRemoteGateway(t *testing.T) {
 	}
 
 	location := ABILocation{ABIType: RemoteGateway}
-	deployMsg, address, err := cs.GetABI(location, false)
+	deployMsg, err := cs.GetABI(location, false)
 	assert.NoError(err)
-	assert.Equal("", address)
-	assert.Equal("description", deployMsg.Description)
+	assert.Equal("", deployMsg.Address)
+	assert.Equal("description", deployMsg.Contract.Description)
 }
 
 func TestGetABIRemoteInstance(t *testing.T) {
@@ -379,18 +400,18 @@ func TestGetABIRemoteInstance(t *testing.T) {
 	cs.(*contractStore).rr = mrr
 
 	location := ABILocation{ABIType: RemoteInstance}
-	deployMsg, address, err := cs.GetABI(location, false)
+	deployMsg, err := cs.GetABI(location, false)
 	assert.NoError(err)
-	assert.Equal("address", address)
-	assert.Equal("description", deployMsg.Description)
+	assert.Equal("address", deployMsg.Address)
+	assert.Equal("description", deployMsg.Contract.Description)
 
 	// verify cache hit
 	assert.Equal(1, cs.(*contractStore).abiCache.Len())
 	mrr.deployMsg = nil
-	deployMsg, address, err = cs.GetABI(location, false)
+	deployMsg, err = cs.GetABI(location, false)
 	assert.NoError(err)
-	assert.Equal("address", address)
-	assert.Equal("description", deployMsg.Description)
+	assert.Equal("address", deployMsg.Address)
+	assert.Equal("description", deployMsg.Contract.Description)
 }
 
 func TestGetABIRemoteInstanceFail(t *testing.T) {
@@ -402,9 +423,8 @@ func TestGetABIRemoteInstanceFail(t *testing.T) {
 	cs.(*contractStore).rr = &mockRR{}
 
 	location := ABILocation{ABIType: RemoteInstance}
-	deployMsg, address, err := cs.GetABI(location, false)
+	deployMsg, err := cs.GetABI(location, false)
 	assert.NoError(err)
-	assert.Equal("", address)
 	assert.Nil(deployMsg)
 }
 
@@ -415,10 +435,10 @@ func TestGetABILocalFail(t *testing.T) {
 	assert.NoError(err)
 
 	location := ABILocation{ABIType: LocalABI, Name: "test"}
-	deployMsg, address, err := cs.GetABI(location, false)
+	deployMsg, err := cs.GetABI(location, false)
 	assert.Regexp("No ABI found with ID test", err)
-	assert.Equal("", address)
-	assert.Nil(deployMsg)
+	assert.Equal("", deployMsg.Address)
+	assert.Nil(deployMsg.Contract)
 }
 
 func TestIsRemote(t *testing.T) {

@@ -809,15 +809,17 @@ func TestProcessEventsEnd2EndWithInputs(t *testing.T) {
 		}, db, 200)
 	defer svr.Close()
 
-	deployMsg := &messages.DeployContract{
-		ABI: ethbinding.ABIMarshaling{
-			{
-				Type: "function",
-				Name: "method1",
-				Inputs: []ethbinding.ABIArgumentMarshaling{
-					{
-						Name: "arg1",
-						Type: "int32",
+	deployMsg := &contractregistry.DeployContractWithAddress{
+		Contract: &messages.DeployContract{
+			ABI: ethbinding.ABIMarshaling{
+				{
+					Type: "function",
+					Name: "method1",
+					Inputs: []ethbinding.ABIArgumentMarshaling{
+						{
+							Name: "arg1",
+							Type: "int32",
+						},
 					},
 				},
 			},
@@ -842,7 +844,7 @@ func TestProcessEventsEnd2EndWithInputs(t *testing.T) {
 	mcr.On("GetABI", contractregistry.ABILocation{
 		ABIType: contractregistry.LocalABI,
 		Name:    "test-abi",
-	}, false).Return(deployMsg, "", nil)
+	}, false).Return(deployMsg, nil)
 
 	// We expect three events to be sent to the webhook
 	// With the default batch size of 1, that means three separate requests

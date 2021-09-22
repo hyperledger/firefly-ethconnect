@@ -67,16 +67,25 @@ func newTestDeployMsg(t *testing.T, addr string) *DeployContractWithAddress {
 	}
 }
 
-func TestLoadDeployMsgOKNoABIInIndex(t *testing.T) {
+func TestLoadDeployMsgOK(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
 	defer cleanup(dir)
+	deployFile := path.Join(dir, "abi_abi1.deploy.json")
+
 	cs, err := NewContractStore(&ContractStoreConf{StoragePath: dir}, nil)
 	assert.NoError(err)
+
 	goodMsg := &messages.DeployContract{}
 	deployBytes, _ := json.Marshal(goodMsg)
 	cs.(*contractStore).abiIndex["abi1"] = &ABIInfo{}
-	ioutil.WriteFile(path.Join(dir, "abi_abi1.deploy.json"), deployBytes, 0644)
+	ioutil.WriteFile(deployFile, deployBytes, 0644)
+	_, _, err = cs.GetLocalABI("abi1")
+	assert.NoError(err)
+
+	// verify cache hit
+	assert.Equal(1, cs.(*contractStore).abiCache.Len())
+	ioutil.WriteFile(deployFile, []byte{}, 0644)
 	_, _, err = cs.GetLocalABI("abi1")
 	assert.NoError(err)
 }
@@ -359,7 +368,7 @@ func TestGetABIRemoteInstance(t *testing.T) {
 	cs, err := NewContractStore(&ContractStoreConf{}, nil)
 	assert.NoError(err)
 
-	cs.(*contractStore).rr = &mockRR{
+	mrr := &mockRR{
 		deployMsg: &DeployContractWithAddress{
 			Contract: &messages.DeployContract{
 				Description: "description",
@@ -367,9 +376,18 @@ func TestGetABIRemoteInstance(t *testing.T) {
 			Address: "address",
 		},
 	}
+	cs.(*contractStore).rr = mrr
 
 	location := ABILocation{ABIType: RemoteInstance}
 	deployMsg, address, err := cs.GetABI(location, false)
+	assert.NoError(err)
+	assert.Equal("address", address)
+	assert.Equal("description", deployMsg.Description)
+
+	// verify cache hit
+	assert.Equal(1, cs.(*contractStore).abiCache.Len())
+	mrr.deployMsg = nil
+	deployMsg, address, err = cs.GetABI(location, false)
 	assert.NoError(err)
 	assert.Equal("address", address)
 	assert.Equal("description", deployMsg.Description)
@@ -390,7 +408,7 @@ func TestGetABIRemoteInstanceFail(t *testing.T) {
 	assert.Nil(deployMsg)
 }
 
-func TestGetABILocal(t *testing.T) {
+func TestGetABILocalFail(t *testing.T) {
 	assert := assert.New(t)
 
 	cs, err := NewContractStore(&ContractStoreConf{}, nil)
@@ -401,4 +419,27 @@ func TestGetABILocal(t *testing.T) {
 	assert.Regexp("No ABI found with ID test", err)
 	assert.Equal("", address)
 	assert.Nil(deployMsg)
+}
+
+func TestIsRemote(t *testing.T) {
+	assert := assert.New(t)
+
+	result := IsRemote(messages.CommonHeaders{
+		Context: map[string]interface{}{
+			RemoteRegistryContextKey: true,
+		},
+	})
+	assert.Equal(true, result)
+
+	result = IsRemote(messages.CommonHeaders{
+		Context: map[string]interface{}{
+			RemoteRegistryContextKey: false,
+		},
+	})
+	assert.Equal(false, result)
+
+	result = IsRemote(messages.CommonHeaders{
+		Context: map[string]interface{}{},
+	})
+	assert.Equal(false, result)
 }

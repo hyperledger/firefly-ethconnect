@@ -461,6 +461,50 @@ func TestGetTransactionInputsTxnInfoFail(t *testing.T) {
 	assert.Equal(string(defaultLogEntry), string(result))
 }
 
+func TestGetTransactionInputsBadMethod(t *testing.T) {
+	assert := assert.New(t)
+	rpc := &ethmocks.RPCClient{}
+	cr := &contractregistrymocks.ContractStore{}
+
+	deployMsg := messages.DeployContract{}
+	cr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    "abi1",
+	}, false).Return(&deployMsg, "", nil)
+
+	s := &subscription{
+		info: &SubscriptionInfo{
+			ABI: &contractregistry.ABILocation{
+				ABIType: contractregistry.LocalABI,
+				Name:    "abi1",
+			},
+		},
+		rpc: rpc,
+		cr:  cr,
+	}
+	l := logEntry{
+		TransactionHash: [32]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	}
+	lCopy := l
+
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getTransactionByHash", "0x0000000000000000000000000000000000000000000000000000000000000001").
+		Run(func(args mock.Arguments) {
+			res := args[1]
+			*(res.(*eth.TxnInfo)) = eth.TxnInfo{
+				Input: &ethbinding.HexBytes{},
+			}
+		}).
+		Return(nil)
+
+	s.getTransactionInputs(context.Background(), &l)
+
+	result, err := json.Marshal(l)
+	assert.NoError(err)
+	defaultLogEntry, err := json.Marshal(lCopy)
+	assert.NoError(err)
+	assert.Equal(string(defaultLogEntry), string(result))
+}
+
 func TestGetTransactionInputsSuccess(t *testing.T) {
 	assert := assert.New(t)
 	rpc := &ethmocks.RPCClient{}

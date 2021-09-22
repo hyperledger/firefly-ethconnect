@@ -199,7 +199,7 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal("set", runtimeABI.Methods["set"].Name)
 
-	// Check we can list it back over REST
+	// Check we can list contracts back over REST
 	router := &httprouter.Router{}
 	scgw.AddRoutes(router)
 	req := httptest.NewRequest("GET", "/contracts", bytes.NewReader([]byte{}))
@@ -220,6 +220,17 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	err = json.NewDecoder(res.Body).Decode(&info)
 	assert.NoError(err)
 	assert.Equal("0123456789abcdef0123456789abcdef01234567", info.Address)
+
+	// Check we can list ABIs back over REST
+	req = httptest.NewRequest("GET", "/abis", bytes.NewReader([]byte{}))
+	res = httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+	assert.Equal(200, res.Result().StatusCode)
+	var abis []*contractregistry.ABIInfo
+	err = json.NewDecoder(res.Body).Decode(&abis)
+	assert.NoError(err)
+	assert.Equal(1, len(abis))
+	assert.Equal("message1", abis[0].ID)
 
 	// Check we can get the full ABI swagger back over REST
 	req = httptest.NewRequest("GET", "/abis/message1?swagger&noauth&schemes=http,https,wss", bytes.NewReader([]byte{}))
@@ -1914,6 +1925,35 @@ func TestResolveAddressFail(t *testing.T) {
 
 	deployMsg, name, info, err := scgw.(*smartContractGW).resolveAddressOrName("test")
 	assert.Regexp("No contract instance registered with address test", err)
+	assert.Nil(deployMsg)
+	assert.Nil(info)
+	assert.Equal("", name)
+}
+
+func TestResolveAddressGetContractFail(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	scgw, _ := NewSmartContractGateway(
+		&SmartContractGatewayConf{
+			StoragePath: dir,
+			BaseURL:     "http://localhost/api/v1",
+		},
+		&tx.TxnProcessorConf{
+			OrionPrivateAPIS: false,
+		},
+		nil, nil, nil, nil,
+	)
+	mcs := &contractregistrymocks.ContractStore{}
+	scgw.(*smartContractGW).cs = mcs
+
+	mcs.On("GetContractByAddress", "test").Return(nil, fmt.Errorf("bad address")).Once()
+	mcs.On("ResolveContractAddress", "test").Return("address1", nil).Once()
+	mcs.On("GetContractByAddress", "address1").Return(nil, fmt.Errorf("bad address")).Once()
+
+	deployMsg, name, info, err := scgw.(*smartContractGW).resolveAddressOrName("test")
+	assert.EqualError(err, "bad address")
 	assert.Nil(deployMsg)
 	assert.Nil(info)
 	assert.Equal("", name)

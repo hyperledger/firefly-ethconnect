@@ -428,7 +428,9 @@ func TestGetTransactionInputsTxnInfoFail(t *testing.T) {
 	rpc := &ethmocks.RPCClient{}
 	cr := &contractregistrymocks.ContractStore{}
 
-	deployMsg := contractregistry.DeployContractWithAddress{}
+	deployMsg := contractregistry.DeployContractWithAddress{
+		Contract: &messages.DeployContract{},
+	}
 	cr.On("GetABI", contractregistry.ABILocation{
 		ABIType: contractregistry.LocalABI,
 		Name:    "abi1",
@@ -466,7 +468,9 @@ func TestGetTransactionInputsBadMethod(t *testing.T) {
 	rpc := &ethmocks.RPCClient{}
 	cr := &contractregistrymocks.ContractStore{}
 
-	deployMsg := contractregistry.DeployContractWithAddress{}
+	deployMsg := contractregistry.DeployContractWithAddress{
+		Contract: &messages.DeployContract{},
+	}
 	cr.On("GetABI", contractregistry.ABILocation{
 		ABIType: contractregistry.LocalABI,
 		Name:    "abi1",

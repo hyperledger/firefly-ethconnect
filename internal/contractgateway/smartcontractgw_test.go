@@ -509,6 +509,7 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	router.ServeHTTP(res, req)
 	assert.Equal(500, res.Code)
 
+	mcs.On("Close").Return()
 	scgw.Shutdown()
 	mcs.AssertExpectations(t)
 }
@@ -552,6 +553,7 @@ func TestRemoteRegistryBadABI(t *testing.T) {
 	json.NewDecoder(res.Body).Decode(&msg)
 	assert.Regexp("Invalid ABI", msg["error"])
 
+	mcs.On("Close").Return()
 	scgw.Shutdown()
 	mcs.AssertExpectations(t)
 }
@@ -753,8 +755,8 @@ func TestPostDeployRemoteRegisteredName(t *testing.T) {
 		},
 		nil, nil, nil, nil,
 	)
-	mrr := &contractregistrymocks.RemoteRegistry{}
-	s.(*smartContractGW).rr = mrr
+	mcs := &contractregistrymocks.ContractStore{}
+	s.(*smartContractGW).cs = mcs
 
 	contractAddr := ethbind.API.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	scgw := s.(*smartContractGW)
@@ -774,7 +776,7 @@ func TestPostDeployRemoteRegisteredName(t *testing.T) {
 		RegisterAs:      "lobster",
 	}
 
-	mrr.On("RegisterInstance", "lobster", "0x0123456789abcdef0123456789abcdef01234567").Return(nil)
+	mcs.On("AddRemoteInstance", "lobster", "0x0123456789abcdef0123456789abcdef01234567").Return(nil)
 
 	deployFile := path.Join(dir, "abi_message1.deploy.json")
 	deployMsg := &messages.DeployContract{}
@@ -785,7 +787,7 @@ func TestPostDeployRemoteRegisteredName(t *testing.T) {
 
 	assert.Equal("http://localhost/api/v1/instances/lobster?openapi", replyMsg.ContractSwagger)
 
-	mrr.AssertExpectations(t)
+	mcs.AssertExpectations(t)
 }
 
 func TestPostDeployRemoteRegisteredNameNotSuccess(t *testing.T) {
@@ -802,8 +804,8 @@ func TestPostDeployRemoteRegisteredNameNotSuccess(t *testing.T) {
 		},
 		nil, nil, nil, nil,
 	)
-	mrr := &contractregistrymocks.RemoteRegistry{}
-	s.(*smartContractGW).rr = mrr
+	mcs := &contractregistrymocks.ContractStore{}
+	s.(*smartContractGW).cs = mcs
 
 	contractAddr := ethbind.API.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	scgw := s.(*smartContractGW)
@@ -832,7 +834,7 @@ func TestPostDeployRemoteRegisteredNameNotSuccess(t *testing.T) {
 
 	assert.Empty(replyMsg.ContractSwagger)
 
-	mrr.AssertExpectations(t)
+	mcs.AssertExpectations(t)
 }
 
 func TestPostDeployMissingContractAddress(t *testing.T) {

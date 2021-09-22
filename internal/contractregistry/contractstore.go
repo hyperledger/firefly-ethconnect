@@ -49,9 +49,11 @@ type ContractResolver interface {
 
 type ContractStore interface {
 	ContractResolver
-	Init()
+	Init() error
+	Close()
 	AddContract(addrHexNo0x, abiID, pathName, registerAs string) (*ContractInfo, error)
 	AddABI(id string, deployMsg *messages.DeployContract, createdTime time.Time) *ABIInfo
+	AddRemoteInstance(lookupStr, address string) error
 	GetLocalABIInfo(abiID string) (*ABIInfo, error)
 	ListContracts() []messages.TimeSortable
 	ListABIs() []messages.TimeSortable
@@ -72,18 +74,14 @@ type contractStore struct {
 	abiCache              *lru.Cache
 }
 
-func NewContractStore(conf *ContractStoreConf, rr RemoteRegistry) (cs ContractStore, err error) {
-	c := &contractStore{
+func NewContractStore(conf *ContractStoreConf, rr RemoteRegistry) ContractStore {
+	return &contractStore{
 		conf:                  conf,
 		rr:                    rr,
 		contractIndex:         make(map[string]messages.TimeSortable),
 		contractRegistrations: make(map[string]*ContractInfo),
 		abiIndex:              make(map[string]messages.TimeSortable),
 	}
-	if c.abiCache, err = lru.New(DefaultABICacheSize); err != nil {
-		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayResourceErr, err)
-	}
-	return c, nil
 }
 
 // ContractInfo is the minimal data structure we keep in memory, indexed by address
@@ -255,7 +253,7 @@ func (cs *contractStore) loadDeployMsg(abiID string) (*messages.DeployContract, 
 	return msg, nil
 }
 
-func (cs *contractStore) Init() {
+func (cs *contractStore) buildIndex() {
 	log.Infof("Building installed smart contract index")
 	legacyContractMatcher, _ := regexp.Compile(`^contract_([0-9a-z]{40})\.swagger\.json$`)
 	instanceMatcher, _ := regexp.Compile(`^contract_([0-9a-z]{40})\.instance\.json$`)
@@ -279,6 +277,18 @@ func (cs *contractStore) Init() {
 		}
 	}
 	log.Infof("Smart contract index built. %d entries", len(cs.contractIndex))
+}
+
+func (cs *contractStore) Init() (err error) {
+	if cs.abiCache, err = lru.New(DefaultABICacheSize); err != nil {
+		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayResourceErr, err)
+	}
+	cs.buildIndex()
+	return cs.rr.Init()
+}
+
+func (cs *contractStore) Close() {
+	cs.rr.Close()
 }
 
 func (cs *contractStore) migrateLegacyContract(address, fileName string, createdTime time.Time) {
@@ -402,6 +412,10 @@ func (cs *contractStore) AddABI(id string, deployMsg *messages.DeployContract, c
 	cs.abiIndex[id] = info
 	cs.idxLock.Unlock()
 	return info
+}
+
+func (cs *contractStore) AddRemoteInstance(lookupStr, address string) error {
+	return cs.rr.RegisterInstance(lookupStr, address)
 }
 
 func (cs *contractStore) ListContracts() []messages.TimeSortable {

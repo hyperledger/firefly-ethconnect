@@ -143,10 +143,8 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 		baseURL, _ = url.Parse("http://localhost:8080")
 	}
 	log.Infof("OpenAPI Smart Contract Gateway configured with base URL '%s'", baseURL.String())
-	rr := contractregistry.NewRemoteRegistry(&conf.RemoteRegistry)
 	gw := &smartContractGW{
 		conf: conf,
-		rr:   rr,
 		baseSwaggerConf: &openapi.ABI2SwaggerConf{
 			ExternalHost:     baseURL.Host,
 			ExternalRootPath: baseURL.Path,
@@ -156,14 +154,12 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 		},
 		ws: ws,
 	}
-	gw.cs, err = contractregistry.NewContractStore(&contractregistry.ContractStoreConf{
+	rr := contractregistry.NewRemoteRegistry(&conf.RemoteRegistry)
+	gw.cs = contractregistry.NewContractStore(&contractregistry.ContractStoreConf{
 		BaseURL:     conf.BaseURL,
 		StoragePath: conf.StoragePath,
 	}, rr)
-	if err != nil {
-		return nil, err
-	}
-	if err = gw.rr.Init(); err != nil {
+	if err = gw.cs.Init(); err != nil {
 		return nil, err
 	}
 	syncDispatcher := newSyncDispatcher(processor)
@@ -175,7 +171,6 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 		}
 	}
 	gw.r2e = newREST2eth(gw, gw.cs, rpc, gw.sm, processor, asyncDispatcher, syncDispatcher)
-	gw.cs.Init()
 	return gw, nil
 }
 
@@ -183,7 +178,6 @@ type smartContractGW struct {
 	conf            *SmartContractGatewayConf
 	sm              events.SubscriptionManager
 	cs              contractregistry.ContractStore
-	rr              contractregistry.RemoteRegistry
 	r2e             *rest2eth
 	ws              ws.WebSocketChannels
 	baseSwaggerConf *openapi.ABI2SwaggerConf
@@ -219,7 +213,7 @@ func (g *smartContractGW) PostDeploy(msg *messages.TransactionReceipt) error {
 		var err error
 		if isRemote {
 			if msg.RegisterAs != "" {
-				err = g.rr.RegisterInstance(msg.RegisterAs, "0x"+addrHexNo0x)
+				err = g.cs.AddRemoteInstance(msg.RegisterAs, "0x"+addrHexNo0x)
 			}
 		} else {
 			_, err = g.cs.AddContract(addrHexNo0x, requestID, registeredName, msg.RegisterAs)
@@ -1163,8 +1157,8 @@ func (g *smartContractGW) Shutdown() {
 	if g.sm != nil {
 		g.sm.Close()
 	}
-	if g.rr != nil {
-		g.rr.Close()
+	if g.cs != nil {
+		g.cs.Close()
 	}
 }
 

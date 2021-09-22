@@ -55,6 +55,20 @@ func (_m *ContractStore) AddContract(addrHexNo0x string, abiID string, pathName 
 	return r0, r1
 }
 
+// AddRemoteInstance provides a mock function with given fields: lookupStr, address
+func (_m *ContractStore) AddRemoteInstance(lookupStr string, address string) error {
+	ret := _m.Called(lookupStr, address)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string, string) error); ok {
+		r0 = rf(lookupStr, address)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // CheckNameAvailable provides a mock function with given fields: name, isRemote
 func (_m *ContractStore) CheckNameAvailable(name string, isRemote bool) error {
 	ret := _m.Called(name, isRemote)
@@ -67,6 +81,11 @@ func (_m *ContractStore) CheckNameAvailable(name string, isRemote bool) error {
 	}
 
 	return r0
+}
+
+// Close provides a mock function with given fields:
+func (_m *ContractStore) Close() {
+	_m.Called()
 }
 
 // GetABI provides a mock function with given fields: location, refresh
@@ -139,8 +158,17 @@ func (_m *ContractStore) GetLocalABIInfo(abiID string) (*contractregistry.ABIInf
 }
 
 // Init provides a mock function with given fields:
-func (_m *ContractStore) Init() {
-	_m.Called()
+func (_m *ContractStore) Init() error {
+	ret := _m.Called()
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func() error); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
 }
 
 // ListABIs provides a mock function with given fields:

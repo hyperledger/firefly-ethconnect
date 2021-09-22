@@ -437,8 +437,7 @@ func TestGetABILocalFail(t *testing.T) {
 	location := ABILocation{ABIType: LocalABI, Name: "test"}
 	deployMsg, err := cs.GetABI(location, false)
 	assert.Regexp("No ABI found with ID test", err)
-	assert.Equal("", deployMsg.Address)
-	assert.Nil(deployMsg.Contract)
+	assert.Nil(deployMsg)
 }
 
 func TestIsRemote(t *testing.T) {

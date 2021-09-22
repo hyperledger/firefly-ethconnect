@@ -192,11 +192,6 @@ func (cs *contractStore) GetContractByAddress(addrHex string) (*ContractInfo, er
 }
 
 func (cs *contractStore) GetABI(location ABILocation, refresh bool) (deployMsg *DeployContractWithAddress, err error) {
-	if location.ABIType == LocalABI {
-		msg, _, err := cs.getLocalABI(location.Name)
-		return &DeployContractWithAddress{Contract: msg}, err
-	}
-
 	if cached, ok := cs.abiCache.Get(location); ok {
 		result := cached.(*DeployContractWithAddress)
 		return result, nil
@@ -209,7 +204,8 @@ func (cs *contractStore) GetABI(location ABILocation, refresh bool) (deployMsg *
 	case RemoteInstance:
 		deployMsg, err = cs.rr.LoadFactoryForInstance(location.Name, refresh)
 	case LocalABI:
-		// handled above
+		deployMsg = &DeployContractWithAddress{}
+		deployMsg.Contract, _, err = cs.getLocalABI(location.Name)
 	default:
 		panic("unknown ABI type") // should not happen
 	}
@@ -227,18 +223,11 @@ func (cs *contractStore) getLocalABI(abiID string) (*messages.DeployContract, *A
 		return nil, nil, err
 	}
 
-	location := ABILocation{ABIType: LocalABI, Name: abiID}
-	if cached, ok := cs.abiCache.Get(location); ok {
-		result := cached.(*DeployContractWithAddress)
-		return result.Contract, info, nil
-	}
-
 	msg, err := cs.loadDeployMsg(abiID)
 	if err != nil || msg == nil {
 		return nil, nil, err
 	}
 
-	cs.abiCache.Add(location, &DeployContractWithAddress{Contract: msg})
 	return msg, info, nil
 }
 

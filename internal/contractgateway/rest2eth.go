@@ -200,7 +200,7 @@ type restCmd struct {
 	transactionHash string
 }
 
-func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params httprouter.Params, c *restCmd, addrParam string, refresh bool) (a ethbinding.ABIMarshaling, validAddress bool, err error) {
+func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params httprouter.Params, c *restCmd, addrParam string) (a ethbinding.ABIMarshaling, validAddress bool, err error) {
 	c.addr = strings.ToLower(strings.TrimPrefix(addrParam, "0x"))
 	validAddress = addrCheck.MatchString(c.addr)
 	var location contractregistry.ABILocation
@@ -245,7 +245,7 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 	}
 
 	var address string
-	c.deployMsg, address, err = r.cr.GetABI(location, refresh)
+	c.deployMsg, address, err = r.cr.GetABI(location, false)
 	if err != nil {
 		r.restErrReply(res, req, err, 500)
 		return
@@ -329,10 +329,10 @@ func (r *rest2eth) resolveEvent(res http.ResponseWriter, req *http.Request, c *r
 	return
 }
 
-func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, params httprouter.Params, refreshABI bool) (c restCmd, err error) {
+func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, params httprouter.Params) (c restCmd, err error) {
 	// Check if we have a valid address in :address (verified later if required)
 	addrParam := params.ByName("address")
-	a, validAddress, err := r.resolveABI(res, req, params, &c, addrParam, refreshABI)
+	a, validAddress, err := r.resolveABI(res, req, params, &c, addrParam)
 	if err != nil {
 		return c, err
 	}
@@ -450,7 +450,7 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 func (r *rest2eth) restHandler(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
 
-	c, err := r.resolveParams(res, req, params, false) // We never refresh the ABI on an execution call - you have to use ?abi or ?swagger
+	c, err := r.resolveParams(res, req, params)
 	if err != nil {
 		return
 	}

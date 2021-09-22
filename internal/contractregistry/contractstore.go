@@ -192,9 +192,11 @@ func (cs *contractStore) GetContractByAddress(addrHex string) (*ContractInfo, er
 }
 
 func (cs *contractStore) GetABI(location ABILocation, refresh bool) (deployMsg *DeployContractWithAddress, err error) {
-	if cached, ok := cs.abiCache.Get(location); ok {
-		result := cached.(*DeployContractWithAddress)
-		return result, nil
+	if !refresh {
+		if cached, ok := cs.abiCache.Get(location); ok {
+			result := cached.(*DeployContractWithAddress)
+			return result, nil
+		}
 	}
 
 	switch location.ABIType {

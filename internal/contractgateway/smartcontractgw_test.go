@@ -381,13 +381,16 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	)
 	iMsg := newTestDeployMsg(t, "0123456789abcdef0123456789abcdef01234567")
 	iMsg.Contract.Headers.ID = "xyz12345"
-	mrr := &contractregistrymocks.RemoteRegistry{}
-	scgw.(*smartContractGW).rr = mrr
+	mcs := &contractregistrymocks.ContractStore{}
+	scgw.(*smartContractGW).cs = mcs
 
 	router := &httprouter.Router{}
 	scgw.AddRoutes(router)
 
-	mrr.On("LoadFactoryForGateway", "test", false).Return(iMsg.Contract, nil).Once()
+	mcs.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteGateway,
+		Name:    "test",
+	}, false).Return(iMsg, nil).Once()
 	req := httptest.NewRequest("GET", "/g/test?swagger", bytes.NewReader([]byte{}))
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
@@ -396,7 +399,10 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	json.NewDecoder(res.Body).Decode(&returnedSwagger)
 	assert.Equal("/api/v1/g/test", returnedSwagger.BasePath)
 
-	mrr.On("LoadFactoryForGateway", "test", false).Return(iMsg.Contract, nil).Once()
+	mcs.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteGateway,
+		Name:    "test",
+	}, false).Return(iMsg, nil).Once()
 	req = httptest.NewRequest("GET", "/g/test?abi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
@@ -405,7 +411,10 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	json.NewDecoder(res.Body).Decode(&returnedABI)
 	assert.Equal("set", returnedABI.Methods["set"].Name)
 
-	mrr.On("LoadFactoryForInstance", "test", true).Return(iMsg, nil).Once()
+	mcs.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteInstance,
+		Name:    "test",
+	}, true).Return(iMsg, nil).Once()
 	req = httptest.NewRequest("GET", "/i/test?openapi&refresh", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
@@ -414,7 +423,10 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	json.NewDecoder(res.Body).Decode(&returnedSwagger)
 	assert.Equal("/api/v1/i/test", returnedSwagger.BasePath)
 
-	mrr.On("LoadFactoryForInstance", "test", false).Return(iMsg, nil).Once()
+	mcs.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteInstance,
+		Name:    "test",
+	}, false).Return(iMsg, nil).Once()
 	req = httptest.NewRequest("GET", "/instances/test", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
@@ -424,7 +436,10 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	assert.Equal("xyz12345", jsonRes["id"].(string))
 	assert.Equal("0123456789abcdef0123456789abcdef01234567", jsonRes["address"].(string))
 
-	mrr.On("LoadFactoryForInstance", "test", false).Return(iMsg, nil).Once()
+	mcs.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteInstance,
+		Name:    "test",
+	}, false).Return(iMsg, nil).Once()
 	req = httptest.NewRequest("GET", "/i/test?ui", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
@@ -433,7 +448,10 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	assert.Contains(string(html), "<html>")
 	assert.Contains(string(html), "/instances/test?swagger")
 
-	mrr.On("LoadFactoryForGateway", "test", false).Return(iMsg.Contract, nil).Once()
+	mcs.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteGateway,
+		Name:    "test",
+	}, false).Return(iMsg, nil).Once()
 	req = httptest.NewRequest("GET", "/g/test?ui&from=0x12345", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
@@ -443,7 +461,10 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	assert.Contains(string(html), "/gateways/test?swagger")
 	assert.Contains(string(html), "0x12345")
 
-	mrr.On("LoadFactoryForGateway", "test", false).Return(iMsg.Contract, nil).Once()
+	mcs.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteGateway,
+		Name:    "test",
+	}, false).Return(iMsg, nil).Once()
 	req = httptest.NewRequest("GET", "/g/test?ui&from=0x12345&factory", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
@@ -452,33 +473,44 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	assert.Contains(string(html), "<html>")
 	assert.Contains(string(html), "Factory API")
 
-	mrr.On("LoadFactoryForInstance", "test", false).Return(nil, nil).Once()
+	mcs.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteInstance,
+		Name:    "test",
+	}, false).Return(nil, nil).Once()
 	req = httptest.NewRequest("GET", "/instances/test?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(404, res.Code)
 
-	mrr.On("LoadFactoryForGateway", "test", false).Return(nil, nil).Once()
+	mcs.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteGateway,
+		Name:    "test",
+	}, false).Return(nil, nil).Once()
 	req = httptest.NewRequest("GET", "/gateways/test?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(404, res.Code)
 
-	mrr.On("LoadFactoryForInstance", "test", false).Return(nil, fmt.Errorf("pop")).Once()
+	mcs.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteInstance,
+		Name:    "test",
+	}, false).Return(nil, fmt.Errorf("pop")).Once()
 	req = httptest.NewRequest("GET", "/instances/test?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(500, res.Code)
 
-	mrr.On("LoadFactoryForGateway", "test", false).Return(nil, fmt.Errorf("pop")).Once()
+	mcs.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteGateway,
+		Name:    "test",
+	}, false).Return(nil, fmt.Errorf("pop")).Once()
 	req = httptest.NewRequest("GET", "/gateways/test?openapi", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(500, res.Code)
 
-	mrr.On("Close").Return()
 	scgw.Shutdown()
-	mrr.AssertExpectations(t)
+	mcs.AssertExpectations(t)
 }
 
 func TestRemoteRegistryBadABI(t *testing.T) {
@@ -502,13 +534,16 @@ func TestRemoteRegistryBadABI(t *testing.T) {
 	iMsg.Contract.ABI = append(iMsg.Contract.ABI, ethbinding.ABIElementMarshaling{
 		Type: "fallback",
 	})
-	mrr := &contractregistrymocks.RemoteRegistry{}
-	scgw.(*smartContractGW).rr = mrr
+	mcs := &contractregistrymocks.ContractStore{}
+	scgw.(*smartContractGW).cs = mcs
 
 	router := &httprouter.Router{}
 	scgw.AddRoutes(router)
 
-	mrr.On("LoadFactoryForGateway", "test", false).Return(iMsg.Contract, nil)
+	mcs.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.RemoteGateway,
+		Name:    "test",
+	}, false).Return(iMsg, nil)
 	req := httptest.NewRequest("GET", "/g/test?swagger", bytes.NewReader([]byte{}))
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
@@ -517,9 +552,8 @@ func TestRemoteRegistryBadABI(t *testing.T) {
 	json.NewDecoder(res.Body).Decode(&msg)
 	assert.Regexp("Invalid ABI", msg["error"])
 
-	mrr.On("Close").Return()
 	scgw.Shutdown()
-	mrr.AssertExpectations(t)
+	mcs.AssertExpectations(t)
 }
 
 func TestRegisterContractBadAddress(t *testing.T) {

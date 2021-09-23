@@ -20,9 +20,9 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/kvstore"
-	"github.com/hyperledger-labs/firefly-ethconnect/mocks/ethmocks"
+	"github.com/hyperledger/firefly-ethconnect/internal/ethbind"
+	"github.com/hyperledger/firefly-ethconnect/internal/kvstore"
+	"github.com/hyperledger/firefly-ethconnect/mocks/ethmocks"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 
 	"github.com/stretchr/testify/assert"

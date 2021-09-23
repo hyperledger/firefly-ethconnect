@@ -23,8 +23,8 @@ import (
 	"time"
 
 	"github.com/go-openapi/spec"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/internal/eth"
+	"github.com/hyperledger/firefly-ethconnect/internal/messages"
 	"github.com/stretchr/testify/assert"
 )
 

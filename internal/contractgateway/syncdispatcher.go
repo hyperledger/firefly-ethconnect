@@ -20,10 +20,10 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/tx"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/internal/tx"
+	"github.com/hyperledger/firefly-ethconnect/internal/utils"
 
 	log "github.com/sirupsen/logrus"
 )

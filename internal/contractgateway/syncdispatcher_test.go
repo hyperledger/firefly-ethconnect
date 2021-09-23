@@ -19,9 +19,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/tx"
+	"github.com/hyperledger/firefly-ethconnect/internal/eth"
+	"github.com/hyperledger/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/internal/tx"
 	"github.com/stretchr/testify/assert"
 )
 

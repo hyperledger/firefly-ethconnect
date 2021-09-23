@@ -23,8 +23,8 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/spf13/cobra"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth/authtest"
+	"github.com/hyperledger/firefly-ethconnect/internal/auth"
+	"github.com/hyperledger/firefly-ethconnect/internal/auth/authtest"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	"github.com/stretchr/testify/assert"
 )

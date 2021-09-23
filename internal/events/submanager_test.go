@@ -25,9 +25,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/kvstore"
-	"github.com/hyperledger-labs/firefly-ethconnect/mocks/ethmocks"
+	"github.com/hyperledger/firefly-ethconnect/internal/eth"
+	"github.com/hyperledger/firefly-ethconnect/internal/kvstore"
+	"github.com/hyperledger/firefly-ethconnect/mocks/ethmocks"
 	"github.com/julienschmidt/httprouter"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	"github.com/spf13/cobra"

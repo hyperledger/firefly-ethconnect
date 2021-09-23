@@ -1,4 +1,4 @@
-module github.com/hyperledger-labs/firefly-ethconnect
+module github.com/hyperledger/firefly-ethconnect
 
 require (
 	github.com/Shopify/sarama v1.29.0

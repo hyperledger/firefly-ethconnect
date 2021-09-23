@@ -3,8 +3,8 @@
 package contractregistrymocks
 
 import (
-	contractregistry "github.com/hyperledger-labs/firefly-ethconnect/internal/contractregistry"
-	messages "github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
+	contractregistry "github.com/hyperledger/firefly-ethconnect/internal/contractregistry"
+	messages "github.com/hyperledger/firefly-ethconnect/internal/messages"
 
 	mock "github.com/stretchr/testify/mock"
 

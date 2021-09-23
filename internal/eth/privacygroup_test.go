@@ -20,7 +20,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
+	"github.com/hyperledger/firefly-ethconnect/internal/ethbind"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

@@ -1,4 +1,4 @@
-module github.com/hyperledger-labs/firefly-ethconnect
+module github.com/hyperledger/firefly-ethconnect
 
 require (
 	github.com/Shopify/sarama v1.29.0
@@ -31,7 +31,6 @@ require (
 	github.com/ulikunitz/xz v0.5.10 // indirect
 	github.com/x-cray/logrus-prefixed-formatter v0.5.2
 	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
-	golang.org/x/net v0.0.0-20210525063256-abc453219eb5 // indirect
 	golang.org/x/term v0.0.0-20210503060354-a79de5458b56 // indirect
 	gopkg.in/yaml.v2 v2.4.0
 )

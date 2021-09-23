@@ -15,7 +15,7 @@
 package events
 
 import (
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 )
 
 type webSocketAction struct {

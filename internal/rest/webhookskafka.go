@@ -21,10 +21,10 @@ import (
 	"sync"
 
 	"github.com/Shopify/sarama"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/kafka"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/internal/auth"
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger/firefly-ethconnect/internal/kafka"
+	"github.com/hyperledger/firefly-ethconnect/internal/messages"
 	log "github.com/sirupsen/logrus"
 )
 

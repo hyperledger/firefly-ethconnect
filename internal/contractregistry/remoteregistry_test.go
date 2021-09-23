@@ -24,8 +24,8 @@ import (
 	"path"
 	"testing"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/kvstore"
+	"github.com/hyperledger/firefly-ethconnect/internal/ethbind"
+	"github.com/hyperledger/firefly-ethconnect/internal/kvstore"
 	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/assert"
 )

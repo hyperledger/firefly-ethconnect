@@ -19,7 +19,7 @@ import (
 	"net/textproto"
 	"strings"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
+	"github.com/hyperledger/firefly-ethconnect/internal/utils"
 )
 
 func getQueryParamNoCase(name string, req *http.Request) []string {

@@ -22,8 +22,8 @@ import (
 	ws "github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger/firefly-ethconnect/internal/utils"
 )
 
 type webSocketConnection struct {

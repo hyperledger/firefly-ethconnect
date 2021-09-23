@@ -19,9 +19,9 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
+	"github.com/hyperledger/firefly-ethconnect/internal/auth"
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger/firefly-ethconnect/internal/ethbind"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"

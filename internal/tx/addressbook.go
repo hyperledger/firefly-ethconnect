@@ -21,9 +21,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger/firefly-ethconnect/internal/eth"
+	"github.com/hyperledger/firefly-ethconnect/internal/utils"
 	log "github.com/sirupsen/logrus"
 )
 

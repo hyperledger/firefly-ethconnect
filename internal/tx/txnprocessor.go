@@ -24,10 +24,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger/firefly-ethconnect/internal/eth"
+	"github.com/hyperledger/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/internal/utils"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	log "github.com/sirupsen/logrus"
 )

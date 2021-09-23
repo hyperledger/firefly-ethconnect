@@ -24,9 +24,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/eth"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/tx"
+	"github.com/hyperledger/firefly-ethconnect/internal/eth"
+	"github.com/hyperledger/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/internal/tx"
 	"github.com/julienschmidt/httprouter"
 
 	"github.com/stretchr/testify/assert"

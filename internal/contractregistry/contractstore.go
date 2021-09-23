@@ -31,8 +31,8 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 	log "github.com/sirupsen/logrus"
 
-	ethconnecterrors "github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/messages"
+	ethconnecterrors "github.com/hyperledger/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger/firefly-ethconnect/internal/messages"
 )
 
 const (

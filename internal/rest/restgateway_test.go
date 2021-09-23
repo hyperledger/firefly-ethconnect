@@ -25,8 +25,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth/authtest"
+	"github.com/hyperledger/firefly-ethconnect/internal/auth"
+	"github.com/hyperledger/firefly-ethconnect/internal/auth/authtest"
 	"github.com/julienschmidt/httprouter"
 	"github.com/stretchr/testify/assert"
 )

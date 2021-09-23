@@ -17,9 +17,9 @@ package cmd
 import (
 	"plugin"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/auth"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/errors"
-	"github.com/hyperledger-labs/firefly-ethconnect/pkg/plugins"
+	"github.com/hyperledger/firefly-ethconnect/internal/auth"
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger/firefly-ethconnect/pkg/plugins"
 	log "github.com/sirupsen/logrus"
 )
 

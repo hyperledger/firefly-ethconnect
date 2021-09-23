@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/Shopify/sarama"
-	"github.com/hyperledger-labs/firefly-ethconnect/mocks/saramamocks"
+	"github.com/hyperledger/firefly-ethconnect/mocks/saramamocks"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 )

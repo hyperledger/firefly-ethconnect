@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/ethbind"
+	"github.com/hyperledger/firefly-ethconnect/internal/ethbind"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	"github.com/stretchr/testify/assert"
 )

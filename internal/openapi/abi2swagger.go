@@ -22,7 +22,7 @@ import (
 
 	"github.com/go-openapi/jsonreference"
 	"github.com/go-openapi/spec"
-	"github.com/hyperledger-labs/firefly-ethconnect/internal/utils"
+	"github.com/hyperledger/firefly-ethconnect/internal/utils"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	"github.com/tidwall/gjson"
 )

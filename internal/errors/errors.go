@@ -456,6 +456,9 @@ const (
 	LevelDBFailedRetriveOriginalKey = "Failed to retrieve the entry for the original key: %s. %s"
 	// LevelDBFailedRetriveGeneratedID problem retrieving entry - generated ID
 	LevelDBFailedRetriveGeneratedID = "Failed to retrieve the entry for the generated ID: %s. %s"
+
+	// WebSocketClosed websocket was closed
+	WebSocketClosed = "WebSocket '%s' closed"
 )
 
 type Error string

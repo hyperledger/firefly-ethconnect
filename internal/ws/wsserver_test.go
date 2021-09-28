@@ -52,7 +52,7 @@ func TestConnectSendReceiveCycle(t *testing.T) {
 		Type: "listen",
 	})
 
-	s, _, r, _ := w.GetChannels("")
+	s, _, r := w.GetChannels("")
 
 	s <- "Hello World"
 
@@ -111,8 +111,8 @@ func TestConnectTopicIsolation(t *testing.T) {
 		Topic: "topic2",
 	})
 
-	s1, _, r1, _ := w.GetChannels("topic1")
-	s2, _, r2, _ := w.GetChannels("topic2")
+	s1, _, r1 := w.GetChannels("topic1")
+	s2, _, r2 := w.GetChannels("topic2")
 
 	s1 <- "Hello Number 1"
 	s2 <- "Hello Number 2"
@@ -155,15 +155,13 @@ func TestConnectAbandonRequest(t *testing.T) {
 	c.WriteJSON(&webSocketCommandMessage{
 		Type: "listen",
 	})
-	_, _, r, closing := w.GetChannels("")
+	_, _, r := w.GetChannels("")
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
 		select {
 		case <-r:
-			break
-		case <-closing:
 			break
 		}
 		wg.Done()
@@ -247,7 +245,7 @@ func TestBroadcast(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	_, b, _, _ := w.GetChannels(topic)
+	_, b, _ := w.GetChannels(topic)
 	b <- "Hello World"
 
 	var val string
@@ -284,7 +282,7 @@ func TestBroadcastDefaultTopic(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	_, b, _, _ := w.GetChannels(topic)
+	_, b, _ := w.GetChannels(topic)
 	b <- "Hello World"
 
 	var val string
@@ -321,7 +319,7 @@ func TestRecvNotOk(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	_, b, _, _ := w.GetChannels(topic)
+	_, b, _ := w.GetChannels(topic)
 	close(b)
 	w.Close()
 }

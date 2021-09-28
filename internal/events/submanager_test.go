@@ -41,12 +41,11 @@ type mockWebSocket struct {
 	sender            chan interface{}
 	broadcast         chan interface{}
 	receiver          chan error
-	closing           chan struct{}
 }
 
-func (m *mockWebSocket) GetChannels(namespace string) (chan<- interface{}, chan<- interface{}, <-chan error, <-chan struct{}) {
+func (m *mockWebSocket) GetChannels(namespace string) (chan<- interface{}, chan<- interface{}, <-chan error) {
 	m.capturedNamespace = namespace
-	return m.sender, m.broadcast, m.receiver, m.closing
+	return m.sender, m.broadcast, m.receiver
 }
 
 func (m *mockWebSocket) SendReply(message interface{}) {}
@@ -66,8 +65,7 @@ func newMockWebSocket() *mockWebSocket {
 	return &mockWebSocket{
 		sender:    make(chan interface{}),
 		broadcast: make(chan interface{}),
-		receiver:  make(chan error),
-		closing:   make(chan struct{}),
+		receiver:  make(chan error, 1),
 	}
 }
 

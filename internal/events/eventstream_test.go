@@ -704,6 +704,7 @@ func TestProcessEventsEnd2EndWebSocket(t *testing.T) {
 			WebSocket:  &webSocketActionInfo{},
 			Timestamps: false,
 		}, db, 200)
+	mockWebSocket.receiver <- fmt.Errorf("Spurious ack from a previvous socket - to be ignored")
 
 	s := setupTestSubscription(assert, sm, stream, "mySubName")
 	assert.Equal("mySubName", s.Name)
@@ -1001,7 +1002,6 @@ func TestInterruptWebSocketReceive(t *testing.T) {
 		sender:    make(chan interface{}),
 		broadcast: make(chan interface{}),
 		receiver:  make(chan error),
-		closing:   make(chan struct{}),
 	}
 	es := &eventStream{
 		wsChannels:      wsChannels,
@@ -1339,6 +1339,27 @@ func TestUpdateStreamSwapType(t *testing.T) {
 	assert.EqualError(err, "The type of an event stream cannot be changed")
 }
 
+func TestUpdateStreamInProgress(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	db, _ := kvstore.NewLDBKeyValueStore(dir)
+	_, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingBlock,
+			BatchSize:     5,
+			Webhook:       &webhookActionInfo{},
+		}, db, 200)
+	defer svr.Close()
+	defer close(eventStream)
+	defer stream.stop()
+
+	stream.updateInProgress = true
+	_, err := stream.update(&StreamInfo{})
+	assert.Regexp("Update to event stream already in progress", err)
+}
+
 func TestUpdateWebSocketBadDistributionMode(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)
@@ -1400,74 +1421,6 @@ func TestUpdateWebSocket(t *testing.T) {
 	assert.Equal("test2", updatedStream.WebSocket.Topic)
 	assert.Equal("websocket-stream", updatedStream.Name)
 	assert.NoError(err)
-}
-
-func TestWebSocketClientClosedOnSend(t *testing.T) {
-
-	dir := tempdir(t)
-	defer cleanup(t, dir)
-
-	db, _ := kvstore.NewLDBKeyValueStore(dir)
-	_, stream, svr, eventStream := newTestStreamForBatching(
-		&StreamInfo{
-			ErrorHandling: ErrorHandlingBlock,
-			BatchSize:     5,
-			Type:          "websocket",
-			WebSocket: &webSocketActionInfo{
-				Topic: "test1",
-			},
-		}, db, 200)
-	defer svr.Close()
-	defer close(eventStream)
-	defer stream.stop()
-
-	mws := stream.wsChannels.(*mockWebSocket)
-	wsa := stream.action.(*webSocketAction)
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		wsa.attemptBatch(0, 0, []*eventData{})
-		wg.Done()
-	}()
-
-	close(mws.closing)
-	wg.Wait()
-
-}
-
-func TestWebSocketClientClosedOnReceive(t *testing.T) {
-
-	dir := tempdir(t)
-	defer cleanup(t, dir)
-
-	db, _ := kvstore.NewLDBKeyValueStore(dir)
-	_, stream, svr, eventStream := newTestStreamForBatching(
-		&StreamInfo{
-			ErrorHandling: ErrorHandlingBlock,
-			BatchSize:     5,
-			Type:          "websocket",
-			WebSocket: &webSocketActionInfo{
-				Topic: "test1",
-			},
-		}, db, 200)
-	defer svr.Close()
-	defer close(eventStream)
-	defer stream.stop()
-
-	mws := stream.wsChannels.(*mockWebSocket)
-	wsa := stream.action.(*webSocketAction)
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		wsa.attemptBatch(0, 0, []*eventData{})
-		wg.Done()
-	}()
-
-	<-mws.sender
-
-	close(mws.closing)
-	wg.Wait()
-
 }
 
 func TestUpdateStreamMissingWebhookURL(t *testing.T) {

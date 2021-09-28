@@ -395,7 +395,7 @@ func (a *eventStream) eventPoller() {
 				// We do the reset on the event processing thread, to avoid any concurrency issue.
 				// It's just an unsubscribe, which clears the resetRequested flag and sets us stale.
 				if sub.resetRequested {
-					sub.unsubscribe(ctx, false)
+					_ = sub.unsubscribe(ctx, false)
 					// Clear any checkpoint
 					delete(checkpoint, sub.info.ID)
 				}
@@ -597,8 +597,8 @@ func (a *eventStream) processBatch(batchNumber uint64, events []*eventData) {
 		// handler failed, then the ErrorHandling strategy kicks in
 		processed = (err == nil)
 		if !processed {
-			log.Errorf("%s: Batch %d attempt %d failed. ErrorHandling=%s BlockedRetryDelay=%ds",
-				a.spec.ID, batchNumber, attempt, a.spec.ErrorHandling, a.spec.BlockedRetryDelaySec)
+			log.Errorf("%s: Batch %d attempt %d failed. ErrorHandling=%s BlockedRetryDelay=%ds err=%s",
+				a.spec.ID, batchNumber, attempt, a.spec.ErrorHandling, a.spec.BlockedRetryDelaySec, err)
 			processed = (a.spec.ErrorHandling == ErrorHandlingSkip)
 		}
 	}

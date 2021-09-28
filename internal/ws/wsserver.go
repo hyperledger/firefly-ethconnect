@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/julienschmidt/httprouter"
 	log "github.com/sirupsen/logrus"
 )
@@ -28,7 +29,7 @@ import (
 // WebSocketChannels is provided to allow us to do a blocking send to a namespace that will complete once a client connects on it
 // We also provide a channel to listen on for closing of the connection, to allow a select to wake on a blocking send
 type WebSocketChannels interface {
-	GetChannels(topic string) (chan<- interface{}, chan<- interface{}, <-chan error, <-chan struct{})
+	GetChannels(topic string) (chan<- interface{}, chan<- interface{}, <-chan error)
 	SendReply(message interface{})
 }
 
@@ -56,7 +57,6 @@ type webSocketTopic struct {
 	senderChannel    chan interface{}
 	broadcastChannel chan interface{}
 	receiverChannel  chan error
-	closingChannel   chan struct{}
 }
 
 // NewWebSocketServer create a new server with a simplified interface
@@ -91,14 +91,16 @@ func (s *webSocketServer) handler(w http.ResponseWriter, r *http.Request, p http
 	s.connections[c.id] = c
 }
 
-func (s *webSocketServer) cycleTopic(t *webSocketTopic) {
+func (s *webSocketServer) cycleTopic(connInfo string, t *webSocketTopic) {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 
 	// When a connection that was listening on a topic closes, we need to wake anyone
 	// that was listening for a response
-	close(t.closingChannel)
-	t.closingChannel = make(chan struct{})
+	select {
+	case t.receiverChannel <- errors.Errorf(errors.WebSocketClosed, connInfo):
+	default:
+	}
 }
 
 func (s *webSocketServer) connectionClosed(c *webSocketConnection) {
@@ -130,7 +132,6 @@ func (s *webSocketServer) getTopic(topic string) *webSocketTopic {
 			senderChannel:    make(chan interface{}),
 			broadcastChannel: make(chan interface{}),
 			receiverChannel:  make(chan error, 1),
-			closingChannel:   make(chan struct{}),
 		}
 		s.topics[topic] = t
 		s.topicMap[topic] = make(map[string]*webSocketConnection)
@@ -143,9 +144,9 @@ func (s *webSocketServer) getTopic(topic string) *webSocketTopic {
 	return t
 }
 
-func (s *webSocketServer) GetChannels(topic string) (chan<- interface{}, chan<- interface{}, <-chan error, <-chan struct{}) {
+func (s *webSocketServer) GetChannels(topic string) (chan<- interface{}, chan<- interface{}, <-chan error) {
 	t := s.getTopic(topic)
-	return t.senderChannel, t.broadcastChannel, t.receiverChannel, t.closingChannel
+	return t.senderChannel, t.broadcastChannel, t.receiverChannel
 }
 
 func (s *webSocketServer) ListenOnTopic(c *webSocketConnection, topic string) {

@@ -1339,6 +1339,27 @@ func TestUpdateStreamSwapType(t *testing.T) {
 	assert.EqualError(err, "The type of an event stream cannot be changed")
 }
 
+func TestUpdateStreamInProgress(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	db, _ := kvstore.NewLDBKeyValueStore(dir)
+	_, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingBlock,
+			BatchSize:     5,
+			Webhook:       &webhookActionInfo{},
+		}, db, 200)
+	defer svr.Close()
+	defer close(eventStream)
+	defer stream.stop()
+
+	stream.updateInProgress = true
+	_, err := stream.update(&StreamInfo{})
+	assert.Regexp("Update to event stream already in progress", err)
+}
+
 func TestUpdateWebSocketBadDistributionMode(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)

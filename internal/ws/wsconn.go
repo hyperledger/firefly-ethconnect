@@ -71,8 +71,8 @@ func (c *webSocketConnection) close() {
 	c.mux.Unlock()
 
 	for _, t := range c.topics {
-		ackInFlight := c.server.cycleTopic(t)
-		log.Infof("WS/%s: Cycled topic '%s' ackInFlight=%t", c.id, t.topic, ackInFlight)
+		c.server.cycleTopic(c.id, t)
+		log.Infof("WS/%s: Websocket closed while active on topic '%s'", c.id, t.topic)
 	}
 	c.server.connectionClosed(c)
 	log.Infof("WS/%s: Disconnected", c.id)

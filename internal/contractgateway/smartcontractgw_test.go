@@ -49,8 +49,8 @@ type mockWebSocketServer struct {
 	testChan chan interface{}
 }
 
-func (m *mockWebSocketServer) GetChannels(topic string) (chan<- interface{}, chan<- interface{}, <-chan error, <-chan bool) {
-	return nil, nil, nil, nil
+func (m *mockWebSocketServer) GetChannels(topic string) (chan<- interface{}, chan<- interface{}, <-chan error) {
+	return nil, nil, nil
 }
 
 func (m *mockWebSocketServer) SendReply(message interface{}) {

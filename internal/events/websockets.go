@@ -45,7 +45,7 @@ func (w *webSocketAction) attemptBatch(batchNumber, attempt uint64, events []*ev
 	}
 
 	// Get a blocking channel to send and receive on our chosen namespace
-	sender, broadcaster, receiver, closing := w.es.wsChannels.GetChannels(topic)
+	sender, broadcaster, receiver := w.es.wsChannels.GetChannels(topic)
 
 	var channel chan<- interface{}
 	switch w.spec.DistributionMode {
@@ -55,29 +55,37 @@ func (w *webSocketAction) attemptBatch(batchNumber, attempt uint64, events []*ev
 		channel = sender
 	}
 
+	// Clear out any current ack/error
+	purging := true
+	for purging {
+		select {
+		case err1 := <-receiver:
+			log.Warnf("Cleared out suprious ack (could be from previous disonnect). err=%s", err1)
+		default:
+			purging = false
+		}
+	}
+
 	// Sent the batch of events
 	select {
 	case channel <- events:
 		break
 	case <-w.es.updateInterrupt:
-		return errors.Errorf(errors.EventStreamsWebSocketInterruptedSend)
-	case <-closing:
-		return errors.Errorf(errors.EventStreamsWebSocketInterruptedSend)
+		err = errors.Errorf(errors.EventStreamsWebSocketInterruptedSend)
 	}
 
 	// If we ever add more distribution modes, we may want to change this logic from a simple if statement
-	if w.spec.DistributionMode != DistributionModeBroadcast {
+	if err == nil && w.spec.DistributionMode != DistributionModeBroadcast {
 		// Wait for the next ack or exception
 		select {
 		case err = <-receiver:
 			break
 		case <-w.es.updateInterrupt:
 			err = errors.Errorf(errors.EventStreamsWebSocketInterruptedReceive)
-		case <-closing:
-			err = errors.Errorf(errors.EventStreamsWebSocketErrorFromClient, "closing")
 		}
-		// Pass back any exception from the client
-		log.Infof("Attempt batch %d complete. ok=%t", batchNumber, err == nil)
 	}
+
+	// Pass back any exception from the client
+	log.Infof("Attempt batch %d complete. ok=%t", batchNumber, err == nil)
 	return err
 }

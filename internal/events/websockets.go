@@ -16,6 +16,7 @@ package events
 
 import (
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 type webSocketAction struct {
@@ -71,11 +72,12 @@ func (w *webSocketAction) attemptBatch(batchNumber, attempt uint64, events []*ev
 		case err = <-receiver:
 			break
 		case <-w.es.updateInterrupt:
-			return errors.Errorf(errors.EventStreamsWebSocketInterruptedReceive)
+			err = errors.Errorf(errors.EventStreamsWebSocketInterruptedReceive)
 		case <-closing:
-			return errors.Errorf(errors.EventStreamsWebSocketInterruptedReceive)
+			err = errors.Errorf(errors.EventStreamsWebSocketErrorFromClient, "closing")
 		}
 		// Pass back any exception from the client
+		log.Infof("Attempt batch %d complete. ok=%t", batchNumber, err == nil)
 	}
 	return err
 }

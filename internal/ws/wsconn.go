@@ -71,7 +71,8 @@ func (c *webSocketConnection) close() {
 	c.mux.Unlock()
 
 	for _, t := range c.topics {
-		c.server.cycleTopic(t)
+		ackInFlight := c.server.cycleTopic(t)
+		log.Infof("WS/%s: Cycled topic '%s' ackInFlight=%t", c.id, t.topic, ackInFlight)
 	}
 	c.server.connectionClosed(c)
 	log.Infof("WS/%s: Disconnected", c.id)
@@ -108,7 +109,7 @@ func (c *webSocketConnection) sender() {
 			cases = buildCases()
 		} else {
 			// Message from one of the existing topics
-			c.conn.WriteJSON(value.Interface())
+			_ = c.conn.WriteJSON(value.Interface())
 		}
 	}
 }

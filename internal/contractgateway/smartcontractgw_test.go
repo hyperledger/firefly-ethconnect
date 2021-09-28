@@ -49,7 +49,7 @@ type mockWebSocketServer struct {
 	testChan chan interface{}
 }
 
-func (m *mockWebSocketServer) GetChannels(topic string) (chan<- interface{}, chan<- interface{}, <-chan error, <-chan struct{}) {
+func (m *mockWebSocketServer) GetChannels(topic string) (chan<- interface{}, chan<- interface{}, <-chan error, <-chan bool) {
 	return nil, nil, nil, nil
 }
 

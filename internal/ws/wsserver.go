@@ -28,7 +28,7 @@ import (
 // WebSocketChannels is provided to allow us to do a blocking send to a namespace that will complete once a client connects on it
 // We also provide a channel to listen on for closing of the connection, to allow a select to wake on a blocking send
 type WebSocketChannels interface {
-	GetChannels(topic string) (chan<- interface{}, chan<- interface{}, <-chan error, <-chan struct{})
+	GetChannels(topic string) (chan<- interface{}, chan<- interface{}, <-chan error, <-chan bool)
 	SendReply(message interface{})
 }
 
@@ -56,7 +56,7 @@ type webSocketTopic struct {
 	senderChannel    chan interface{}
 	broadcastChannel chan interface{}
 	receiverChannel  chan error
-	closingChannel   chan struct{}
+	closingChannel   chan bool
 }
 
 // NewWebSocketServer create a new server with a simplified interface
@@ -91,14 +91,18 @@ func (s *webSocketServer) handler(w http.ResponseWriter, r *http.Request, p http
 	s.connections[c.id] = c
 }
 
-func (s *webSocketServer) cycleTopic(t *webSocketTopic) {
+func (s *webSocketServer) cycleTopic(t *webSocketTopic) bool {
 	s.mux.Lock()
 	defer s.mux.Unlock()
 
 	// When a connection that was listening on a topic closes, we need to wake anyone
 	// that was listening for a response
-	close(t.closingChannel)
-	t.closingChannel = make(chan struct{})
+	select {
+	case t.closingChannel <- true:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *webSocketServer) connectionClosed(c *webSocketConnection) {
@@ -130,7 +134,7 @@ func (s *webSocketServer) getTopic(topic string) *webSocketTopic {
 			senderChannel:    make(chan interface{}),
 			broadcastChannel: make(chan interface{}),
 			receiverChannel:  make(chan error, 1),
-			closingChannel:   make(chan struct{}),
+			closingChannel:   make(chan bool),
 		}
 		s.topics[topic] = t
 		s.topicMap[topic] = make(map[string]*webSocketConnection)
@@ -143,7 +147,7 @@ func (s *webSocketServer) getTopic(topic string) *webSocketTopic {
 	return t
 }
 
-func (s *webSocketServer) GetChannels(topic string) (chan<- interface{}, chan<- interface{}, <-chan error, <-chan struct{}) {
+func (s *webSocketServer) GetChannels(topic string) (chan<- interface{}, chan<- interface{}, <-chan error, <-chan bool) {
 	t := s.getTopic(topic)
 	return t.senderChannel, t.broadcastChannel, t.receiverChannel, t.closingChannel
 }

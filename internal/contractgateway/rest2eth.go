@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -212,53 +213,79 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 	// 2. we lookup it up locally in a simple filestore managed in ethconnect (the original option)
 	//    - /abis      is for factory interfaces installed into ethconnect by uploading the Solidity
 	//    - /contracts is for individual instances deployed via ethconnect factory interfaces
-	if strings.HasPrefix(req.URL.Path, "/gateways/") || strings.HasPrefix(req.URL.Path, "/g/") {
-		location.ABIType = contractregistry.RemoteGateway
-		location.Name = params.ByName("gateway_lookup")
-	} else if strings.HasPrefix(req.URL.Path, "/instances/") || strings.HasPrefix(req.URL.Path, "/i/") {
-		location.ABIType = contractregistry.RemoteInstance
-		location.Name = params.ByName("instance_lookup")
-		validAddress = true // assume registry only returns valid addresses
-	} else {
-		// Local logic
-		location.ABIType = contractregistry.LocalABI
-		abiID := params.ByName("abi")
-		if abiID != "" {
-			location.Name = abiID
-		} else {
-			if !validAddress {
-				// Resolve the address as a registered name, to an actual contract address
-				if c.addr, err = r.cr.ResolveContractAddress(addrParam); err != nil {
-					r.restErrReply(res, req, err, 404)
+	if schemaVal, exists := c.body["$schema"]; exists {
+		// the payload schema is passed in the POST body, which takes precedence over other options
+		var schema []interface{}
+		if reflect.TypeOf(schemaVal).Kind() == reflect.Map {
+			schema = []interface{}{schemaVal}
+		} else if reflect.TypeOf(schemaVal).Kind() == reflect.Slice {
+			arr := schemaVal.([]interface{})
+			if len(arr) == 0 {
+				r.restErrReply(res, req, fmt.Errorf("schema must not be empty"), 400)
+				return
+			}
+			for i, v := range arr {
+				if reflect.TypeOf(v).Kind() != reflect.Map {
+					r.restErrReply(res, req, fmt.Errorf("schema element at index %d is not a valid JSON object", i), 400)
 					return
 				}
 			}
-			validAddress = true
-			addrParam = c.addr
-			var info *contractregistry.ContractInfo
-			if info, err = r.cr.GetContractByAddress(addrParam); err != nil {
-				r.restErrReply(res, req, err, 404)
-				return
-			}
-			location.Name = info.ABI
+			schema = arr
+		} else {
+			r.restErrReply(res, req, fmt.Errorf("schema must be a JSON object or JSON array"), 400)
+			return
 		}
-	}
+		bytes, _ := json.Marshal(schema)
+		_ = json.Unmarshal(bytes, &a)
+	} else {
+		if strings.HasPrefix(req.URL.Path, "/gateways/") || strings.HasPrefix(req.URL.Path, "/g/") {
+			location.ABIType = contractregistry.RemoteGateway
+			location.Name = params.ByName("gateway_lookup")
+		} else if strings.HasPrefix(req.URL.Path, "/instances/") || strings.HasPrefix(req.URL.Path, "/i/") {
+			location.ABIType = contractregistry.RemoteInstance
+			location.Name = params.ByName("instance_lookup")
+			validAddress = true // assume registry only returns valid addresses
+		} else {
+			// Local logic
+			location.ABIType = contractregistry.LocalABI
+			abiID := params.ByName("abi")
+			if abiID != "" {
+				location.Name = abiID
+			} else {
+				if !validAddress {
+					// Resolve the address as a registered name, to an actual contract address
+					if c.addr, err = r.cr.ResolveContractAddress(addrParam); err != nil {
+						r.restErrReply(res, req, err, 404)
+						return
+					}
+				}
+				validAddress = true
+				addrParam = c.addr
+				var info *contractregistry.ContractInfo
+				if info, err = r.cr.GetContractByAddress(addrParam); err != nil {
+					r.restErrReply(res, req, err, 404)
+					return
+				}
+				location.Name = info.ABI
+			}
+		}
 
-	deployMsg, err := r.cr.GetABI(location, false)
-	if err != nil {
-		r.restErrReply(res, req, err, 500)
-		return
-	} else if deployMsg == nil || deployMsg.Contract == nil {
-		err = ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayInstanceNotFound)
-		r.restErrReply(res, req, err, 404)
-		return
+		deployMsg, err := r.cr.GetABI(location, false)
+		if err != nil {
+			r.restErrReply(res, req, err, 500)
+			return nil, validAddress, err
+		} else if deployMsg == nil || deployMsg.Contract == nil {
+			err = ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayInstanceNotFound)
+			r.restErrReply(res, req, err, 404)
+			return nil, validAddress, err
+		}
+		c.deployMsg = deployMsg.Contract
+		c.abiLocation = &location
+		if deployMsg.Address != "" {
+			c.addr = deployMsg.Address
+		}
+		a = c.deployMsg.ABI
 	}
-	c.deployMsg = deployMsg.Contract
-	c.abiLocation = &location
-	if deployMsg.Address != "" {
-		c.addr = deployMsg.Address
-	}
-	a = c.deployMsg.ABI
 	return
 }
 
@@ -328,6 +355,12 @@ func (r *rest2eth) resolveEvent(res http.ResponseWriter, req *http.Request, c *r
 }
 
 func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, params httprouter.Params) (c restCmd, err error) {
+	c.body, err = utils.YAMLorJSONPayload(req)
+	if err != nil {
+		r.restErrReply(res, req, err, 400)
+		return
+	}
+
 	// Check if we have a valid address in :address (verified later if required)
 	addrParam := params.ByName("address")
 	a, validAddress, err := r.resolveABI(res, req, params, &c, addrParam)
@@ -405,12 +438,6 @@ func (r *rest2eth) resolveParams(res http.ResponseWriter, req *http.Request, par
 		}
 	}
 	c.value = json.Number(getFlyParam("ethvalue", req))
-
-	c.body, err = utils.YAMLorJSONPayload(req)
-	if err != nil {
-		r.restErrReply(res, req, err, 400)
-		return
-	}
 
 	c.blocknumber = getFlyParam("blocknumber", req)
 	c.transactionHash = getFlyParam("transaction", req)

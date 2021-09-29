@@ -1350,6 +1350,154 @@ func TestSendTransactionRegisteredName(t *testing.T) {
 	mcr.AssertExpectations(t)
 }
 
+func TestSendTransactionInlineSchema(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
+	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
+	dispatcher := &mockREST2EthDispatcher{
+		asyncDispatchReply: &messages.AsyncSentMsg{
+			Sent:    true,
+			Request: "request1",
+		},
+	}
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+
+	bodyStr := `{
+		"$schema": {
+			"type": "function",
+			"name": "set",
+			"stateMutability": "nonpayable",
+			"inputs": [
+				{
+					"name": "x",
+					"type": "uint256",
+					"internalType": "uint256"
+				}
+			],
+			"outputs": []
+		},
+		"x": 12345
+	}`
+	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?i=999&s=msg&fly-ethvalue=12345", bytes.NewReader([]byte(bodyStr)))
+	req.Header.Set("x-firefly-from", from)
+	router.ServeHTTP(res, req)
+
+	assert.Equal(202, res.Result().StatusCode)
+
+	mcr.AssertExpectations(t)
+}
+
+func TestSendTransactionInlineSchemaNotJSON(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
+	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
+	dispatcher := &mockREST2EthDispatcher{
+		asyncDispatchReply: &messages.AsyncSentMsg{
+			Sent:    true,
+			Request: "request1",
+		},
+	}
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+
+	bodyStr := `{
+		"$schema": ["bad schema"],
+		"x": 12345
+	}`
+	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?i=999&s=msg&fly-ethvalue=12345", bytes.NewReader([]byte(bodyStr)))
+	req.Header.Set("x-firefly-from", from)
+	router.ServeHTTP(res, req)
+
+	assert.Equal(400, res.Result().StatusCode)
+	reply := restErrMsg{}
+	err := json.NewDecoder(res.Result().Body).Decode(&reply)
+	assert.NoError(err)
+	assert.Equal("schema element at index 0 is not a valid JSON object", reply.Message)
+
+	mcr.AssertExpectations(t)
+}
+
+func TestSendTransactionInlineSchemaEmpty(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
+	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
+	dispatcher := &mockREST2EthDispatcher{
+		asyncDispatchReply: &messages.AsyncSentMsg{
+			Sent:    true,
+			Request: "request1",
+		},
+	}
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+
+	bodyStr := `{
+		"$schema": [],
+		"x": 12345
+	}`
+	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?i=999&s=msg&fly-ethvalue=12345", bytes.NewReader([]byte(bodyStr)))
+	req.Header.Set("x-firefly-from", from)
+	router.ServeHTTP(res, req)
+
+	assert.Equal(400, res.Result().StatusCode)
+	reply := restErrMsg{}
+	err := json.NewDecoder(res.Result().Body).Decode(&reply)
+	assert.NoError(err)
+	assert.Equal("schema must not be empty", reply.Message)
+
+	mcr.AssertExpectations(t)
+}
+
+func TestSendTransactionInlineSchemaNotJSONOrArray(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	bodyMap := make(map[string]interface{})
+	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
+	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
+	dispatcher := &mockREST2EthDispatcher{
+		asyncDispatchReply: &messages.AsyncSentMsg{
+			Sent:    true,
+			Request: "request1",
+		},
+	}
+
+	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+
+	bodyStr := `{
+		"$schema": "bad schema",
+		"x": 12345
+	}`
+	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?i=999&s=msg&fly-ethvalue=12345", bytes.NewReader([]byte(bodyStr)))
+	req.Header.Set("x-firefly-from", from)
+	router.ServeHTTP(res, req)
+
+	assert.Equal(400, res.Result().StatusCode)
+	reply := restErrMsg{}
+	err := json.NewDecoder(res.Result().Body).Decode(&reply)
+	assert.NoError(err)
+	assert.Equal("schema must be a JSON object or JSON array", reply.Message)
+
+	mcr.AssertExpectations(t)
+}
+
 func TestSendTransactionMissingParam(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir()
@@ -1397,7 +1545,6 @@ func TestSendTransactionBadBody(t *testing.T) {
 
 	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
 	mcr := r.cr.(*contractregistrymocks.ContractStore)
-	expectContractSuccess(t, mcr, to)
 
 	req := httptest.NewRequest("POST", "/contracts/"+to+"/set?x=999", bytes.NewReader([]byte(":not json or yaml")))
 	req.Header.Set("x-firefly-from", from)
@@ -1820,6 +1967,48 @@ func TestSubscribeWithAddressSuccess(t *testing.T) {
 		"stream": "stream1",
 	})
 	req := httptest.NewRequest("POST", "/contracts/0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8/Changed/subscribe", bytes.NewReader(bodyBytes))
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
+
+	assert.Equal(200, res.Result().StatusCode)
+	reply := events.SubscriptionInfo{}
+	err := json.NewDecoder(res.Result().Body).Decode(&reply)
+	assert.NoError(err)
+	assert.Equal("sub1", reply.ID)
+	assert.Equal("0x66C5fE653e7A9EBB628a6D40f0452d1e358BaEE8", sm.capturedAddr.Hex())
+
+	mcr.AssertExpectations(t)
+}
+
+func TestSubscribeWithAddressInlineSchema(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
+
+	dispatcher := &mockREST2EthDispatcher{}
+	r, router := newTestREST2Eth(dispatcher)
+	mcr := r.cr.(*contractregistrymocks.ContractStore)
+
+	sm := &mockSubMgr{
+		sub: &events.SubscriptionInfo{ID: "sub1"},
+	}
+	r.subMgr = sm
+	bodyBytes := []byte(`{
+		"$schema": {
+			"anonymous": false,
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "data",
+					"type": "uint256"
+				}
+			],
+			"name": "DataStored",
+			"type": "event"
+		},
+		"stream": "stream1",
+	}`)
+	req := httptest.NewRequest("POST", "/contracts/0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8/DataStored/subscribe", bytes.NewReader(bodyBytes))
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 

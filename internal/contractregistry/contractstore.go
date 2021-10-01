@@ -193,7 +193,12 @@ func (cs *contractStore) GetABI(location ABILocation, refresh bool) (deployMsg *
 	if !refresh {
 		if cached, ok := cs.abiCache.Get(location); ok {
 			result := cached.(*DeployContractWithAddress)
-			return result, nil
+			if result != nil && result.Contract != nil {
+				log.Infof("Loaded contract from cache: %+v", location)
+				return result, nil
+			} else {
+				log.Warnf("Contract was cached in memory but was nil: %+v", location)
+			}
 		}
 	}
 
@@ -213,6 +218,7 @@ func (cs *contractStore) GetABI(location ABILocation, refresh bool) (deployMsg *
 	if err != nil || deployMsg == nil || deployMsg.Contract == nil {
 		return nil, err
 	}
+	log.Infof("Adding contract to cache: %+v", location)
 	cs.abiCache.Add(location, deployMsg)
 	return deployMsg, nil
 }

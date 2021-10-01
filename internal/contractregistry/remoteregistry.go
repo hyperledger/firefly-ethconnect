@@ -130,8 +130,10 @@ func (rr *remoteRegistry) loadFactoryFromURL(baseURL, ns, lookupStr string, refr
 	safeLookupStr := url.QueryEscape(lookupStr)
 	if !refresh {
 		msg = rr.loadFactoryFromCacheDB(ns + "/" + safeLookupStr)
-		if msg != nil {
+		if msg != nil && msg.Contract != nil {
 			return msg, nil
+		} else {
+			log.Warnf("Contract was cached in database but was nil: %s", ns+"/"+safeLookupStr)
 		}
 	}
 	queryURL := baseURL + safeLookupStr

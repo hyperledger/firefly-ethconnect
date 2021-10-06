@@ -247,7 +247,10 @@ func TestInitialFilterBadInitialBlock(t *testing.T) {
 
 func TestInitialFilterCustomInitialBlock(t *testing.T) {
 	assert := assert.New(t)
+	stream := newTestStream()
+	lp := &logProcessor{stream: stream}
 	s := &subscription{
+		lp: lp,
 		info: &SubscriptionInfo{
 			FromBlock: "12345",
 		},

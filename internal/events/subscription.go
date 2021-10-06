@@ -160,6 +160,8 @@ func (s *subscription) setInitialBlockHeight(ctx context.Context) (*big.Int, err
 		if _, ok := i.SetString(s.info.FromBlock, 10); !ok {
 			return nil, errors.Errorf(errors.EventStreamsSubscribeBadBlock)
 		}
+		log.Infof("%s: initial block height for event stream (from block): %s", s.logName, i.String())
+		s.lp.initBlockHWM(&i)
 		return &i, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -216,7 +218,7 @@ func (s *subscription) restartFilter(ctx context.Context, checkpoint *big.Int) e
 	}
 
 	blockGap := new(big.Int).Sub(blockNumber.ToInt(), since).Int64()
-	log.Debugf("%s: restarting. Head=%s Position=%s Gap=%d (catchup threshold: %d)", s.logName, blockNumber.String(), since.String(), blockGap, s.catchupModeBlockGap)
+	log.Debugf("%s: restarting. Head=%s Position=%s Gap=%d (catchup threshold: %d)", s.logName, blockNumber.ToInt().String(), since.String(), blockGap, s.catchupModeBlockGap)
 	if s.catchupModeBlockGap > 0 && blockGap > s.catchupModeBlockGap {
 		s.catchupBlock = since // note if we were already in catchup, this does not change anything
 		return nil

@@ -155,6 +155,8 @@ func (r *testRPC) CallContext(ctx context.Context, result interface{}, method st
 		return r.ethEstimateGasErr
 	} else if method == "eth_call" {
 		return nil
+	} else if method == "priv_getTransactionReceipt" {
+		return nil
 	}
 	panic(fmt.Errorf("method unknown to test: %s", method))
 }

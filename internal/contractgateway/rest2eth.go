@@ -546,6 +546,7 @@ func (r *rest2eth) addPrivateTx(msg *messages.TransactionCommon, req *http.Reque
 func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, from string, value json.Number, abiMethodElem *ethbinding.ABIElementMarshaling, deployMsg *messages.DeployContract, msgParams []interface{}) {
 
 	deployMsg.Headers.MsgType = messages.MsgTypeDeployContract
+	deployMsg.Headers.ID = getFlyParam("id", req)
 	deployMsg.From = from
 	deployMsg.Gas = json.Number(getFlyParam("gas", req))
 	deployMsg.GasPrice = json.Number(getFlyParam("gasprice", req))

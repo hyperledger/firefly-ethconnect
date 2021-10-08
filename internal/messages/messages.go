@@ -69,7 +69,7 @@ type ReplyHeaders struct {
 	Elapsed   float64 `json:"timeElapsed"`
 	ReqOffset string  `json:"requestOffset"`
 	ReqID     string  `json:"requestId"`
-	ReqABIID  string  `json:"requestABIId"`
+	ReqABIID  string  `json:"requestABIId,omitempty"`
 }
 
 // ReplyWithHeaders gives common access the reply headers

@@ -46,6 +46,7 @@ type AsyncSentMsg struct {
 // CommonHeaders are common to all messages
 type CommonHeaders struct {
 	ID      string                 `json:"id,omitempty"`
+	ABIID   string                 `json:"abiId,omitempty"`
 	MsgType string                 `json:"type"`
 	Account string                 `json:"account,omitempty"`
 	Context map[string]interface{} `json:"ctx,omitempty"`
@@ -68,6 +69,7 @@ type ReplyHeaders struct {
 	Elapsed   float64 `json:"timeElapsed"`
 	ReqOffset string  `json:"requestOffset"`
 	ReqID     string  `json:"requestId"`
+	ReqABIID  string  `json:"requestABIId"`
 }
 
 // ReplyWithHeaders gives common access the reply headers

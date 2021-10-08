@@ -216,7 +216,12 @@ func (g *smartContractGW) PostDeploy(msg *messages.TransactionReceipt) error {
 				err = g.cs.AddRemoteInstance(msg.RegisterAs, "0x"+addrHexNo0x)
 			}
 		} else {
-			_, err = g.cs.AddContract(addrHexNo0x, requestID, registeredName, msg.RegisterAs)
+			abiID := requestID
+			if msg.Headers.ReqABIID != "" {
+				// This was invoked against an existing ABI, so we need to add an instance there
+				abiID = msg.Headers.ReqABIID
+			}
+			_, err = g.cs.AddContract(addrHexNo0x, abiID, registeredName, msg.RegisterAs)
 		}
 		return err
 	}

@@ -543,10 +543,17 @@ func (r *rest2eth) addPrivateTx(msg *messages.TransactionCommon, req *http.Reque
 	return nil
 }
 
+func (r *rest2eth) assignMessageID(headers *messages.RequestHeaders, req *http.Request) {
+	headers.ID = getFlyParam("id", req)
+	if headers.ID == "" {
+		headers.ID = utils.UUIDv4()
+	}
+}
+
 func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, from string, value json.Number, abiMethodElem *ethbinding.ABIElementMarshaling, deployMsg *messages.DeployContract, msgParams []interface{}) {
 
+	r.assignMessageID(&deployMsg.Headers, req)
 	deployMsg.Headers.MsgType = messages.MsgTypeDeployContract
-	deployMsg.Headers.ID = getFlyParam("id", req)
 	deployMsg.From = from
 	deployMsg.Gas = json.Number(getFlyParam("gas", req))
 	deployMsg.GasPrice = json.Number(getFlyParam("gasprice", req))
@@ -596,8 +603,8 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, from, addr string, value json.Number, abiMethodElem *ethbinding.ABIElementMarshaling, msgParams []interface{}) {
 
 	msg := &messages.SendTransaction{}
+	r.assignMessageID(&msg.Headers, req)
 	msg.Headers.MsgType = messages.MsgTypeSendTransaction
-	msg.Headers.ID = getFlyParam("id", req)
 	msg.Method = abiMethodElem
 	msg.To = addr
 	msg.From = from

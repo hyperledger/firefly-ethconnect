@@ -254,6 +254,7 @@ func (r *rest2eth) resolveABI(res http.ResponseWriter, req *http.Request, params
 		return
 	}
 	c.deployMsg = deployMsg.Contract
+	c.deployMsg.Headers.ABIID = deployMsg.Contract.Headers.ID // Reference to the original ABI needs to flow through for registration
 	c.abiLocation = &location
 	if deployMsg.Address != "" {
 		c.addr = deployMsg.Address

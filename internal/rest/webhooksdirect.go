@@ -107,6 +107,7 @@ func (t *msgContext) Reply(replyMessage messages.ReplyWithHeaders) {
 	replyHeaders.ID = utils.UUIDv4()
 	replyHeaders.Context = t.headers.Context
 	replyHeaders.ReqID = t.headers.ID
+	replyHeaders.ReqABIID = t.headers.ABIID
 	replyHeaders.Received = t.timeReceived.UTC().Format(time.RFC3339Nano)
 	replyTime := time.Now().UTC()
 	replyHeaders.Elapsed = replyTime.Sub(t.timeReceived).Seconds()

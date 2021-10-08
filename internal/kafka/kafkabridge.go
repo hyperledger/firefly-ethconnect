@@ -279,6 +279,7 @@ func (c *msgContext) Reply(replyMessage messages.ReplyWithHeaders) {
 	replyHeaders.ID = utils.UUIDv4()
 	replyHeaders.Context = c.requestCommon.Headers.Context
 	replyHeaders.ReqID = c.requestCommon.Headers.ID
+	replyHeaders.ReqABIID = c.requestCommon.Headers.ABIID
 	replyHeaders.ReqOffset = c.reqOffset
 	replyHeaders.ReqOffset = c.reqOffset
 	replyHeaders.Received = c.timeReceived.UTC().Format(time.RFC3339Nano)

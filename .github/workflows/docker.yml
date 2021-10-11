@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  release:
+    types:
+      - published
 
 jobs:
   docker:
@@ -13,8 +16,12 @@ jobs:
 
       - name: Build
         run: docker build -t ghcr.io/hyperledger/firefly-ethconnect:latest .
-
-      - name: Push
+      
+      - name: Tag release
+        if: github.event_name == 'release' && github.event.action == 'published'
+        run: docker tag ghcr.io/hyperledger/firefly-ethconnect:latest ghcr.io/hyperledger/firefly-ethconnect:$GITHUB_REF
+      
+      - name: Push docker image
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
-          docker push ghcr.io/hyperledger/firefly-ethconnect:latest
+          docker push -a ghcr.io/hyperledger/firefly-ethconnect

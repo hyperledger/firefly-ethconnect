@@ -1,9 +1,6 @@
 name: Docker
 
 on:
-  push:
-    branches:
-      - main
   release:
     types:
       - published
@@ -18,7 +15,6 @@ jobs:
         run: docker build -t ghcr.io/hyperledger/firefly-ethconnect:latest .
       
       - name: Tag release
-        if: github.event_name == 'release' && github.event.action == 'published'
         run: docker tag ghcr.io/hyperledger/firefly-ethconnect:latest ghcr.io/hyperledger/firefly-ethconnect:$GITHUB_REF
       
       - name: Push docker image

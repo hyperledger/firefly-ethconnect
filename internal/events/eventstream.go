@@ -545,7 +545,7 @@ func (a *eventStream) batchProcessor() {
 				<-a.updateInterrupt
 				// we were notified by the caller about an ongoing update, return
 				log.Infof("%s: Notified of an ongoing stream update, exiting batch processor", a.spec.ID)
-				a.updateWG.Done() //Not moving this to a 'defer' since we need to unlock after calling Done()
+				a.updateWG.Done()
 				return
 			} else {
 				a.batchCond.Wait()

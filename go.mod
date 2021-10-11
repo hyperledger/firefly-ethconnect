@@ -12,7 +12,7 @@ require (
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d
 	github.com/icza/dyno v0.0.0-20200205103839-49cb13720835
 	github.com/julienschmidt/httprouter v1.3.0
-	github.com/kaleido-io/ethbinding v0.0.0-20210527224458-a2622d9a2bde
+	github.com/kaleido-io/ethbinding v0.0.0-20210901174425-3b4290c196a9
 	github.com/klauspost/compress v1.12.3 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-isatty v0.0.13 // indirect

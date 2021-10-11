@@ -3,6 +3,7 @@ BINARY_NAME=ethconnect
 BINARY_UNIX=$(BINARY_NAME)-tux
 BINARY_MAC=$(BINARY_NAME)-mac
 BINARY_WIN=$(BINARY_NAME)-win
+TEST_DEBUG_FLAGS?=
 
 GOBIN := $(shell $(VGO) env GOPATH)/bin
 MOCKERY := $(GOBIN)/mockery
@@ -23,7 +24,7 @@ delv-ethbinding: force
 # "plugin was built with a different version of package runtime/internal/sys"
 	  go build -buildmode=plugin -gcflags='all=-N -l' github.com/kaleido-io/ethbinding
 coverage.txt: $(GOFILES)
-		$(VGO) test  ./... -cover -coverprofile=coverage.txt -covermode=atomic -timeout 30s
+		$(VGO) test  ./... ${TEST_DEBUG_FLAGS} -cover -coverprofile=coverage.txt -covermode=atomic -timeout 30s
 coverage.html:
 	  $(VGO) tool cover -html=coverage.txt
 test: coverage.txt

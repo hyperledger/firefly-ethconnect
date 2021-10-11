@@ -30,6 +30,8 @@ jobs:
           sudo chmod 755 /usr/local/bin/solc
 
       - name: Build and Test
+        env:
+          TEST_DEBUG_FLAGS: -v
         run: cd ethconnect && make
 
       - name: Upload coverage

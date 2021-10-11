@@ -541,11 +541,11 @@ func (a *eventStream) batchProcessor() {
 		a.batchCond.L.Lock()
 		for !a.suspendOrStop() && a.batchQueue.Len() == 0 {
 			if a.updateInProgress {
+				a.batchCond.L.Unlock()
 				<-a.updateInterrupt
 				// we were notified by the caller about an ongoing update, return
 				log.Infof("%s: Notified of an ongoing stream update, exiting batch processor", a.spec.ID)
-				a.updateWG.Done() //Not moving this to a 'defer' since we need to unlock after calling Done()
-				a.batchCond.L.Unlock()
+				a.updateWG.Done()
 				return
 			} else {
 				a.batchCond.Wait()

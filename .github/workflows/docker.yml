@@ -15,7 +15,7 @@ jobs:
       
       - name: Tag release
         if: github.event.action == 'published'
-        run: docker tag ghcr.io/hyperledger/firefly-ethconnect:latest ghcr.io/hyperledger/firefly-ethconnect:latest
+        run: docker tag ghcr.io/hyperledger/firefly-ethconnect:${GITHUB_REF##*/} ghcr.io/hyperledger/firefly-ethconnect:latest
       
       - name: Push docker image
         run: |

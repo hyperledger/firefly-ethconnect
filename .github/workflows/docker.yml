@@ -26,4 +26,4 @@ jobs:
         if: github.event.action == 'published'
         run: |
           echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
-          docker push ghcr.io/hyperledger/firefly-ethconnect:$latest
+          docker push ghcr.io/hyperledger/firefly-ethconnect:latest

@@ -35,8 +35,9 @@ import (
 
 // KafkaBridgeConf defines the YAML config structure for a Kafka bridge instance
 type KafkaBridgeConf struct {
-	Kafka       KafkaCommonConf `json:"kafka"`
-	MaxInFlight int             `json:"maxInFlight"`
+	CircuitBreaker CircuitBreakerConf `json:"circuitBreaker,omitempty"`
+	Kafka          KafkaCommonConf    `json:"kafka"`
+	MaxInFlight    int                `json:"maxInFlight"`
 	tx.TxnProcessorConf
 	eth.RPCConf
 }
@@ -424,6 +425,10 @@ func (k *KafkaBridge) Start() (err error) {
 	// Connect the RPC URL
 	if err = k.connect(); err != nil {
 		return
+	}
+
+	if err = InitCircuitBreaker(&k.conf.CircuitBreaker); err != nil {
+		return err
 	}
 
 	// Defer to KafkaCommon processing

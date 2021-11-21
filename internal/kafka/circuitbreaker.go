@@ -1,0 +1,178 @@
+// Copyright 2018, 2021 Kaleido
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+
+//     http://www.apache.org/licenses/LICENSE-2.0
+
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package kafka
+
+import (
+	"math"
+	"sync"
+	"time"
+
+	log "github.com/sirupsen/logrus"
+)
+
+var (
+	DefaultTripBufferSize int64   = 80 * (1024 * 1024)
+	DefaultUntripFraction float64 = 0.6
+	DefaultLogFrequency           = 30 * time.Second
+)
+
+// CircuitBreakerConf defines the YAML config structure for the circuit breaker
+type CircuitBreakerConf struct {
+	Enabled         bool    `json:"enabled,omitempty"`
+	TripBufferSize  int64   `json:"tripBufferSize,omitempty"`
+	UntripFraction  float64 `json:"untripFraction,omitempty"`
+	MinTripTimeMS   int     `json:"minTripTimeMS,omitempty"`
+	LogFrequencySec int     `json:"logFrequencySec,omitempty"`
+
+	// calculated values
+	minTripTime      time.Duration
+	logFrequency     time.Duration
+	untripBufferSize int64
+}
+
+type CircuitBreaker interface {
+	Update(topic string, partition int32, hwm, offset, size int64)
+	Check(topic string) bool
+}
+
+// cbPartitionState is a per-topic state structure for managing trips
+type cbPartitionState struct {
+	sizeEstimate int64
+	offset       int64
+	hwm          int64
+	gap          int64
+	bufSize      int64
+	msgCount     int64
+	msgBytes     int64
+	tripped      bool
+	lastTripTime time.Time
+	lastLogged   time.Time
+}
+
+// circuitBreaker checks that the
+type circuitBreaker struct {
+	conf  *CircuitBreakerConf
+	mux   sync.Mutex
+	state map[string]map[int32]*cbPartitionState
+}
+
+var singletonCircuitBreaker *circuitBreaker
+
+func InitCircuitBreaker(conf *CircuitBreakerConf) error {
+
+	if !conf.Enabled {
+		log.Debugf("CircuitBreaker disabled")
+		return nil
+	}
+	if singletonCircuitBreaker != nil {
+		log.Warnf("Multiple Kafka Consumer CircuitBreaker configurations in config. Only the first will be applied")
+		return nil
+	}
+
+	cb := &circuitBreaker{
+		conf:  conf,
+		state: make(map[string]map[int32]*cbPartitionState),
+	}
+	cb.conf.logFrequency = time.Duration(cb.conf.LogFrequencySec) * time.Second
+	if cb.conf.logFrequency <= 0 {
+		cb.conf.logFrequency = DefaultLogFrequency
+	}
+	if cb.conf.TripBufferSize <= 0 {
+		cb.conf.TripBufferSize = DefaultTripBufferSize
+	}
+	if cb.conf.UntripFraction < 0 || cb.conf.UntripFraction > 1 {
+		cb.conf.UntripFraction = DefaultUntripFraction
+	}
+	cb.conf.untripBufferSize = int64(math.Ceil(cb.conf.UntripFraction * float64(cb.conf.TripBufferSize)))
+	singletonCircuitBreaker = cb
+	log.Infof("Kafka Consumer CircuitBreaker enabled: trip=%.2fKb untrip=%.2fKb", float64(cb.conf.TripBufferSize)/1024, float64(cb.conf.untripBufferSize)/1024)
+
+	return nil
+}
+
+func GetCircuitBreaker() *circuitBreaker {
+	return singletonCircuitBreaker
+}
+
+func (cb *circuitBreaker) logState(prefix, topic string, partition int32, partitionState *cbPartitionState) {
+	lastTripped := partitionState.lastTripTime.Format(time.RFC3339Nano)
+	if partitionState.lastTripTime.IsZero() {
+		lastTripped = "never"
+	}
+	log.Infof("%s '%s/%d': offset=%d hwm=%d sizeEstimate=%.2fKb tripped=%t lastTripped=%s",
+		prefix, topic, partition, partitionState.offset, partitionState.hwm, float64(partitionState.bufSize)/1024, partitionState.tripped, lastTripped)
+}
+
+func (cb *circuitBreaker) Update(topic string, partition int32, hwm, offset, size int64) {
+	cb.mux.Lock()
+	defer cb.mux.Unlock()
+
+	topicState := cb.state[topic]
+	if topicState == nil {
+		topicState = make(map[int32]*cbPartitionState)
+		cb.state[topic] = topicState
+	}
+	partitionState := topicState[partition]
+	if partitionState == nil {
+		partitionState = &cbPartitionState{
+			msgCount:     1,
+			msgBytes:     size,
+			sizeEstimate: size,
+		}
+	} else {
+		partitionState.msgCount++
+		partitionState.msgBytes += size
+		partitionState.sizeEstimate = partitionState.msgBytes / partitionState.msgCount
+	}
+	partitionState.hwm = hwm
+	partitionState.offset = offset
+	partitionState.gap = (hwm - offset)
+	partitionState.bufSize = (partitionState.gap * partitionState.sizeEstimate)
+
+	if partitionState.tripped {
+		if partitionState.bufSize < cb.conf.untripBufferSize {
+			partitionState.tripped = false
+		}
+	} else {
+		if partitionState.bufSize > cb.conf.TripBufferSize {
+			partitionState.tripped = true
+			partitionState.lastTripTime = time.Now()
+		}
+	}
+	if time.Since(partitionState.lastLogged) > cb.conf.logFrequency {
+		partitionState.lastLogged = time.Now()
+		cb.logState("ConsumerHealth", topic, partition, partitionState)
+	}
+
+}
+
+func (cb *circuitBreaker) Check(topic string) bool {
+	cb.mux.Lock()
+	defer cb.mux.Unlock()
+
+	topicState := cb.state[topic]
+	if topicState == nil {
+		return true
+	}
+
+	for partition, partitionState := range topicState {
+		if partitionState.tripped {
+			cb.logState("CircuitBreakerRejection", topic, partition, partitionState)
+			return true
+		}
+	}
+
+	return false
+}

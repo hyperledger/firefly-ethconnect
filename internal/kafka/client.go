@@ -89,7 +89,8 @@ func (c *saramaKafkaClient) NewProducer(k KafkaCommon) (KafkaProducer, error) {
 func (c *saramaKafkaClient) NewConsumer(k KafkaCommon) (KafkaConsumer, error) {
 	h := newSaramaKafkaConsumerGroupHandler(
 		&saramaConsumerGroupFactory{},
-		c.client, k.Conf().ConsumerGroup,
+		c.client,
+		k.Conf().ConsumerGroup,
 		[]string{k.Conf().TopicIn},
 		kafkaConsumerReconnectDelaySecs*time.Second)
 	return h, nil
@@ -116,6 +117,7 @@ type saramaKafkaConsumerGroupHandler struct {
 	messages       chan *sarama.ConsumerMessage
 	errors         chan error
 	session        sarama.ConsumerGroupSession
+	hwmMux         sync.Mutex
 	wg             sync.WaitGroup
 }
 
@@ -185,7 +187,15 @@ func (h *saramaKafkaConsumerGroupHandler) Cleanup(session sarama.ConsumerGroupSe
 }
 
 func (h *saramaKafkaConsumerGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+
+	topic := claim.Topic()
+	partition := claim.Partition()
 	for msg := range claim.Messages() {
+		cb := GetCircuitBreaker()
+		if cb != nil {
+			hwm := claim.HighWaterMarkOffset()
+			cb.Update(topic, partition, hwm, msg.Offset, int64(len(msg.Value)))
+		}
 		h.messages <- msg
 	}
 	return nil

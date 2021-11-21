@@ -203,8 +203,9 @@ func (h *saramaKafkaConsumerGroupHandler) ConsumeClaim(session sarama.ConsumerGr
 
 func (h *saramaKafkaConsumerGroupHandler) Close() error {
 	h.closed = true
-	if h.cg != nil {
-		return h.cg.Close()
+	cg := h.cg
+	if cg != nil {
+		return cg.Close()
 	}
 	return nil
 }

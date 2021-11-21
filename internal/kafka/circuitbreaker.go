@@ -19,12 +19,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	log "github.com/sirupsen/logrus"
 )
 
 var (
 	DefaultTripBufferSize int64   = 80 * (1024 * 1024)
-	DefaultUntripFraction float64 = 0.6
+	DefaultUntripFraction float64 = 0.8
 	DefaultLogFrequency           = 30 * time.Second
 )
 
@@ -33,18 +34,16 @@ type CircuitBreakerConf struct {
 	Enabled         bool    `json:"enabled,omitempty"`
 	TripBufferSize  int64   `json:"tripBufferSize,omitempty"`
 	UntripFraction  float64 `json:"untripFraction,omitempty"`
-	MinTripTimeMS   int     `json:"minTripTimeMS,omitempty"`
 	LogFrequencySec int     `json:"logFrequencySec,omitempty"`
 
 	// calculated values
-	minTripTime      time.Duration
 	logFrequency     time.Duration
 	untripBufferSize int64
 }
 
 type CircuitBreaker interface {
 	Update(topic string, partition int32, hwm, offset, size int64)
-	Check(topic string) bool
+	Check(topic string) error
 }
 
 // cbPartitionState is a per-topic state structure for managing trips
@@ -72,8 +71,7 @@ var singletonCircuitBreaker *circuitBreaker
 
 func InitCircuitBreaker(conf *CircuitBreakerConf) error {
 
-	if !conf.Enabled {
-		log.Debugf("CircuitBreaker disabled")
+	if conf == nil || !conf.Enabled {
 		return nil
 	}
 	if singletonCircuitBreaker != nil {
@@ -92,12 +90,12 @@ func InitCircuitBreaker(conf *CircuitBreakerConf) error {
 	if cb.conf.TripBufferSize <= 0 {
 		cb.conf.TripBufferSize = DefaultTripBufferSize
 	}
-	if cb.conf.UntripFraction < 0 || cb.conf.UntripFraction > 1 {
+	if cb.conf.UntripFraction <= 0 || cb.conf.UntripFraction > 1 {
 		cb.conf.UntripFraction = DefaultUntripFraction
 	}
 	cb.conf.untripBufferSize = int64(math.Ceil(cb.conf.UntripFraction * float64(cb.conf.TripBufferSize)))
 	singletonCircuitBreaker = cb
-	log.Infof("Kafka Consumer CircuitBreaker enabled: trip=%.2fKb untrip=%.2fKb", float64(cb.conf.TripBufferSize)/1024, float64(cb.conf.untripBufferSize)/1024)
+	log.Infof("CircuitBreakerEnabled: trip=%.2fKb untrip=%.2fKb", float64(cb.conf.TripBufferSize)/1024, float64(cb.conf.untripBufferSize)/1024)
 
 	return nil
 }
@@ -111,7 +109,7 @@ func (cb *circuitBreaker) logState(prefix, topic string, partition int32, partit
 	if partitionState.lastTripTime.IsZero() {
 		lastTripped = "never"
 	}
-	log.Infof("%s '%s/%d': offset=%d hwm=%d sizeEstimate=%.2fKb tripped=%t lastTripped=%s",
+	log.Infof("%s: topic=%s partition=%d offset=%d hwm=%d sizeEstimate=%.2fKb tripped=%t lastTripped=%s",
 		prefix, topic, partition, partitionState.offset, partitionState.hwm, float64(partitionState.bufSize)/1024, partitionState.tripped, lastTripped)
 }
 
@@ -131,6 +129,7 @@ func (cb *circuitBreaker) Update(topic string, partition int32, hwm, offset, siz
 			msgBytes:     size,
 			sizeEstimate: size,
 		}
+		topicState[partition] = partitionState
 	} else {
 		partitionState.msgCount++
 		partitionState.msgBytes += size
@@ -139,40 +138,47 @@ func (cb *circuitBreaker) Update(topic string, partition int32, hwm, offset, siz
 	partitionState.hwm = hwm
 	partitionState.offset = offset
 	partitionState.gap = (hwm - offset)
+	if partitionState.gap <= 0 {
+		partitionState.gap = 0 // ensure positive
+	}
 	partitionState.bufSize = (partitionState.gap * partitionState.sizeEstimate)
 
 	if partitionState.tripped {
 		if partitionState.bufSize < cb.conf.untripBufferSize {
 			partitionState.tripped = false
+			cb.logState("CircuitBreakerUntripped", topic, partition, partitionState)
+			return // No extra health log entry here
 		}
 	} else {
 		if partitionState.bufSize > cb.conf.TripBufferSize {
 			partitionState.tripped = true
 			partitionState.lastTripTime = time.Now()
+			cb.logState("CircuitBreakerTripped", topic, partition, partitionState)
+			return // No extra health log entry here
 		}
 	}
 	if time.Since(partitionState.lastLogged) > cb.conf.logFrequency {
 		partitionState.lastLogged = time.Now()
-		cb.logState("ConsumerHealth", topic, partition, partitionState)
+		cb.logState("CircuitBreakerHealth", topic, partition, partitionState)
 	}
 
 }
 
-func (cb *circuitBreaker) Check(topic string) bool {
+func (cb *circuitBreaker) Check(topic string) error {
 	cb.mux.Lock()
 	defer cb.mux.Unlock()
 
 	topicState := cb.state[topic]
 	if topicState == nil {
-		return true
+		return nil
 	}
 
 	for partition, partitionState := range topicState {
 		if partitionState.tripped {
 			cb.logState("CircuitBreakerRejection", topic, partition, partitionState)
-			return true
+			return errors.Errorf(errors.CircuitBreakerTripped, partitionState.gap, float64(partitionState.bufSize)/1024)
 		}
 	}
 
-	return false
+	return nil
 }

@@ -832,6 +832,12 @@ func TestProcessEventsEnd2EndWithInputs(t *testing.T) {
 	}
 	expectedArgs := map[string]interface{}{"arg1": "1"}
 
+	mcr := sm.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    "test-abi",
+	}, false).Return(deployMsg, nil)
+
 	s := setupTestSubscriptionWithRPCHandler(assert, sm, stream, "mySubName", func(method string, result interface{}) {
 		if method == "eth_getTransactionByHash" {
 			*(result.(*eth.TxnInfo)) = eth.TxnInfo{
@@ -840,12 +846,6 @@ func TestProcessEventsEnd2EndWithInputs(t *testing.T) {
 		}
 	})
 	assert.Equal("mySubName", s.Name)
-
-	mcr := sm.cr.(*contractregistrymocks.ContractStore)
-	mcr.On("GetABI", contractregistry.ABILocation{
-		ABIType: contractregistry.LocalABI,
-		Name:    "test-abi",
-	}, false).Return(deployMsg, nil)
 
 	// We expect three events to be sent to the webhook
 	// With the default batch size of 1, that means three separate requests

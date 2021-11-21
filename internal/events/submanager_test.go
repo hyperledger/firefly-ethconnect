@@ -227,6 +227,7 @@ func TestActionChildCleanup(t *testing.T) {
 
 	sm.Close(true)
 }
+
 func TestStreamAndSubscriptionErrors(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)
@@ -257,7 +258,7 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	err = sm.ResetSubscription(ctx, sub.ID, "0")
 	assert.EqualError(err, "Failed to store subscription: leveldb: closed")
 
-	sm.Close(false)
+	sm.Close(true)
 }
 
 func TestResetSubscriptionErrors(t *testing.T) {

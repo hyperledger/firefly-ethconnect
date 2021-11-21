@@ -95,9 +95,7 @@ type eventStream struct {
 	spec                *StreamInfo
 	eventStream         chan *eventData
 	stopped             bool
-	processorDone       bool
 	pollingInterval     time.Duration
-	pollerDone          bool
 	inFlight            uint64
 	batchCond           *sync.Cond
 	batchQueue          *list.List
@@ -105,11 +103,14 @@ type eventStream struct {
 	initialRetryDelay   time.Duration
 	backoffFactor       float64
 	updateInProgress    bool
-	updateInterrupt     chan struct{}   // a zero-sized struct used only for signaling (hand rolled alternative to context)
-	updateWG            *sync.WaitGroup // Wait group for the go routines to reply back after they have stopped
+	updateInterrupt     chan struct{} // a zero-sized struct used only for signaling (hand rolled alternative to context)
 	blockTimestampCache *lru.Cache
 	action              eventStreamAction
 	wsChannels          ws.WebSocketChannels
+
+	eventPollerDone     chan struct{}
+	batchProcessorDone  chan struct{}
+	batchDispatcherDone chan struct{}
 }
 
 type eventStreamAction interface {
@@ -202,16 +203,15 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo, wsChannels ws.WebS
 func (a *eventStream) startEventHandlers(resume bool) {
 	// create a context that can be used to indicate an update to the eventstream
 	a.updateInterrupt = make(chan struct{})
-	a.updateWG = &sync.WaitGroup{}
-	a.updateWG.Add(1) // add a channel for eventPoller to inform after it has stopped
+	a.eventPollerDone = make(chan struct{})
 	go a.eventPoller()
-	a.updateWG.Add(1) // add a channel for batchProcessor to inform after it has stopped
+	a.batchProcessorDone = make(chan struct{})
 	go a.batchProcessor()
 	// For a pause/resume, the batch dispatcher goroutine is not terminated, hence no need to start it
 	if !resume {
+		a.batchDispatcherDone = make(chan struct{})
 		go a.batchDispatcher()
 	}
-	a.updateWG.Add(1) // add a channel for batchDispatcher to inform after it has stopped
 }
 
 // GetID returns the ID (for sorting)
@@ -237,8 +237,6 @@ func (a *eventStream) preUpdateStream() error {
 // postUpdateStream resets flags and kicks off a fresh round of handler go routines
 func (a *eventStream) postUpdateStream() {
 	a.batchCond.L.Lock()
-	a.pollerDone = false
-	a.processorDone = false
 	a.startEventHandlers(false)
 	a.updateInProgress = false
 	a.batchCond.L.Unlock()
@@ -253,7 +251,8 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 		return nil, err
 	}
 	// wait for the poked goroutines to finish up
-	a.updateWG.Wait()
+	<-a.eventPollerDone
+	<-a.batchProcessorDone
 	defer a.postUpdateStream()
 
 	if newSpec.Type != "" && newSpec.Type != a.spec.Type {
@@ -328,7 +327,9 @@ func (a *eventStream) stop(wait bool) {
 	a.batchCond.Broadcast()
 	a.batchCond.L.Unlock()
 	if wait {
-		a.updateWG.Wait()
+		<-a.eventPollerDone
+		<-a.batchProcessorDone
+		<-a.batchDispatcherDone
 	}
 }
 
@@ -338,18 +339,30 @@ func (a *eventStream) suspend() {
 	a.spec.Suspended = true
 	a.batchCond.Broadcast()
 	a.batchCond.L.Unlock()
+	<-a.eventPollerDone
+	<-a.batchProcessorDone
+}
+
+func isChannelDone(c chan struct{}) bool {
+	var isDone bool
+	select {
+	case <-c:
+		isDone = true
+	default:
+		isDone = false
+	}
+	return isDone
 }
 
 // resume resumes the dispatcher
 func (a *eventStream) resume() error {
 	a.batchCond.L.Lock()
 	defer a.batchCond.L.Unlock()
-	if !a.processorDone || !a.pollerDone {
+
+	if !isChannelDone(a.batchProcessorDone) || !isChannelDone(a.eventPollerDone) {
 		return errors.Errorf(errors.EventStreamsWebhookResumeActive, a.spec.Suspended)
 	}
 	a.spec.Suspended = false
-	a.processorDone = false
-	a.pollerDone = false
 
 	a.startEventHandlers(true)
 	a.batchCond.Broadcast()
@@ -382,11 +395,9 @@ func (a *eventStream) markAllSubscriptionsStale(ctx context.Context) {
 // eventPoller checks every few seconds against the ethereum node for any
 // new events on the subscriptions that are registered for this stream
 func (a *eventStream) eventPoller() {
-	defer a.updateWG.Done()
+	defer close(a.eventPollerDone)
 
 	ctx := auth.NewSystemAuthContext()
-
-	defer func() { a.pollerDone = true }()
 	var checkpoint map[string]*big.Int
 	for !a.suspendOrStop() {
 		var err error
@@ -464,14 +475,10 @@ func (a *eventStream) eventPoller() {
 // events we'll be dispatched from blocks before the IsBlocked() feedback
 // loop protects us, this logic has to build a list of batches
 func (a *eventStream) batchDispatcher() {
+	defer close(a.batchDispatcherDone)
 	var currentBatch []*eventData
 	var batchStart time.Time
 	batchTimeout := time.Duration(a.spec.BatchTimeoutMS) * time.Millisecond
-	defer func() {
-		// note for suspend-resume-update case, the `updateWG` might have been recreated.
-		// So we cannot defer the updateWG call itself (need to wrap in a separate function)
-		a.updateWG.Done()
-	}()
 	for {
 		// Wait for the next event - if we're in the middle of a batch, we
 		// need to cope with a timeout
@@ -543,7 +550,8 @@ func (a *eventStream) suspendOrStop() bool {
 // We use a sync.Cond rather than a channel to communicate with this goroutine, as
 // it might be blocked for very large periods of time
 func (a *eventStream) batchProcessor() {
-	defer func() { a.processorDone = true }()
+	defer close(a.batchProcessorDone)
+
 	for {
 		// Wait for the next batch, or to be stopped
 		a.batchCond.L.Lock()
@@ -553,7 +561,6 @@ func (a *eventStream) batchProcessor() {
 				<-a.updateInterrupt
 				// we were notified by the caller about an ongoing update, return
 				log.Infof("%s: Notified of an ongoing stream update, exiting batch processor", a.spec.ID)
-				a.updateWG.Done()
 				return
 			} else {
 				a.batchCond.Wait()
@@ -572,7 +579,6 @@ func (a *eventStream) batchProcessor() {
 		// Process the batch - could block for a very long time, particularly if
 		// ErrorHandlingBlock is configured.
 		// Track this as an item in the update wait group
-		a.updateWG.Add(1)
 		a.processBatch(batchNumber, batchElem.Value.([]*eventData))
 	}
 }
@@ -581,7 +587,6 @@ func (a *eventStream) batchProcessor() {
 // It never returns an error, and uses the chosen block/skip ErrorHandling
 // behaviour combined with the parameters on the event itself
 func (a *eventStream) processBatch(batchNumber uint64, events []*eventData) {
-	defer a.updateWG.Done()
 	if len(events) == 0 {
 		return
 	}
@@ -599,7 +604,6 @@ func (a *eventStream) processBatch(batchNumber uint64, events []*eventData) {
 		}
 		attempt++
 		log.Infof("%s: Batch %d initiated with %d events. FirstBlock=%s LastBlock=%s", a.spec.ID, batchNumber, len(events), events[0].BlockNumber, events[len(events)-1].BlockNumber)
-		a.updateWG.Add(1)
 		err := a.performActionWithRetry(batchNumber, events)
 		// If we got an error after all of the internal retries within the event
 		// handler failed, then the ErrorHandling strategy kicks in
@@ -643,7 +647,6 @@ func (a *eventStream) performActionWithRetry(batchNumber uint64, events []*event
 	delay := a.initialRetryDelay
 	var attempt uint64
 	complete := false
-	defer a.updateWG.Done()
 
 	for !a.suspendOrStop() && !complete {
 		if attempt > 0 {

@@ -200,7 +200,7 @@ func TestStopDuringTimeout(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	stream.stop(false)
 	time.Sleep(10 * time.Millisecond)
-	assert.True(stream.processorDone)
+	assert.True(isChannelDone(stream.eventPollerDone))
 }
 
 func TestBatchSizeCap(t *testing.T) {
@@ -1054,9 +1054,7 @@ func TestCheckpointRecovery(t *testing.T) {
 		}
 	}
 	stream.suspend()
-	for !stream.pollerDone {
-		time.Sleep(1 * time.Millisecond)
-	}
+	<-stream.eventPollerDone
 
 	// Restart from the checkpoint that was stored
 	var newFilterBlock uint64
@@ -1080,7 +1078,7 @@ func TestCheckpointRecovery(t *testing.T) {
 	sub.rpc = rpc
 
 	stream.resume()
-	for stream.pollerDone {
+	for isChannelDone(stream.eventPollerDone) {
 		time.Sleep(1 * time.Millisecond)
 	}
 	wg.Wait()
@@ -1103,9 +1101,7 @@ func TestWithoutCheckpointRecovery(t *testing.T) {
 	defer stream.stop(false)
 
 	stream.suspend()
-	for !stream.pollerDone {
-		time.Sleep(1 * time.Millisecond)
-	}
+	<-stream.eventPollerDone
 
 	s := setupTestSubscription(assert, sm, stream, "")
 
@@ -1131,7 +1127,7 @@ func TestWithoutCheckpointRecovery(t *testing.T) {
 	sub.rpc = rpc
 
 	stream.resume()
-	for stream.pollerDone {
+	for isChannelDone(stream.eventPollerDone) {
 		time.Sleep(1 * time.Millisecond)
 	}
 	for initialEndBlock != "latest" {
@@ -1153,9 +1149,7 @@ func TestMarkStaleOnError(t *testing.T) {
 	defer stream.stop(false)
 
 	stream.suspend()
-	for !stream.pollerDone {
-		time.Sleep(1 * time.Millisecond)
-	}
+	<-stream.eventPollerDone
 
 	s := setupTestSubscription(assert, sm, stream, "")
 	sm.subscriptions[s.ID].filterStale = false
@@ -1169,7 +1163,7 @@ func TestMarkStaleOnError(t *testing.T) {
 	sub.rpc = rpc
 
 	stream.resume()
-	for stream.pollerDone {
+	for isChannelDone(stream.eventPollerDone) {
 		time.Sleep(1 * time.Millisecond)
 	}
 	for !sub.filterStale {
@@ -1192,11 +1186,9 @@ func TestStoreCheckpointLoadError(t *testing.T) {
 	defer stream.stop(false)
 
 	stream.suspend()
-	for !stream.pollerDone {
-		time.Sleep(1 * time.Millisecond)
-	}
+	<-stream.eventPollerDone
 	stream.resume()
-	for stream.pollerDone {
+	for isChannelDone(stream.eventPollerDone) {
 		time.Sleep(1 * time.Millisecond)
 	}
 }
@@ -1226,9 +1218,7 @@ func TestStoreCheckpointStoreError(t *testing.T) {
 	wg.Wait()
 
 	stream.suspend()
-	for !stream.pollerDone {
-		time.Sleep(1 * time.Millisecond)
-	}
+	<-stream.eventPollerDone
 }
 
 func TestProcessBatchEmptyArray(t *testing.T) {
@@ -1531,4 +1521,11 @@ func TestUpdateStreamDuplicateCall(t *testing.T) {
 
 	err = stream.preUpdateStream()
 	assert.Regexp("Update to event stream already in progress", err)
+}
+
+func TestIsDone(t *testing.T) {
+	c := make(chan struct{})
+	assert.False(t, isChannelDone(c))
+	close(c)
+	assert.True(t, isChannelDone(c))
 }

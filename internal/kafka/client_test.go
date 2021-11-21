@@ -60,6 +60,8 @@ func TestConsumerGroupHandler(t *testing.T) {
 	mcg.On("Errors").Return((<-chan error)(errors))
 	mcg.On("Close").Return(nil).Once()
 	mcgc.On("Messages").Return((<-chan *sarama.ConsumerMessage)(messages))
+	mcgc.On("Topic").Return("topic1")
+	mcgc.On("Partition").Return(int32(0))
 	mcg.On("Consume", context.Background(), []string{"topic1"}, mock.Anything).
 		Run(func(args mock.Arguments) {
 			handler := args[2].(sarama.ConsumerGroupHandler)

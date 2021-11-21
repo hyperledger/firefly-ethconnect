@@ -37,7 +37,7 @@ type KafkaGoRoutines interface {
 // KafkaProducer provides the interface passed from KafkaCommon to produce messages (subset of sarama)
 type KafkaProducer interface {
 	AsyncClose()
-	Input() chan<- *sarama.ProducerMessage
+	Input(topic string) (chan<- *sarama.ProducerMessage, error)
 	Successes() <-chan *sarama.ProducerMessage
 	Errors() <-chan *sarama.ProducerError
 }
@@ -83,7 +83,10 @@ func (c *saramaKafkaClient) Brokers() []*sarama.Broker {
 }
 
 func (c *saramaKafkaClient) NewProducer(k KafkaCommon) (KafkaProducer, error) {
-	return sarama.NewAsyncProducerFromClient(c.client)
+	producer, err := sarama.NewAsyncProducerFromClient(c.client)
+	return &saramKafkaProducer{
+		sp: producer,
+	}, err
 }
 
 func (c *saramaKafkaClient) NewConsumer(k KafkaCommon) (KafkaConsumer, error) {
@@ -94,6 +97,33 @@ func (c *saramaKafkaClient) NewConsumer(k KafkaCommon) (KafkaConsumer, error) {
 		[]string{k.Conf().TopicIn},
 		kafkaConsumerReconnectDelaySecs*time.Second)
 	return h, nil
+}
+
+type saramKafkaProducer struct {
+	sp sarama.AsyncProducer
+}
+
+func (p *saramKafkaProducer) AsyncClose() {
+	p.sp.AsyncClose()
+}
+
+// Input must be called each time a message is sent, to let the circuitbreaker get a look in
+func (p *saramKafkaProducer) Input(topic string) (chan<- *sarama.ProducerMessage, error) {
+	cb := GetCircuitBreaker()
+	if cb != nil {
+		if err := cb.Check(topic); err != nil {
+			return nil, err
+		}
+	}
+	return p.sp.Input(), nil
+}
+
+func (p *saramKafkaProducer) Successes() <-chan *sarama.ProducerMessage {
+	return p.sp.Successes()
+}
+
+func (p *saramKafkaProducer) Errors() <-chan *sarama.ProducerError {
+	return p.sp.Errors()
 }
 
 type consumerGroupFactory interface {
@@ -117,7 +147,6 @@ type saramaKafkaConsumerGroupHandler struct {
 	messages       chan *sarama.ConsumerMessage
 	errors         chan error
 	session        sarama.ConsumerGroupSession
-	hwmMux         sync.Mutex
 	wg             sync.WaitGroup
 }
 

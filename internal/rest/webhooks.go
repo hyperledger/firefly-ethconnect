@@ -57,8 +57,7 @@ func (w *webhooks) hookErrReply(res http.ResponseWriter, req *http.Request, err 
 	reply, _ := json.Marshal(&hookErrMsg{Message: err.Error()})
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(status)
-	res.Write(reply)
-	return
+	_, _ = res.Write(reply)
 }
 
 func (w *webhooks) msgSentReply(res http.ResponseWriter, req *http.Request, replyMsg *messages.AsyncSentMsg) {
@@ -67,8 +66,7 @@ func (w *webhooks) msgSentReply(res http.ResponseWriter, req *http.Request, repl
 	log.Infof("<-- %s %s [%d]: Webhook RequestID=%s", req.Method, req.URL, status, replyMsg.Request)
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(status)
-	res.Write(reply)
-	return
+	_, _ = res.Write(reply)
 }
 
 func (w *webhooks) addRoutes(router *httprouter.Router) {
@@ -121,7 +119,6 @@ func (w *webhooks) processMsg(ctx context.Context, msg map[string]interface{}, a
 			return nil, 400, errors.Errorf(errors.WebhooksInvalidMsgFromMissing)
 		}
 		key = from.(string)
-		break
 	default:
 		return nil, 400, errors.Errorf(errors.WebhooksInvalidMsgType, msgType)
 	}
@@ -173,7 +170,7 @@ func (w *webhooks) contractGWHandler(msg map[string]interface{}) (map[string]int
 	// Now send the message back to a generic map
 	msgBytes, _ = json.Marshal(&deployMsg)
 	var newMsg map[string]interface{}
-	json.Unmarshal(msgBytes, &newMsg)
+	_ = json.Unmarshal(msgBytes, &newMsg)
 	return newMsg, nil
 }
 

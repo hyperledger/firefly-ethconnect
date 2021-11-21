@@ -202,6 +202,7 @@ func TestExecuteWithBadRPCURL(t *testing.T) {
 func setupMocks() (*KafkaBridge, *testKafkaMsgProcessor, *MockKafkaConsumer, *MockKafkaProducer, *sync.WaitGroup) {
 	k, _ := newTestKafkaBridge()
 	k.conf.MaxInFlight = 10
+	k.conf.Kafka.sendRetryDelay = 0
 	f := NewMockKafkaFactory()
 	mockConsumer, _ := f.NewConsumer(k.kafka)
 	mockProducer, _ := f.NewProducer(k.kafka)
@@ -328,7 +329,7 @@ func TestSingleMessageWithNotAuthorizedReply(t *testing.T) {
 	auth.RegisterSecurityModule(nil)
 }
 
-func TestSingleMessageWithErrorReply(t *testing.T) {
+func TestSingleMessageWithErrorReplyAndCircuitBreakerRetry(t *testing.T) {
 	assert := assert.New(t)
 
 	_, processor, mockConsumer, mockProducer, wg := setupMocks()
@@ -349,6 +350,7 @@ func TestSingleMessageWithErrorReply(t *testing.T) {
 	}()
 
 	// Check the reply is sent correctly to Kafka
+	mockProducer.FirstSendError = fmt.Errorf("Simulated circuit breaker")
 	replyKafkaMsg := <-mockProducer.MockInput
 	mockProducer.MockSuccesses <- replyKafkaMsg
 	replyBytes, err := replyKafkaMsg.Value.Encode()

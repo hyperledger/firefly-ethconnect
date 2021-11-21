@@ -23,6 +23,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/hyperledger/firefly-ethconnect/mocks/saramamocks"
 	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -53,6 +54,12 @@ func TestConsumerGroupHandler(t *testing.T) {
 	errors := make(chan error)
 	messages := make(chan *sarama.ConsumerMessage)
 
+	InitCircuitBreaker(&CircuitBreakerConf{
+		Enabled:        true,
+		TripBufferSize: 1, // Trip immediately
+	})
+	cb := GetCircuitBreaker()
+
 	ms.On("Claims").Return(nil)
 	ms.On("MemberID").Return("")
 	ms.On("GenerationID").Return(int32(0))
@@ -62,6 +69,7 @@ func TestConsumerGroupHandler(t *testing.T) {
 	mcgc.On("Messages").Return((<-chan *sarama.ConsumerMessage)(messages))
 	mcgc.On("Topic").Return("topic1")
 	mcgc.On("Partition").Return(int32(0))
+	mcgc.On("HighWaterMarkOffset").Return(int64(1000))
 	mcg.On("Consume", context.Background(), []string{"topic1"}, mock.Anything).
 		Run(func(args mock.Arguments) {
 			handler := args[2].(sarama.ConsumerGroupHandler)
@@ -75,7 +83,9 @@ func TestConsumerGroupHandler(t *testing.T) {
 
 	h := newSaramaKafkaConsumerGroupHandler(mf, mc, "group1", []string{"topic1"}, 10*time.Millisecond)
 	go func() {
-		msg := &sarama.ConsumerMessage{}
+		msg := &sarama.ConsumerMessage{
+			Value: []byte("hello world"),
+		}
 		messages <- msg
 		errors <- fmt.Errorf("sample error")
 		h.MarkOffset(msg, "mymeta")
@@ -96,6 +106,9 @@ func TestConsumerGroupHandler(t *testing.T) {
 	mcg.AssertExpectations(t)
 	ms.AssertExpectations(t)
 	mcgc.AssertExpectations(t)
+
+	assert.Regexp(t, "too large", cb.Check("topic1"))
+	singletonCircuitBreaker = nil
 }
 
 func TestConsumerGroupHandlerCreateFail(t *testing.T) {

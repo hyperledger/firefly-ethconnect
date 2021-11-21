@@ -106,20 +106,18 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 }
 
 type msgContext struct {
-	timeReceived   time.Time
-	ctx            context.Context
-	producer       KafkaProducer
-	requestCommon  messages.RequestCommon
-	reqOffset      string
-	saramaMsg      *sarama.ConsumerMessage
-	key            string
-	bridge         *KafkaBridge
-	complete       bool
-	replyType      string
-	replyTime      time.Time
-	replyBytes     []byte
-	replyPartition int32
-	replyOffset    int64
+	timeReceived  time.Time
+	ctx           context.Context
+	producer      KafkaProducer
+	requestCommon messages.RequestCommon
+	reqOffset     string
+	saramaMsg     *sarama.ConsumerMessage
+	key           string
+	bridge        *KafkaBridge
+	complete      bool
+	replyType     string
+	replyTime     time.Time
+	replyBytes    []byte
 }
 
 // addInflightMsg creates a msgContext wrapper around a message with all the
@@ -287,14 +285,25 @@ func (c *msgContext) Reply(replyMessage messages.ReplyWithHeaders) {
 	c.replyTime = time.Now().UTC()
 	replyHeaders.Elapsed = c.replyTime.Sub(c.timeReceived).Seconds()
 	c.replyBytes, _ = json.Marshal(replyMessage)
+
 	log.Infof("Sending reply: %s", c)
-	c.producer.Input() <- &sarama.ProducerMessage{
-		Topic:    c.bridge.kafka.Conf().TopicOut,
+	topic := c.bridge.kafka.Conf().TopicOut
+	var input chan<- *sarama.ProducerMessage
+	for {
+		var err error
+		input, err = c.producer.Input(topic)
+		if err == nil {
+			break
+		}
+		log.Errorf("Unable to send reply to topic '%s': %s", topic, err)
+		time.Sleep(c.bridge.kafka.Conf().sendRetryDelay)
+	}
+	input <- &sarama.ProducerMessage{
+		Topic:    topic,
 		Key:      sarama.StringEncoder(c.key),
 		Metadata: c.reqOffset,
 		Value:    c,
 	}
-	return
 }
 
 func (c *msgContext) String() string {
@@ -392,7 +401,7 @@ func (k *KafkaBridge) ProducerSuccessLoop(consumer KafkaConsumer, producer Kafka
 		if ctx, ok := k.inFlight[reqOffset]; ok {
 			log.Infof("Reply sent: %s", ctx)
 			// While still holding the lock, add this to the completed list
-			k.setInFlightComplete(ctx, consumer)
+			_ = k.setInFlightComplete(ctx, consumer)
 			// We've reduced the in-flight count - wake any waiting consumer go func
 			k.inFlightCond.Broadcast()
 		} else {

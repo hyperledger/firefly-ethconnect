@@ -254,6 +254,7 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 	}
 	// wait for the poked goroutines to finish up
 	a.updateWG.Wait()
+	defer a.postUpdateStream()
 
 	if newSpec.Type != "" && newSpec.Type != a.spec.Type {
 		return nil, errors.Errorf(errors.EventStreamsCannotUpdateType)
@@ -304,7 +305,6 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 	if a.spec.Inputs != newSpec.Inputs {
 		a.spec.Inputs = newSpec.Inputs
 	}
-	a.postUpdateStream()
 	return a.spec, nil
 }
 
@@ -316,12 +316,20 @@ func (a *eventStream) handleEvent(event *eventData) {
 }
 
 // stop is a lazy stop, that marks a flag for the batch goroutine to pick up
-func (a *eventStream) stop() {
+func (a *eventStream) stop(wait bool) {
 	a.batchCond.L.Lock()
-	a.stopped = true
-	close(a.eventStream)
+	if !a.stopped {
+		a.stopped = true
+		close(a.eventStream)
+		if a.updateInterrupt != nil {
+			close(a.updateInterrupt)
+		}
+	}
 	a.batchCond.Broadcast()
 	a.batchCond.L.Unlock()
+	if wait {
+		a.updateWG.Wait()
+	}
 }
 
 // suspend only stops the dispatcher, pushing back as if we're in blocking mode

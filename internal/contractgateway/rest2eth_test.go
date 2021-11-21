@@ -135,7 +135,7 @@ func (m *mockSubMgr) DeleteSubscription(ctx context.Context, id string) error { 
 func (m *mockSubMgr) ResetSubscription(ctx context.Context, id, initialBlock string) error {
 	return m.err
 }
-func (m *mockSubMgr) Close() {}
+func (m *mockSubMgr) Close(wait bool) {}
 
 func newTestDeployMsg(t *testing.T, addr string) *contractregistry.DeployContractWithAddress {
 	compiled, err := eth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")

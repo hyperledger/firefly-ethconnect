@@ -184,7 +184,7 @@ func topicToValue(topic *ethbinding.Hash, input *ethbinding.ABIArgument) interfa
 	switch input.Type.T {
 	case ethbinding.IntTy, ethbinding.UintTy, ethbinding.BoolTy:
 		h := ethbinding.HexBigInt{}
-		h.UnmarshalText([]byte(topic.Hex()))
+		_ = h.UnmarshalText([]byte(topic.Hex()))
 		bI, _ := ethbind.API.ParseBig256(topic.Hex())
 		if input.Type.T == ethbinding.IntTy {
 			// It will be a two's complement number, so needs to be interpretted

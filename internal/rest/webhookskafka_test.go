@@ -32,6 +32,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/hyperledger/firefly-ethconnect/internal/auth"
 	"github.com/hyperledger/firefly-ethconnect/internal/auth/authtest"
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/kafka"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
 	"github.com/julienschmidt/httprouter"
@@ -137,7 +138,7 @@ func assertSentResp(assert *assert.Assertions, resp *http.Response, ack bool) {
 			assert.NotEmpty(replyMsg.Msg)
 		}
 	} else {
-		var replyMsg restError
+		var replyMsg errors.RESTError
 		err = json.Unmarshal(replyBytes, &replyMsg)
 		assert.Nil(err)
 		log.Errorf("Error from server: %s", replyMsg.Message)
@@ -148,7 +149,7 @@ func assertErrResp(assert *assert.Assertions, resp *http.Response, status int, m
 	assert.Equal(status, resp.StatusCode)
 	replyBytes, err := ioutil.ReadAll(resp.Body)
 	assert.Nil(err)
-	var replyMsg restError
+	var replyMsg errors.RESTError
 	err = json.Unmarshal(replyBytes, &replyMsg)
 	assert.Nil(err)
 	assert.Regexp(msg, replyMsg.Message)

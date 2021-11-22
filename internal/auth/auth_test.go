@@ -51,7 +51,7 @@ func TestAccessToken(t *testing.T) {
 	assert.Equal("", GetAccessToken(context.Background()))
 
 	_, err = WithAuthContext(context.Background(), "badone")
-	assert.EqualError(err, "badness")
+	assert.Regexp("badness", err)
 
 	RegisterSecurityModule(nil)
 }
@@ -63,13 +63,13 @@ func TestAuthRPC(t *testing.T) {
 
 	RegisterSecurityModule(&authtest.TestSecurityModule{})
 
-	assert.EqualError(AuthRPC(context.Background(), "anything"), "No auth context")
+	assert.Regexp("No auth context", AuthRPC(context.Background(), "anything"))
 
 	assert.NoError(AuthRPC(NewSystemAuthContext(), "anything"))
 
 	ctx, _ := WithAuthContext(context.Background(), "testat")
 	assert.NoError(AuthRPC(ctx, "testrpc"))
-	assert.EqualError(AuthRPC(ctx, "anything"), "badness")
+	assert.Regexp("badness", AuthRPC(ctx, "anything"))
 
 	RegisterSecurityModule(nil)
 
@@ -82,13 +82,13 @@ func TestAuthRPCSubscribe(t *testing.T) {
 
 	RegisterSecurityModule(&authtest.TestSecurityModule{})
 
-	assert.EqualError(AuthRPCSubscribe(context.Background(), "anything", nil), "No auth context")
+	assert.Regexp("No auth context", AuthRPCSubscribe(context.Background(), "anything", nil))
 
 	assert.NoError(AuthRPCSubscribe(NewSystemAuthContext(), "anything", nil))
 
 	ctx, _ := WithAuthContext(context.Background(), "testat")
 	assert.NoError(AuthRPCSubscribe(ctx, "testns", nil))
-	assert.EqualError(AuthRPCSubscribe(ctx, "anything", nil), "badness")
+	assert.Regexp("badness", AuthRPCSubscribe(ctx, "anything", nil))
 
 	RegisterSecurityModule(nil)
 
@@ -101,7 +101,7 @@ func TestAuthEventStreams(t *testing.T) {
 
 	RegisterSecurityModule(&authtest.TestSecurityModule{})
 
-	assert.EqualError(AuthEventStreams(context.Background()), "No auth context")
+	assert.Regexp("No auth context", AuthEventStreams(context.Background()))
 
 	assert.NoError(AuthEventStreams(NewSystemAuthContext()))
 
@@ -119,7 +119,7 @@ func TestAuthListAsyncReplies(t *testing.T) {
 
 	RegisterSecurityModule(&authtest.TestSecurityModule{})
 
-	assert.EqualError(AuthListAsyncReplies(context.Background()), "No auth context")
+	assert.Regexp("No auth context", AuthListAsyncReplies(context.Background()))
 
 	assert.NoError(AuthListAsyncReplies(NewSystemAuthContext()))
 
@@ -137,7 +137,7 @@ func TestAuthReadAsyncReplyByUUID(t *testing.T) {
 
 	RegisterSecurityModule(&authtest.TestSecurityModule{})
 
-	assert.EqualError(AuthReadAsyncReplyByUUID(context.Background()), "No auth context")
+	assert.Regexp("No auth context", AuthReadAsyncReplyByUUID(context.Background()))
 
 	assert.NoError(AuthReadAsyncReplyByUUID(NewSystemAuthContext()))
 

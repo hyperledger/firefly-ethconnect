@@ -28,6 +28,7 @@ import (
 	"github.com/hyperledger/firefly-ethconnect/internal/auth"
 	"github.com/hyperledger/firefly-ethconnect/internal/auth/authtest"
 	"github.com/hyperledger/firefly-ethconnect/internal/contractregistry"
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger/firefly-ethconnect/internal/events"
@@ -747,7 +748,7 @@ func TestSendTransactionSyncFail(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("pop", reply.Message)
@@ -776,7 +777,7 @@ func TestSendTransactionAsyncFail(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("pop", reply.Message)
@@ -807,7 +808,7 @@ func TestDeployContractAsyncFail(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("pop", reply.Message)
@@ -836,7 +837,7 @@ func TestSendTransactionAsyncBadMethod(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("pop", reply.Message)
@@ -866,7 +867,7 @@ func TestSendTransactionBadContract(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("pop", reply.Message)
@@ -893,7 +894,7 @@ func TestSendTransactionUnknownRegisteredName(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("unregistered", reply.Message)
@@ -919,7 +920,7 @@ func TestSendTransactionContractNotFound(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("not found", reply.Message)
@@ -948,10 +949,10 @@ func TestSendTransactionMissingContract(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(400, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
-	assert.Equal("Please specify a valid address in the 'fly-from' query string parameter or x-firefly-from HTTP header", reply.Message)
+	assert.Regexp("Please specify a valid address in the 'fly-from' query string parameter or x-firefly-from HTTP header", reply.Message)
 
 	mcr.AssertExpectations(t)
 }
@@ -992,10 +993,10 @@ func TestSendTransactionBadMethodABI(t *testing.T) {
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(400, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
-	assert.Equal("Invalid method 'badmethod' in ABI: unsupported arg type: badness", reply.Message)
+	assert.Regexp("Invalid method 'badmethod' in ABI: unsupported arg type: badness", reply.Message)
 
 	mcr.AssertExpectations(t)
 }
@@ -1036,10 +1037,10 @@ func TestSendTransactionBadEventABI(t *testing.T) {
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(400, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
-	assert.Equal("Invalid event 'badevent' in ABI: unsupported arg type: badness", reply.Message)
+	assert.Regexp("Invalid event 'badevent' in ABI: unsupported arg type: badness", reply.Message)
 
 	mcr.AssertExpectations(t)
 }
@@ -1078,10 +1079,10 @@ func TestSendTransactionBadConstructorABI(t *testing.T) {
 	res := httptest.NewRecorder()
 	router.ServeHTTP(res, req)
 	assert.Equal(400, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
-	assert.Equal("Invalid method 'constructor' in ABI: unsupported arg type: badness", reply.Message)
+	assert.Regexp("Invalid method 'constructor' in ABI: unsupported arg type: badness", reply.Message)
 
 	mcr.AssertExpectations(t)
 }
@@ -1182,10 +1183,10 @@ func TestSendTransactionBadFrom(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
-	assert.Equal("From Address must be a 40 character hex string (0x prefix is optional)", reply.Message)
+	assert.Regexp("From Address must be a 40 character hex string \\(0x prefix is optional\\)", reply.Message)
 
 	mcr.AssertExpectations(t)
 }
@@ -1213,7 +1214,7 @@ func TestSendTransactionInvalidContract(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("pop", reply.Message)
@@ -1251,7 +1252,7 @@ func TestDeployContractInvalidABI(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("pop", reply.Message)
@@ -1285,10 +1286,10 @@ func TestSendTransactionInvalidMethod(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
-	assert.Equal("Method or Event 'shazaam' is not declared in the ABI of contract '567a417717cb6c59ddc1035705f02c0fd1ab1872'", reply.Message)
+	assert.Regexp("Method or Event 'shazaam' is not declared in the ABI of contract '567a417717cb6c59ddc1035705f02c0fd1ab1872'", reply.Message)
 
 	mcr.AssertExpectations(t)
 }
@@ -1372,10 +1373,10 @@ func TestSendTransactionMissingParam(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(400, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
-	assert.Equal("Parameter 'i' of method 'set' was not specified in body or query parameters", reply.Message)
+	assert.Regexp("Parameter 'i' of method 'set' was not specified in body or query parameters", reply.Message)
 
 	mcr.AssertExpectations(t)
 }
@@ -1404,7 +1405,7 @@ func TestSendTransactionBadBody(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(400, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Regexp("Unable to parse as YAML or JSON", reply.Message)
@@ -1616,7 +1617,7 @@ func TestCallMethodFail(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(500, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Regexp("Call failed: pop", reply.Message)
@@ -1654,10 +1655,10 @@ func TestCallMethodViaABIBadAddress(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
-	assert.Equal("To Address must be a 40 character hex string (0x prefix is optional)", reply.Message)
+	assert.Regexp("To Address must be a 40 character hex string \\(0x prefix is optional\\)", reply.Message)
 
 	mcr.AssertExpectations(t)
 }
@@ -1681,10 +1682,10 @@ func TestSubscribeNoAddressNoSubMgr(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(405, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
-	assert.Equal("Event support is not configured on this gateway", reply.Message)
+	assert.Regexp("Event support is not configured on this gateway", reply.Message)
 
 	mcr.AssertExpectations(t)
 }
@@ -1708,10 +1709,10 @@ func TestSubscribeNoAddressUnknownEvent(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
-	assert.Equal("Event 'subscribe' is not declared in the ABI", reply.Message)
+	assert.Regexp("Event 'subscribe' is not declared in the ABI", reply.Message)
 
 	mcr.AssertExpectations(t)
 }
@@ -1736,10 +1737,10 @@ func TestSubscribeUnauthorized(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(401, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
-	assert.Equal("Unauthorized", reply.Message)
+	assert.Regexp(reply.Message, "Unauthorized")
 
 	auth.RegisterSecurityModule(nil)
 	mcr.AssertExpectations(t)
@@ -1762,10 +1763,10 @@ func TestSubscribeNoAddressMissingStream(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(400, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
-	assert.Equal("Must supply a 'stream' parameter in the body or query", reply.Message)
+	assert.Regexp(reply.Message, "Must supply a 'stream' parameter in the body or query")
 
 	mcr.AssertExpectations(t)
 }
@@ -1855,7 +1856,7 @@ func TestSubscribeWithAddressBadAddress(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(404, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("unregistered", reply.Message)
@@ -1884,7 +1885,7 @@ func TestSubscribeWithAddressSubmgrFailure(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(400, res.Result().StatusCode)
-	reply := restErrMsg{}
+	reply := errors.RESTError{}
 	err := json.NewDecoder(res.Result().Body).Decode(&reply)
 	assert.NoError(err)
 	assert.Equal("pop", reply.Message)

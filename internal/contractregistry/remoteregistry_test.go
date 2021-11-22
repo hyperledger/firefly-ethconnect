@@ -256,7 +256,7 @@ func TestRemoteRegistryRegisterNoInstanceURL(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	err := rr.RegisterInstance("testid", "12345")
-	assert.EqualError(err, "No remote registry is configured")
+	assert.Regexp("No remote registry is configured", err)
 }
 
 func TestRemoteRegistryLoadFactoryMissingID(t *testing.T) {
@@ -282,7 +282,7 @@ func TestRemoteRegistryLoadFactoryMissingID(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.LoadFactoryForGateway("testid", false)
-	assert.EqualError(err, "'id' missing in Contract registry response")
+	assert.Regexp("'id' missing in Contract registry response", err)
 }
 
 func TestRemoteRegistryLoadFactoryMissingABI(t *testing.T) {
@@ -308,7 +308,7 @@ func TestRemoteRegistryLoadFactoryMissingABI(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.LoadFactoryForGateway("testid", false)
-	assert.EqualError(err, "'abi' missing in Contract registry response")
+	assert.Regexp("'abi' missing in Contract registry response", err)
 }
 
 func TestRemoteRegistryLoadFactoryBadABIJSON(t *testing.T) {
@@ -335,7 +335,7 @@ func TestRemoteRegistryLoadFactoryBadABIJSON(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.LoadFactoryForGateway("testid", false)
-	assert.EqualError(err, "Error processing contract registry response")
+	assert.Regexp("Error processing contract registry response", err)
 }
 
 func TestRemoteRegistryLoadFactoryMissingDevDoc(t *testing.T) {
@@ -362,7 +362,7 @@ func TestRemoteRegistryLoadFactoryMissingDevDoc(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.LoadFactoryForGateway("testid", false)
-	assert.EqualError(err, "'devdoc' missing in Contract registry response")
+	assert.Regexp("'devdoc' missing in Contract registry response", err)
 }
 
 func TestRemoteRegistryLoadFactoryBadDevDoc(t *testing.T) {
@@ -390,7 +390,7 @@ func TestRemoteRegistryLoadFactoryBadDevDoc(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.LoadFactoryForGateway("testid", false)
-	assert.EqualError(err, "'devdoc' not a string in Contract registry response")
+	assert.Regexp("'devdoc' not a string in Contract registry response", err)
 }
 
 func TestRemoteRegistryLoadFactoryEmptyBytecode(t *testing.T) {
@@ -419,7 +419,7 @@ func TestRemoteRegistryLoadFactoryEmptyBytecode(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.LoadFactoryForGateway("testid", false)
-	assert.EqualError(err, "'bin' empty (or null) in Contract registry response")
+	assert.Regexp("'bin' empty \\(or null\\) in Contract registry response", err)
 }
 
 func TestRemoteRegistryLoadFactoryBadBytecode(t *testing.T) {
@@ -448,7 +448,7 @@ func TestRemoteRegistryLoadFactoryBadBytecode(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.LoadFactoryForGateway("testid", false)
-	assert.EqualError(err, "Error processing contract registry response")
+	assert.Regexp("Error processing contract registry response", err)
 }
 
 func TestRemoteRegistryLoadFactoryErrorStatusGeneric(t *testing.T) {
@@ -471,7 +471,7 @@ func TestRemoteRegistryLoadFactoryErrorStatusGeneric(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.LoadFactoryForGateway("testid", false)
-	assert.EqualError(err, "Could not process Contract registry [500] response")
+	assert.Regexp("Could not process Contract registry \\[500\\] response", err)
 }
 
 func TestRemoteRegistryLoadFactoryErrorStatus(t *testing.T) {
@@ -495,7 +495,7 @@ func TestRemoteRegistryLoadFactoryErrorStatus(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.LoadFactoryForGateway("testid", false)
-	assert.EqualError(err, "Contract registry returned [500]: poof")
+	assert.Regexp("Contract registry returned \\[500\\]: poof", err)
 }
 
 func TestRemoteRegistryLoadFactoryNotFound(t *testing.T) {
@@ -543,7 +543,7 @@ func TestRemoteRegistryLoadFactoryBadBody(t *testing.T) {
 	rr := r.(*remoteRegistry)
 
 	_, err := rr.LoadFactoryForGateway("testid", false)
-	assert.EqualError(err, "Could not process Contract registry [200] response")
+	assert.Regexp("Could not process Contract registry \\[200\\] response", err)
 }
 
 func TestRemoteRegistryLoadFactoryNOOP(t *testing.T) {

@@ -81,7 +81,7 @@ func TestConnectSendReceiveCycle(t *testing.T) {
 	})
 
 	err = <-r
-	assert.EqualError(err, "Error received from WebSocket client: Panic!")
+	assert.Regexp("Error received from WebSocket client: Panic!", err)
 
 	w.Close()
 

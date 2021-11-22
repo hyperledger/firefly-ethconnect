@@ -132,9 +132,9 @@ func TestCallContextWrapperAuth(t *testing.T) {
 
 	w := &rpcWrapper{rpc: &mockEthClient{}}
 	_, err := w.Subscribe(context.Background(), "", nil)
-	assert.EqualError(err, "Unauthorized")
+	assert.Regexp("Unauthorized", err)
 	err = w.CallContext(context.Background(), nil, "")
-	assert.EqualError(err, "Unauthorized")
+	assert.Regexp("Unauthorized", err)
 
 	auth.RegisterSecurityModule(nil)
 }

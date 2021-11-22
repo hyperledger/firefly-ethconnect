@@ -30,7 +30,7 @@ func TestHTTPRequesterDoRequestBadURL(t *testing.T) {
 	hr := NewHTTPRequester("unit test", &HTTPRequesterConf{})
 
 	_, err := hr.DoRequest("GET", "! a URL", nil)
-	assert.EqualError(err, "Error querying unit test")
+	assert.Regexp("Error querying unit test", err)
 }
 
 func TestHTTPRequesterDoRequestBadPayload(t *testing.T) {
@@ -41,7 +41,7 @@ func TestHTTPRequesterDoRequestBadPayload(t *testing.T) {
 	bodyMap := make(map[string]interface{})
 	bodyMap["unserializable"] = map[bool]interface{}{true: "JSON does not like this"}
 	_, err := hr.DoRequest("GET", "http://localhost", bodyMap)
-	assert.Regexp("Failed to serialize request payload", err.Error())
+	assert.Regexp("Failed to serialize request payload", err)
 }
 
 func TestHTTPRequesterErrorStatus(t *testing.T) {
@@ -58,7 +58,7 @@ func TestHTTPRequesterErrorStatus(t *testing.T) {
 	hr := NewHTTPRequester("unit test", &HTTPRequesterConf{})
 
 	_, err := hr.DoRequest("GET", server.URL, nil)
-	assert.EqualError(err, "unit test returned [500]: poof")
+	assert.Regexp("unit test returned \\[500\\]: poof", err)
 }
 
 func TestHTTPRequesterUnknownError(t *testing.T) {
@@ -75,7 +75,7 @@ func TestHTTPRequesterUnknownError(t *testing.T) {
 	hr := NewHTTPRequester("unit test", &HTTPRequesterConf{})
 
 	_, err := hr.DoRequest("GET", server.URL, nil)
-	assert.EqualError(err, "Error querying unit test")
+	assert.Regexp("Error querying unit test", err)
 }
 
 func TestHTTPRequesterPOSTSuccess(t *testing.T) {
@@ -155,7 +155,7 @@ func TestHTTPRequesterBadResponse(t *testing.T) {
 	hr := NewHTTPRequester("unit test", &HTTPRequesterConf{})
 
 	_, err := hr.DoRequest("GET", server.URL, nil)
-	assert.EqualError(err, "Could not process unit test [200] response")
+	assert.Regexp("Could not process unit test \\[200\\] response", err)
 }
 
 func TestHTTPRequesterGetResponseStringVariants(t *testing.T) {
@@ -170,10 +170,10 @@ func TestHTTPRequesterGetResponseStringVariants(t *testing.T) {
 	}
 
 	_, err := hr.GetResponseString(body, "non-existent", true)
-	assert.EqualError(err, "'non-existent' missing in unit test response")
+	assert.Regexp("'non-existent' missing in unit test response", err)
 
 	_, err = hr.GetResponseString(body, "not-a-string", true)
-	assert.EqualError(err, "'not-a-string' not a string in unit test response")
+	assert.Regexp("'not-a-string' not a string in unit test response", err)
 
 	str, err := hr.GetResponseString(body, "a-string", true)
 	assert.NoError(err)
@@ -184,6 +184,6 @@ func TestHTTPRequesterGetResponseStringVariants(t *testing.T) {
 	assert.Equal("", str)
 
 	_, err = hr.GetResponseString(body, "nil-value", false)
-	assert.EqualError(err, "'nil-value' empty (or null) in unit test response")
+	assert.Regexp("'nil-value' empty \\(or null\\) in unit test response", err)
 
 }

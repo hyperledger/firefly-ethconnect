@@ -65,7 +65,7 @@ func TestYAMLorJSONPayloadTooBig(t *testing.T) {
 	req := httptest.NewRequest("POST", "/anything", bytes.NewReader(bigBytes))
 
 	_, err := YAMLorJSONPayload(req)
-	assert.EqualError(err, "Message exceeds maximum allowable size")
+	assert.Regexp("Message exceeds maximum allowable size", err)
 }
 
 func TestYAMLorJSONPayloadReadError(t *testing.T) {

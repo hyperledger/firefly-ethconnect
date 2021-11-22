@@ -161,7 +161,7 @@ func TestLoadDeployMsgRemoteLookupNotFound(t *testing.T) {
 		ABIType: LocalABI,
 		Name:    "abi1",
 	}, false)
-	assert.EqualError(err, "No ABI found with ID abi1")
+	assert.Regexp("No ABI found with ID abi1", err)
 }
 
 func TestStoreABIWriteFail(t *testing.T) {
@@ -242,7 +242,7 @@ func TestCheckNameAvailableRRDuplicate(t *testing.T) {
 	cs := NewContractStore(&ContractStoreConf{BaseURL: "http://localhost/api/v1"}, mrr)
 
 	err := cs.CheckNameAvailable("lobster", true)
-	assert.EqualError(err, "Contract address 12345 is already registered for name 'lobster'")
+	assert.Regexp("Contract address 12345 is already registered for name 'lobster'", err)
 }
 
 func TestCheckNameAvailableRRFail(t *testing.T) {
@@ -254,7 +254,7 @@ func TestCheckNameAvailableRRFail(t *testing.T) {
 	cs := NewContractStore(&ContractStoreConf{BaseURL: "http://localhost/api/v1"}, mrr)
 
 	err := cs.CheckNameAvailable("lobster", true)
-	assert.EqualError(err, "pop")
+	assert.Regexp("pop", err)
 }
 
 func TestBuildIndex(t *testing.T) {

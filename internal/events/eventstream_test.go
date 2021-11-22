@@ -43,7 +43,7 @@ import (
 func TestConstructorNoSpec(t *testing.T) {
 	assert := assert.New(t)
 	_, err := newEventStream(newTestSubscriptionManager(), nil, nil)
-	assert.EqualError(err, "No ID")
+	assert.Regexp("No ID", err)
 }
 
 func TestConstructorBadType(t *testing.T) {
@@ -52,7 +52,7 @@ func TestConstructorBadType(t *testing.T) {
 		ID:   "123",
 		Type: "random",
 	}, nil)
-	assert.EqualError(err, "Unknown action type 'random'")
+	assert.Regexp("Unknown action type 'random'", err)
 }
 
 func TestConstructorMissingWebhook(t *testing.T) {
@@ -61,7 +61,7 @@ func TestConstructorMissingWebhook(t *testing.T) {
 		ID:   "123",
 		Type: "webhook",
 	}, nil)
-	assert.EqualError(err, "Must specify webhook.url for action type 'webhook'")
+	assert.Regexp("Must specify webhook.url for action type 'webhook'", err)
 }
 
 func TestConstructorBadWebhookURL(t *testing.T) {
@@ -73,7 +73,7 @@ func TestConstructorBadWebhookURL(t *testing.T) {
 			URL: ":badurl",
 		},
 	}, nil)
-	assert.EqualError(err, "Invalid URL in webhook action")
+	assert.Regexp("Invalid URL in webhook action", err)
 }
 
 func TestConstructorBadWebSocketDistributionMode(t *testing.T) {
@@ -86,7 +86,7 @@ func TestConstructorBadWebSocketDistributionMode(t *testing.T) {
 			DistributionMode: "banana",
 		},
 	}, nil)
-	assert.EqualError(err, "Invalid distribution mode 'banana'. Valid distribution modes are: 'workloadDistribution' and 'broadcast'.")
+	assert.Regexp("Invalid distribution mode 'banana'. Valid distribution modes are: 'workloadDistribution' and 'broadcast'.", err)
 }
 
 func testEvent(subID string) *eventData {
@@ -408,7 +408,7 @@ func TestWebSocketUnconfigured(t *testing.T) {
 	assert := assert.New(t)
 	sm := NewSubscriptionManager(&SubscriptionManagerConf{}, nil, nil, nil).(*subscriptionMGR)
 	_, err := sm.AddStream(context.Background(), &StreamInfo{Type: "websocket"})
-	assert.EqualError(err, "WebSocket listener not configured")
+	assert.Regexp("WebSocket listener not configured", err)
 }
 
 func TestBadTimestampCacheSize(t *testing.T) {
@@ -417,7 +417,7 @@ func TestBadTimestampCacheSize(t *testing.T) {
 	_, err := sm.AddStream(context.Background(), &StreamInfo{
 		TimestampCacheSize: -1,
 	})
-	assert.EqualError(err, "Failed to create a resource for the stream: must provide a positive size")
+	assert.Regexp("Failed to create a resource for the stream: must provide a positive size", err)
 }
 
 func setupTestSubscription(assert *assert.Assertions, sm *subscriptionMGR, stream *eventStream, subscriptionName string) *SubscriptionInfo {
@@ -1326,7 +1326,7 @@ func TestUpdateStreamSwapType(t *testing.T) {
 		},
 	}
 	_, err := sm.UpdateStream(ctx, stream.spec.ID, updateSpec)
-	assert.EqualError(err, "The type of an event stream cannot be changed")
+	assert.Regexp("The type of an event stream cannot be changed", err)
 }
 
 func TestUpdateStreamInProgress(t *testing.T) {
@@ -1378,7 +1378,7 @@ func TestUpdateWebSocketBadDistributionMode(t *testing.T) {
 		},
 	}
 	_, err := sm.UpdateStream(ctx, stream.spec.ID, updateSpec)
-	assert.EqualError(err, "Invalid distribution mode 'banana'. Valid distribution modes are: 'workloadDistribution' and 'broadcast'.")
+	assert.Regexp("Invalid distribution mode 'banana'. Valid distribution modes are: 'workloadDistribution' and 'broadcast'.", err)
 }
 
 func TestUpdateWebSocket(t *testing.T) {
@@ -1450,7 +1450,7 @@ func TestUpdateStreamMissingWebhookURL(t *testing.T) {
 		},
 	}
 	_, err := sm.UpdateStream(ctx, stream.spec.ID, updateSpec)
-	assert.EqualError(err, errors.EventStreamsWebhookNoURL)
+	assert.Regexp(errors.EventStreamsWebhookNoURL.Code(), err)
 	err = sm.DeleteSubscription(ctx, s.ID)
 	assert.NoError(err)
 	err = sm.DeleteStream(ctx, stream.spec.ID)
@@ -1495,7 +1495,7 @@ func TestUpdateStreamInvalidWebhookURL(t *testing.T) {
 		},
 	}
 	_, err := sm.UpdateStream(ctx, stream.spec.ID, updateSpec)
-	assert.EqualError(err, errors.EventStreamsWebhookInvalidURL)
+	assert.Regexp(errors.EventStreamsWebhookInvalidURL.Code(), err)
 	err = sm.DeleteSubscription(ctx, s.ID)
 	assert.NoError(err)
 	err = sm.DeleteStream(ctx, stream.spec.ID)

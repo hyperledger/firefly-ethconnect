@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
@@ -41,7 +40,7 @@ import (
 
 	"github.com/hyperledger/firefly-ethconnect/internal/auth"
 	"github.com/hyperledger/firefly-ethconnect/internal/contractregistry"
-	ethconnecterrors "github.com/hyperledger/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger/firefly-ethconnect/internal/events"
@@ -53,9 +52,9 @@ import (
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 )
 
-const (
-	maxFormParsingMemory   = 32 << 20 // 32 MB
-	errEventSupportMissing = "Event support is not configured on this gateway"
+var (
+	maxFormParsingMemory   int64 = 32 << 20 // 32 MB
+	errEventSupportMissing       = errors.Errorf(errors.EventSupportNotConfiugred)
 )
 
 // remoteContractInfo is the ABI raw data back out of the REST API gateway with bytecode
@@ -94,7 +93,7 @@ func (g *smartContractGW) withEventsAuth(handler httprouter.Handle) httprouter.H
 		err := auth.AuthEventStreams(req.Context())
 		if err != nil {
 			log.Errorf("Unauthorized: %s", err)
-			g.gatewayErrReply(res, req, ethconnecterrors.Errorf(ethconnecterrors.Unauthorized), 401)
+			g.gatewayErrReply(res, req, errors.Errorf(errors.Unauthorized), 401)
 			return
 		}
 		handler(res, req, params)
@@ -167,7 +166,7 @@ func NewSmartContractGateway(conf *SmartContractGatewayConf, txnConf *tx.TxnProc
 		gw.sm = events.NewSubscriptionManager(&conf.SubscriptionManagerConf, rpc, gw.cs, gw.ws)
 		err = gw.sm.Init()
 		if err != nil {
-			return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayEventManagerInitFailed, err)
+			return nil, errors.Errorf(errors.RESTGatewayEventManagerInitFailed, err)
 		}
 	}
 	gw.r2e = newREST2eth(gw, gw.cs, rpc, gw.sm, processor, asyncDispatcher, syncDispatcher)
@@ -191,7 +190,7 @@ func (g *smartContractGW) PostDeploy(msg *messages.TransactionReceipt) error {
 	// We use the ethereum address of the contract, without the 0x prefix, and
 	// all in lower case, as the name of the file and the path root of the Swagger operations
 	if msg.ContractAddress == nil {
-		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayPostDeployMissingAddress, requestID)
+		return errors.Errorf(errors.RESTGatewayPostDeployMissingAddress, requestID)
 	}
 	addrHexNo0x := strings.ToLower(msg.ContractAddress.Hex()[2:])
 
@@ -294,12 +293,12 @@ func (g *smartContractGW) storeDeployableABI(msg *messages.DeployContract, compi
 		msg.ContractName = compiled.ContractName
 		msg.CompilerVersion = compiled.ContractInfo.CompilerVersion
 	} else if msg.ABI == nil {
-		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreMissingABI)
+		return nil, errors.Errorf(errors.RESTGatewayLocalStoreMissingABI)
 	}
 
 	runtimeABI, err := ethbind.API.ABIMarshalingToABIRuntime(msg.ABI)
 	if err != nil {
-		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayInvalidABI, err)
+		return nil, errors.Errorf(errors.RESTGatewayInvalidABI, err)
 	}
 
 	requestID := msg.Headers.ID
@@ -323,7 +322,7 @@ func (g *smartContractGW) storeDeployableABI(msg *messages.DeployContract, compi
 
 func (g *smartContractGW) gatewayErrReply(res http.ResponseWriter, req *http.Request, err error, status int) {
 	log.Errorf("<-- %s %s [%d]: %s", req.Method, req.URL, status, err)
-	reply, _ := json.Marshal(&restErrMsg{Message: err.Error()})
+	reply, _ := json.Marshal(errors.ToRESTError(err))
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(status)
 	res.Write(reply)
@@ -337,7 +336,7 @@ func (g *smartContractGW) writeAbiInfo(requestID string, msg *messages.DeployCon
 	infoBytes, _ := json.MarshalIndent(msg, "", "  ")
 	log.Infof("%s: Stashing deployment details to '%s'", requestID, infoFile)
 	if err := ioutil.WriteFile(infoFile, infoBytes, 0664); err != nil {
-		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreContractSavePostDeploy, requestID, err)
+		return errors.Errorf(errors.RESTGatewayLocalStoreContractSavePostDeploy, requestID, err)
 	}
 	return nil
 }
@@ -367,13 +366,13 @@ func (g *smartContractGW) createStream(res http.ResponseWriter, req *http.Reques
 	log.Infof("--> %s %s", req.Method, req.URL)
 
 	if g.sm == nil {
-		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		g.gatewayErrReply(res, req, errEventSupportMissing, 405)
 		return
 	}
 
 	var spec events.StreamInfo
 	if err := json.NewDecoder(req.Body).Decode(&spec); err != nil {
-		g.gatewayErrReply(res, req, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayEventStreamInvalid, err), 400)
+		g.gatewayErrReply(res, req, errors.Errorf(errors.RESTGatewayEventStreamInvalid, err), 400)
 		return
 	}
 
@@ -397,7 +396,7 @@ func (g *smartContractGW) updateStream(res http.ResponseWriter, req *http.Reques
 	log.Infof("--> %s %s", req.Method, req.URL)
 
 	if g.sm == nil {
-		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		g.gatewayErrReply(res, req, errEventSupportMissing, 405)
 		return
 	}
 
@@ -409,7 +408,7 @@ func (g *smartContractGW) updateStream(res http.ResponseWriter, req *http.Reques
 	}
 	var spec events.StreamInfo
 	if err := json.NewDecoder(req.Body).Decode(&spec); err != nil {
-		g.gatewayErrReply(res, req, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayEventStreamInvalid, err), 400)
+		g.gatewayErrReply(res, req, errors.Errorf(errors.RESTGatewayEventStreamInvalid, err), 400)
 		return
 	}
 	newSpec, err := g.sm.UpdateStream(req.Context(), streamID, &spec)
@@ -432,7 +431,7 @@ func (g *smartContractGW) listStreamsOrSubs(res http.ResponseWriter, req *http.R
 	log.Infof("--> %s %s", req.Method, req.URL)
 
 	if g.sm == nil {
-		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		g.gatewayErrReply(res, req, errEventSupportMissing, 405)
 		return
 	}
 
@@ -470,7 +469,7 @@ func (g *smartContractGW) getStreamOrSub(res http.ResponseWriter, req *http.Requ
 	log.Infof("--> %s %s", req.Method, req.URL)
 
 	if g.sm == nil {
-		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		g.gatewayErrReply(res, req, errEventSupportMissing, 405)
 		return
 	}
 
@@ -500,7 +499,7 @@ func (g *smartContractGW) deleteStreamOrSub(res http.ResponseWriter, req *http.R
 	log.Infof("--> %s %s", req.Method, req.URL)
 
 	if g.sm == nil {
-		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		g.gatewayErrReply(res, req, errEventSupportMissing, 405)
 		return
 	}
 
@@ -526,7 +525,7 @@ func (g *smartContractGW) resetSub(res http.ResponseWriter, req *http.Request, p
 	log.Infof("--> %s %s", req.Method, req.URL)
 
 	if g.sm == nil {
-		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		g.gatewayErrReply(res, req, errEventSupportMissing, 405)
 		return
 	}
 
@@ -553,7 +552,7 @@ func (g *smartContractGW) suspendOrResumeStream(res http.ResponseWriter, req *ht
 	log.Infof("--> %s %s", req.Method, req.URL)
 
 	if g.sm == nil {
-		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		g.gatewayErrReply(res, req, errEventSupportMissing, 405)
 		return
 	}
 
@@ -682,7 +681,7 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 		addr := params.ByName("address")
 		runtimeABI, err := ethbind.API.ABIMarshalingToABIRuntime(deployMsg.ABI)
 		if err != nil {
-			g.gatewayErrReply(res, req, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayInvalidABI, err), 404)
+			g.gatewayErrReply(res, req, errors.Errorf(errors.RESTGatewayInvalidABI, err), 404)
 			return
 		}
 		swagger := g.swaggerForABI(swaggerGen, abiID, deployMsg.ContractName, factoryOnly, runtimeABI, deployMsg.DevDoc, addr, registeredName)
@@ -726,7 +725,7 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 			g.gatewayErrReply(res, req, err, 500)
 			return
 		} else if msg == nil || msg.Contract == nil {
-			err = ethconnecterrors.Errorf(ethconnecterrors.RemoteRegistryLookupGatewayNotFound)
+			err = errors.Errorf(errors.RemoteRegistryLookupGatewayNotFound)
 			g.gatewayErrReply(res, req, err, 404)
 			return
 		}
@@ -742,7 +741,7 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 			g.gatewayErrReply(res, req, err, 500)
 			return
 		} else if msg == nil || msg.Contract == nil {
-			err = ethconnecterrors.Errorf(ethconnecterrors.RemoteRegistryLookupInstanceNotFound)
+			err = errors.Errorf(errors.RemoteRegistryLookupInstanceNotFound)
 			g.gatewayErrReply(res, req, err, 404)
 			return
 		}
@@ -755,7 +754,7 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 	} else if swaggerGen != nil {
 		runtimeABI, err := ethbind.API.ABIMarshalingToABIRuntime(deployMsg.ABI)
 		if err != nil {
-			g.gatewayErrReply(res, req, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayInvalidABI, err), 400)
+			g.gatewayErrReply(res, req, errors.Errorf(errors.RESTGatewayInvalidABI, err), 400)
 			return
 		}
 		swagger := g.swaggerForRemoteRegistry(swaggerGen, id, addr, factoryOnly, runtimeABI, deployMsg.DevDoc, req.URL.Path)
@@ -788,7 +787,7 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 	addrHexNo0x := strings.ToLower(strings.TrimPrefix(params.ByName("address"), "0x"))
 	addrCheck, _ := regexp.Compile("^[0-9a-z]{40}$")
 	if !addrCheck.MatchString(addrHexNo0x) {
-		g.gatewayErrReply(res, req, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayRegistrationSuppliedInvalidAddress), 404)
+		g.gatewayErrReply(res, req, errors.Errorf(errors.RESTGatewayRegistrationSuppliedInvalidAddress), 404)
 		return
 	}
 
@@ -838,7 +837,7 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 	log.Infof("--> %s %s", req.Method, req.URL)
 
 	if err := req.ParseMultipartForm(maxFormParsingMemory); err != nil {
-		g.gatewayErrReply(res, req, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayCompileContractInvalidFormData, err), 400)
+		g.gatewayErrReply(res, req, errors.Errorf(errors.RESTGatewayCompileContractInvalidFormData, err), 400)
 		return
 	}
 
@@ -873,13 +872,13 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 
 	abi, err := g.parseABI(req.Form)
 	if err != nil {
-		g.gatewayErrReply(res, req, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayCompileContractInvalidFormData, err), 400)
+		g.gatewayErrReply(res, req, errors.Errorf(errors.RESTGatewayCompileContractInvalidFormData, err), 400)
 		return
 	}
 
 	bytecode, err := g.parseBytecode(req.Form)
 	if err != nil {
-		g.gatewayErrReply(res, req, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayCompileContractInvalidFormData, err), 400)
+		g.gatewayErrReply(res, req, errors.Errorf(errors.RESTGatewayCompileContractInvalidFormData, err), 400)
 		return
 	}
 
@@ -888,7 +887,7 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 		var err error
 		preCompiled, err = g.compileMultipartFormSolidity(tempdir, req)
 		if err != nil {
-			g.gatewayErrReply(res, req, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayCompileContractCompileFailed, err), 400)
+			g.gatewayErrReply(res, req, errors.Errorf(errors.RESTGatewayCompileContractCompileFailed, err), 400)
 			return
 		}
 	}
@@ -913,7 +912,7 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 		var err error
 		compiled, err = eth.ProcessCompiled(preCompiled, req.FormValue("contract"), false)
 		if err != nil {
-			g.gatewayErrReply(res, req, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayCompileContractPostCompileFailed, err), 400)
+			g.gatewayErrReply(res, req, errors.Errorf(errors.RESTGatewayCompileContractPostCompileFailed, err), 400)
 			return
 		}
 	} else {
@@ -967,7 +966,7 @@ func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Req
 	rootFiles, err := ioutil.ReadDir(dir)
 	if err != nil {
 		log.Errorf("Failed to read dir '%s': %s", dir, err)
-		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayCompileContractExtractedReadFailed)
+		return nil, errors.Errorf(errors.RESTGatewayCompileContractExtractedReadFailed)
 	}
 	for _, file := range rootFiles {
 		log.Debugf("multi-part: '%s' [dir=%t]", file.Name(), file.IsDir())
@@ -983,12 +982,12 @@ func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Req
 	} else if len(solFiles) > 0 {
 		solcArgs = append(solcArgs, solFiles...)
 	} else {
-		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayCompileContractNoSOL)
+		return nil, errors.Errorf(errors.RESTGatewayCompileContractNoSOL)
 	}
 
 	solcVer, err := eth.GetSolc(req.FormValue("compiler"))
 	if err != nil {
-		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayCompileContractSolcVerFail, err)
+		return nil, errors.Errorf(errors.RESTGatewayCompileContractSolcVerFail, err)
 	}
 	solOptionsString := strings.Join(append([]string{solcVer.Path}, solcArgs...), " ")
 	log.Infof("Compiling: %s", solOptionsString)
@@ -999,12 +998,12 @@ func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Req
 	cmd.Stdout = &stdout
 	cmd.Dir = dir
 	if err := cmd.Run(); err != nil {
-		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayCompileContractCompileFailDetails, err, stderr.String())
+		return nil, errors.Errorf(errors.RESTGatewayCompileContractCompileFailDetails, err, stderr.String())
 	}
 
 	compiled, err := ethbind.API.ParseCombinedJSON(stdout.Bytes(), "", solcVer.Version, solcVer.Version, solOptionsString)
 	if err != nil {
-		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayCompileContractSolcOutputProcessFail, err)
+		return nil, errors.Errorf(errors.RESTGatewayCompileContractSolcOutputProcessFail, err)
 	}
 
 	return compiled, nil
@@ -1013,24 +1012,24 @@ func (g *smartContractGW) compileMultipartFormSolidity(dir string, req *http.Req
 func (g *smartContractGW) extractMultiPartFile(dir string, file *multipart.FileHeader) error {
 	fileName := file.Filename
 	if strings.ContainsAny(fileName, "/\\") {
-		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayCompileContractSlashes)
+		return errors.Errorf(errors.RESTGatewayCompileContractSlashes)
 	}
 	in, err := file.Open()
 	if err != nil {
 		log.Errorf("Failed opening '%s' for reading: %s", fileName, err)
-		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayCompileContractUnzipRead)
+		return errors.Errorf(errors.RESTGatewayCompileContractUnzipRead)
 	}
 	defer in.Close()
 	outFileName := path.Join(dir, fileName)
 	out, err := os.OpenFile(outFileName, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Errorf("Failed opening '%s' for writing: %s", fileName, err)
-		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayCompileContractUnzipWrite)
+		return errors.Errorf(errors.RESTGatewayCompileContractUnzipWrite)
 	}
 	written, err := io.Copy(out, in)
 	if err != nil {
 		log.Errorf("Failed writing '%s' from multi-part form: %s", fileName, err)
-		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayCompileContractUnzipCopy)
+		return errors.Errorf(errors.RESTGatewayCompileContractUnzipCopy)
 	}
 	log.Debugf("multi-part: '%s' [%dKb]", fileName, written/1024)
 	return g.processIfArchive(dir, outFileName)
@@ -1044,7 +1043,7 @@ func (g *smartContractGW) processIfArchive(dir, fileName string) error {
 	}
 	err = z.(archiver.Unarchiver).Unarchive(fileName, dir)
 	if err != nil {
-		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayCompileContractUnzip, err)
+		return errors.Errorf(errors.RESTGatewayCompileContractUnzip, err)
 	}
 	return nil
 }

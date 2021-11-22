@@ -147,7 +147,7 @@ func TestLevelDBReceiptsAddReceiptFailed(t *testing.T) {
 
 	receipt := make(map[string]interface{})
 	err := r.AddReceipt("key", &receipt)
-	assert.EqualError(err, "pop")
+	assert.Regexp("pop", err)
 }
 
 func TestLevelDBReceiptsGetReceiptsOK(t *testing.T) {
@@ -522,7 +522,7 @@ func TestLevelDBReceiptsGetReceiptErrorID(t *testing.T) {
 	}
 
 	_, err := r.GetReceipt("receipt1")
-	assert.EqualError(err, "Failed to retrieve the entry for the original key: receipt1. pop")
+	assert.Regexp("Failed to retrieve the entry for the original key: receipt1. pop", err)
 }
 
 func TestLevelDBReceiptsGetReceiptErrorGeneratedID(t *testing.T) {
@@ -539,7 +539,7 @@ func TestLevelDBReceiptsGetReceiptErrorGeneratedID(t *testing.T) {
 	}
 
 	_, err := r.GetReceipt("receipt1")
-	assert.EqualError(err, "Failed to retrieve the entry for the generated ID: receipt1. pop")
+	assert.Regexp("Failed to retrieve the entry for the generated ID: receipt1. pop", err)
 }
 
 func TestLevelDBReceiptsGetReceiptBadDataID(t *testing.T) {

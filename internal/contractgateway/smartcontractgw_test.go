@@ -33,6 +33,7 @@ import (
 	"github.com/hyperledger/firefly-ethconnect/internal/auth"
 	"github.com/hyperledger/firefly-ethconnect/internal/auth/authtest"
 	"github.com/hyperledger/firefly-ethconnect/internal/contractregistry"
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger/firefly-ethconnect/internal/events"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
@@ -657,7 +658,7 @@ func TestRegisterContractBadABI(t *testing.T) {
 	assert.Equal(404, res.Code)
 	var resBody map[string]interface{}
 	json.NewDecoder(res.Body).Decode(&resBody)
-	assert.Regexp("No ABI found with ID BADID", resBody["error"])
+	assert.Equal("No ABI found with ID BADID", resBody["error"])
 }
 
 func TestPreDeployCompileFailure(t *testing.T) {
@@ -1169,10 +1170,11 @@ func TestAddABIBadZip(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(400, res.Result().StatusCode)
-	errInfo := &restErrMsg{}
+	errInfo := &errors.RESTError{}
 	err := json.NewDecoder(res.Body).Decode(errInfo)
 	assert.NoError(err)
 	assert.Regexp("Error unarchiving supplied zip file", errInfo.Message)
+	assert.Equal(errors.RESTGatewayCompileContractUnzip.Code(), errInfo.Code)
 }
 
 func TestAddABIZipNestedNoSource(t *testing.T) {
@@ -1209,10 +1211,11 @@ func TestAddABIZipNestedNoSource(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(400, res.Result().StatusCode)
-	errInfo := &restErrMsg{}
+	errInfo := &errors.RESTError{}
 	err := json.NewDecoder(res.Body).Decode(errInfo)
 	assert.NoError(err)
-	assert.Equal("Failed to compile solidity: No .sol files found in root. Please set a 'source' query param or form field to the relative path of your solidity", errInfo.Message)
+	assert.Regexp("Failed to compile solidity.*No .sol files found in root. Please set a 'source' query param or form field to the relative path of your solidity", errInfo.Message)
+	assert.Equal(errors.RESTGatewayCompileContractCompileFailed.Code(), errInfo.Code)
 }
 
 func TestAddABIZiNotMultipart(t *testing.T) {
@@ -1239,10 +1242,11 @@ func TestAddABIZiNotMultipart(t *testing.T) {
 	router.ServeHTTP(res, req)
 
 	assert.Equal(400, res.Result().StatusCode)
-	errInfo := &restErrMsg{}
+	errInfo := &errors.RESTError{}
 	err := json.NewDecoder(res.Body).Decode(errInfo)
 	assert.NoError(err)
-	assert.Equal("Could not parse supplied multi-part form data: request Content-Type isn't multipart/form-data", errInfo.Message)
+	assert.Regexp(errInfo.Message, "Could not parse supplied multi-part form data: request Content-Type isn't multipart/form-data")
+	assert.Equal(errors.RESTGatewayCompileContractInvalidFormData.Code(), errInfo.Code)
 }
 
 func TestCompileMultipartFormSolidityBadDir(t *testing.T) {
@@ -1263,7 +1267,7 @@ func TestCompileMultipartFormSolidityBadDir(t *testing.T) {
 	scgw := s.(*smartContractGW)
 
 	_, err := scgw.compileMultipartFormSolidity(path.Join(dir, "baddir"), nil)
-	assert.EqualError(err, "Failed to read extracted multi-part form data")
+	assert.Regexp("Failed to read extracted multi-part form data", err)
 }
 
 func TestCompileMultipartFormSolidityBadSolc(t *testing.T) {
@@ -1311,7 +1315,7 @@ func TestCompileMultipartFormSolidityBadCompilerVerReq(t *testing.T) {
 	ioutil.WriteFile(path.Join(dir, "solidity.sol"), []byte(simpleEventsSource()), 0644)
 	req := httptest.NewRequest("POST", "/abis?compiler=0.99", bytes.NewReader([]byte{}))
 	_, err := scgw.compileMultipartFormSolidity(dir, req)
-	assert.EqualError(err, "Failed checking solc version: Could not find a configured compiler for requested Solidity major version 0.99")
+	assert.Regexp("Failed checking solc version.*Could not find a configured compiler for requested Solidity major version 0.99", err)
 }
 
 func TestCompileMultipartFormSolidityBadSolidity(t *testing.T) {
@@ -1357,7 +1361,7 @@ func TestExtractMultiPartFileBadFile(t *testing.T) {
 	err := scgw.extractMultiPartFile(dir, &multipart.FileHeader{
 		Filename: "/stuff.zip",
 	})
-	assert.EqualError(err, "Filenames cannot contain slashes. Use a zip file to upload a directory structure")
+	assert.Regexp("Filenames cannot contain slashes. Use a zip file to upload a directory structure", err)
 }
 
 func TestExtractMultiPartFileBadInput(t *testing.T) {
@@ -1380,7 +1384,7 @@ func TestExtractMultiPartFileBadInput(t *testing.T) {
 	err := scgw.extractMultiPartFile(dir, &multipart.FileHeader{
 		Filename: "stuff.zip",
 	})
-	assert.EqualError(err, "Failed to read archive")
+	assert.Regexp("Failed to read archive", err)
 }
 
 func TestStoreDeployableABIMissingABI(t *testing.T) {
@@ -1401,7 +1405,7 @@ func TestStoreDeployableABIMissingABI(t *testing.T) {
 	scgw := s.(*smartContractGW)
 
 	_, err := scgw.storeDeployableABI(&messages.DeployContract{}, nil)
-	assert.EqualError(err, "Must supply ABI to install an existing ABI into the REST Gateway")
+	assert.Regexp("Must supply ABI to install an existing ABI into the REST Gateway", err)
 }
 
 func testGWPath(method, path string, results interface{}, sm *mockSubMgr) (res *httptest.ResponseRecorder) {
@@ -1477,7 +1481,7 @@ func TestAddStreamBadData(t *testing.T) {
 	r := &httprouter.Router{}
 	s.AddRoutes(r)
 	r.ServeHTTP(res, req)
-	var resError restErrMsg
+	var resError errors.RESTError
 	json.NewDecoder(res.Body).Decode(&resError)
 	assert.Equal(400, res.Result().StatusCode)
 	assert.Regexp("Invalid event stream specification", resError.Message)
@@ -1494,7 +1498,7 @@ func TestAddStreamSubMgrError(t *testing.T) {
 	r := &httprouter.Router{}
 	s.AddRoutes(r)
 	r.ServeHTTP(res, req)
-	var resError restErrMsg
+	var resError errors.RESTError
 	json.NewDecoder(res.Body).Decode(&resError)
 	assert.Equal(400, res.Result().StatusCode)
 	assert.Regexp("pop", resError.Message)
@@ -1536,7 +1540,7 @@ func TestUpdateStreamBadData(t *testing.T) {
 	r := &httprouter.Router{}
 	s.AddRoutes(r)
 	r.ServeHTTP(res, req)
-	var resError restErrMsg
+	var resError errors.RESTError
 	json.NewDecoder(res.Body).Decode(&resError)
 	assert.Equal(400, res.Result().StatusCode)
 	assert.Regexp("Invalid event stream specification", resError.Message)
@@ -1553,7 +1557,7 @@ func TestUpdateStreamNotFoundError(t *testing.T) {
 	r := &httprouter.Router{}
 	s.AddRoutes(r)
 	r.ServeHTTP(res, req)
-	var resError restErrMsg
+	var resError errors.RESTError
 	json.NewDecoder(res.Body).Decode(&resError)
 	assert.Equal(404, res.Result().StatusCode)
 	assert.Regexp("pop", resError.Message)
@@ -1575,7 +1579,7 @@ func TestUpdateStreamSubMgrError(t *testing.T) {
 	r := &httprouter.Router{}
 	s.AddRoutes(r)
 	r.ServeHTTP(res, req)
-	var resError restErrMsg
+	var resError errors.RESTError
 	json.NewDecoder(res.Body).Decode(&resError)
 	assert.Equal(500, res.Result().StatusCode)
 	assert.Regexp("pop", resError.Message)
@@ -1739,7 +1743,7 @@ func TestDeleteSubError(t *testing.T) {
 	assert := assert.New(t)
 
 	mockSubMgr := &mockSubMgr{err: fmt.Errorf("not found")}
-	var errInfo = restErrMsg{}
+	var errInfo = errors.RESTError{}
 	res := testGWPath("DELETE", events.SubPathPrefix+"/123", &errInfo, mockSubMgr)
 	assert.Equal(500, res.Result().StatusCode)
 	assert.Equal("not found", errInfo.Message)
@@ -1767,7 +1771,7 @@ func TestResumeStreamFail(t *testing.T) {
 	assert := assert.New(t)
 
 	mockSubMgr := &mockSubMgr{err: fmt.Errorf("pop")}
-	var errInfo = restErrMsg{}
+	var errInfo = errors.RESTError{}
 	res := testGWPath("POST", events.StreamPathPrefix+"/123/resume", &errInfo, mockSubMgr)
 	assert.Equal(500, res.Result().StatusCode)
 	assert.Equal("pop", errInfo.Message)
@@ -1998,7 +2002,7 @@ func TestResolveAddressGetContractFail(t *testing.T) {
 	mcs.On("GetContractByAddress", "address1").Return(nil, fmt.Errorf("bad address")).Once()
 
 	deployMsg, name, info, err := scgw.(*smartContractGW).resolveAddressOrName("test")
-	assert.EqualError(err, "bad address")
+	assert.Regexp("bad address", err)
 	assert.Nil(deployMsg)
 	assert.Nil(info)
 	assert.Equal("", name)

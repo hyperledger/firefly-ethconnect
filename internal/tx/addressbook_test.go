@@ -131,7 +131,7 @@ func TestLookupBadURL(t *testing.T) {
 	ctx := context.Background()
 	_, err := ab.lookup(ctx, "0xdb0997dccd71607bd6ee378723a12ef8478e4ed6")
 
-	assert.EqualError(err, "Invalid URL obtained for address")
+	assert.Regexp("Invalid URL obtained for address", err)
 }
 
 func TestLookupFallbackAddress(t *testing.T) {
@@ -191,7 +191,7 @@ func TestLookupNoFallbackAddress(t *testing.T) {
 	ctx := context.Background()
 	_, err := ab.lookup(ctx, "0xdb0997dccd71607bd6ee378723a12ef8478e4ed6")
 
-	assert.EqualError(err, "Unknown address")
+	assert.Regexp("Unknown address", err)
 
 }
 
@@ -220,7 +220,7 @@ func TestLookupBadResponse(t *testing.T) {
 	ctx := context.Background()
 	_, err := ab.lookup(ctx, "0xdb0997dccd71607bd6ee378723a12ef8478e4ed6")
 
-	assert.EqualError(err, "'rpcEndpointProp' missing in Addressbook response")
+	assert.Regexp("'rpcEndpointProp' missing in Addressbook response", err)
 
 }
 
@@ -247,7 +247,7 @@ func TestLookupFailureResponse(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	_, err := ab.lookup(context.Background(), "0xdb0997dccd71607bd6ee378723a12ef8478e4ed6")
 
-	assert.EqualError(err, "Could not process Addressbook [500] response")
+	assert.Regexp("Could not process Addressbook \\[500\\] response", err)
 
 }
 

@@ -76,7 +76,7 @@ func TestGetTXReceiptFail(t *testing.T) {
 
 	isMined, err := tx.GetTXReceipt(context.Background(), &r)
 
-	assert.EqualError(err, "eth_getTransactionReceipt returned: pop")
+	assert.Regexp("eth_getTransactionReceipt returned: pop", err)
 	assert.Equal("eth_getTransactionReceipt", r.capturedMethod)
 	assert.Equal(false, isMined)
 }
@@ -123,7 +123,7 @@ func TestGetTXReceiptOrionTXFail(t *testing.T) {
 
 	isMined, err := tx.GetTXReceipt(context.Background(), &r)
 
-	assert.EqualError(err, "priv_getTransactionReceipt returned: pop")
+	assert.Regexp("priv_getTransactionReceipt returned: pop", err)
 	assert.Equal("eth_getTransactionReceipt", r.capturedMethod)
 	assert.Equal("priv_getTransactionReceipt", r.capturedMethod2)
 	assert.Equal(false, isMined)

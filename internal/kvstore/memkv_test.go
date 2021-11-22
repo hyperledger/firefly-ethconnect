@@ -30,7 +30,7 @@ func TestExerciseMockLDB(t *testing.T) {
 	assert.Equal("val", string(o2))
 	m.Delete("test")
 	_, err := m.Get("test")
-	assert.EqualError(err, "leveldb: not found")
+	assert.Regexp("leveldb: not found", err)
 	m.NewIterator()
 	m.Close()
 

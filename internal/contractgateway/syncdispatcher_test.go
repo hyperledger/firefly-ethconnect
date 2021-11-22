@@ -124,7 +124,7 @@ func TestDispatchSendTransactionBadUnmarshal(t *testing.T) {
 	r := &mockReplyProcessor{}
 	d.DispatchSendTransactionSync(context.Background(), sendTx, r)
 
-	assert.EqualError(processor.unmarshalErr, "Unexpected condition (message types do not match when processing)")
+	assert.Regexp("Unexpected condition \\(message types do not match when processing\\)", processor.unmarshalErr)
 }
 
 func TestDispatchSendTransactionError(t *testing.T) {
@@ -141,5 +141,5 @@ func TestDispatchSendTransactionError(t *testing.T) {
 	r := &mockReplyProcessor{}
 	d.DispatchSendTransactionSync(context.Background(), sendTx, r)
 
-	assert.EqualError(r.err, "TX hash1: pop")
+	assert.Regexp("TX hash1: pop", r.err)
 }

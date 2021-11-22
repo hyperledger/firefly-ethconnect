@@ -84,7 +84,7 @@ func TestGetOrionPrivacyGroupErrFind(t *testing.T) {
 		"jO6dpqnMhmnrCHqUumyK09+18diF7quq/rROGs2HFWI=",
 		[]string{"2QiZG7rYPzRvRsioEn6oYUff1DOvPA22EZr0+/o3RUg="})
 
-	assert.EqualError(err, "priv_findPrivacyGroup returned: pop")
+	assert.Regexp("priv_findPrivacyGroup returned: pop", err)
 }
 
 func TestGetOrionPrivacyGroupErrCreate(t *testing.T) {
@@ -100,5 +100,5 @@ func TestGetOrionPrivacyGroupErrCreate(t *testing.T) {
 		"jO6dpqnMhmnrCHqUumyK09+18diF7quq/rROGs2HFWI=",
 		[]string{"2QiZG7rYPzRvRsioEn6oYUff1DOvPA22EZr0+/o3RUg="})
 
-	assert.EqualError(err, "priv_createPrivacyGroup returned: pop")
+	assert.Regexp("priv_createPrivacyGroup returned: pop", err)
 }

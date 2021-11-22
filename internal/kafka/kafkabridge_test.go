@@ -26,6 +26,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/hyperledger/firefly-ethconnect/internal/auth"
 	"github.com/hyperledger/firefly-ethconnect/internal/auth/authtest"
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
 	"github.com/hyperledger/firefly-ethconnect/internal/tx"
@@ -125,7 +126,7 @@ func TestExecuteBridgeWithIncompleteArgs(t *testing.T) {
 
 	kafkaCmd.SetArgs(testArgs)
 	err := kafkaCmd.Execute()
-	assert.Equal(err.Error(), "No JSON/RPC URL set for ethereum node")
+	assert.Regexp("No JSON/RPC URL set for ethereum node", err)
 	testArgs = append(testArgs, []string{"-r", "http://localhost:8545"}...)
 
 	testArgs = append(testArgs, []string{"--tx-timeout", "1"}...)
@@ -320,6 +321,7 @@ func TestSingleMessageWithNotAuthorizedReply(t *testing.T) {
 		return
 	}
 	assert.Equal("Unauthorized", errorReply.ErrorMessage)
+	assert.Equal(errors.Unauthorized.Code(), errorReply.ErrorCode)
 
 	// Shut down
 	mockProducer.AsyncClose()

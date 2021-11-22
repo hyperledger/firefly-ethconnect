@@ -45,7 +45,7 @@ type ethFilter struct {
 type SubscriptionCreateDTO struct {
 	Name      string                           `json:"name,omitempty"`
 	Stream    string                           `json:"stream,omitempty"`
-	Event     *ethbinding.ABIElementMarshaling `json:"even,omitempty"`
+	Event     *ethbinding.ABIElementMarshaling `json:"event,omitempty"`
 	FromBlock string                           `json:"fromBlock,omitempty"`
 	Address   *ethbinding.Address              `json:"address,omitempty"`
 }

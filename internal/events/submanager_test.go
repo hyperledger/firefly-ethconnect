@@ -207,7 +207,12 @@ func TestActionChildCleanup(t *testing.T) {
 	dir := tempdir(t)
 	defer cleanup(t, dir)
 	sm := newTestSubscriptionManager()
-	sm.rpc = &ethmocks.RPCClient{}
+
+	blockCall := make(chan struct{})
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) { <-blockCall }).Return(nil)
+	sm.rpc = rpc
+
 	sm.db, _ = kvstore.NewLDBKeyValueStore(path.Join(dir, "db"))
 	defer sm.db.Close()
 
@@ -225,6 +230,7 @@ func TestActionChildCleanup(t *testing.T) {
 	assert.Equal([]*SubscriptionInfo{}, sm.Subscriptions(ctx))
 	assert.Equal([]*StreamInfo{}, sm.Streams(ctx))
 
+	close(blockCall)
 	sm.Close(true)
 }
 
@@ -234,7 +240,12 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	subscriptionName := "testSub"
 	defer cleanup(t, dir)
 	sm := newTestSubscriptionManager()
-	sm.rpc = &ethmocks.RPCClient{}
+
+	blockCall := make(chan struct{})
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) { <-blockCall }).Return(nil)
+	sm.rpc = rpc
+
 	sm.db, _ = kvstore.NewLDBKeyValueStore(path.Join(dir, "db"))
 	defer sm.db.Close()
 
@@ -258,6 +269,7 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	err = sm.ResetSubscription(ctx, sub.ID, "0")
 	assert.EqualError(err, "Failed to store subscription: leveldb: closed")
 
+	close(blockCall)
 	sm.Close(true)
 }
 

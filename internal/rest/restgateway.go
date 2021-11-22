@@ -212,8 +212,8 @@ func (g *RESTGateway) sendError(res http.ResponseWriter, msg string, code int) {
 }
 
 // DispatchMsgAsync is the rest2eth interface method for async dispatching of messages (via our webhook logic)
-func (g *RESTGateway) DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack bool) (*messages.AsyncSentMsg, error) {
-	reply, _, err := g.webhooks.processMsg(ctx, msg, ack)
+func (g *RESTGateway) DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack, immediateReceipt bool) (*messages.AsyncSentMsg, error) {
+	reply, _, err := g.webhooks.processMsg(ctx, msg, ack, immediateReceipt)
 	return reply, err
 }
 
@@ -302,10 +302,10 @@ func (g *RESTGateway) Start() (err error) {
 	g.receipts.addRoutes(router)
 	if len(g.conf.Kafka.Brokers) > 0 {
 		wk := newWebhooksKafka(&g.conf.Kafka, g.receipts)
-		g.webhooks = newWebhooks(wk, g.smartContractGW)
+		g.webhooks = newWebhooks(wk, g.receipts, g.smartContractGW)
 	} else {
 		wd := newWebhooksDirect(&g.conf.WebhooksDirectConf, processor, g.receipts)
-		g.webhooks = newWebhooks(wd, g.smartContractGW)
+		g.webhooks = newWebhooks(wd, g.receipts, g.smartContractGW)
 	}
 	g.webhooks.addRoutes(router)
 

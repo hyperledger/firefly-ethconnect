@@ -54,7 +54,7 @@ type mockREST2EthDispatcher struct {
 	deployContractSyncError    error
 }
 
-func (m *mockREST2EthDispatcher) DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack bool) (*messages.AsyncSentMsg, error) {
+func (m *mockREST2EthDispatcher) DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack, immediateReceipt bool) (*messages.AsyncSentMsg, error) {
 	m.asyncDispatchMsg = msg
 	m.asyncDispatchAck = ack
 	return m.asyncDispatchReply, m.asyncDispatchError

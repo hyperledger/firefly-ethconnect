@@ -109,8 +109,8 @@ func (cb *circuitBreaker) logState(prefix, topic string, partition int32, partit
 	if partitionState.lastTripTime.IsZero() {
 		lastTripped = "never"
 	}
-	log.Infof("%s: topic=%s partition=%d offset=%d hwm=%d sizeEstimate=%.2fKb tripped=%t lastTripped=%s",
-		prefix, topic, partition, partitionState.offset, partitionState.hwm, float64(partitionState.bufSize)/1024, partitionState.tripped, lastTripped)
+	log.Infof("%s: topic=%s partition=%d offset=%d hwm=%d gap=%d gap.estimate=%.2fKb tripped=%t lastTripped=%s",
+		prefix, topic, partition, partitionState.offset, partitionState.hwm, partitionState.gap, float64(partitionState.bufSize)/1024, partitionState.tripped, lastTripped)
 }
 
 func (cb *circuitBreaker) Update(topic string, partition int32, hwm, offset, size int64) {

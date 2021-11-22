@@ -80,6 +80,16 @@ func (r *receiptStore) extractHeaders(parsedMsg map[string]interface{}) map[stri
 	return nil
 }
 
+func (r *receiptStore) writeAccepted(msgID, msgAck string, msg map[string]interface{}) {
+	msg["receivedAt"] = time.Now().UnixNano() / int64(time.Millisecond)
+	msg["pending"] = true
+	msg["msgAck"] = msgAck
+	msg["_id"] = msgID
+	if msgID != "" && r.persistence != nil {
+		r.writeReceipt(msgID, msg)
+	}
+}
+
 func (r *receiptStore) processReply(msgBytes []byte) {
 
 	// Parse the reply as JSON
@@ -158,8 +168,8 @@ func (r *receiptStore) writeReceipt(requestID string, receipt map[string]interfa
 		// Check if the reason is that there is a receipt already
 		existing, qErr := r.persistence.GetReceipt(requestID)
 		if qErr == nil && existing != nil {
-			log.Warnf("%s: exiting   receipt: %+v", requestID, *existing)
-			log.Warnf("%s: duplicate receipt: %+v", requestID, receipt)
+			log.Debugf("%s: exiting   receipt: %+v", requestID, *existing)
+			log.Debugf("%s: duplicate receipt: %+v", requestID, receipt)
 			break
 		}
 

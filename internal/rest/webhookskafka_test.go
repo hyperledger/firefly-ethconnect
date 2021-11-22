@@ -107,7 +107,7 @@ func newTestWebhooks() (*webhooks, *webhooksKafka, *testKafkaCommon, *httptest.S
 	k := newTestKafkaComon()
 	wk := newWebhooksKafkaBase(r)
 	wk.kafka = k
-	w := newWebhooks(wk, nil)
+	w := newWebhooks(wk, wk.receipts, nil)
 	router := &httprouter.Router{}
 	w.addRoutes(router)
 	ts := httptest.NewUnstartedServer(router)

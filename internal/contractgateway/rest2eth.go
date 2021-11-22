@@ -44,7 +44,7 @@ import (
 // REST2EthAsyncDispatcher is passed in to process messages over a streaming system with
 // a receipt store. Only used for POST methods, when fly-sync is not set to true
 type REST2EthAsyncDispatcher interface {
-	DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack bool) (*messages.AsyncSentMsg, error)
+	DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack, immediateReceipt bool) (*messages.AsyncSentMsg, error)
 }
 
 // rest2EthSyncDispatcher abstracts the processing of the transactions and queries
@@ -586,13 +586,14 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 		}
 	} else {
 		ack := !getFlyParamBool("noack", req) // turn on ack's by default
+		immediateReceipt := strings.EqualFold(getFlyParam("acktype", req), "receipt")
 
 		// Async messages are dispatched as generic map payloads.
 		// We are confident in the re-serialization here as we've deserialized from JSON then built our own structure
 		msgBytes, _ := json.Marshal(deployMsg)
 		var mapMsg map[string]interface{}
 		json.Unmarshal(msgBytes, &mapMsg)
-		if asyncResponse, err := r.asyncDispatcher.DispatchMsgAsync(req.Context(), mapMsg, ack); err != nil {
+		if asyncResponse, err := r.asyncDispatcher.DispatchMsgAsync(req.Context(), mapMsg, ack, immediateReceipt); err != nil {
 			r.restErrReply(res, req, err, 500)
 		} else {
 			r.restAsyncReply(res, req, asyncResponse)
@@ -633,13 +634,14 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 		}
 	} else {
 		ack := !getFlyParamBool("noack", req) // turn on ack's by default
+		immediateReceipt := strings.EqualFold(getFlyParam("acktype", req), "receipt")
 
 		// Async messages are dispatched as generic map payloads.
 		// We are confident in the re-serialization here as we've deserialized from JSON then built our own structure
 		msgBytes, _ := json.Marshal(msg)
 		var mapMsg map[string]interface{}
 		json.Unmarshal(msgBytes, &mapMsg)
-		if asyncResponse, err := r.asyncDispatcher.DispatchMsgAsync(req.Context(), mapMsg, ack); err != nil {
+		if asyncResponse, err := r.asyncDispatcher.DispatchMsgAsync(req.Context(), mapMsg, ack, immediateReceipt); err != nil {
 			r.restErrReply(res, req, err, 500)
 		} else {
 			r.restAsyncReply(res, req, asyncResponse)

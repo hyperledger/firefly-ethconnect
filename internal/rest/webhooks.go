@@ -38,11 +38,13 @@ type webhooksHandler interface {
 type webhooks struct {
 	smartContractGW contractgateway.SmartContractGateway
 	handler         webhooksHandler
+	receipts        *receiptStore
 }
 
-func newWebhooks(handler webhooksHandler, smartContractGW contractgateway.SmartContractGateway) *webhooks {
+func newWebhooks(handler webhooksHandler, receipts *receiptStore, smartContractGW contractgateway.SmartContractGateway) *webhooks {
 	return &webhooks{
 		handler:         handler,
+		receipts:        receipts,
 		smartContractGW: smartContractGW,
 	}
 }
@@ -92,7 +94,20 @@ func (w *webhooks) webhookHandler(res http.ResponseWriter, req *http.Request, ac
 		return
 	}
 
-	reply, statusCode, err := w.processMsg(req.Context(), msg, ack)
+	// Special body parameter on webhook to ask for an immediate receipt
+	immediateReceipt := false
+	iAckType, ok := msg["acktype"]
+	if ok {
+		ackType, ok := iAckType.(string)
+		if ok {
+			immediateReceipt = (ackType == "receipt")
+			if immediateReceipt {
+				ack = true // forces ack
+			}
+		}
+	}
+
+	reply, statusCode, err := w.processMsg(req.Context(), msg, ack, immediateReceipt)
 	if err != nil {
 		w.hookErrReply(res, req, err, statusCode)
 		return
@@ -100,7 +115,7 @@ func (w *webhooks) webhookHandler(res http.ResponseWriter, req *http.Request, ac
 	w.msgSentReply(res, req, reply)
 }
 
-func (w *webhooks) processMsg(ctx context.Context, msg map[string]interface{}, ack bool) (*messages.AsyncSentMsg, int, error) {
+func (w *webhooks) processMsg(ctx context.Context, msg map[string]interface{}, ack, immediateReceipt bool) (*messages.AsyncSentMsg, int, error) {
 	// Check we understand the type, and can get the key.
 	// The rest of the validation is performed by the bridge listening to Kafka
 	headers, exists := msg["headers"]
@@ -145,6 +160,9 @@ func (w *webhooks) processMsg(ctx context.Context, msg map[string]interface{}, a
 	msgAck, status, err := w.handler.sendWebhookMsg(ctx, key, msgID, msg, ack)
 	if err != nil {
 		return nil, status, err
+	}
+	if ack && immediateReceipt {
+		w.receipts.writeAccepted(msgID, msgAck, msg)
 	}
 	return &messages.AsyncSentMsg{
 		Sent:    true,

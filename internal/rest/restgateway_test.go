@@ -323,9 +323,10 @@ func TestDispatchMsgAsyncPassesThroughToWebhooks(t *testing.T) {
 	var printYAML = true
 	g := NewRESTGateway(&printYAML)
 	fakeHandler := &mockHandler{}
-	g.webhooks = newWebhooks(fakeHandler, nil)
+	r, _ := newReceiptsTestStore(nil)
+	g.webhooks = newWebhooks(fakeHandler, r, nil)
 
 	var fakeMsg map[string]interface{}
-	_, err := g.DispatchMsgAsync(context.Background(), fakeMsg, true)
+	_, err := g.DispatchMsgAsync(context.Background(), fakeMsg, true, true)
 	assert.EqualError(err, "Invalid message - missing 'headers' (or not an object)")
 }

@@ -1184,5 +1184,8 @@ func (g *smartContractGW) resolveAddressOrName(id string) (deployMsg *messages.D
 		ABIType: contractregistry.LocalABI,
 		Name:    info.ABI,
 	}, false)
-	return result.Contract, registeredName, info, err
+	if result != nil {
+		deployMsg = result.Contract
+	}
+	return deployMsg, registeredName, info, err
 }

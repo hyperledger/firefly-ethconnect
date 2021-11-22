@@ -249,7 +249,11 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	})
 	assert.NoError(err)
 
-	sub, err := sm.AddSubscription(ctx, nil, nil, &ethbinding.ABIElementMarshaling{Name: "ping"}, stream.ID, "", subscriptionName)
+	sub, err := sm.AddSubscriptionDirect(ctx, &SubscriptionCreateDTO{
+		Name:   subscriptionName,
+		Stream: stream.ID,
+		Event:  &ethbinding.ABIElementMarshaling{Name: "ping"},
+	})
 	assert.NoError(err)
 
 	err = sm.ResetSubscription(ctx, sub.ID, "badness")

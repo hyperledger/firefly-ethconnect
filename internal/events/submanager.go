@@ -59,6 +59,7 @@ type SubscriptionManager interface {
 	ResumeStream(ctx context.Context, id string) error
 	DeleteStream(ctx context.Context, id string) error
 	AddSubscription(ctx context.Context, addr *ethbinding.Address, abi *contractregistry.ABILocation, event *ethbinding.ABIElementMarshaling, streamID, initialBlock, name string) (*SubscriptionInfo, error)
+	AddSubscriptionDirect(ctx context.Context, newSub *SubscriptionCreateDTO) (*SubscriptionInfo, error)
 	Subscriptions(ctx context.Context) []*SubscriptionInfo
 	SubscriptionByID(ctx context.Context, id string) (*SubscriptionInfo, error)
 	ResetSubscription(ctx context.Context, id, initialBlock string) error
@@ -159,26 +160,39 @@ func (s *subscriptionMGR) setInitialBlock(i *SubscriptionInfo, initialBlock stri
 
 // AddSubscription adds a new subscription
 func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *ethbinding.Address, abi *contractregistry.ABILocation, event *ethbinding.ABIElementMarshaling, streamID, initialBlock, name string) (*SubscriptionInfo, error) {
+	return s.addSubscriptionCommon(ctx, abi, &SubscriptionCreateDTO{
+		Address:   addr,
+		Name:      name,
+		Event:     event,
+		Stream:    streamID,
+		FromBlock: initialBlock,
+	})
+}
+
+func (s *subscriptionMGR) AddSubscriptionDirect(ctx context.Context, newSub *SubscriptionCreateDTO) (*SubscriptionInfo, error) {
+	return s.addSubscriptionCommon(ctx, nil, newSub)
+}
+
+func (s *subscriptionMGR) addSubscriptionCommon(ctx context.Context, abi *contractregistry.ABILocation, newSub *SubscriptionCreateDTO) (*SubscriptionInfo, error) {
 	i := &SubscriptionInfo{
+		Name: newSub.Name,
 		TimeSorted: messages.TimeSorted{
 			CreatedISO8601: time.Now().UTC().Format(time.RFC3339),
 		},
 		ID:     subIDPrefix + utils.UUIDv4(),
-		Event:  event,
-		Stream: streamID,
+		Event:  newSub.Event,
+		Stream: newSub.Stream,
 		ABI:    abi,
 	}
 	i.Path = SubPathPrefix + "/" + i.ID
-	// Set any user supplied a name for the subscription
-	if name != "" {
-		i.Name = name
-	}
+
 	// Check initial block number to subscribe from
-	if err := s.setInitialBlock(i, initialBlock); err != nil {
+	if err := s.setInitialBlock(i, newSub.FromBlock); err != nil {
 		return nil, err
 	}
+
 	// Create it
-	sub, err := newSubscription(s, s.rpc, s.cr, addr, i)
+	sub, err := newSubscription(s, s.rpc, s.cr, newSub.Address, i)
 	if err != nil {
 		return nil, err
 	}

@@ -42,6 +42,14 @@ type ethFilter struct {
 	ToBlock   string               `json:"toBlock,omitempty"`
 }
 
+type SubscriptionCreateDTO struct {
+	Name      string                           `json:"name,omitempty"`
+	Stream    string                           `json:"stream,omitempty"`
+	Event     *ethbinding.ABIElementMarshaling `json:"even,omitempty"`
+	FromBlock string                           `json:"fromBlock,omitempty"`
+	Address   *ethbinding.Address              `json:"address,omitempty"`
+}
+
 // SubscriptionInfo is the persisted data for the subscription
 type SubscriptionInfo struct {
 	messages.TimeSorted

@@ -116,6 +116,7 @@ func (g *smartContractGW) AddRoutes(router *httprouter.Router) {
 	router.POST(events.StreamPathPrefix, g.withEventsAuth(g.createStream))
 	router.PATCH(events.StreamPathPrefix+"/:id", g.withEventsAuth(g.updateStream))
 	router.GET(events.StreamPathPrefix, g.withEventsAuth(g.listStreamsOrSubs))
+	router.POST(events.SubPathPrefix, g.withEventsAuth(g.addSub))
 	router.GET(events.SubPathPrefix, g.withEventsAuth(g.listStreamsOrSubs))
 	router.GET(events.StreamPathPrefix+"/:id", g.withEventsAuth(g.getStreamOrSub))
 	router.GET(events.SubPathPrefix+"/:id", g.withEventsAuth(g.getStreamOrSub))
@@ -519,6 +520,35 @@ func (g *smartContractGW) deleteStreamOrSub(res http.ResponseWriter, req *http.R
 	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(status)
+}
+
+// addSub resets subscription over REST
+func (g *smartContractGW) addSub(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	log.Infof("--> %s %s", req.Method, req.URL)
+
+	if g.sm == nil {
+		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		return
+	}
+
+	var retval interface{}
+	var body events.SubscriptionCreateDTO
+	err := json.NewDecoder(req.Body).Decode(&body)
+	if err == nil {
+		retval, err = g.sm.AddSubscriptionDirect(req.Context(), &body)
+	}
+	if err != nil {
+		g.gatewayErrReply(res, req, err, 500)
+		return
+	}
+
+	status := 201
+	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(status)
+	enc := json.NewEncoder(res)
+	enc.SetIndent("", "  ")
+	enc.Encode(retval)
 }
 
 // resetSub resets subscription over REST

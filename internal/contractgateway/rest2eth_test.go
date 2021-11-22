@@ -127,6 +127,10 @@ func (m *mockSubMgr) AddSubscription(ctx context.Context, addr *ethbinding.Addre
 	m.capturedAddr = addr
 	return m.sub, m.err
 }
+func (m *mockSubMgr) AddSubscriptionDirect(ctx context.Context, newSub *events.SubscriptionCreateDTO) (*events.SubscriptionInfo, error) {
+	m.capturedAddr = newSub.Address
+	return m.sub, m.err
+}
 func (m *mockSubMgr) Subscriptions(ctx context.Context) []*events.SubscriptionInfo { return m.subs }
 func (m *mockSubMgr) SubscriptionByID(ctx context.Context, id string) (*events.SubscriptionInfo, error) {
 	return m.sub, m.err

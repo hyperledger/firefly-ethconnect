@@ -1688,6 +1688,41 @@ func TestDeleteSub(t *testing.T) {
 	assert.Equal(204, res.Result().StatusCode)
 }
 
+func TestAddSub(t *testing.T) {
+	assert := assert.New(t)
+
+	mockSubMgr := &mockSubMgr{
+		sub: &events.SubscriptionInfo{
+			Name: "mysub",
+		},
+	}
+	var resBody events.SubscriptionInfo
+	res := testGWPathBody("POST", events.SubPathPrefix, &resBody, mockSubMgr, bytes.NewReader([]byte(`
+    {
+      "name": "mysub"
+    }
+  `)))
+	assert.Equal(201, res.Result().StatusCode)
+	assert.Equal("mysub", resBody.Name)
+}
+
+func TestAddSubNoBody(t *testing.T) {
+	assert := assert.New(t)
+
+	mockSubMgr := &mockSubMgr{}
+	var resBody events.SubscriptionInfo
+	res := testGWPath("POST", events.SubPathPrefix, &resBody, mockSubMgr)
+	assert.Equal(500, res.Result().StatusCode)
+}
+
+func TestAddSubNoSubMgr(t *testing.T) {
+	assert := assert.New(t)
+
+	var result events.SubscriptionInfo
+	res := testGWPath("POST", events.SubPathPrefix, &result, nil)
+	assert.Equal(405, res.Result().StatusCode)
+}
+
 func TestResetSub(t *testing.T) {
 	assert := assert.New(t)
 

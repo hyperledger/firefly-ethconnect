@@ -55,8 +55,8 @@ func TestConsumerGroupHandler(t *testing.T) {
 	messages := make(chan *sarama.ConsumerMessage)
 
 	InitCircuitBreaker(&CircuitBreakerConf{
-		Enabled:        true,
-		TripBufferSize: 1, // Trip immediately
+		Enabled:    true,
+		UpperBound: 1, // Trip immediately
 	})
 	cb := GetCircuitBreaker()
 

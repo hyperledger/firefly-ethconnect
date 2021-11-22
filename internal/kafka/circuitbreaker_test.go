@@ -47,11 +47,11 @@ func TestCircuitBreakerTrip(t *testing.T) {
 
 	InitCircuitBreaker(&CircuitBreakerConf{
 		Enabled:        true,
-		TripBufferSize: 1024 * 1024,
-		UntripFraction: 0.5,
+		UpperBound:     1024 * 1024,
+		ResetThreshold: 0.5,
 	})
 	cb := GetCircuitBreaker()
-	assert.Equal(t, int64(512*1024), cb.conf.untripBufferSize)
+	assert.Equal(t, int64(512*1024), cb.conf.resetBufferSize)
 
 	cb.Update("topic1", 2, 10, 10, 1000)
 	assert.Equal(t, int64(1000), cb.state["topic1"][2].sizeEstimate)
@@ -63,23 +63,23 @@ func TestCircuitBreakerTrip(t *testing.T) {
 	assert.Equal(t, int64((1000+1100)/2), cb.state["topic1"][2].sizeEstimate)
 	assert.Equal(t, int64(1000*cb.state["topic1"][2].sizeEstimate), cb.state["topic1"][2].bufSize)
 	assert.Equal(t, int64(1000), cb.state["topic1"][2].gap)
-	assert.True(t, cb.state["topic1"][2].bufSize > cb.conf.TripBufferSize)
+	assert.True(t, cb.state["topic1"][2].bufSize > cb.conf.UpperBound)
 	assert.Regexp(t, "too large", cb.Check("topic1")) // tripped
 
 	cb.Update("topic1", 2, 2000, 1500, 2048)
 	assert.Equal(t, int64((1000+1100+2048)/3), cb.state["topic1"][2].sizeEstimate)
 	assert.Equal(t, int64(500*cb.state["topic1"][2].sizeEstimate), cb.state["topic1"][2].bufSize)
 	assert.Equal(t, int64(500), cb.state["topic1"][2].gap)
-	assert.True(t, cb.state["topic1"][2].bufSize < cb.conf.TripBufferSize)
-	assert.True(t, cb.state["topic1"][2].bufSize > cb.conf.untripBufferSize)
+	assert.True(t, cb.state["topic1"][2].bufSize < cb.conf.UpperBound)
+	assert.True(t, cb.state["topic1"][2].bufSize > cb.conf.resetBufferSize)
 	assert.Regexp(t, "too large", cb.Check("topic1")) // tripped
 
 	cb.Update("topic1", 2, 2000, 1800, 1024)
 	assert.Equal(t, int64((1000+1100+2048+1024)/4), cb.state["topic1"][2].sizeEstimate)
 	assert.Equal(t, int64(200*cb.state["topic1"][2].sizeEstimate), cb.state["topic1"][2].bufSize)
 	assert.Equal(t, int64(200), cb.state["topic1"][2].gap)
-	assert.True(t, cb.state["topic1"][2].bufSize < cb.conf.TripBufferSize)
-	assert.True(t, cb.state["topic1"][2].bufSize < cb.conf.untripBufferSize)
+	assert.True(t, cb.state["topic1"][2].bufSize < cb.conf.UpperBound)
+	assert.True(t, cb.state["topic1"][2].bufSize < cb.conf.resetBufferSize)
 	assert.Nil(t, cb.Check("topic1"))
 
 	// Check other topics are isolated

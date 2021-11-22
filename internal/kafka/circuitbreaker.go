@@ -24,21 +24,21 @@ import (
 )
 
 var (
-	DefaultTripBufferSize int64   = 80 * (1024 * 1024)
-	DefaultUntripFraction float64 = 0.8
+	DefaultUpperBound     int64   = 80 * (1024 * 1024)
+	DefaultResetThreshold float64 = 0.8
 	DefaultLogFrequency           = 30 * time.Second
 )
 
 // CircuitBreakerConf defines the YAML config structure for the circuit breaker
 type CircuitBreakerConf struct {
 	Enabled         bool    `json:"enabled,omitempty"`
-	TripBufferSize  int64   `json:"tripBufferSize,omitempty"`
-	UntripFraction  float64 `json:"untripFraction,omitempty"`
+	UpperBound      int64   `json:"upperBound,omitempty"`
+	ResetThreshold  float64 `json:"resetFraction,omitempty"`
 	LogFrequencySec int     `json:"logFrequencySec,omitempty"`
 
 	// calculated values
-	logFrequency     time.Duration
-	untripBufferSize int64
+	logFrequency    time.Duration
+	resetBufferSize int64
 }
 
 type CircuitBreaker interface {
@@ -87,15 +87,15 @@ func InitCircuitBreaker(conf *CircuitBreakerConf) error {
 	if cb.conf.logFrequency <= 0 {
 		cb.conf.logFrequency = DefaultLogFrequency
 	}
-	if cb.conf.TripBufferSize <= 0 {
-		cb.conf.TripBufferSize = DefaultTripBufferSize
+	if cb.conf.UpperBound <= 0 {
+		cb.conf.UpperBound = DefaultUpperBound
 	}
-	if cb.conf.UntripFraction <= 0 || cb.conf.UntripFraction > 1 {
-		cb.conf.UntripFraction = DefaultUntripFraction
+	if cb.conf.ResetThreshold <= 0 || cb.conf.ResetThreshold > 1 {
+		cb.conf.ResetThreshold = DefaultResetThreshold
 	}
-	cb.conf.untripBufferSize = int64(math.Ceil(cb.conf.UntripFraction * float64(cb.conf.TripBufferSize)))
+	cb.conf.resetBufferSize = int64(math.Ceil(cb.conf.ResetThreshold * float64(cb.conf.UpperBound)))
 	singletonCircuitBreaker = cb
-	log.Infof("CircuitBreakerEnabled: trip=%.2fKb untrip=%.2fKb", float64(cb.conf.TripBufferSize)/1024, float64(cb.conf.untripBufferSize)/1024)
+	log.Infof("CircuitBreakerEnabled: trip=%.2fKb reset=%.2fKb", float64(cb.conf.UpperBound)/1024, float64(cb.conf.resetBufferSize)/1024)
 
 	return nil
 }
@@ -144,13 +144,13 @@ func (cb *circuitBreaker) Update(topic string, partition int32, hwm, offset, siz
 	partitionState.bufSize = (partitionState.gap * partitionState.sizeEstimate)
 
 	if partitionState.tripped {
-		if partitionState.bufSize < cb.conf.untripBufferSize {
+		if partitionState.bufSize < cb.conf.resetBufferSize {
 			partitionState.tripped = false
-			cb.logState("CircuitBreakerUntripped", topic, partition, partitionState)
+			cb.logState("CircuitBreakerReset", topic, partition, partitionState)
 			return // No extra health log entry here
 		}
 	} else {
-		if partitionState.bufSize > cb.conf.TripBufferSize {
+		if partitionState.bufSize > cb.conf.UpperBound {
 			partitionState.tripped = true
 			partitionState.lastTripTime = time.Now()
 			cb.logState("CircuitBreakerTripped", topic, partition, partitionState)

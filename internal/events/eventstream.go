@@ -253,6 +253,7 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 	// wait for the poked goroutines to finish up
 	<-a.eventPollerDone
 	<-a.batchProcessorDone
+	<-a.batchDispatcherDone
 	defer a.postUpdateStream()
 
 	if newSpec.Type != "" && newSpec.Type != a.spec.Type {

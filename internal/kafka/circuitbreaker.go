@@ -48,22 +48,26 @@ type CircuitBreaker interface {
 
 // cbPartitionState is a per-topic state structure for managing trips
 type cbPartitionState struct {
-	sizeEstimate int64
-	offset       int64
-	hwm          int64
-	gap          int64
-	bufSize      int64
-	msgCount     int64
-	msgBytes     int64
-	tripped      bool
-	lastTripTime time.Time
-	lastLogged   time.Time
+	sizeEstimate  int64
+	offset        int64
+	hwm           int64
+	gap           int64
+	bufSize       int64
+	msgCount      int64
+	msgBytes      int64
+	tripped       bool
+	lastTripTime  time.Time
+	lastResetTime time.Time
+	lastLogged    time.Time
 }
 
-// circuitBreaker checks that the
+// circuitBreaker is a singleton within the process, that keeps track of all reported offset->HWM
+// gaps of all consumers. Then provides an interface to check before producing a message that
+// the gap is believed to be safe.
 type circuitBreaker struct {
-	conf  *CircuitBreakerConf
-	mux   sync.Mutex
+	conf *CircuitBreakerConf
+	mux  sync.Mutex
+	// state organized by {topic} -> {partition} -> {partitionState}
 	state map[string]map[int32]*cbPartitionState
 }
 
@@ -72,6 +76,9 @@ var singletonCircuitBreaker *circuitBreaker
 func InitCircuitBreaker(conf *CircuitBreakerConf) error {
 
 	if conf == nil || !conf.Enabled {
+		if singletonCircuitBreaker == nil {
+			log.Debugf("CircuitBreakerDisabled: The Kafka consumer circuit breaker is not enabled in the config")
+		}
 		return nil
 	}
 	if singletonCircuitBreaker != nil {
@@ -109,8 +116,12 @@ func (cb *circuitBreaker) logState(prefix, topic string, partition int32, partit
 	if partitionState.lastTripTime.IsZero() {
 		lastTripped = "never"
 	}
-	log.Infof("%s: topic=%s partition=%d offset=%d hwm=%d gap=%d gap.estimate=%.2fKb tripped=%t lastTripped=%s",
-		prefix, topic, partition, partitionState.offset, partitionState.hwm, partitionState.gap, float64(partitionState.bufSize)/1024, partitionState.tripped, lastTripped)
+	lastReset := partitionState.lastResetTime.Format(time.RFC3339Nano)
+	if partitionState.lastResetTime.IsZero() {
+		lastReset = "never"
+	}
+	log.Infof("%s: topic=%s partition=%d offset=%d hwm=%d gap=%d gap.estimate=%.2fKb tripped=%t lastTripped=%s lastReset=%s",
+		prefix, topic, partition, partitionState.offset, partitionState.hwm, partitionState.gap, float64(partitionState.bufSize)/1024, partitionState.tripped, lastTripped, lastReset)
 }
 
 func (cb *circuitBreaker) Update(topic string, partition int32, hwm, offset, size int64) {
@@ -146,6 +157,7 @@ func (cb *circuitBreaker) Update(topic string, partition int32, hwm, offset, siz
 	if partitionState.tripped {
 		if partitionState.bufSize < cb.conf.resetBufferSize {
 			partitionState.tripped = false
+			partitionState.lastResetTime = time.Now()
 			cb.logState("CircuitBreakerReset", topic, partition, partitionState)
 			return // No extra health log entry here
 		}

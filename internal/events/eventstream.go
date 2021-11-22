@@ -465,7 +465,7 @@ func (a *eventStream) eventPoller() {
 		select {
 		case <-a.updateInterrupt:
 			// we were notified by the caller about an ongoing update, no need to continue
-			log.Infof("%s: Notified of an ongoing stream update, exiting event poller", a.spec.ID)
+			log.Infof("%s: Notified of an ongoing stream update, existing event poller", a.spec.ID)
 			a.markAllSubscriptionsStale(ctx)
 			return
 		case <-time.After(a.pollingInterval): //fall through and continue to the next iteration
@@ -566,14 +566,14 @@ func (a *eventStream) batchProcessor() {
 				a.batchCond.L.Unlock()
 				<-a.updateInterrupt
 				// we were notified by the caller about an ongoing update, return
-				log.Infof("%s: Notified of an ongoing stream update, exiting batch processor", a.spec.ID)
+				log.Infof("%s: Notified of an ongoing stream update, existing batch processor", a.spec.ID)
 				return
 			} else {
 				a.batchCond.Wait()
 			}
 		}
 		if a.suspendOrStop() {
-			log.Infof("%s: Suspended, returning exiting batch processor", a.spec.ID)
+			log.Infof("%s: Suspended, returning existing batch processor", a.spec.ID)
 			a.batchCond.L.Unlock()
 			return
 		}

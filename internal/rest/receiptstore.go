@@ -168,7 +168,7 @@ func (r *receiptStore) writeReceipt(requestID string, receipt map[string]interfa
 		// Check if the reason is that there is a receipt already
 		existing, qErr := r.persistence.GetReceipt(requestID)
 		if qErr == nil && existing != nil {
-			log.Debugf("%s: exiting   receipt: %+v", requestID, *existing)
+			log.Debugf("%s: existing   receipt: %+v", requestID, *existing)
 			log.Debugf("%s: duplicate receipt: %+v", requestID, receipt)
 			break
 		}

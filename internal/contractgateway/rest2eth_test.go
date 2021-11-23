@@ -94,6 +94,7 @@ func (m *mockGateway) Shutdown()                           { return }
 type mockSubMgr struct {
 	err             error
 	updateStreamErr error
+	captureSub      *events.SubscriptionCreateDTO
 	sub             *events.SubscriptionInfo
 	stream          *events.StreamInfo
 	subs            []*events.SubscriptionInfo
@@ -125,6 +126,11 @@ func (m *mockSubMgr) ResumeStream(ctx context.Context, id string) error {
 func (m *mockSubMgr) DeleteStream(ctx context.Context, id string) error { return m.err }
 func (m *mockSubMgr) AddSubscription(ctx context.Context, addr *ethbinding.Address, abi *contractregistry.ABILocation, event *ethbinding.ABIElementMarshaling, streamID, initialBlock, name string) (*events.SubscriptionInfo, error) {
 	m.capturedAddr = addr
+	return m.sub, m.err
+}
+func (m *mockSubMgr) AddSubscriptionDirect(ctx context.Context, newSub *events.SubscriptionCreateDTO) (*events.SubscriptionInfo, error) {
+	m.capturedAddr = newSub.Address
+	m.captureSub = newSub
 	return m.sub, m.err
 }
 func (m *mockSubMgr) Subscriptions(ctx context.Context) []*events.SubscriptionInfo { return m.subs }

@@ -506,7 +506,8 @@ func setupTestSubscriptionWithRPCHandler(assert *assert.Assertions, sm *subscrip
 		ABIType: contractregistry.LocalABI,
 		Name:    "test-abi",
 	}
-	s, _ := sm.AddSubscription(ctx, &addr, loc, event, stream.spec.ID, "", subscriptionName)
+	s, err := sm.AddSubscription(ctx, &addr, loc, event, stream.spec.ID, "", subscriptionName)
+	assert.NoError(err)
 	return s
 }
 

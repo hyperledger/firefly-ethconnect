@@ -199,7 +199,7 @@ func TestExecuteWithBadRPCURL(t *testing.T) {
 
 }
 
-func setupMocks() (*KafkaBridge, *testKafkaMsgProcessor, *MockKafkaConsumer, *MockKafkaProducer, *sync.WaitGroup) {
+func setupMocks(start bool) (*KafkaBridge, *testKafkaMsgProcessor, *MockKafkaConsumer, *MockKafkaProducer, *sync.WaitGroup) {
 	k, _ := newTestKafkaBridge()
 	k.conf.MaxInFlight = 10
 	k.conf.Kafka.sendRetryDelay = 0
@@ -207,9 +207,11 @@ func setupMocks() (*KafkaBridge, *testKafkaMsgProcessor, *MockKafkaConsumer, *Mo
 	mockConsumer, _ := f.NewConsumer(k.kafka)
 	mockProducer, _ := f.NewProducer(k.kafka)
 	wg := &sync.WaitGroup{}
-	wg.Add(2)
-	go k.ConsumerMessagesLoop(mockConsumer, mockProducer, wg)
-	go k.ProducerSuccessLoop(mockConsumer, mockProducer, wg)
+	if start {
+		wg.Add(2)
+		go k.ConsumerMessagesLoop(mockConsumer, mockProducer, wg)
+		go k.ProducerSuccessLoop(mockConsumer, mockProducer, wg)
+	}
 	processor := k.processor.(*testKafkaMsgProcessor)
 	return k, processor, mockConsumer.(*MockKafkaConsumer), mockProducer.(*MockKafkaProducer), wg
 }
@@ -218,7 +220,7 @@ func TestSingleMessageWithReply(t *testing.T) {
 	assert := assert.New(t)
 	auth.RegisterSecurityModule(&authtest.TestSecurityModule{})
 
-	_, processor, mockConsumer, mockProducer, wg := setupMocks()
+	_, processor, mockConsumer, mockProducer, wg := setupMocks(true)
 
 	// Send a minimal test message
 	msg1 := messages.RequestCommon{}
@@ -295,7 +297,7 @@ func TestSingleMessageWithNotAuthorizedReply(t *testing.T) {
 	assert := assert.New(t)
 	auth.RegisterSecurityModule(&authtest.TestSecurityModule{})
 
-	_, _, mockConsumer, mockProducer, wg := setupMocks()
+	_, _, mockConsumer, mockProducer, wg := setupMocks(true)
 
 	// Send a minimal test message
 	msg1 := messages.RequestCommon{}
@@ -332,7 +334,7 @@ func TestSingleMessageWithNotAuthorizedReply(t *testing.T) {
 func TestSingleMessageWithErrorReplyAndCircuitBreakerRetry(t *testing.T) {
 	assert := assert.New(t)
 
-	_, processor, mockConsumer, mockProducer, wg := setupMocks()
+	_, processor, mockConsumer, mockProducer, wg := setupMocks(true)
 
 	// Send a minimal test message
 	msg1 := messages.RequestCommon{}
@@ -375,7 +377,7 @@ func TestSingleMessageWithErrorReplyAndCircuitBreakerRetry(t *testing.T) {
 func TestSingleMessageWithErrorReplyWithGapFillDetail(t *testing.T) {
 	assert := assert.New(t)
 
-	_, processor, mockConsumer, mockProducer, wg := setupMocks()
+	_, processor, mockConsumer, mockProducer, wg := setupMocks(true)
 
 	// Send a minimal test message
 	msg1 := messages.RequestCommon{}
@@ -410,7 +412,7 @@ func TestSingleMessageWithErrorReplyWithGapFillDetail(t *testing.T) {
 func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 	assert := assert.New(t)
 
-	k, processor, mockConsumer, mockProducer, wg := setupMocks()
+	k, processor, mockConsumer, mockProducer, wg := setupMocks(true)
 	assert.Equal(10, k.conf.MaxInFlight)
 
 	// Send 20 messages (10 is the max inflight)
@@ -491,7 +493,7 @@ func TestMoreMessagesThanMaxInFlight(t *testing.T) {
 func TestAddInflightDuplicateMessage(t *testing.T) {
 	assert := assert.New(t)
 
-	k, _, mockConsumer, mockProducer, wg := setupMocks()
+	k, _, mockConsumer, mockProducer, wg := setupMocks(true)
 
 	k.addInflightMsg(&sarama.ConsumerMessage{
 		Value:     []byte("first"),
@@ -524,7 +526,7 @@ func TestAddInflightDuplicateMessage(t *testing.T) {
 func TestAddInflightMessageBadMessage(t *testing.T) {
 	assert := assert.New(t)
 
-	k, _, mockConsumer, mockProducer, wg := setupMocks()
+	k, _, mockConsumer, mockProducer, wg := setupMocks(true)
 
 	mockConsumer.MockMessages <- &sarama.ConsumerMessage{
 		Value:     []byte("badness"),
@@ -557,7 +559,7 @@ func TestAddInflightMessageBadMessage(t *testing.T) {
 func TestProducerErrorLoopPanics(t *testing.T) {
 	assert := assert.New(t)
 
-	k, _, mockConsumer, mockProducer, wg := setupMocks()
+	k, _, mockConsumer, mockProducer, wg := setupMocks(false)
 
 	wg.Add(2)
 	go func() {
@@ -570,6 +572,7 @@ func TestProducerErrorLoopPanics(t *testing.T) {
 
 	assert.Panics(func() {
 		k.ProducerErrorLoop(nil, mockProducer, wg)
+		wg.Done()
 	})
 
 	mockProducer.AsyncClose()
@@ -581,7 +584,7 @@ func TestProducerErrorLoopPanics(t *testing.T) {
 func TestProducerSuccessLoopPanicsMsgNotInflight(t *testing.T) {
 	assert := assert.New(t)
 
-	k, _, mockConsumer, mockProducer, wg := setupMocks()
+	k, _, mockConsumer, mockProducer, wg := setupMocks(false)
 
 	wg.Add(2)
 	go func() {
@@ -593,6 +596,7 @@ func TestProducerSuccessLoopPanicsMsgNotInflight(t *testing.T) {
 
 	assert.Panics(func() {
 		k.ProducerSuccessLoop(nil, mockProducer, wg)
+		wg.Done()
 	})
 
 	mockProducer.AsyncClose()

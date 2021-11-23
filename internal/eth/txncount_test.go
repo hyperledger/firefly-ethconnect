@@ -48,7 +48,7 @@ func TestGetTransactionCountErr(t *testing.T) {
 	addr := ethbind.API.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
 	_, err := GetTransactionCount(context.Background(), &r, &addr, "latest")
 
-	assert.EqualError(err, "eth_getTransactionCount returned: pop")
+	assert.Regexp("eth_getTransactionCount returned: pop", err)
 }
 
 func TestGetOrionPrivateTransactionCount(t *testing.T) {
@@ -75,5 +75,5 @@ func TestGetOrionPrivateTransactionCountErr(t *testing.T) {
 	addr := ethbind.API.HexToAddress("0xD50ce736021D9F7B0B2566a3D2FA7FA3136C003C")
 	_, err := GetOrionTXCount(context.Background(), &r, &addr, "negmDcN2P4ODpqn/6WkJ02zT/0w0bjhGpkZ8UP6vARk=")
 
-	assert.EqualError(err, "priv_getTransactionCount for privacy group 'negmDcN2P4ODpqn/6WkJ02zT/0w0bjhGpkZ8UP6vARk=' returned: pop")
+	assert.Regexp("priv_getTransactionCount for privacy group 'negmDcN2P4ODpqn/6WkJ02zT/0w0bjhGpkZ8UP6vARk=' returned: pop", err)
 }

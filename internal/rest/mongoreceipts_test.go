@@ -150,7 +150,7 @@ func TestMongoReceiptsConnectConnErr(t *testing.T) {
 	}
 
 	err := r.connect()
-	assert.EqualError(err, "Unable to connect to MongoDB: pop")
+	assert.Regexp("Unable to connect to MongoDB: pop", err)
 }
 
 func TestMongoReceiptsConnectCollErr(t *testing.T) {
@@ -178,7 +178,7 @@ func TestMongoReceiptsConnectIdxErr(t *testing.T) {
 	}
 
 	err := r.connect()
-	assert.EqualError(err, "Unable to create index: pop")
+	assert.Regexp("Unable to create index: pop", err)
 }
 
 func TestMongoReceiptsAddReceiptOK(t *testing.T) {
@@ -209,7 +209,7 @@ func TestMongoReceiptsAddReceiptFailed(t *testing.T) {
 	r.connect()
 	receipt := make(map[string]interface{})
 	err := r.AddReceipt("key", &receipt)
-	assert.EqualError(err, "pop")
+	assert.Regexp("pop", err)
 }
 
 func TestMongoReceiptsGetReceiptsOK(t *testing.T) {
@@ -304,7 +304,7 @@ func TestMongoReceiptsGetReceiptsError(t *testing.T) {
 
 	r.connect()
 	_, err := r.GetReceipts(5, 2, nil, 0, "", "", "")
-	assert.EqualError(err, "pop")
+	assert.Regexp("pop", err)
 }
 
 func TestMongoReceiptsGetReceiptOK(t *testing.T) {
@@ -361,5 +361,5 @@ func TestMongoReceiptsGetReceiptError(t *testing.T) {
 
 	r.connect()
 	_, err := r.GetReceipt("receipt1")
-	assert.EqualError(err, "pop")
+	assert.Regexp("pop", err)
 }

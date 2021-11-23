@@ -175,12 +175,12 @@ func DecodeInputs(method *ethbinding.ABIMethod, inputs *ethbinding.HexBytes) (ma
 	methodIDLen := len(method.ID)
 	expectedMethod := hex.EncodeToString(method.ID)
 	if len(*inputs) < methodIDLen {
-		return nil, fmt.Errorf(errors.TransactionQueryMethodMismatch, "unknown", expectedMethod)
+		return nil, errors.Errorf(errors.TransactionQueryMethodMismatch, "unknown", expectedMethod)
 	}
 	inputMethod := hex.EncodeToString((*inputs)[:methodIDLen])
 	if inputMethod != expectedMethod {
 		log.Infof("Method did not match: %s != %s", inputMethod, expectedMethod)
-		return nil, fmt.Errorf(errors.TransactionQueryMethodMismatch, inputMethod, expectedMethod)
+		return nil, errors.Errorf(errors.TransactionQueryMethodMismatch, inputMethod, expectedMethod)
 	}
 	return ProcessRLPBytes(method.Inputs, (*inputs)[methodIDLen:]), nil
 }
@@ -189,10 +189,10 @@ func GetTransactionInfo(ctx context.Context, rpc RPCClient, txHash string) (*Txn
 	log.Debugf("Retrieving transaction %s", txHash)
 	var txn TxnInfo
 	if err := rpc.CallContext(ctx, &txn, "eth_getTransactionByHash", txHash); err != nil {
-		return nil, fmt.Errorf(errors.RPCCallReturnedError, "eth_getTransactionByHash", err)
+		return nil, errors.Errorf(errors.RPCCallReturnedError, "eth_getTransactionByHash", err)
 	}
 	if txn.Input == nil {
-		return nil, fmt.Errorf(errors.TransactionQueryFailed, txHash)
+		return nil, errors.Errorf(errors.TransactionQueryFailed, txHash)
 	}
 	return &txn, nil
 }

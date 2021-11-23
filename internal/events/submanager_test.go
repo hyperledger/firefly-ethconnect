@@ -174,7 +174,7 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	}
 
 	err = sm.ResumeStream(ctx, stream.ID)
-	assert.EqualError(err, "Event processor is already active. Suspending:false")
+	assert.Regexp("Event processor is already active. Suspending:false", err)
 
 	// Reload
 	sm.Close(false)
@@ -267,11 +267,11 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	assert.NoError(err)
 
 	err = sm.ResetSubscription(ctx, sub.ID, "badness")
-	assert.EqualError(err, "FromBlock cannot be parsed as a BigInt")
+	assert.Regexp("FromBlock cannot be parsed as a BigInt", err)
 
 	sm.db.Close()
 	err = sm.ResetSubscription(ctx, sub.ID, "0")
-	assert.EqualError(err, "Failed to store subscription: leveldb: closed")
+	assert.Regexp("Failed to store subscription: leveldb: closed", err)
 
 	close(blockCall)
 	sm.Close(true)
@@ -292,35 +292,35 @@ func TestResetSubscriptionErrors(t *testing.T) {
 
 	ctx := context.Background()
 	_, err := sm.AddStream(ctx, &StreamInfo{Type: "random"})
-	assert.EqualError(err, "Unknown action type 'random'")
+	assert.Regexp("Unknown action type 'random'", err)
 	_, err = sm.AddStream(ctx, &StreamInfo{
 		Type:    "webhook",
 		Webhook: &webhookActionInfo{URL: "http://test.invalid"},
 	})
-	assert.EqualError(err, "Failed to store stream: pop")
+	assert.Regexp("Failed to store stream: pop", err)
 	sm.streams["teststream"] = newTestStream()
 	err = sm.DeleteStream(ctx, "nope")
-	assert.EqualError(err, "Stream with ID 'nope' not found")
+	assert.Regexp("Stream with ID 'nope' not found", err)
 	err = sm.SuspendStream(ctx, "nope")
-	assert.EqualError(err, "Stream with ID 'nope' not found")
+	assert.Regexp("Stream with ID 'nope' not found", err)
 	err = sm.ResumeStream(ctx, "nope")
-	assert.EqualError(err, "Stream with ID 'nope' not found")
+	assert.Regexp("Stream with ID 'nope' not found", err)
 	err = sm.DeleteStream(ctx, "teststream")
-	assert.EqualError(err, "pop")
+	assert.Regexp("pop", err)
 
 	_, err = sm.AddSubscription(ctx, nil, nil, &ethbinding.ABIElementMarshaling{Name: "any"}, "nope", "", "")
-	assert.EqualError(err, "Stream with ID 'nope' not found")
+	assert.Regexp("Stream with ID 'nope' not found", err)
 	_, err = sm.AddSubscription(ctx, nil, nil, &ethbinding.ABIElementMarshaling{Name: "any"}, "teststream", "", "test")
-	assert.EqualError(err, "Failed to store subscription: pop")
+	assert.Regexp("Failed to store subscription: pop", err)
 	_, err = sm.AddSubscription(ctx, nil, nil, &ethbinding.ABIElementMarshaling{Name: "any"}, "teststream", "!bad integer", "")
-	assert.EqualError(err, "FromBlock cannot be parsed as a BigInt")
+	assert.Regexp("FromBlock cannot be parsed as a BigInt", err)
 	sm.subscriptions["testsub"] = &subscription{info: &SubscriptionInfo{}, rpc: sm.rpc}
 	err = sm.ResetSubscription(ctx, "nope", "0")
-	assert.EqualError(err, "Subscription with ID 'nope' not found")
+	assert.Regexp("Subscription with ID 'nope' not found", err)
 	err = sm.DeleteSubscription(ctx, "nope")
-	assert.EqualError(err, "Subscription with ID 'nope' not found")
+	assert.Regexp("Subscription with ID 'nope' not found", err)
 	err = sm.DeleteSubscription(ctx, "testsub")
-	assert.EqualError(err, "pop")
+	assert.Regexp("pop", err)
 }
 
 func TestRecoverErrors(t *testing.T) {

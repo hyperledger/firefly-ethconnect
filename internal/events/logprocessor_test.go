@@ -117,7 +117,7 @@ func TestProcessLogEntryNillAndTooFewFields(t *testing.T) {
 		Topics: []*ethbinding.Hash{nil},
 	}, 2)
 
-	assert.EqualError(err, "ut: Ran out of topics for indexed fields at field 1 of testEvent(uint256,uint256)")
+	assert.Regexp("ut: Ran out of topics for indexed fields at field 1 of testEvent\\(uint256,uint256\\)", err)
 }
 
 func TestProcessLogBadRLPData(t *testing.T) {

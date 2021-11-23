@@ -17,7 +17,6 @@ package contractgateway
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -28,6 +27,7 @@ import (
 
 	"github.com/hyperledger/firefly-ethconnect/internal/auth"
 	"github.com/hyperledger/firefly-ethconnect/internal/contractregistry"
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	ethconnecterrors "github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger/firefly-ethconnect/internal/ethbind"
@@ -70,10 +70,6 @@ type rest2eth struct {
 	asyncDispatcher REST2EthAsyncDispatcher
 	syncDispatcher  rest2EthSyncDispatcher
 	subMgr          events.SubscriptionManager
-}
-
-type restErrMsg struct {
-	Message string `json:"error"`
 }
 
 type restAsyncMsg struct {
@@ -491,7 +487,7 @@ func (r *rest2eth) subscribeEvent(res http.ResponseWriter, req *http.Request, ad
 	}
 
 	if r.subMgr == nil {
-		r.restErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		r.restErrReply(res, req, errEventSupportMissing, 405)
 		return
 	}
 	streamID := r.fromBodyOrForm(req, body, "stream")
@@ -740,7 +736,7 @@ func (r *rest2eth) restAsyncReply(res http.ResponseWriter, req *http.Request, as
 
 func (r *rest2eth) restErrReply(res http.ResponseWriter, req *http.Request, err error, status int) {
 	log.Errorf("<-- %s %s [%d]: %s", req.Method, req.URL, status, err)
-	reply, _ := json.Marshal(&restErrMsg{Message: err.Error()})
+	reply, _ := json.Marshal(errors.ToRESTError(err))
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(status)
 	res.Write(reply)

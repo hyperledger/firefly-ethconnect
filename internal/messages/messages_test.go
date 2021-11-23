@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -66,6 +67,18 @@ func TestJSONEncodingAssumptions(t *testing.T) {
 	assert.Equal("pop", unmarshaledErrMsg.ErrorMessage)
 	assert.NotEmpty(unmarshaledErrMsg.OriginalMessage)
 
+}
+
+func TestNewErrorReplyFFEC(t *testing.T) {
+	errReply := NewErrorReply(errors.Errorf(errors.Unauthorized), map[string]interface{}{})
+	assert.Equal(t, errors.Unauthorized.Code(), errReply.ErrorCode)
+	assert.Equal(t, "Unauthorized", errReply.ErrorMessage)
+}
+
+func TestNewErrorReplyNonFFEC(t *testing.T) {
+	errReply := NewErrorReply(fmt.Errorf("non FFEC error"), map[string]interface{}{})
+	assert.Empty(t, errReply.ErrorCode)
+	assert.Equal(t, "non FFEC error", errReply.ErrorMessage)
 }
 
 func TestErrorMessageForEmptyData(t *testing.T) {

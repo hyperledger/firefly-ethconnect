@@ -243,7 +243,7 @@ func TestOnDeployContractMessageBadMsg(t *testing.T) {
 
 	assert.NotEmpty(testTxnContext.errorReplies)
 	assert.Empty(testTxnContext.replies)
-	assert.Equal("Missing Compiled Code + ABI, or Solidity", testTxnContext.errorReplies[0].err.Error())
+	assert.Regexp("Missing Compiled Code \\+ ABI, or Solidity", testTxnContext.errorReplies[0].err.Error())
 
 }
 func TestOnDeployContractMessageBadJSON(t *testing.T) {
@@ -595,7 +595,7 @@ func TestOnDeployContractMessageFailedToGetNonce(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
-	assert.Equal("eth_getTransactionCount returned: ding", testTxnContext.errorReplies[0].err.Error())
+	assert.Regexp("eth_getTransactionCount returned: ding", testTxnContext.errorReplies[0].err.Error())
 	assert.EqualValues([]string{"eth_getTransactionCount"}, testRPC.calls)
 }
 
@@ -876,7 +876,7 @@ func TestOnSendTransactionMessageFailedToGetNonce(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
-	assert.Equal("eth_getTransactionCount returned: poof", testTxnContext.errorReplies[0].err.Error())
+	assert.Regexp("eth_getTransactionCount returned: poof", testTxnContext.errorReplies[0].err.Error())
 	assert.EqualValues([]string{"eth_getTransactionCount"}, testRPC.calls)
 }
 
@@ -1176,7 +1176,7 @@ func TestOnSendTransactionAddressBook(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
-	assert.EqualError(testTxnContext.errorReplies[0].err, "500 Internal Server Error")
+	assert.Regexp("500 Internal Server Error", testTxnContext.errorReplies[0].err)
 }
 
 func TestOnDeployContractMessageFailAddressLookup(t *testing.T) {
@@ -1200,7 +1200,7 @@ func TestOnDeployContractMessageFailAddressLookup(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
-	assert.EqualError(testTxnContext.errorReplies[0].err, "Error querying Addressbook")
+	assert.Regexp("Error querying Addressbook", testTxnContext.errorReplies[0].err)
 
 }
 
@@ -1222,7 +1222,7 @@ func TestOnDeployContractMessageFailHDWalletMissing(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
-	assert.EqualError(testTxnContext.errorReplies[0].err, "No HD Wallet Configuration")
+	assert.Regexp("No HD Wallet Configuration", testTxnContext.errorReplies[0].err)
 
 }
 
@@ -1245,7 +1245,7 @@ func TestOnDeployContractMessageFailHDWalletFail(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
-	assert.EqualError(testTxnContext.errorReplies[0].err, "HDWallet signing failed")
+	assert.Regexp("HDWallet signing failed", testTxnContext.errorReplies[0].err)
 
 }
 
@@ -1300,5 +1300,5 @@ func TestResolveAddressHDWalletFail(t *testing.T) {
 	}, &eth.RPCConf{}).(*txnProcessor)
 
 	_, err := txnProcessor.ResolveAddress("hd-testinst-testwallet-1234")
-	assert.EqualError(err, "No HD Wallet Configuration")
+	assert.Regexp("No HD Wallet Configuration", err)
 }

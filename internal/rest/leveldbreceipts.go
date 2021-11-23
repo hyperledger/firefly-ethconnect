@@ -211,7 +211,7 @@ func (l *levelDBReceipts) GetReceipt(requestID string) (*map[string]interface{},
 	content, err := l.store.Get(lookupKey)
 	if err != nil {
 		log.Errorf("Failed to retrieve the entry using the generated ID: %s. %s\n", lookupKey, err)
-		return nil, fmt.Errorf(errors.LevelDBFailedRetriveGeneratedID, requestID, err)
+		return nil, errors.Errorf(errors.LevelDBFailedRetriveGeneratedID, requestID, err)
 	}
 
 	result := make(map[string]interface{})

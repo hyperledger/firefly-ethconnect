@@ -103,7 +103,7 @@ func TestHDWalletSignerForRequestFail(t *testing.T) {
 	}).(*hdWallet)
 
 	_, err := hd.SignerFor(hdr)
-	assert.EqualError(err, "HDWallet signing failed")
+	assert.Regexp("HDWallet signing failed", err)
 }
 
 func TestHDWalletSignerForEmptyResponse(t *testing.T) {
@@ -124,7 +124,7 @@ func TestHDWalletSignerForEmptyResponse(t *testing.T) {
 	}).(*hdWallet)
 
 	_, err := hd.SignerFor(hdr)
-	assert.EqualError(err, "Unexpected response from HDWallet")
+	assert.Regexp("Unexpected response from HDWallet", err)
 }
 
 func TestHDWalletSignerBadAddress(t *testing.T) {
@@ -145,7 +145,7 @@ func TestHDWalletSignerBadAddress(t *testing.T) {
 	}).(*hdWallet)
 
 	_, err := hd.SignerFor(hdr)
-	assert.EqualError(err, "Unexpected response from HDWallet")
+	assert.Regexp("Unexpected response from HDWallet", err)
 }
 
 func TestHDWalletSignerBadKeyType(t *testing.T) {
@@ -166,7 +166,7 @@ func TestHDWalletSignerBadKeyType(t *testing.T) {
 	}).(*hdWallet)
 
 	_, err := hd.SignerFor(hdr)
-	assert.EqualError(err, "Unexpected response from HDWallet")
+	assert.Regexp("Unexpected response from HDWallet", err)
 }
 
 func TestHDWalletSignerBadKey(t *testing.T) {
@@ -187,5 +187,5 @@ func TestHDWalletSignerBadKey(t *testing.T) {
 	}).(*hdWallet)
 
 	_, err := hd.SignerFor(hdr)
-	assert.EqualError(err, "Unexpected response from HDWallet")
+	assert.Regexp("Unexpected response from HDWallet", err)
 }

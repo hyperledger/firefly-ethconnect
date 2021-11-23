@@ -204,7 +204,7 @@ func TestNewContractDeployTxnSimpleStoragePrivateOrionMissingPrivateFrom(t *test
 	rpc := testRPCClient{}
 
 	err = tx.Send(context.Background(), &rpc)
-	assert.EqualError(err, "private-from is required when submitting private transactions via Orion")
+	assert.Regexp("private-from is required when submitting private transactions via Orion", err)
 }
 func TestNewContractDeployTxnSimpleStorageCalcGasFailAndCallSucceeds(t *testing.T) {
 	assert := assert.New(t)
@@ -222,7 +222,7 @@ func TestNewContractDeployTxnSimpleStorageCalcGasFailAndCallSucceeds(t *testing.
 
 	rpc.mockError = fmt.Errorf("pop")
 	err = tx.Send(context.Background(), &rpc)
-	assert.EqualError(err, "Failed to calculate gas for transaction: pop")
+	assert.Regexp("Failed to calculate gas for transaction: pop", err)
 }
 
 func TestNewContractDeployTxnSimpleStorageCalcGasFailAndCallFailsAsExpected(t *testing.T) {
@@ -242,7 +242,7 @@ func TestNewContractDeployTxnSimpleStorageCalcGasFailAndCallFailsAsExpected(t *t
 	rpc.mockError = fmt.Errorf("estimate gas fails")
 	rpc.mockError2 = fmt.Errorf("call fails")
 	err = tx.Send(context.Background(), &rpc)
-	assert.EqualError(err, "Call failed: call fails")
+	assert.Regexp("Call failed: call fails", err)
 }
 
 func TestNewContractDeployMissingCompiledOrSolidity(t *testing.T) {
@@ -256,7 +256,7 @@ func TestNewContractDeployMissingCompiledOrSolidity(t *testing.T) {
 	msg.Gas = "456"
 	msg.GasPrice = "789"
 	_, err := NewContractDeployTxn(&msg, nil)
-	assert.EqualError(err, "Missing Compiled Code + ABI, or Solidity")
+	assert.Regexp("Missing Compiled Code \\+ ABI, or Solidity", err)
 }
 
 func TestNewContractDeployPrecompiledSimpleStorage(t *testing.T) {
@@ -715,7 +715,7 @@ func TestSendTxnNilParam(t *testing.T) {
 	msg.Gas = "456"
 	msg.GasPrice = "789"
 	_, err := NewSendTxn(&msg, nil)
-	assert.EqualError(err, "Method 'testFunc' param 0: Cannot supply a null value")
+	assert.Regexp("Method 'testFunc' param 0: Cannot supply a null value", err)
 
 }
 
@@ -731,7 +731,7 @@ func TestNewSendTxnMissingParamTypes(t *testing.T) {
 		},
 		MethodName: "test",
 	}, nil)
-	assert.EqualError(err, "Param 0: supplied as an object must have 'type' and 'value' fields")
+	assert.Regexp("Param 0: supplied as an object must have 'type' and 'value' fields", err)
 }
 
 func TestCallMethod(t *testing.T) {
@@ -860,13 +860,13 @@ func TestCallMethodFail(t *testing.T) {
 		json.Number("12345"), method, params, "")
 
 	assert.Equal("eth_call", rpc.capturedMethod)
-	assert.EqualError(err, "Call failed: pop")
+	assert.Regexp("Call failed: pop", err)
 
 	_, err = CallMethod(context.Background(), rpc, nil,
 		"0xAA983AD2a0e0eD8ac639277F37be42F2A5d2618c",
 		"0x2b8c0ECc76d0759a8F50b2E14A6881367D805832",
 		json.Number("12345"), method, params, "ab2345")
-	assert.EqualError(err, "Invalid blocknumber. Failed to parse into big integer")
+	assert.Regexp("Invalid blocknumber. Failed to parse into big integer", err)
 }
 
 func TestCallMethodRevert(t *testing.T) {
@@ -890,7 +890,7 @@ func TestCallMethodRevert(t *testing.T) {
 		json.Number("12345"), method, params, "")
 
 	assert.Equal("eth_call", rpc.capturedMethod)
-	assert.EqualError(err, "Muppetry detected")
+	assert.Regexp("Muppetry detected", err)
 }
 
 func TestCallMethodRevertBadStrLen(t *testing.T) {
@@ -915,7 +915,7 @@ func TestCallMethodRevertBadStrLen(t *testing.T) {
 
 	assert.Equal("eth_call", rpc.capturedMethod)
 	// Should read up to the end of the padding, and not panic
-	assert.EqualError(err, "Muppetry detected\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+	assert.Regexp("Muppetry detected\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", err)
 }
 
 func TestCallMethodRevertBadBytes(t *testing.T) {
@@ -939,7 +939,7 @@ func TestCallMethodRevertBadBytes(t *testing.T) {
 		json.Number("12345"), method, params, "")
 
 	assert.Equal("eth_call", rpc.capturedMethod)
-	assert.EqualError(err, "EVM reverted. Failed to decode error message")
+	assert.Regexp("EVM reverted. Failed to decode error message", err)
 }
 
 func TestCallMethodBadArgs(t *testing.T) {
@@ -951,7 +951,7 @@ func TestCallMethodBadArgs(t *testing.T) {
 
 	_, err := CallMethod(context.Background(), rpc, nil, "badness", "", json.Number(""), &ethbinding.ABIMethod{}, []interface{}{}, "")
 
-	assert.EqualError(err, "Supplied value for 'from' is not a valid hex address")
+	assert.Regexp("Supplied value for 'from' is not a valid hex address", err)
 }
 
 func TestSendTxnNodeAssignNonce(t *testing.T) {
@@ -1091,7 +1091,7 @@ func TestSendWithTXSignerFail(t *testing.T) {
 	rpc := testRPCClient{}
 
 	err = tx.Send(context.Background(), &rpc)
-	assert.EqualError(err, "pop")
+	assert.Regexp("pop", err)
 }
 
 func TestSendWithTXSignerFailPrivate(t *testing.T) {
@@ -1121,7 +1121,7 @@ func TestSendWithTXSignerFailPrivate(t *testing.T) {
 	rpc := testRPCClient{}
 
 	err = tx.Send(context.Background(), &rpc)
-	assert.EqualError(err, "Signing with mock signer is not currently supported with private transactions")
+	assert.Regexp("Signing with mock signer is not currently supported with private transactions", err)
 }
 
 func TestNewContractWithTXSignerOK(t *testing.T) {
@@ -1205,7 +1205,7 @@ func TestSendTxnRPFError(t *testing.T) {
 	}
 
 	err = tx.Send(context.Background(), &rpc)
-	assert.EqualError(err, "pop")
+	assert.Regexp("pop", err)
 }
 
 func TestSendTxnInlineBadParamType(t *testing.T) {
@@ -1624,7 +1624,7 @@ func TestProcessRLPV2ABIEncodedStructsBadInputType(t *testing.T) {
 
 	tx := Txn{}
 	_, err = tx.generateTypedArgs([]interface{}{input1Map}, &abiMethod)
-	assert.EqualError(err, "Method 'inOutType1' param 0.nested is a (string,string,address,bytes): Must supply an object (supplied=string)")
+	assert.Regexp("Method 'inOutType1' param 0.nested is a \\(string,string,address,bytes\\): Must supply an object \\(supplied=string\\)", err)
 }
 
 func TestProcessRLPV2ABIEncodedStructsBadNilType(t *testing.T) {
@@ -1647,7 +1647,7 @@ func TestProcessRLPV2ABIEncodedStructsBadNilType(t *testing.T) {
 
 	tx := Txn{}
 	_, err = tx.generateTypedArgs([]interface{}{input1Map}, &abiMethod)
-	assert.EqualError(err, "Method inOutType1 param 0: supplied value '<nil>' could not be assigned to 'str1' field (string)")
+	assert.Regexp("Method inOutType1 param 0: supplied value '<nil>' could not be assigned to 'str1' field \\(string\\)", err)
 }
 
 func TestGenerateTupleFromMapBadStructType(t *testing.T) {
@@ -1660,14 +1660,14 @@ func TestGenerateTupleFromMapBadStructType(t *testing.T) {
 		TupleRawNames: []string{"field1"},
 		TupleElems:    []*ethbinding.ABIType{&tUint},
 	}, map[string]interface{}{"field1": float64(42)})
-	assert.EqualError(err, "Method method1 param test: supplied value '+42' could not be assigned to 'field1' field (uint256)")
+	assert.Regexp("Method method1 param test.*supplied value '\\+42' could not be assigned to 'field1' field \\(uint256\\)", err)
 }
 
 func TestGenTupleMapOutputBadTypeNonStruct(t *testing.T) {
 	assert := assert.New(t)
 	type random struct{ stuff string }
 	_, err := genTupleMapOutput("test", "random", &ethbinding.ABIType{TupleType: reflect.TypeOf((*string)(nil)).Elem()}, 42)
-	assert.EqualError(err, "Unable to process type for test (random). Expected string. Received 42")
+	assert.Regexp("Unable to process type for test \\(random\\). Expected string. Received 42", err)
 }
 
 func TestGenTupleMapOutputBadTypeCountMismatch(t *testing.T) {
@@ -1677,7 +1677,7 @@ func TestGenTupleMapOutputBadTypeCountMismatch(t *testing.T) {
 		TupleType:     reflect.TypeOf((*random)(nil)).Elem(),
 		TupleRawNames: []string{"field1", "field2"},
 	}, random{})
-	assert.EqualError(err, "Unable to process type for test (random). Expected 2 fields on the structure. Received 0")
+	assert.Regexp("Unable to process type for test \\(random\\). Expected 2 fields on the structure. Received 0", err)
 }
 
 func TestGenTupleMapOutputBadTypeValMismatch(t *testing.T) {
@@ -1689,7 +1689,7 @@ func TestGenTupleMapOutputBadTypeValMismatch(t *testing.T) {
 		TupleRawNames: []string{"field1"},
 		TupleElems:    []*ethbinding.ABIType{&tUint},
 	}, random{Field1: "stuff"})
-	assert.EqualError(err, "Expected number type in JSON/RPC response for test.field1 (uint256). Received string")
+	assert.Regexp("Expected number type in JSON/RPC response for test.field1 \\(uint256\\). Received string", err)
 }
 
 func TestProcessRLPBytesInvalidNumber(t *testing.T) {
@@ -1697,7 +1697,7 @@ func TestProcessRLPBytesInvalidNumber(t *testing.T) {
 
 	t1, _ := ethbind.API.ABITypeFor("int32")
 	_, err := mapOutput("test1", "int256", &t1, "not an int")
-	assert.EqualError(err, "Expected number type in JSON/RPC response for test1 (int256). Received string")
+	assert.Regexp("Expected number type in JSON/RPC response for test1 \\(int256\\). Received string", err)
 }
 
 func TestProcessRLPBytesInvalidBool(t *testing.T) {
@@ -1705,7 +1705,7 @@ func TestProcessRLPBytesInvalidBool(t *testing.T) {
 
 	t1, _ := ethbind.API.ABITypeFor("bool")
 	_, err := mapOutput("test1", "bool", &t1, "not a bool")
-	assert.EqualError(err, "Expected boolean type in JSON/RPC response for test1 (bool). Received string")
+	assert.Regexp("Expected boolean type in JSON/RPC response for test1 \\(bool\\). Received string", err)
 }
 
 func TestProcessRLPBytesInvalidString(t *testing.T) {
@@ -1713,7 +1713,7 @@ func TestProcessRLPBytesInvalidString(t *testing.T) {
 
 	t1, _ := ethbind.API.ABITypeFor("string")
 	_, err := mapOutput("test1", "string", &t1, 42)
-	assert.EqualError(err, "Expected string array type in JSON/RPC response for test1 (string). Received int")
+	assert.Regexp("Expected string array type in JSON/RPC response for test1 \\(string\\). Received int", err)
 }
 
 func TestProcessRLPBytesInvalidByteArray(t *testing.T) {
@@ -1721,7 +1721,7 @@ func TestProcessRLPBytesInvalidByteArray(t *testing.T) {
 
 	t1, _ := ethbind.API.ABITypeFor("address")
 	_, err := mapOutput("test1", "address", &t1, 42)
-	assert.EqualError(err, "Expected []byte type in JSON/RPC response for test1 (address). Received int")
+	assert.Regexp("Expected \\[\\]byte type in JSON/RPC response for test1 \\(address\\). Received int", err)
 }
 
 func TestProcessRLPBytesInvalidArray(t *testing.T) {
@@ -1729,7 +1729,7 @@ func TestProcessRLPBytesInvalidArray(t *testing.T) {
 
 	t1, _ := ethbind.API.ABITypeFor("int32[]")
 	_, err := mapOutput("test1", "int32[]", &t1, 42)
-	assert.EqualError(err, "Expected slice type in JSON/RPC response for test1 (int32[]). Received int")
+	assert.Regexp("Expected slice type in JSON/RPC response for test1 \\(int32\\[\\]\\). Received int", err)
 }
 
 func TestProcessRLPBytesInvalidArrayType(t *testing.T) {
@@ -1737,7 +1737,7 @@ func TestProcessRLPBytesInvalidArrayType(t *testing.T) {
 
 	t1, _ := ethbind.API.ABITypeFor("int32[]")
 	_, err := mapOutput("test1", "int32[]", &t1, []string{"wrong"})
-	assert.EqualError(err, "Expected number type in JSON/RPC response for test1[0] (int32[]). Received string")
+	assert.Regexp("Expected number type in JSON/RPC response for test1\\[0\\] \\(int32\\[\\]\\). Received string", err)
 }
 
 func TestProcessRLPBytesInvalidTypeByte(t *testing.T) {
@@ -1746,7 +1746,7 @@ func TestProcessRLPBytesInvalidTypeByte(t *testing.T) {
 	t1, _ := ethbind.API.ABITypeFor("bool")
 	t1.T = 42
 	_, err := mapOutput("test1", "randomness", &t1, 42)
-	assert.EqualError(err, "Unable to process type for test1 (randomness). Received int")
+	assert.Regexp("Unable to process type for test1 \\(randomness\\). Received int", err)
 }
 
 func TestProcessRLPBytesUnpackFailure(t *testing.T) {
@@ -1778,7 +1778,7 @@ func TestProcessOutputsTooFew(t *testing.T) {
 	}
 
 	err := processOutputs(methodABI.Outputs, []interface{}{}, make(map[string]interface{}))
-	assert.EqualError(err, "Expected 1 in JSON/RPC response. Received 0: []")
+	assert.Regexp("Expected 1 in JSON/RPC response. Received 0: \\[\\]", err)
 }
 
 func TestProcessOutputsTooMany(t *testing.T) {
@@ -1791,7 +1791,7 @@ func TestProcessOutputsTooMany(t *testing.T) {
 	}
 
 	err := processOutputs(methodABI.Outputs, []interface{}{"arg1"}, make(map[string]interface{}))
-	assert.EqualError(err, "Expected nil in JSON/RPC response. Received: [arg1]")
+	assert.Regexp("Expected nil in JSON/RPC response. Received: \\[arg1\\]", err)
 }
 
 func TestProcessOutputsDefaultName(t *testing.T) {
@@ -1826,7 +1826,7 @@ func TestProcessOutputsBadArgs(t *testing.T) {
 	}
 
 	err := processOutputs(methodABI.Outputs, []interface{}{"arg1"}, make(map[string]interface{}))
-	assert.EqualError(err, "Expected slice type in JSON/RPC response for retval1 (int32[]). Received string")
+	assert.Regexp("Expected slice type in JSON/RPC response for retval1 \\(int32\\[\\]\\). Received string", err)
 }
 
 func TestGetTransactionInfoFail(t *testing.T) {

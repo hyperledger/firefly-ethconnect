@@ -48,7 +48,7 @@ func TestPackContractFailBadHexCode(t *testing.T) {
 		Code: "Not Hex",
 	}
 	_, err := packContract("", contract)
-	assert.EqualError(err, "Decoding bytecode: hex string without 0x prefix")
+	assert.Regexp("Decoding bytecode: hex string without 0x prefix", err)
 }
 
 func TestPackContractEmpty(t *testing.T) {
@@ -57,7 +57,7 @@ func TestPackContractEmpty(t *testing.T) {
 		Code: "0x",
 	}
 	_, err := packContract("", contract)
-	assert.EqualError(err, "Specified contract compiled ok, but did not result in any bytecode: ")
+	assert.Regexp("Specified contract compiled ok, but did not result in any bytecode: ", err)
 }
 
 func TestPackContractFailMarshalABI(t *testing.T) {
@@ -69,7 +69,7 @@ func TestPackContractFailMarshalABI(t *testing.T) {
 		},
 	}
 	_, err := packContract("", contract)
-	assert.EqualError(err, "Serializing ABI: json: unsupported type: map[bool]bool")
+	assert.Regexp("Serializing ABI: json: unsupported type: map\\[bool\\]bool", err)
 }
 
 func TestPackContractFailUnmarshalABIJSON(t *testing.T) {
@@ -140,19 +140,19 @@ func TestSolcCustomVersionUnknown(t *testing.T) {
 	assert := assert.New(t)
 	defaultSolc = ""
 	_, err := getSolcExecutable("0.5")
-	assert.EqualError(err, "Could not find a configured compiler for requested Solidity major version 0.5")
+	assert.Regexp("Could not find a configured compiler for requested Solidity major version 0.5", err)
 }
 
 func TestSolcCustomVersionInvalid(t *testing.T) {
 	assert := assert.New(t)
 	defaultSolc = ""
 	_, err := getSolcExecutable("0.")
-	assert.EqualError(err, "Invalid Solidity version requested for compiler. Ensure the string starts with two dot separated numbers, such as 0.5")
+	assert.Regexp("Invalid Solidity version requested for compiler. Ensure the string starts with two dot separated numbers, such as 0.5", err)
 }
 
 func TestSolcCompileInvalidVersion(t *testing.T) {
 	assert := assert.New(t)
 	defaultSolc = ""
 	_, err := CompileContract("", "", "zero.four", "")
-	assert.EqualError(err, "Invalid Solidity version requested for compiler. Ensure the string starts with two dot separated numbers, such as 0.5")
+	assert.Regexp("Invalid Solidity version requested for compiler. Ensure the string starts with two dot separated numbers, such as 0.5", err)
 }

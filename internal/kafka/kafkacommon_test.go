@@ -121,25 +121,25 @@ func TestExecuteWithIncompleteArgs(t *testing.T) {
 
 	testArgs := []string{}
 	_, err := execKafkaCommonWithArgs(assert, testArgs, f)
-	assert.Equal("No output topic specified for bridge to send events to", err.Error())
+	assert.Regexp("No output topic specified for bridge to send events to", err.Error())
 	testArgs = append(testArgs, []string{"-T", "test"}...)
 
 	_, err = execKafkaCommonWithArgs(assert, testArgs, f)
-	assert.Equal("No input topic specified for bridge to listen to", err.Error())
+	assert.Regexp("No input topic specified for bridge to listen to", err.Error())
 	testArgs = append(testArgs, []string{"-t", "test-in"}...)
 
 	_, err = execKafkaCommonWithArgs(assert, testArgs, f)
-	assert.Equal("No consumer group specified", err.Error())
+	assert.Regexp("No consumer group specified", err.Error())
 	testArgs = append(testArgs, []string{"-g", "test-group"}...)
 
 	testArgs = append(testArgs, []string{"-b", "broker1", "--tls-clientcerts", "/some/file"}...)
 	_, err = execKafkaCommonWithArgs(assert, testArgs, f)
-	assert.Equal("Client private key and certificate must both be provided for mutual auth", err.Error())
+	assert.Regexp("Client private key and certificate must both be provided for mutual auth", err.Error())
 	testArgs = append(testArgs, []string{"--tls-clientkey", "somekey"}...)
 
 	testArgs = append(testArgs, []string{"--sasl-username", "testuser"}...)
 	_, err = execKafkaCommonWithArgs(assert, testArgs, f)
-	assert.Equal("Username and Password must both be provided for SASL", err.Error())
+	assert.Regexp("Username and Password must both be provided for SASL", err.Error())
 
 }
 
@@ -245,7 +245,7 @@ func TestMissingBroker(t *testing.T) {
 		"-i", "clientid1",
 	}, f)
 
-	assert.EqualError(err, "No Kafka brokers configured")
+	assert.Regexp("No Kafka brokers configured", err)
 
 }
 

@@ -49,7 +49,7 @@ func TestValidateConfInvalidArgs(t *testing.T) {
 	g := NewRESTGateway(&printYAML)
 	g.conf.MongoDB.URL = "mongodb://localhost:27017"
 	err := g.ValidateConf()
-	assert.EqualError(err, "MongoDB URL, Database and Collection name must be specified to enable the receipt store")
+	assert.Regexp("MongoDB URL, Database and Collection name must be specified to enable the receipt store", err)
 }
 
 func TestValidateConfInvalidOpenAPIArgs(t *testing.T) {
@@ -58,7 +58,7 @@ func TestValidateConfInvalidOpenAPIArgs(t *testing.T) {
 	g := NewRESTGateway(&printYAML)
 	g.conf.OpenAPI.StoragePath = "/tmp/t"
 	err := g.ValidateConf()
-	assert.EqualError(err, "RPC URL and Storage Path must be supplied to enable the Open API REST Gateway")
+	assert.Regexp("RPC URL and Storage Path must be supplied to enable the Open API REST Gateway", err)
 }
 
 func TestStartStatusStopNoKafkaWebhooksAccessToken(t *testing.T) {
@@ -106,7 +106,7 @@ func TestStartStatusStopNoKafkaWebhooksAccessToken(t *testing.T) {
 
 	g.srv.Close()
 	wg.Wait()
-	assert.EqualError(err, "http: Server closed")
+	assert.Regexp("http: Server closed", err)
 
 	auth.RegisterSecurityModule(nil)
 
@@ -158,7 +158,7 @@ func TestStartStatusStopNoKafkaWebhooksMissingToken(t *testing.T) {
 
 	g.srv.Close()
 	wg.Wait()
-	assert.EqualError(err, "http: Server closed")
+	assert.Regexp("http: Server closed", err)
 
 	auth.RegisterSecurityModule(nil)
 
@@ -182,7 +182,7 @@ func TestStartWithKafkaWebhooks(t *testing.T) {
 	}()
 
 	wg.Wait()
-	assert.EqualError(err, "No Kafka brokers configured")
+	assert.Regexp("No Kafka brokers configured", err)
 }
 
 func TestStartWithBadTLS(t *testing.T) {
@@ -204,7 +204,7 @@ func TestStartWithBadTLS(t *testing.T) {
 	}()
 
 	wg.Wait()
-	assert.EqualError(err, "Client private key and certificate must both be provided for mutual auth")
+	assert.Regexp("Client private key and certificate must both be provided for mutual auth", err)
 }
 
 func TestStartInvalidMongo(t *testing.T) {
@@ -221,7 +221,7 @@ func TestStartInvalidMongo(t *testing.T) {
 	g.conf.MongoDB.URL = url.String()
 	g.conf.MongoDB.ConnectTimeoutMS = 100
 	err := g.Start()
-	assert.EqualError(err, "Unable to connect to MongoDB: no reachable servers")
+	assert.Regexp("Unable to connect to MongoDB: no reachable servers", err)
 }
 
 func TestStartWithBadRPCUrl(t *testing.T) {
@@ -242,7 +242,7 @@ func TestStartWithBadRPCUrl(t *testing.T) {
 	}()
 
 	wg.Wait()
-	assert.EqualError(err, "JSON/RPC connection to  failed: dial unix: missing address")
+	assert.Regexp("JSON/RPC connection to  failed: dial unix: missing address", err)
 }
 func TestPrintYaml(t *testing.T) {
 	assert := assert.New(t)
@@ -265,7 +265,7 @@ func TestMissingRPCAndMissingKafka(t *testing.T) {
 	cmd := g.CobraInit("rest")
 	cmd.SetArgs([]string{"-l", "8001"})
 	err := cmd.Execute()
-	assert.EqualError(err, "No JSON/RPC URL set for ethereum node")
+	assert.Regexp("No JSON/RPC URL set for ethereum node", err)
 }
 
 func TestMaxWaitTimeTooSmallWarns(t *testing.T) {
@@ -313,7 +313,7 @@ func TestKafkaCobraInitFailure(t *testing.T) {
 	cmd.SetArgs(args)
 	cmd.ParseFlags(args)
 	err := cmd.PreRunE(cmd, args)
-	assert.EqualError(err, "No output topic specified for bridge to send events to")
+	assert.Regexp("No output topic specified for bridge to send events to", err)
 	assert.Equal([]string{"broker1", "broker2"}, g.conf.Kafka.Brokers)
 }
 
@@ -328,5 +328,5 @@ func TestDispatchMsgAsyncPassesThroughToWebhooks(t *testing.T) {
 
 	var fakeMsg map[string]interface{}
 	_, err := g.DispatchMsgAsync(context.Background(), fakeMsg, true, true)
-	assert.EqualError(err, "Invalid message - missing 'headers' (or not an object)")
+	assert.Regexp("Invalid message - missing 'headers' \\(or not an object\\)", err)
 }

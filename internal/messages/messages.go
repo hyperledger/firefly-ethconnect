@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"reflect"
 
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 )
 
@@ -193,6 +194,7 @@ type TransactionInfo struct {
 type ErrorReply struct {
 	ReplyCommon
 	ErrorMessage     string `json:"errorMessage,omitempty"`
+	ErrorCode        string `json:"errorCode,omitempty"`
 	OriginalMessage  string `json:"requestPayload,omitempty"`
 	TXHash           string `json:"transactionHash,omitempty"`
 	GapFillTxHash    string `json:"gapFillTxHash,omitempty"`
@@ -204,7 +206,13 @@ func NewErrorReply(err error, origMsg interface{}) *ErrorReply {
 	var errMsg ErrorReply
 	errMsg.Headers.MsgType = MsgTypeError
 	if err != nil {
-		errMsg.ErrorMessage = err.Error()
+		switch err := err.(type) {
+		case errors.EthconnectError:
+			errMsg.ErrorMessage = err.ErrorNoCode()
+			errMsg.ErrorCode = err.Code()
+		default:
+			errMsg.ErrorMessage = err.Error()
+		}
 	}
 	if reflect.TypeOf(origMsg).Kind() == reflect.Slice {
 		errMsg.OriginalMessage = string(origMsg.([]byte))

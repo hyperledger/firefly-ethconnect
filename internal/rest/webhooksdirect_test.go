@@ -161,7 +161,7 @@ func TestWebhooksDirectSendWebhooksMsgBadHeaders(t *testing.T) {
 	msgMap["headers"] = false
 	_, statusCode, err := wd.sendWebhookMsg(context.Background(), "", "", msgMap, false)
 	assert.Equal(400, statusCode)
-	assert.EqualError(err, "Failed to process headers in message")
+	assert.Regexp("Failed to process headers in message", err)
 }
 
 func TestWebhooksDirectUnmarshalBadMsg(t *testing.T) {
@@ -170,5 +170,5 @@ func TestWebhooksDirectUnmarshalBadMsg(t *testing.T) {
 	ctx := &msgContext{msg: msg}
 	msg["bad"] = map[bool]string{}
 	err := ctx.Unmarshal(nil)
-	assert.EqualError(err, "json: unsupported type: map[bool]string")
+	assert.Regexp("json: unsupported type: map\\[bool\\]string", err)
 }

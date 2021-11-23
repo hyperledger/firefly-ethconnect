@@ -475,7 +475,7 @@ func TestGetRepliesCustomFiltersISO(t *testing.T) {
 	status, resObj, httpErr := testGETObject(ts, "/replies?from=abc&to=bcd&since=2019-01-01T00:00:00Z")
 	assert.NoError(httpErr)
 	assert.Equal(500, status)
-	assert.Equal("Error querying replies: Memory receipts do not support filtering", resObj["error"])
+	assert.Regexp("Error querying replies.*Memory receipts do not support filtering", resObj["error"])
 }
 
 func TestGetRepliesCustomFiltersTS(t *testing.T) {
@@ -492,7 +492,7 @@ func TestGetRepliesCustomFiltersTS(t *testing.T) {
 	status, resObj, httpErr := testGETObject(ts, "/replies?from=abc&to=bcd&since=1580435959")
 	assert.NoError(httpErr)
 	assert.Equal(500, status)
-	assert.Equal("Error querying replies: Memory receipts do not support filtering", resObj["error"])
+	assert.Regexp("Error querying replies.*Memory receipts do not support filtering", resObj["error"])
 }
 
 func TestGetRepliesBadSinceTS(t *testing.T) {

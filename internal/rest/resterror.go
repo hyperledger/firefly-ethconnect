@@ -18,15 +18,12 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	log "github.com/sirupsen/logrus"
 )
 
-type restError struct {
-	Message string `json:"error"`
-}
-
 func sendRESTError(res http.ResponseWriter, req *http.Request, err error, status int) {
-	reply, _ := json.Marshal(&restError{Message: err.Error()})
+	reply, _ := json.Marshal(errors.ToRESTError(err))
 	log.Errorf("<-- %s %s [%d]: %s", req.Method, req.URL, status, err)
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(status)

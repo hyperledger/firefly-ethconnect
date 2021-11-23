@@ -143,7 +143,7 @@ func TestCreateSubscriptionNoEvent(t *testing.T) {
 	event := &ethbinding.ABIElementMarshaling{}
 	m := &mockSubMgr{stream: newTestStream()}
 	_, err := newSubscription(m, nil, nil, nil, testSubInfo(event))
-	assert.EqualError(err, "Solidity event name must be specified")
+	assert.Regexp("Solidity event name must be specified", err)
 }
 
 func TestCreateSubscriptionBadABI(t *testing.T) {
@@ -155,7 +155,7 @@ func TestCreateSubscriptionBadABI(t *testing.T) {
 	}
 	m := &mockSubMgr{stream: newTestStream()}
 	_, err := newSubscription(m, nil, nil, nil, testSubInfo(event))
-	assert.EqualError(err, "invalid type '-1'")
+	assert.Regexp("invalid type '-1'", err)
 }
 
 func TestCreateSubscriptionMissingAction(t *testing.T) {
@@ -163,14 +163,14 @@ func TestCreateSubscriptionMissingAction(t *testing.T) {
 	event := &ethbinding.ABIElementMarshaling{Name: "party"}
 	m := &mockSubMgr{err: fmt.Errorf("nope")}
 	_, err := newSubscription(m, nil, nil, nil, testSubInfo(event))
-	assert.EqualError(err, "nope")
+	assert.Regexp("nope", err)
 }
 
 func TestRestoreSubscriptionMissingAction(t *testing.T) {
 	assert := assert.New(t)
 	m := &mockSubMgr{err: fmt.Errorf("nope")}
 	_, err := restoreSubscription(m, nil, nil, testSubInfo(&ethbinding.ABIElementMarshaling{}))
-	assert.EqualError(err, "nope")
+	assert.Regexp("nope", err)
 }
 
 func TestRestoreSubscriptionBadType(t *testing.T) {
@@ -182,7 +182,7 @@ func TestRestoreSubscriptionBadType(t *testing.T) {
 	}
 	m := &mockSubMgr{stream: newTestStream()}
 	_, err := restoreSubscription(m, nil, nil, testSubInfo(event))
-	assert.EqualError(err, "invalid type '-1'")
+	assert.Regexp("invalid type '-1'", err)
 }
 
 func TestProcessEventsStaleFilter(t *testing.T) {
@@ -193,7 +193,7 @@ func TestProcessEventsStaleFilter(t *testing.T) {
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_uninstallFilter", mock.Anything).Return(nil)
 	s := &subscription{rpc: rpc}
 	err := s.processNewEvents(context.Background())
-	assert.EqualError(err, "filter not found")
+	assert.Regexp("filter not found", err)
 	assert.True(s.filterStale)
 }
 
@@ -229,7 +229,7 @@ func TestInitialFilterFail(t *testing.T) {
 		rpc:  rpc,
 	}
 	_, err := s.setInitialBlockHeight(context.Background())
-	assert.EqualError(err, "eth_blockNumber returned: pop")
+	assert.Regexp("eth_blockNumber returned: pop", err)
 	rpc.AssertExpectations(t)
 }
 
@@ -242,7 +242,7 @@ func TestInitialFilterBadInitialBlock(t *testing.T) {
 		rpc: &ethmocks.RPCClient{},
 	}
 	_, err := s.setInitialBlockHeight(context.Background())
-	assert.EqualError(err, "FromBlock cannot be parsed as a BigInt")
+	assert.Regexp("FromBlock cannot be parsed as a BigInt", err)
 }
 
 func TestInitialFilterCustomInitialBlock(t *testing.T) {
@@ -270,7 +270,7 @@ func TestRestartFilterFail(t *testing.T) {
 		rpc:  rpc,
 	}
 	err := s.restartFilter(context.Background(), big.NewInt(0))
-	assert.EqualError(err, "eth_blockNumber returned: pop")
+	assert.Regexp("eth_blockNumber returned: pop", err)
 	rpc.AssertExpectations(t)
 }
 
@@ -284,7 +284,7 @@ func TestCreateFilterFail(t *testing.T) {
 		rpc:  rpc,
 	}
 	err := s.createFilter(context.Background(), big.NewInt(0))
-	assert.EqualError(err, "eth_newFilter returned: pop")
+	assert.Regexp("eth_newFilter returned: pop", err)
 	rpc.AssertExpectations(t)
 }
 
@@ -299,7 +299,7 @@ func TestProcessCatchupBlocksFail(t *testing.T) {
 		catchupBlock: big.NewInt(12345),
 	}
 	err := s.processCatchupBlocks(context.Background())
-	assert.EqualError(err, "eth_getLogs returned: pop")
+	assert.Regexp("eth_getLogs returned: pop", err)
 	rpc.AssertExpectations(t)
 }
 

@@ -188,7 +188,7 @@ func TestContractGWHandlerUnmarshalFail(t *testing.T) {
 	_, err := w.contractGWHandler(map[string]interface{}{
 		"bad json": map[bool]bool{true: false},
 	})
-	assert.EqualError(err, "unexpected end of JSON input")
+	assert.Regexp("unexpected end of JSON input", err)
 }
 
 func TestWebhookHandlerTransaction(t *testing.T) {

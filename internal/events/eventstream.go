@@ -312,7 +312,12 @@ func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) 
 func (a *eventStream) handleEvent(event *eventData) {
 	// Does nothing more than add it to the batch, to be picked up
 	// by the batchDispatcher
-	a.eventStream <- event
+	select {
+	case a.eventStream <- event:
+	case <-a.batchDispatcherDone:
+		// If the dispatcher isn't running, then there's no problem - the HWM won't get updated
+		log.Infof("Event arrived while event stream shutting down")
+	}
 }
 
 // stop is a lazy stop, that marks a flag for the batch goroutine to pick up
@@ -320,7 +325,6 @@ func (a *eventStream) stop(wait bool) {
 	a.batchCond.L.Lock()
 	if !a.stopped {
 		a.stopped = true
-		close(a.eventStream)
 		if a.updateInterrupt != nil {
 			close(a.updateInterrupt)
 		}

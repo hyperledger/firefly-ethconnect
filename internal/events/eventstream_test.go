@@ -203,6 +203,21 @@ func TestStopDuringTimeout(t *testing.T) {
 	assert.True(isChannelDone(stream.eventPollerDone))
 }
 
+func TestHandleEventAfterClose(t *testing.T) {
+	_, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			BatchSize:      10,
+			BatchTimeoutMS: 2000,
+			Webhook:        &webhookActionInfo{},
+		}, nil, 200)
+	defer close(eventStream)
+	defer svr.Close()
+
+	stream.stop(true)
+	<-stream.batchDispatcherDone
+	stream.handleEvent(testEvent("sub1"))
+}
+
 func TestBatchSizeCap(t *testing.T) {
 	assert := assert.New(t)
 	_, stream, svr, eventStream := newTestStreamForBatching(

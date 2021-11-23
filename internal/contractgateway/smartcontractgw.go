@@ -526,7 +526,7 @@ func (g *smartContractGW) addSub(res http.ResponseWriter, req *http.Request, par
 	log.Infof("--> %s %s", req.Method, req.URL)
 
 	if g.sm == nil {
-		g.gatewayErrReply(res, req, errors.New(errEventSupportMissing), 405)
+		g.gatewayErrReply(res, req, errEventSupportMissing, 405)
 		return
 	}
 

@@ -149,7 +149,7 @@ func TestBatchTimeout(t *testing.T) {
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
-	defer stream.stop()
+	defer stream.stop(false)
 
 	var e1s []*eventData
 	wg := sync.WaitGroup{}
@@ -198,9 +198,9 @@ func TestStopDuringTimeout(t *testing.T) {
 
 	stream.handleEvent(testEvent("sub1"))
 	time.Sleep(10 * time.Millisecond)
-	stream.stop()
+	stream.stop(false)
 	time.Sleep(10 * time.Millisecond)
-	assert.True(stream.processorDone)
+	assert.True(isChannelDone(stream.eventPollerDone))
 }
 
 func TestBatchSizeCap(t *testing.T) {
@@ -212,7 +212,7 @@ func TestBatchSizeCap(t *testing.T) {
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
-	defer stream.stop()
+	defer stream.stop(false)
 
 	assert.Equal(uint64(MaxBatchSize), stream.spec.BatchSize)
 	assert.Equal("", stream.spec.Name)
@@ -227,7 +227,7 @@ func TestStreamName(t *testing.T) {
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
-	defer stream.stop()
+	defer stream.stop(false)
 
 	assert.Equal("testStream", stream.spec.Name)
 }
@@ -243,7 +243,7 @@ func TestBlockingBehavior(t *testing.T) {
 		}, nil, 404)
 	defer close(eventStream)
 	defer svr.Close()
-	defer stream.stop()
+	defer stream.stop(false)
 
 	complete := false
 	wg := &sync.WaitGroup{}
@@ -268,7 +268,7 @@ func TestSkippingBehavior(t *testing.T) {
 		}, nil, 404 /* fail the requests */)
 	defer close(eventStream)
 	defer svr.Close()
-	defer stream.stop()
+	defer stream.stop(false)
 
 	complete := false
 	wg := sync.WaitGroup{}
@@ -297,7 +297,7 @@ func TestBackoffRetry(t *testing.T) {
 		}, nil, 404, 500, 503, 504, 200)
 	defer close(eventStream)
 	defer svr.Close()
-	defer stream.stop()
+	defer stream.stop(false)
 	stream.initialRetryDelay = 1 * time.Millisecond
 	stream.backoffFactor = 1.1
 
@@ -332,7 +332,7 @@ func TestBlockedAddresses(t *testing.T) {
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
-	defer stream.stop()
+	defer stream.stop(false)
 
 	stream.allowPrivateIPs = false
 
@@ -355,7 +355,7 @@ func TestBadDNSName(t *testing.T) {
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
-	defer stream.stop()
+	defer stream.stop(false)
 	stream.spec.Webhook.URL = "http://fail.invalid"
 
 	called := false
@@ -380,7 +380,7 @@ func TestBuildup(t *testing.T) {
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
-	defer stream.stop()
+	defer stream.stop(false)
 
 	assert.False(stream.isBlocked())
 
@@ -639,7 +639,7 @@ func TestProcessEventsEnd2EndWebhook(t *testing.T) {
 	assert.NoError(err)
 	err = sm.DeleteStream(ctx, stream.spec.ID)
 	assert.NoError(err)
-	sm.Close()
+	sm.Close(true)
 }
 
 func TestProcessEventsEnd2EndCatchupWebhook(t *testing.T) {
@@ -688,7 +688,7 @@ func TestProcessEventsEnd2EndCatchupWebhook(t *testing.T) {
 	assert.NoError(err)
 	err = sm.DeleteStream(ctx, stream.spec.ID)
 	assert.NoError(err)
-	sm.Close()
+	sm.Close(true)
 }
 
 func TestProcessEventsEnd2EndWebSocket(t *testing.T) {
@@ -741,7 +741,7 @@ func TestProcessEventsEnd2EndWebSocket(t *testing.T) {
 	assert.NoError(err)
 	err = sm.DeleteStream(ctx, stream.spec.ID)
 	assert.NoError(err)
-	sm.Close()
+	sm.Close(true)
 }
 
 func TestProcessEventsEnd2EndWithTimestamps(t *testing.T) {
@@ -793,7 +793,7 @@ func TestProcessEventsEnd2EndWithTimestamps(t *testing.T) {
 	assert.NoError(err)
 	err = sm.DeleteStream(ctx, stream.spec.ID)
 	assert.NoError(err)
-	sm.Close()
+	sm.Close(true)
 }
 
 func TestProcessEventsEnd2EndWithInputs(t *testing.T) {
@@ -832,6 +832,12 @@ func TestProcessEventsEnd2EndWithInputs(t *testing.T) {
 	}
 	expectedArgs := map[string]interface{}{"arg1": "1"}
 
+	mcr := sm.cr.(*contractregistrymocks.ContractStore)
+	mcr.On("GetABI", contractregistry.ABILocation{
+		ABIType: contractregistry.LocalABI,
+		Name:    "test-abi",
+	}, false).Return(deployMsg, nil)
+
 	s := setupTestSubscriptionWithRPCHandler(assert, sm, stream, "mySubName", func(method string, result interface{}) {
 		if method == "eth_getTransactionByHash" {
 			*(result.(*eth.TxnInfo)) = eth.TxnInfo{
@@ -840,12 +846,6 @@ func TestProcessEventsEnd2EndWithInputs(t *testing.T) {
 		}
 	})
 	assert.Equal("mySubName", s.Name)
-
-	mcr := sm.cr.(*contractregistrymocks.ContractStore)
-	mcr.On("GetABI", contractregistry.ABILocation{
-		ABIType: contractregistry.LocalABI,
-		Name:    "test-abi",
-	}, false).Return(deployMsg, nil)
 
 	// We expect three events to be sent to the webhook
 	// With the default batch size of 1, that means three separate requests
@@ -882,7 +882,7 @@ func TestProcessEventsEnd2EndWithInputs(t *testing.T) {
 	assert.NoError(err)
 	err = sm.DeleteStream(ctx, stream.spec.ID)
 	assert.NoError(err)
-	sm.Close()
+	sm.Close(true)
 }
 
 func TestProcessEventsEnd2EndWithReset(t *testing.T) {
@@ -952,7 +952,7 @@ func TestProcessEventsEnd2EndWithReset(t *testing.T) {
 	assert.NoError(err)
 	err = sm.DeleteStream(ctx, stream.spec.ID)
 	assert.NoError(err)
-	sm.Close()
+	sm.Close(true)
 }
 
 func TestInterruptWebSocketBroadcast(t *testing.T) {
@@ -1028,7 +1028,7 @@ func TestCheckpointRecovery(t *testing.T) {
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
-	defer stream.stop()
+	defer stream.stop(false)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
@@ -1054,9 +1054,7 @@ func TestCheckpointRecovery(t *testing.T) {
 		}
 	}
 	stream.suspend()
-	for !stream.pollerDone {
-		time.Sleep(1 * time.Millisecond)
-	}
+	<-stream.eventPollerDone
 
 	// Restart from the checkpoint that was stored
 	var newFilterBlock uint64
@@ -1080,7 +1078,7 @@ func TestCheckpointRecovery(t *testing.T) {
 	sub.rpc = rpc
 
 	stream.resume()
-	for stream.pollerDone {
+	for isChannelDone(stream.eventPollerDone) {
 		time.Sleep(1 * time.Millisecond)
 	}
 	wg.Wait()
@@ -1100,12 +1098,10 @@ func TestWithoutCheckpointRecovery(t *testing.T) {
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
-	defer stream.stop()
+	defer stream.stop(false)
 
 	stream.suspend()
-	for !stream.pollerDone {
-		time.Sleep(1 * time.Millisecond)
-	}
+	<-stream.eventPollerDone
 
 	s := setupTestSubscription(assert, sm, stream, "")
 
@@ -1131,7 +1127,7 @@ func TestWithoutCheckpointRecovery(t *testing.T) {
 	sub.rpc = rpc
 
 	stream.resume()
-	for stream.pollerDone {
+	for isChannelDone(stream.eventPollerDone) {
 		time.Sleep(1 * time.Millisecond)
 	}
 	for initialEndBlock != "latest" {
@@ -1150,12 +1146,10 @@ func TestMarkStaleOnError(t *testing.T) {
 		}, nil, 200)
 	defer close(eventStream)
 	defer svr.Close()
-	defer stream.stop()
+	defer stream.stop(false)
 
 	stream.suspend()
-	for !stream.pollerDone {
-		time.Sleep(1 * time.Millisecond)
-	}
+	<-stream.eventPollerDone
 
 	s := setupTestSubscription(assert, sm, stream, "")
 	sm.subscriptions[s.ID].filterStale = false
@@ -1169,7 +1163,7 @@ func TestMarkStaleOnError(t *testing.T) {
 	sub.rpc = rpc
 
 	stream.resume()
-	for stream.pollerDone {
+	for isChannelDone(stream.eventPollerDone) {
 		time.Sleep(1 * time.Millisecond)
 	}
 	for !sub.filterStale {
@@ -1189,14 +1183,12 @@ func TestStoreCheckpointLoadError(t *testing.T) {
 	sm.db = mockKV
 	defer close(eventStream)
 	defer svr.Close()
-	defer stream.stop()
+	defer stream.stop(false)
 
 	stream.suspend()
-	for !stream.pollerDone {
-		time.Sleep(1 * time.Millisecond)
-	}
+	<-stream.eventPollerDone
 	stream.resume()
-	for stream.pollerDone {
+	for isChannelDone(stream.eventPollerDone) {
 		time.Sleep(1 * time.Millisecond)
 	}
 }
@@ -1212,7 +1204,7 @@ func TestStoreCheckpointStoreError(t *testing.T) {
 	mockKV.StoreErr = fmt.Errorf("pop")
 	defer close(eventStream)
 	defer svr.Close()
-	defer stream.stop()
+	defer stream.stop(false)
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
@@ -1226,9 +1218,7 @@ func TestStoreCheckpointStoreError(t *testing.T) {
 	wg.Wait()
 
 	stream.suspend()
-	for !stream.pollerDone {
-		time.Sleep(1 * time.Millisecond)
-	}
+	<-stream.eventPollerDone
 }
 
 func TestProcessBatchEmptyArray(t *testing.T) {
@@ -1242,7 +1232,7 @@ func TestProcessBatchEmptyArray(t *testing.T) {
 	sm.db = mockKV
 	defer close(eventStream)
 	defer svr.Close()
-	defer stream.stop()
+	defer stream.stop(false)
 
 	stream.processBatch(0, []*eventData{})
 }
@@ -1266,7 +1256,7 @@ func TestUpdateStream(t *testing.T) {
 		}, db, 200)
 	defer svr.Close()
 	defer close(eventStream)
-	defer stream.stop()
+	defer stream.stop(false)
 
 	for i := 0; i < 3; i++ {
 		stream.handleEvent(testEvent(fmt.Sprintf("sub%d", i)))
@@ -1326,7 +1316,7 @@ func TestUpdateStreamSwapType(t *testing.T) {
 		}, db, 200)
 	defer svr.Close()
 	defer close(eventStream)
-	defer stream.stop()
+	defer stream.stop(false)
 
 	ctx := context.Background()
 	updateSpec := &StreamInfo{
@@ -1353,7 +1343,7 @@ func TestUpdateStreamInProgress(t *testing.T) {
 		}, db, 200)
 	defer svr.Close()
 	defer close(eventStream)
-	defer stream.stop()
+	defer stream.stop(false)
 
 	stream.updateInProgress = true
 	_, err := stream.update(&StreamInfo{})
@@ -1378,7 +1368,7 @@ func TestUpdateWebSocketBadDistributionMode(t *testing.T) {
 		}, db, 200)
 	defer svr.Close()
 	defer close(eventStream)
-	defer stream.stop()
+	defer stream.stop(false)
 
 	ctx := context.Background()
 	updateSpec := &StreamInfo{
@@ -1409,7 +1399,7 @@ func TestUpdateWebSocket(t *testing.T) {
 		}, db, 200)
 	defer svr.Close()
 	defer close(eventStream)
-	defer stream.stop()
+	defer stream.stop(false)
 
 	ctx := context.Background()
 	updateSpec := &StreamInfo{
@@ -1465,7 +1455,7 @@ func TestUpdateStreamMissingWebhookURL(t *testing.T) {
 	assert.NoError(err)
 	err = sm.DeleteStream(ctx, stream.spec.ID)
 	assert.NoError(err)
-	sm.Close()
+	sm.Close(true)
 }
 
 func TestUpdateStreamInvalidWebhookURL(t *testing.T) {
@@ -1510,7 +1500,7 @@ func TestUpdateStreamInvalidWebhookURL(t *testing.T) {
 	assert.NoError(err)
 	err = sm.DeleteStream(ctx, stream.spec.ID)
 	assert.NoError(err)
-	sm.Close()
+	sm.Close(true)
 }
 
 func TestUpdateStreamDuplicateCall(t *testing.T) {
@@ -1531,4 +1521,11 @@ func TestUpdateStreamDuplicateCall(t *testing.T) {
 
 	err = stream.preUpdateStream()
 	assert.Regexp("Update to event stream already in progress", err)
+}
+
+func TestIsDone(t *testing.T) {
+	c := make(chan struct{})
+	assert.False(t, isChannelDone(c))
+	close(c)
+	assert.True(t, isChannelDone(c))
 }

@@ -25,7 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hyperledger/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger/firefly-ethconnect/internal/kvstore"
 	"github.com/hyperledger/firefly-ethconnect/mocks/contractregistrymocks"
 	"github.com/hyperledger/firefly-ethconnect/mocks/ethmocks"
@@ -101,7 +100,7 @@ func TestInitLevelDBSuccess(t *testing.T) {
 	sm.config().EventLevelDBPath = path.Join(dir, "db")
 	err := sm.Init()
 	assert.Equal(nil, err)
-	sm.Close()
+	sm.Close(true)
 }
 
 func TestInitLevelDBFail(t *testing.T) {
@@ -113,7 +112,7 @@ func TestInitLevelDBFail(t *testing.T) {
 	sm.config().EventLevelDBPath = path.Join(dir, "db")
 	err := sm.Init()
 	assert.Regexp("not a directory", err.Error())
-	sm.Close()
+	sm.Close(true)
 }
 
 func TestActionAndSubscriptionLifecyle(t *testing.T) {
@@ -178,14 +177,13 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	assert.EqualError(err, "Event processor is already active. Suspending:false")
 
 	// Reload
-	sm.Close()
+	sm.Close(false)
 	mux := http.NewServeMux()
 	svr := httptest.NewServer(mux)
 	defer svr.Close()
 	sm = newTestSubscriptionManager()
 	sm.conf.EventLevelDBPath = path.Join(dir, "db")
 	sm.rpc = rpc
-	sm.rpcConf = &eth.RPCConnOpts{URL: svr.URL}
 	err = sm.Init()
 	assert.NoError(err)
 
@@ -201,7 +199,7 @@ func TestActionAndSubscriptionLifecyle(t *testing.T) {
 	err = sm.DeleteStream(ctx, stream.ID)
 	assert.NoError(err)
 
-	sm.Close()
+	sm.Close(true)
 }
 
 func TestActionChildCleanup(t *testing.T) {
@@ -209,7 +207,12 @@ func TestActionChildCleanup(t *testing.T) {
 	dir := tempdir(t)
 	defer cleanup(t, dir)
 	sm := newTestSubscriptionManager()
-	sm.rpc = &ethmocks.RPCClient{}
+
+	blockCall := make(chan struct{})
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) { <-blockCall }).Return(nil)
+	sm.rpc = rpc
+
 	sm.db, _ = kvstore.NewLDBKeyValueStore(path.Join(dir, "db"))
 	defer sm.db.Close()
 
@@ -227,15 +230,22 @@ func TestActionChildCleanup(t *testing.T) {
 	assert.Equal([]*SubscriptionInfo{}, sm.Subscriptions(ctx))
 	assert.Equal([]*StreamInfo{}, sm.Streams(ctx))
 
-	sm.Close()
+	close(blockCall)
+	sm.Close(true)
 }
+
 func TestStreamAndSubscriptionErrors(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)
 	subscriptionName := "testSub"
 	defer cleanup(t, dir)
 	sm := newTestSubscriptionManager()
-	sm.rpc = &ethmocks.RPCClient{}
+
+	blockCall := make(chan struct{})
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) { <-blockCall }).Return(nil)
+	sm.rpc = rpc
+
 	sm.db, _ = kvstore.NewLDBKeyValueStore(path.Join(dir, "db"))
 	defer sm.db.Close()
 
@@ -259,7 +269,8 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	err = sm.ResetSubscription(ctx, sub.ID, "0")
 	assert.EqualError(err, "Failed to store subscription: leveldb: closed")
 
-	sm.Close()
+	close(blockCall)
+	sm.Close(true)
 }
 
 func TestResetSubscriptionErrors(t *testing.T) {

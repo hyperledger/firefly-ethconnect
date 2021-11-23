@@ -27,19 +27,23 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/utils"
-	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
+var (
+	DefaultSendRetryDelay = 5 * time.Second
+)
+
 // KafkaCommonConf - Common configuration for Kafka
 type KafkaCommonConf struct {
-	Brokers       []string `json:"brokers"`
-	ClientID      string   `json:"clientID"`
-	ConsumerGroup string   `json:"consumerGroup"`
-	TopicIn       string   `json:"topicIn"`
-	TopicOut      string   `json:"topicOut"`
-	ProducerFlush struct {
+	Brokers          []string `json:"brokers"`
+	ClientID         string   `json:"clientID"`
+	ConsumerGroup    string   `json:"consumerGroup"`
+	TopicIn          string   `json:"topicIn"`
+	TopicOut         string   `json:"topicOut"`
+	SendRetryDelayMS int      `json:"sendRetryDelayMS"`
+	ProducerFlush    struct {
 		Frequency int `json:"frequency"`
 		Messages  int `json:"messages"`
 		Bytes     int `json:"bytes"`
@@ -49,6 +53,9 @@ type KafkaCommonConf struct {
 		Password string
 	} `json:"sasl"`
 	TLS utils.TLSConfig `json:"tls"`
+
+	// Computed
+	sendRetryDelay time.Duration
 }
 
 // KafkaCommon is the base interface for bridges that interact with Kafka
@@ -67,6 +74,10 @@ func NewKafkaCommon(kf KafkaFactory, conf *KafkaCommonConf, kafkaGoRoutines Kafk
 		kafkaGoRoutines: kafkaGoRoutines,
 		conf:            conf,
 	}
+	conf.sendRetryDelay = time.Duration(conf.SendRetryDelayMS) * time.Millisecond
+	if conf.sendRetryDelay <= 0 {
+		conf.sendRetryDelay = DefaultSendRetryDelay
+	}
 	return
 }
 
@@ -75,7 +86,6 @@ func NewKafkaCommon(kf KafkaFactory, conf *KafkaCommonConf, kafkaGoRoutines Kafk
 type kafkaCommon struct {
 	conf            *KafkaCommonConf
 	factory         KafkaFactory
-	rpc             *ethbinding.RPCClient
 	client          KafkaClient
 	signals         chan os.Signal
 	consumer        KafkaConsumer
@@ -142,7 +152,6 @@ func KafkaCommonCobraInit(cmd *cobra.Command, kconf *KafkaCommonConf) {
 	cmd.Flags().BoolVarP(&kconf.TLS.InsecureSkipVerify, "tls-insecure", "z", defTLSinsecure, "Disable verification of TLS certificate chain")
 	cmd.Flags().StringVarP(&kconf.SASL.Username, "sasl-username", "u", os.Getenv("KAFKA_SASL_USERNAME"), "Username for SASL authentication")
 	cmd.Flags().StringVarP(&kconf.SASL.Password, "sasl-password", "p", os.Getenv("KAFKA_SASL_PASSWORD"), "Password for SASL authentication")
-	return
 }
 
 type saramaLogger struct {
@@ -281,16 +290,14 @@ func (k *kafkaCommon) Start() (err error) {
 	log.Debugf("Kafka initialization complete")
 	k.signals = make(chan os.Signal, 1)
 	signal.Notify(k.signals, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
-	for {
-		select {
-		case <-k.signals:
-			k.producer.AsyncClose()
-			k.consumer.Close()
-			k.producerWG.Wait()
-			k.consumerWG.Wait()
+	for s := range k.signals {
+		k.producer.AsyncClose()
+		k.consumer.Close()
+		k.producerWG.Wait()
+		k.consumerWG.Wait()
 
-			log.Infof("Kafka Bridge complete")
-			return
-		}
+		log.Infof("Kafka Bridge complete (sig=%s)", s.String())
+		return
 	}
+	return
 }

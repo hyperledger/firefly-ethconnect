@@ -113,6 +113,7 @@ type TransactionCommon struct {
 	PrivateFrom    string        `json:"privateFrom,omitempty"`
 	PrivateFor     []string      `json:"privateFor,omitempty"`
 	PrivacyGroupID string        `json:"privacyGroupId,omitempty"`
+	AckType        string        `json:"acktype,omitempty"`
 }
 
 // SendTransaction message instructs the bridge to install a contract

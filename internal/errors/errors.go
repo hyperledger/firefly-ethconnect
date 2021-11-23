@@ -459,6 +459,9 @@ const (
 
 	// WebSocketClosed websocket was closed
 	WebSocketClosed = "WebSocket '%s' closed"
+
+	// CircuitBreakerTripped is returned when the Kafka circuit breaker has deemed it unsafe to produce more messages
+	CircuitBreakerTripped = "Unable to send Kafka message as the gap of %d messages between consumer and producer is too large. Estimated at %.2fKb"
 )
 
 type Error string

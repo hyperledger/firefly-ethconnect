@@ -107,7 +107,7 @@ func newTestWebhooks() (*webhooks, *webhooksKafka, *testKafkaCommon, *httptest.S
 	k := newTestKafkaComon()
 	wk := newWebhooksKafkaBase(r)
 	wk.kafka = k
-	w := newWebhooks(wk, nil)
+	w := newWebhooks(wk, wk.receipts, nil)
 	router := &httprouter.Router{}
 	w.addRoutes(router)
 	ts := httptest.NewUnstartedServer(router)
@@ -154,10 +154,11 @@ func assertErrResp(assert *assert.Assertions, resp *http.Response, status int, m
 	assert.Regexp(msg, replyMsg.Message)
 }
 
-func sendTestTransaction(assert *assert.Assertions, msgBytes []byte, contentType string, sendErr error, ack bool) (*http.Response, [][]byte) {
+func sendTestTransaction(assert *assert.Assertions, msgBytes []byte, contentType string, circuitBreakerErr, sendErr error, ack bool) (*http.Response, [][]byte) {
 
 	log.SetLevel(log.DebugLevel)
 	_, wk, k, ts := newTestWebhooks()
+	k.kafkaFactory.Producer.FirstSendError = circuitBreakerErr
 	defer ts.Close()
 	go k.Start()
 
@@ -222,7 +223,7 @@ func TestWebhookHandlerJSONSendTransaction(t *testing.T) {
 	msg := messages.SendTransaction{}
 	msg.Headers.MsgType = messages.MsgTypeSendTransaction
 	msgBytes, _ := json.Marshal(&msg)
-	resp, replyMsgs := sendTestTransaction(assert, msgBytes, "application/json", nil, true)
+	resp, replyMsgs := sendTestTransaction(assert, msgBytes, "application/json", nil, nil, true)
 	assertSentResp(assert, resp, true)
 	assert.Equal(1, len(replyMsgs))
 
@@ -240,7 +241,7 @@ func TestWebhookHandlerJSONSendnWithAccessToken(t *testing.T) {
 	msg := messages.SendTransaction{}
 	msg.Headers.MsgType = messages.MsgTypeSendTransaction
 	msgBytes, _ := json.Marshal(&msg)
-	resp, replyMsgs := sendTestTransaction(assert, msgBytes, "application/json", nil, true)
+	resp, replyMsgs := sendTestTransaction(assert, msgBytes, "application/json", nil, nil, true)
 	assertSentResp(assert, resp, true)
 	assert.Equal(1, len(replyMsgs))
 
@@ -260,13 +261,24 @@ func TestWebhookHandlerJSONSendTransactionNoAck(t *testing.T) {
 	msg := messages.SendTransaction{}
 	msg.Headers.MsgType = messages.MsgTypeSendTransaction
 	msgBytes, _ := json.Marshal(&msg)
-	resp, replyMsgs := sendTestTransaction(assert, msgBytes, "application/json", nil, false)
+	resp, replyMsgs := sendTestTransaction(assert, msgBytes, "application/json", nil, nil, false)
 	assertSentResp(assert, resp, false)
 	assert.Equal(1, len(replyMsgs))
 
 	forwardedMessage := messages.SendTransaction{}
 	json.Unmarshal(replyMsgs[0], &forwardedMessage)
 	assert.Equal(messages.MsgTypeSendTransaction, forwardedMessage.Headers.MsgType)
+}
+
+func TestWebhookHandlerCircuitBreakerClosed(t *testing.T) {
+
+	assert := assert.New(t)
+
+	msg := messages.SendTransaction{}
+	msg.Headers.MsgType = messages.MsgTypeSendTransaction
+	msgBytes, _ := json.Marshal(&msg)
+	resp, _ := sendTestTransaction(assert, msgBytes, "application/json", fmt.Errorf("circuit breaker error"), nil, true)
+	assertErrResp(assert, resp, 500, "circuit breaker error")
 }
 
 func TestWebhookHandlerJSONSendFailedToKafka(t *testing.T) {
@@ -276,7 +288,7 @@ func TestWebhookHandlerJSONSendFailedToKafka(t *testing.T) {
 	msg := messages.SendTransaction{}
 	msg.Headers.MsgType = messages.MsgTypeSendTransaction
 	msgBytes, _ := json.Marshal(&msg)
-	resp, _ := sendTestTransaction(assert, msgBytes, "application/json", fmt.Errorf("pop"), true)
+	resp, _ := sendTestTransaction(assert, msgBytes, "application/json", nil, fmt.Errorf("pop"), true)
 	assertErrResp(assert, resp, 502, "Failed to deliver message to Kafka.*pop")
 }
 
@@ -287,7 +299,7 @@ func TestWebhookHandlerJSONSendFailedToKafkaNoAck(t *testing.T) {
 	msg := messages.SendTransaction{}
 	msg.Headers.MsgType = messages.MsgTypeSendTransaction
 	msgBytes, _ := json.Marshal(&msg)
-	resp, replyMsgs := sendTestTransaction(assert, msgBytes, "application/json", fmt.Errorf("pop"), false)
+	resp, replyMsgs := sendTestTransaction(assert, msgBytes, "application/json", nil, fmt.Errorf("pop"), false)
 	// Error is swallowed
 	assertSentResp(assert, resp, false)
 	assert.Equal(1, len(replyMsgs))
@@ -356,7 +368,7 @@ func TestWebhookHandlerJSONDeployContract(t *testing.T) {
 	msg.Headers.MsgType = messages.MsgTypeDeployContract
 	msg.From = "any string"
 	msgBytes, _ := json.Marshal(&msg)
-	resp, replyMsgs := sendTestTransaction(assert, msgBytes, "application/json", nil, true)
+	resp, replyMsgs := sendTestTransaction(assert, msgBytes, "application/json", nil, nil, true)
 	assertSentResp(assert, resp, true)
 	assert.Equal(1, len(replyMsgs))
 
@@ -393,7 +405,7 @@ func TestWebhookHandlerYAMLDeployContract(t *testing.T) {
 		"  }\n" +
 		"\n"
 
-	resp, replyMsgs := sendTestTransaction(assert, []byte(msg), "application/x-yaml", nil, true)
+	resp, replyMsgs := sendTestTransaction(assert, []byte(msg), "application/x-yaml", nil, nil, true)
 	assertSentResp(assert, resp, true)
 	assert.Equal(1, len(replyMsgs))
 
@@ -410,7 +422,7 @@ func TestWebhookHandlerYAMLBadHeaders(t *testing.T) {
 		"headers: some string" +
 		"\n"
 
-	resp, replyMsgs := sendTestTransaction(assert, []byte(msg), "application/x-yaml", nil, true)
+	resp, replyMsgs := sendTestTransaction(assert, []byte(msg), "application/x-yaml", nil, nil, true)
 	assertErrResp(assert, resp, 400, "Invalid message - missing 'headers' \\(or not an object\\)")
 	assert.Equal(0, len(replyMsgs))
 }
@@ -425,7 +437,7 @@ func TestWebhookHandlerYAMLMissingType(t *testing.T) {
 		"    an: object\n" +
 		"\n"
 
-	resp, replyMsgs := sendTestTransaction(assert, []byte(msg), "application/x-yaml", nil, true)
+	resp, replyMsgs := sendTestTransaction(assert, []byte(msg), "application/x-yaml", nil, nil, true)
 	assertErrResp(assert, resp, 400, "Invalid message - missing 'headers.type' \\(or not a string\\)")
 	assert.Equal(0, len(replyMsgs))
 }
@@ -439,7 +451,7 @@ func TestWebhookHandlerYAMLMissingTo(t *testing.T) {
 		"  type: DeployContract\n" +
 		"\n"
 
-	resp, replyMsgs := sendTestTransaction(assert, []byte(msg), "application/x-yaml", nil, true)
+	resp, replyMsgs := sendTestTransaction(assert, []byte(msg), "application/x-yaml", nil, nil, true)
 	assertErrResp(assert, resp, 400, "Invalid message - missing 'from' \\(or not a string\\)")
 	assert.Equal(0, len(replyMsgs))
 }
@@ -448,7 +460,7 @@ func TestWebhookHandlerBadYAML(t *testing.T) {
 
 	assert := assert.New(t)
 
-	resp, replyMsgs := sendTestTransaction(assert, []byte("!badness!"), "application/x-yaml", nil, true)
+	resp, replyMsgs := sendTestTransaction(assert, []byte("!badness!"), "application/x-yaml", nil, nil, true)
 	assertErrResp(assert, resp, 400, "Unable to parse as YAML or JSON")
 	assert.Equal(0, len(replyMsgs))
 }
@@ -457,7 +469,7 @@ func TestWebhookHandlerBadJSON(t *testing.T) {
 
 	assert := assert.New(t)
 
-	resp, replyMsgs := sendTestTransaction(assert, []byte("badness"), "application/json", nil, true)
+	resp, replyMsgs := sendTestTransaction(assert, []byte("badness"), "application/json", nil, nil, true)
 	assertErrResp(assert, resp, 400, "Unable to parse as YAML or JSON")
 	assert.Equal(0, len(replyMsgs))
 }
@@ -469,7 +481,7 @@ func TestWebhookHandlerBadMsgType(t *testing.T) {
 	msg := messages.RequestCommon{}
 	msg.Headers.MsgType = "badness"
 	msgBytes, _ := json.Marshal(&msg)
-	resp, replyMsgs := sendTestTransaction(assert, msgBytes, "application/json", nil, true)
+	resp, replyMsgs := sendTestTransaction(assert, msgBytes, "application/json", nil, nil, true)
 	assertErrResp(assert, resp, 400, "Invalid message type")
 	assert.Equal(0, len(replyMsgs))
 }
@@ -480,7 +492,7 @@ func TestWebhookHandlerTooBig(t *testing.T) {
 
 	// Build a 1MB payload
 	msgBytes := make([]byte, 1025*1024)
-	resp, replyMsgs := sendTestTransaction(assert, msgBytes, "application/json", nil, true)
+	resp, replyMsgs := sendTestTransaction(assert, msgBytes, "application/json", nil, nil, true)
 	assertErrResp(assert, resp, 400, "Message exceeds maximum allowable size")
 	assert.Equal(0, len(replyMsgs))
 }

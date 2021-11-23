@@ -66,6 +66,9 @@
             "$ref": "#/parameters/blocknumberParam"
           },
           {
+            "$ref": "#/parameters/acktypeParam"
+          },
+          {
             "$ref": "#/parameters/privacyGroupIdParam"
           },
           {
@@ -258,6 +261,9 @@
             "$ref": "#/parameters/blocknumberParam"
           },
           {
+            "$ref": "#/parameters/acktypeParam"
+          },
+          {
             "$ref": "#/parameters/privacyGroupIdParam"
           }
         ],
@@ -400,6 +406,9 @@
             "$ref": "#/parameters/blocknumberParam"
           },
           {
+            "$ref": "#/parameters/acktypeParam"
+          },
+          {
             "$ref": "#/parameters/privacyGroupIdParam"
           }
         ],
@@ -475,6 +484,13 @@
     }
   },
   "parameters": {
+    "acktypeParam": {
+      "type": "string",
+      "description": "Set to 'receipt' to store a receipt before acknowledging an async request (header: x-firefly-acktype)",
+      "name": "fly-acktype",
+      "in": "query",
+      "allowEmptyValue": true
+    },
     "blocknumberParam": {
       "type": "string",
       "description": "The target block number for eth_call requests. One of 'earliest/latest/pending', a number or a hex string (header: x-firefly-blocknumber)",

@@ -54,7 +54,7 @@ type mockREST2EthDispatcher struct {
 	deployContractSyncError    error
 }
 
-func (m *mockREST2EthDispatcher) DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack bool) (*messages.AsyncSentMsg, error) {
+func (m *mockREST2EthDispatcher) DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack, immediateReceipt bool) (*messages.AsyncSentMsg, error) {
 	m.asyncDispatchMsg = msg
 	m.asyncDispatchAck = ack
 	return m.asyncDispatchReply, m.asyncDispatchError
@@ -139,7 +139,7 @@ func (m *mockSubMgr) DeleteSubscription(ctx context.Context, id string) error { 
 func (m *mockSubMgr) ResetSubscription(ctx context.Context, id, initialBlock string) error {
 	return m.err
 }
-func (m *mockSubMgr) Close() {}
+func (m *mockSubMgr) Close(wait bool) {}
 
 func newTestDeployMsg(t *testing.T, addr string) *contractregistry.DeployContractWithAddress {
 	compiled, err := eth.CompileContract(simpleEventsSource(), "SimpleEvents", "", "")

@@ -80,6 +80,16 @@ func (r *receiptStore) extractHeaders(parsedMsg map[string]interface{}) map[stri
 	return nil
 }
 
+func (r *receiptStore) writeAccepted(msgID, msgAck string, msg map[string]interface{}) {
+	msg["receivedAt"] = time.Now().UnixNano() / int64(time.Millisecond)
+	msg["pending"] = true
+	msg["msgAck"] = msgAck
+	msg["_id"] = msgID
+	if msgID != "" && r.persistence != nil {
+		r.writeReceipt(msgID, msg)
+	}
+}
+
 func (r *receiptStore) processReply(msgBytes []byte) {
 
 	// Parse the reply as JSON
@@ -158,8 +168,8 @@ func (r *receiptStore) writeReceipt(requestID string, receipt map[string]interfa
 		// Check if the reason is that there is a receipt already
 		existing, qErr := r.persistence.GetReceipt(requestID)
 		if qErr == nil && existing != nil {
-			log.Warnf("%s: exiting   receipt: %+v", requestID, *existing)
-			log.Warnf("%s: duplicate receipt: %+v", requestID, receipt)
+			log.Debugf("%s: existing   receipt: %+v", requestID, *existing)
+			log.Debugf("%s: duplicate receipt: %+v", requestID, receipt)
 			break
 		}
 
@@ -186,7 +196,7 @@ func (r *receiptStore) marshalAndReply(res http.ResponseWriter, req *http.Reques
 	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(status)
-	res.Write(resBytes)
+	_, _ = res.Write(resBytes)
 }
 
 // getReplies handles a HTTP request for recent replies
@@ -208,7 +218,7 @@ func (r *receiptStore) getReplies(res http.ResponseWriter, req *http.Request, pa
 
 	// Default limit - which is set to zero (infinite) if we have specific IDs being request
 	limit := defaultReceiptLimit
-	req.ParseForm()
+	_ = req.ParseForm()
 	ids, ok := req.Form["id"]
 	if ok {
 		limit = 0 // can be explicitly set below, but no imposed limit when we have a list of IDs

@@ -323,6 +323,18 @@ func (c *ABI2Swagger) getCommonParameters() map[string]spec.Parameter {
 			Default: true,
 		},
 	}
+	params["acktypeParam"] = spec.Parameter{
+		ParamProps: spec.ParamProps{
+			Description:     fmt.Sprintf("Set to 'receipt' to store a receipt before acknowledging an async request (header: x-%s-acktype)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
+			Name:            fmt.Sprintf("%s-acktype", utils.GetenvOrDefaultLowerCase("PREFIX_SHORT", "fly")),
+			In:              "query",
+			Required:        false,
+			AllowEmptyValue: true,
+		},
+		SimpleSchema: spec.SimpleSchema{
+			Type: "string",
+		},
+	}
 	params["callParam"] = spec.Parameter{
 		ParamProps: spec.ParamProps{
 			Description:     fmt.Sprintf("Perform a read-only call with the same parameters that would be used to invoke, and return result (header: x-%s-call)", utils.GetenvOrDefaultLowerCase("PREFIX_LONG", "firefly")),
@@ -428,6 +440,7 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 	privacyGroupIDParam, _ := spec.NewRef("#/parameters/privacyGroupIdParam")
 	registerParam, _ := spec.NewRef("#/parameters/registerParam")
 	blocknumberParam, _ := spec.NewRef("#/parameters/blocknumberParam")
+	acktypeParam, _ := spec.NewRef("#/parameters/acktypeParam")
 	transactionParam, _ := spec.NewRef("#/parameters/transactionParam")
 	op.Parameters = append(op.Parameters, spec.Parameter{
 		Refable: spec.Refable{
@@ -478,6 +491,11 @@ func (c *ABI2Swagger) addCommonParams(op *spec.Operation, isPOST bool, isConstru
 		op.Parameters = append(op.Parameters, spec.Parameter{
 			Refable: spec.Refable{
 				Ref: blocknumberParam,
+			},
+		})
+		op.Parameters = append(op.Parameters, spec.Parameter{
+			Refable: spec.Refable{
+				Ref: acktypeParam,
 			},
 		})
 		if c.conf.OrionPrivateAPI {

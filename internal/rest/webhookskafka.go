@@ -144,8 +144,9 @@ func (w *webhooksKafka) sendWebhookMsg(ctx context.Context, key, msgID string, m
 	}
 
 	log.Debugf("Message payload: %s", payloadToForward)
+	topic := w.kafka.Conf().TopicOut
 	sentMsg := &sarama.ProducerMessage{
-		Topic:    w.kafka.Conf().TopicOut,
+		Topic:    topic,
 		Key:      sarama.StringEncoder(key),
 		Value:    sarama.ByteEncoder(payloadToForward),
 		Metadata: msgID,
@@ -159,7 +160,11 @@ func (w *webhooksKafka) sendWebhookMsg(ctx context.Context, key, msgID string, m
 			},
 		}
 	}
-	w.kafka.Producer().Input() <- sentMsg
+	input, err := w.kafka.Producer().Input(topic)
+	if err != nil {
+		return "", 500, err
+	}
+	input <- sentMsg
 
 	msgAck := ""
 	if ack {
@@ -170,10 +175,6 @@ func (w *webhooksKafka) sendWebhookMsg(ctx context.Context, key, msgID string, m
 		msgAck = fmt.Sprintf("%s:%d:%d", successMsg.Topic, successMsg.Partition, successMsg.Offset)
 	}
 	return msgAck, 200, nil
-}
-
-func (w *webhooksKafka) validateConf() error {
-	return w.kafka.ValidateConf()
 }
 
 func (w *webhooksKafka) run() error {

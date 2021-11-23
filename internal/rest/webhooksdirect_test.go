@@ -58,7 +58,7 @@ func newTestWebhooksDirect(maxMsgs int) (*webhooksDirect, *memoryReceipts, *mock
 func newTestWebhooksDirectServer(maxMsgs int) (*webhooksDirect, *httptest.Server, *memoryReceipts, *mockProcessor) {
 	wd, r, p := newTestWebhooksDirect(maxMsgs)
 	router := &httprouter.Router{}
-	wh := newWebhooks(wd, nil)
+	wh := newWebhooks(wd, wd.receipts, nil)
 	wh.addRoutes(router)
 	ts := httptest.NewServer(router)
 	return wd, ts, r, p

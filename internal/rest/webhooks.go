@@ -38,11 +38,13 @@ type webhooksHandler interface {
 type webhooks struct {
 	smartContractGW contractgateway.SmartContractGateway
 	handler         webhooksHandler
+	receipts        *receiptStore
 }
 
-func newWebhooks(handler webhooksHandler, smartContractGW contractgateway.SmartContractGateway) *webhooks {
+func newWebhooks(handler webhooksHandler, receipts *receiptStore, smartContractGW contractgateway.SmartContractGateway) *webhooks {
 	return &webhooks{
 		handler:         handler,
+		receipts:        receipts,
 		smartContractGW: smartContractGW,
 	}
 }
@@ -57,8 +59,7 @@ func (w *webhooks) hookErrReply(res http.ResponseWriter, req *http.Request, err 
 	reply, _ := json.Marshal(&hookErrMsg{Message: err.Error()})
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(status)
-	res.Write(reply)
-	return
+	_, _ = res.Write(reply)
 }
 
 func (w *webhooks) msgSentReply(res http.ResponseWriter, req *http.Request, replyMsg *messages.AsyncSentMsg) {
@@ -67,8 +68,7 @@ func (w *webhooks) msgSentReply(res http.ResponseWriter, req *http.Request, repl
 	log.Infof("<-- %s %s [%d]: Webhook RequestID=%s", req.Method, req.URL, status, replyMsg.Request)
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(status)
-	res.Write(reply)
-	return
+	_, _ = res.Write(reply)
 }
 
 func (w *webhooks) addRoutes(router *httprouter.Router) {
@@ -94,7 +94,20 @@ func (w *webhooks) webhookHandler(res http.ResponseWriter, req *http.Request, ac
 		return
 	}
 
-	reply, statusCode, err := w.processMsg(req.Context(), msg, ack)
+	// Special body parameter on webhook to ask for an immediate receipt
+	immediateReceipt := false
+	iAckType, ok := msg["acktype"]
+	if ok {
+		ackType, ok := iAckType.(string)
+		if ok {
+			immediateReceipt = (ackType == "receipt")
+			if immediateReceipt {
+				ack = true // forces ack
+			}
+		}
+	}
+
+	reply, statusCode, err := w.processMsg(req.Context(), msg, ack, immediateReceipt)
 	if err != nil {
 		w.hookErrReply(res, req, err, statusCode)
 		return
@@ -102,7 +115,7 @@ func (w *webhooks) webhookHandler(res http.ResponseWriter, req *http.Request, ac
 	w.msgSentReply(res, req, reply)
 }
 
-func (w *webhooks) processMsg(ctx context.Context, msg map[string]interface{}, ack bool) (*messages.AsyncSentMsg, int, error) {
+func (w *webhooks) processMsg(ctx context.Context, msg map[string]interface{}, ack, immediateReceipt bool) (*messages.AsyncSentMsg, int, error) {
 	// Check we understand the type, and can get the key.
 	// The rest of the validation is performed by the bridge listening to Kafka
 	headers, exists := msg["headers"]
@@ -121,7 +134,6 @@ func (w *webhooks) processMsg(ctx context.Context, msg map[string]interface{}, a
 			return nil, 400, errors.Errorf(errors.WebhooksInvalidMsgFromMissing)
 		}
 		key = from.(string)
-		break
 	default:
 		return nil, 400, errors.Errorf(errors.WebhooksInvalidMsgType, msgType)
 	}
@@ -149,6 +161,9 @@ func (w *webhooks) processMsg(ctx context.Context, msg map[string]interface{}, a
 	if err != nil {
 		return nil, status, err
 	}
+	if ack && immediateReceipt {
+		w.receipts.writeAccepted(msgID, msgAck, msg)
+	}
 	return &messages.AsyncSentMsg{
 		Sent:    true,
 		Request: msgID,
@@ -173,7 +188,7 @@ func (w *webhooks) contractGWHandler(msg map[string]interface{}) (map[string]int
 	// Now send the message back to a generic map
 	msgBytes, _ = json.Marshal(&deployMsg)
 	var newMsg map[string]interface{}
-	json.Unmarshal(msgBytes, &newMsg)
+	_ = json.Unmarshal(msgBytes, &newMsg)
 	return newMsg, nil
 }
 

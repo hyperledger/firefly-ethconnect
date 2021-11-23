@@ -1190,7 +1190,7 @@ func (g *smartContractGW) writeHTMLForUI(prefix, id, from string, isGateway, fac
 // Shutdown performs a clean shutdown
 func (g *smartContractGW) Shutdown() {
 	if g.sm != nil {
-		g.sm.Close()
+		g.sm.Close(false)
 	}
 	if g.cs != nil {
 		g.cs.Close()

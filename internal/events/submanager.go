@@ -64,7 +64,7 @@ type SubscriptionManager interface {
 	SubscriptionByID(ctx context.Context, id string) (*SubscriptionInfo, error)
 	ResetSubscription(ctx context.Context, id, initialBlock string) error
 	DeleteSubscription(ctx context.Context, id string) error
-	Close()
+	Close(wait bool)
 }
 
 type subscriptionManager interface {
@@ -87,7 +87,6 @@ type SubscriptionManagerConf struct {
 
 type subscriptionMGR struct {
 	conf          *SubscriptionManagerConf
-	rpcConf       *eth.RPCConnOpts
 	db            kvstore.KVStore
 	rpc           eth.RPCClient
 	subscriptions map[string]*subscription
@@ -237,7 +236,7 @@ func (s *subscriptionMGR) DeleteSubscription(ctx context.Context, id string) err
 
 func (s *subscriptionMGR) deleteSubscription(ctx context.Context, sub *subscription) error {
 	delete(s.subscriptions, sub.info.ID)
-	sub.unsubscribe(ctx, true)
+	_ = sub.unsubscribe(ctx, true)
 	if err := s.db.Delete(sub.info.ID); err != nil {
 		return err
 	}
@@ -313,11 +312,11 @@ func (s *subscriptionMGR) DeleteStream(ctx context.Context, id string) error {
 	// We have to clean up all the associated subs
 	for _, sub := range s.subscriptions {
 		if sub.info.Stream == stream.spec.ID {
-			s.deleteSubscription(ctx, sub)
+			_ = s.deleteSubscription(ctx, sub)
 		}
 	}
 	delete(s.streams, stream.spec.ID)
-	stream.stop()
+	stream.stop(false)
 	if err = s.db.Delete(stream.spec.ID); err != nil {
 		return err
 	}
@@ -405,7 +404,7 @@ func (s *subscriptionMGR) storeCheckpoint(streamID string, checkpoint map[string
 
 func (s *subscriptionMGR) deleteCheckpoint(streamID string) {
 	cpID := checkpointIDPrefix + streamID
-	s.db.Delete(cpID)
+	_ = s.db.Delete(cpID)
 }
 
 func (s *subscriptionMGR) Init() (err error) {
@@ -463,10 +462,10 @@ func (s *subscriptionMGR) recoverSubscriptions() {
 	}
 }
 
-func (s *subscriptionMGR) Close() {
+func (s *subscriptionMGR) Close(wait bool) {
 	log.Infof("Event stream subscription manager shutting down")
 	for _, stream := range s.streams {
-		stream.stop()
+		stream.stop(wait)
 	}
 	if !s.closed && s.db != nil {
 		s.db.Close()

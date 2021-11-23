@@ -89,7 +89,6 @@ type RESTGatewayConf struct {
 type RESTGateway struct {
 	printYAML       *bool
 	conf            RESTGatewayConf
-	kafka           kafka.KafkaCommon
 	srv             *http.Server
 	sendCond        *sync.Cond
 	pendingMsgs     map[string]bool
@@ -202,21 +201,19 @@ func (g *RESTGateway) statusHandler(res http.ResponseWriter, req *http.Request, 
 	reply, _ := json.Marshal(&statusMsg{OK: true})
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(200)
-	res.Write(reply)
-	return
+	_, _ = res.Write(reply)
 }
 
 func (g *RESTGateway) sendError(res http.ResponseWriter, msg string, code int) {
 	reply, _ := json.Marshal(&errMsg{Message: msg})
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(code)
-	res.Write(reply)
-	return
+	_, _ = res.Write(reply)
 }
 
 // DispatchMsgAsync is the rest2eth interface method for async dispatching of messages (via our webhook logic)
-func (g *RESTGateway) DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack bool) (*messages.AsyncSentMsg, error) {
-	reply, _, err := g.webhooks.processMsg(ctx, msg, ack)
+func (g *RESTGateway) DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack, immediateReceipt bool) (*messages.AsyncSentMsg, error) {
+	reply, _, err := g.webhooks.processMsg(ctx, msg, ack, immediateReceipt)
 	return reply, err
 }
 
@@ -305,10 +302,10 @@ func (g *RESTGateway) Start() (err error) {
 	g.receipts.addRoutes(router)
 	if len(g.conf.Kafka.Brokers) > 0 {
 		wk := newWebhooksKafka(&g.conf.Kafka, g.receipts)
-		g.webhooks = newWebhooks(wk, g.smartContractGW)
+		g.webhooks = newWebhooks(wk, g.receipts, g.smartContractGW)
 	} else {
 		wd := newWebhooksDirect(&g.conf.WebhooksDirectConf, processor, g.receipts)
-		g.webhooks = newWebhooks(wd, g.smartContractGW)
+		g.webhooks = newWebhooks(wd, g.receipts, g.smartContractGW)
 	}
 	g.webhooks.addRoutes(router)
 
@@ -363,7 +360,7 @@ func (g *RESTGateway) Start() (err error) {
 	}
 	log.Infof("Shutting down HTTP server")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	g.srv.Shutdown(ctx)
+	_ = g.srv.Shutdown(ctx)
 	defer cancel()
 
 	return

@@ -30,6 +30,5 @@ func sendRESTError(res http.ResponseWriter, req *http.Request, err error, status
 	log.Errorf("<-- %s %s [%d]: %s", req.Method, req.URL, status, err)
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(status)
-	res.Write(reply)
-	return
+	_, _ = res.Write(reply)
 }

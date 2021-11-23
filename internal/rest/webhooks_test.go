@@ -106,6 +106,49 @@ func TestWebhookHandlerContractGWSuccess(t *testing.T) {
 	assert.Equal(200, rec.Result().StatusCode)
 }
 
+func TestWebhookHandlerContractGWImmeidateReceiptSuccess(t *testing.T) {
+	assert := assert.New(t)
+
+	deployMsg := messages.DeployContract{
+		TransactionCommon: messages.TransactionCommon{
+			RequestCommon: messages.RequestCommon{
+				Headers: messages.RequestHeaders{
+					CommonHeaders: messages.CommonHeaders{
+						MsgType: messages.MsgTypeDeployContract,
+					},
+				},
+			},
+			AckType: "receipt",
+		},
+	}
+	deployMsgBytes, _ := json.Marshal(&deployMsg)
+	req, _ := http.NewRequest("POST", "/any", bytes.NewReader(deployMsgBytes))
+	r := newMemoryReceipts(&ReceiptStoreConf{})
+	rs := newReceiptStore(&ReceiptStoreConf{}, r, nil)
+	w := &webhooks{
+		smartContractGW: &mockContractGW{},
+		handler:         &mockHandler{},
+		receipts:        rs,
+	}
+	rec := httptest.NewRecorder()
+	w.webhookHandler(rec, req, false)
+	assert.Equal(200, rec.Result().StatusCode)
+
+	var responseBody map[string]interface{}
+	err := json.NewDecoder(rec.Body).Decode(&responseBody)
+	assert.NoError(err)
+
+	id := responseBody["id"].(string)
+	assert.NotEmpty(id)
+
+	receipt, err := r.GetReceipt(id)
+	assert.NoError(err)
+	assert.NotNil(receipt)
+	assert.Equal(id, (*receipt)["_id"].(string))
+	assert.True((*receipt)["pending"].(bool))
+
+}
+
 func TestWebhookHandlerContractGWFail(t *testing.T) {
 	assert := assert.New(t)
 

@@ -79,11 +79,12 @@ func (f *MockKafkaFactory) NewConsumer(k KafkaCommon) (KafkaConsumer, error) {
 
 // MockKafkaProducer - mock
 type MockKafkaProducer struct {
-	MockInput     chan *sarama.ProducerMessage
-	MockSuccesses chan *sarama.ProducerMessage
-	MockErrors    chan *sarama.ProducerError
-	Closed        bool
-	CloseSync     sync.Mutex
+	MockInput      chan *sarama.ProducerMessage
+	MockSuccesses  chan *sarama.ProducerMessage
+	MockErrors     chan *sarama.ProducerError
+	FirstSendError error
+	Closed         bool
+	CloseSync      sync.Mutex
 }
 
 // AsyncClose - mock
@@ -103,8 +104,13 @@ func (p *MockKafkaProducer) AsyncClose() {
 }
 
 // Input - mock
-func (p *MockKafkaProducer) Input() chan<- *sarama.ProducerMessage {
-	return p.MockInput
+func (p *MockKafkaProducer) Input(topic string) (chan<- *sarama.ProducerMessage, error) {
+	if p.FirstSendError != nil {
+		err := p.FirstSendError
+		p.FirstSendError = nil
+		return p.MockInput, err
+	}
+	return p.MockInput, nil
 }
 
 // Successes - mock
@@ -148,5 +154,4 @@ func (c *MockKafkaConsumer) Errors() <-chan error {
 // MarkOffset - mock
 func (c *MockKafkaConsumer) MarkOffset(msg *sarama.ConsumerMessage, metadata string) {
 	c.OffsetsByPartition[msg.Partition] = msg.Offset
-	return
 }

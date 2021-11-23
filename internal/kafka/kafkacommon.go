@@ -171,6 +171,22 @@ func (s saramaLogger) Println(v ...interface{}) {
 	log.Debug(v...)
 }
 
+func getFetchDefault() int32 {
+	fetchDefault := int32(1024 * 1024)
+	cb := GetCircuitBreaker()
+	if cb != nil {
+		// Default fetch should not be more than 5% of the configured circuit breaker buffer.
+		// The cicruit breaker requires a fetch to occur, to update the high water mark.
+		// So if we hardly ever fetch, then there's a higher chance the producer could
+		// run over the buffer without us switching the switch
+		fivePercent := int32(cb.conf.UpperBound / 20)
+		if fivePercent > 0 && fivePercent < fetchDefault {
+			fetchDefault = fivePercent
+		}
+	}
+	return fetchDefault
+}
+
 func (k *kafkaCommon) connect() (err error) {
 
 	log.Debugf("Kafka Bootstrap brokers: %s", k.conf.Brokers)
@@ -192,6 +208,8 @@ func (k *kafkaCommon) connect() (err error) {
 		clientConf.Net.SASL.User = k.conf.SASL.Username
 		clientConf.Net.SASL.Password = k.conf.SASL.Password
 	}
+
+	clientConf.Consumer.Fetch.Default = getFetchDefault()
 
 	clientConf.Producer.Return.Successes = true
 	clientConf.Producer.Return.Errors = true

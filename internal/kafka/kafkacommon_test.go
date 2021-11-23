@@ -376,3 +376,18 @@ func TestConsumerErrorLoopLogsAndContinues(t *testing.T) {
 	k.signals <- os.Interrupt
 	wg.Wait()
 }
+
+func TestGetFetchDefault(t *testing.T) {
+	assert := assert.New(t)
+
+	assert.Equal(int32(1024*1024), getFetchDefault())
+	err := InitCircuitBreaker(&CircuitBreakerConf{
+		Enabled:    true,
+		UpperBound: 1024 * 1024 * 6,
+	})
+	assert.NoError(err)
+	assert.Equal(int32(314572), getFetchDefault())
+
+	singletonCircuitBreaker = nil
+
+}

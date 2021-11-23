@@ -357,6 +357,7 @@ func TestRegisterExistingContract(t *testing.T) {
 	json.NewDecoder(res.Body).Decode(&errBody)
 	assert.Equal(409, res.Code)
 	assert.Equal("Contract address 0123456789abcdef0123456789abcdef01234567 is already registered for name 'testcontract'", errBody["error"])
+	assert.Equal(errors.RESTGatewayFriendlyNameClash.Code(), errBody["code"])
 
 	req = httptest.NewRequest("GET", "/contracts/testcontract?swagger", bytes.NewReader([]byte{}))
 	res = httptest.NewRecorder()

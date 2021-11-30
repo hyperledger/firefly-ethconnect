@@ -212,9 +212,9 @@ func (g *RESTGateway) sendError(res http.ResponseWriter, msg string, code int) {
 }
 
 // DispatchMsgAsync is the rest2eth interface method for async dispatching of messages (via our webhook logic)
-func (g *RESTGateway) DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack, immediateReceipt bool) (*messages.AsyncSentMsg, error) {
-	reply, _, err := g.webhooks.processMsg(ctx, msg, ack, immediateReceipt)
-	return reply, err
+func (g *RESTGateway) DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack, immediateReceipt bool) (*messages.AsyncSentMsg, int, error) {
+	reply, status, err := g.webhooks.processMsg(ctx, msg, ack, immediateReceipt)
+	return reply, status, err
 }
 
 func (g *RESTGateway) newAccessTokenContextHandler(parent http.Handler) http.Handler {

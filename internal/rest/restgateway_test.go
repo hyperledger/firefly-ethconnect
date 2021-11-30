@@ -327,6 +327,7 @@ func TestDispatchMsgAsyncPassesThroughToWebhooks(t *testing.T) {
 	g.webhooks = newWebhooks(fakeHandler, r, nil)
 
 	var fakeMsg map[string]interface{}
-	_, err := g.DispatchMsgAsync(context.Background(), fakeMsg, true, true)
+	_, status, err := g.DispatchMsgAsync(context.Background(), fakeMsg, true, true)
+	assert.Equal(400, status)
 	assert.Regexp("Invalid message - missing 'headers' \\(or not an object\\)", err)
 }

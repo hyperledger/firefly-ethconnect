@@ -44,7 +44,7 @@ import (
 // REST2EthAsyncDispatcher is passed in to process messages over a streaming system with
 // a receipt store. Only used for POST methods, when fly-sync is not set to true
 type REST2EthAsyncDispatcher interface {
-	DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack, immediateReceipt bool) (*messages.AsyncSentMsg, error)
+	DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack, immediateReceipt bool) (*messages.AsyncSentMsg, int, error)
 }
 
 // rest2EthSyncDispatcher abstracts the processing of the transactions and queries
@@ -589,8 +589,8 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 		msgBytes, _ := json.Marshal(deployMsg)
 		var mapMsg map[string]interface{}
 		json.Unmarshal(msgBytes, &mapMsg)
-		if asyncResponse, err := r.asyncDispatcher.DispatchMsgAsync(req.Context(), mapMsg, ack, immediateReceipt); err != nil {
-			r.restErrReply(res, req, err, 500)
+		if asyncResponse, status, err := r.asyncDispatcher.DispatchMsgAsync(req.Context(), mapMsg, ack, immediateReceipt); err != nil {
+			r.restErrReply(res, req, err, status)
 		} else {
 			r.restAsyncReply(res, req, asyncResponse)
 		}
@@ -637,8 +637,8 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 		msgBytes, _ := json.Marshal(msg)
 		var mapMsg map[string]interface{}
 		json.Unmarshal(msgBytes, &mapMsg)
-		if asyncResponse, err := r.asyncDispatcher.DispatchMsgAsync(req.Context(), mapMsg, ack, immediateReceipt); err != nil {
-			r.restErrReply(res, req, err, 500)
+		if asyncResponse, status, err := r.asyncDispatcher.DispatchMsgAsync(req.Context(), mapMsg, ack, immediateReceipt); err != nil {
+			r.restErrReply(res, req, err, status)
 		} else {
 			r.restAsyncReply(res, req, asyncResponse)
 		}

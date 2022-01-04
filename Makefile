@@ -52,6 +52,8 @@ ${MOCKERY}:
 		$(VGO) install github.com/vektra/mockery/cmd/mockery@latest
 sarama:
 		$(eval SARAMA_PATH := $(shell $(VGO) list -f '{{.Dir}}' github.com/Shopify/sarama))
+go-mod-tidy: .ALWAYS
+		$(VGO) mod tidy
 
 define makemock
 mocks: mocks-$(strip $(1))-$(strip $(2))

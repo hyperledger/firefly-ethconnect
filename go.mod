@@ -11,14 +11,13 @@ require (
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d
 	github.com/icza/dyno v0.0.0-20210726202311-f1bafe5d9996
 	github.com/julienschmidt/httprouter v1.3.0
-	github.com/kaleido-io/ethbinding v0.0.0-20210901174425-3b4290c196a9
+	github.com/kaleido-io/ethbinding v0.0.0-20220104211806-1a198c06124a
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/mholt/archiver v3.1.1+incompatible
 	github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d
 	github.com/nwaples/rardecode v1.1.2 // indirect
 	github.com/oklog/ulid/v2 v2.0.2
-	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.2.1
 	github.com/stretchr/testify v1.7.0

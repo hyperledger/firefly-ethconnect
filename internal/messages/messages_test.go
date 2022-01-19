@@ -116,3 +116,17 @@ func TestIsReceiptForError(t *testing.T) {
 	m = &ErrorReply{}
 	assert.Nil(m.IsReceipt())
 }
+
+func TestAsyncSentMsgRequestID(t *testing.T) {
+	var asm *AsyncSentMsg
+	assert.Empty(t, asm.RequestID())
+	asm = &AsyncSentMsg{
+		Request: "abcd12345",
+	}
+	assert.Equal(t, "abcd12345", asm.RequestID())
+}
+
+func TestSyncQueryReplyRequestID(t *testing.T) {
+	var sqn SyncQueryReply
+	assert.Equal(t, "n/a", sqn.RequestID())
+}

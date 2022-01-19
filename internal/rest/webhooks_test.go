@@ -26,8 +26,11 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/mocks/ethmocks"
 	"github.com/julienschmidt/httprouter"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 type popReader struct{}
@@ -260,4 +263,101 @@ func TestWebhookHandlerTransactionWithID(t *testing.T) {
 	err = json.Unmarshal(data, &asyncResponse)
 	assert.NoError(err)
 	assert.Equal("test-id", asyncResponse.Request)
+}
+
+func TestWebhookHandlerQuery(t *testing.T) {
+	assert := assert.New(t)
+
+	queryMsg := messages.QueryTransaction{
+		SendTransaction: messages.SendTransaction{
+			TransactionCommon: messages.TransactionCommon{
+				RequestCommon: messages.RequestCommon{
+					Headers: messages.RequestHeaders{
+						CommonHeaders: messages.CommonHeaders{
+							MsgType: messages.MsgTypeQuery,
+						},
+					},
+				},
+			},
+			To: "0x6287111c39df2ff2aaa367f0b062f2dd86e3bcaa",
+			Method: &ethbinding.ABIElementMarshaling{
+				Name: "get",
+			},
+		},
+	}
+	queryMsgBytes, _ := json.Marshal(&queryMsg)
+	req, _ := http.NewRequest("POST", "/any", bytes.NewReader(queryMsgBytes))
+	mockRPC := &ethmocks.RPCClient{}
+	mockRPC.On("CallContext", mock.Anything, mock.Anything, "eth_call", mock.Anything, "latest").Return(nil)
+	w := &webhooks{
+		rpcClient: mockRPC,
+	}
+	rec := httptest.NewRecorder()
+	w.webhookHandler(rec, req, false)
+	assert.Equal(200, rec.Result().StatusCode)
+}
+
+func TestWebhookHandlerQueryBadPayload(t *testing.T) {
+	assert := assert.New(t)
+
+	badMsg := map[string]interface{}{
+		"headers": map[string]interface{}{
+			"type": "Query",
+		},
+		"blockNumber": []string{"Wrong!"}}
+	badMsgBytes, _ := json.Marshal(&badMsg)
+	req, _ := http.NewRequest("POST", "/any", bytes.NewReader(badMsgBytes))
+	w := &webhooks{}
+	rec := httptest.NewRecorder()
+	w.webhookHandler(rec, req, false)
+	assert.Equal(400, rec.Result().StatusCode)
+}
+
+func TestWebhookHandlerQueryBadBlockNumber(t *testing.T) {
+	assert := assert.New(t)
+
+	badMsg := map[string]interface{}{
+		"headers": map[string]interface{}{
+			"type": "Query",
+		},
+		"blockNumber": "!Badnumber",
+	}
+	badMsgBytes, _ := json.Marshal(&badMsg)
+	req, _ := http.NewRequest("POST", "/any", bytes.NewReader(badMsgBytes))
+	w := &webhooks{}
+	rec := httptest.NewRecorder()
+	w.webhookHandler(rec, req, false)
+	assert.Equal(400, rec.Result().StatusCode)
+}
+
+func TestWebhookHandlerQueryFail(t *testing.T) {
+	assert := assert.New(t)
+
+	queryMsg := messages.QueryTransaction{
+		SendTransaction: messages.SendTransaction{
+			TransactionCommon: messages.TransactionCommon{
+				RequestCommon: messages.RequestCommon{
+					Headers: messages.RequestHeaders{
+						CommonHeaders: messages.CommonHeaders{
+							MsgType: messages.MsgTypeQuery,
+						},
+					},
+				},
+			},
+			To: "0x6287111c39df2ff2aaa367f0b062f2dd86e3bcaa",
+			Method: &ethbinding.ABIElementMarshaling{
+				Name: "get",
+			},
+		},
+	}
+	queryMsgBytes, _ := json.Marshal(&queryMsg)
+	req, _ := http.NewRequest("POST", "/any", bytes.NewReader(queryMsgBytes))
+	mockRPC := &ethmocks.RPCClient{}
+	mockRPC.On("CallContext", mock.Anything, mock.Anything, "eth_call", mock.Anything, "latest").Return(fmt.Errorf("pop"))
+	w := &webhooks{
+		rpcClient: mockRPC,
+	}
+	rec := httptest.NewRecorder()
+	w.webhookHandler(rec, req, false)
+	assert.Equal(500, rec.Result().StatusCode)
 }

@@ -22,6 +22,7 @@ import (
 
 	"github.com/hyperledger/firefly-ethconnect/internal/contractgateway"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
 	"github.com/hyperledger/firefly-ethconnect/internal/utils"
 	"github.com/julienschmidt/httprouter"
@@ -39,13 +40,15 @@ type webhooks struct {
 	smartContractGW contractgateway.SmartContractGateway
 	handler         webhooksHandler
 	receipts        *receiptStore
+	rpcClient       eth.RPCClient
 }
 
-func newWebhooks(handler webhooksHandler, receipts *receiptStore, smartContractGW contractgateway.SmartContractGateway) *webhooks {
+func newWebhooks(handler webhooksHandler, receipts *receiptStore, smartContractGW contractgateway.SmartContractGateway, rpcClient eth.RPCClient) *webhooks {
 	return &webhooks{
 		handler:         handler,
 		receipts:        receipts,
 		smartContractGW: smartContractGW,
+		rpcClient:       rpcClient,
 	}
 }
 
@@ -62,10 +65,10 @@ func (w *webhooks) hookErrReply(res http.ResponseWriter, req *http.Request, err 
 	_, _ = res.Write(reply)
 }
 
-func (w *webhooks) msgSentReply(res http.ResponseWriter, req *http.Request, replyMsg *messages.AsyncSentMsg) {
+func (w *webhooks) sendWebhookReply(res http.ResponseWriter, req *http.Request, replyMsg messages.WebhookReply) {
 	reply, _ := json.Marshal(replyMsg)
 	status := 200
-	log.Infof("<-- %s %s [%d]: Webhook RequestID=%s", req.Method, req.URL, status, replyMsg.Request)
+	log.Infof("<-- %s %s [%d]: Webhook RequestID=%s", req.Method, req.URL, status, replyMsg.RequestID())
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(status)
 	_, _ = res.Write(reply)
@@ -112,10 +115,27 @@ func (w *webhooks) webhookHandler(res http.ResponseWriter, req *http.Request, ac
 		w.hookErrReply(res, req, err, statusCode)
 		return
 	}
-	w.msgSentReply(res, req, reply)
+	w.sendWebhookReply(res, req, reply)
 }
 
-func (w *webhooks) processMsg(ctx context.Context, msg map[string]interface{}, ack, immediateReceipt bool) (*messages.AsyncSentMsg, int, error) {
+func (w *webhooks) syncCallContract(ctx context.Context, msg map[string]interface{}) (messages.WebhookReply, int, error) {
+	msgBytes, _ := json.Marshal(&msg)
+	var qm messages.QueryTransaction
+	if err := json.Unmarshal(msgBytes, &qm); err != nil {
+		return nil, 400, err
+	}
+	tx, err := eth.NewSendTxn(&qm.SendTransaction, nil)
+	if err != nil {
+		return nil, 400, err
+	}
+	res, err := tx.CallAndProcessReply(ctx, w.rpcClient, qm.BlockNumber)
+	if err != nil {
+		return nil, 500, err
+	}
+	return messages.SyncQueryReply(res), 200, nil
+}
+
+func (w *webhooks) processMsg(ctx context.Context, msg map[string]interface{}, ack, immediateReceipt bool) (messages.WebhookReply, int, error) {
 	// Check we understand the type, and can get the key.
 	// The rest of the validation is performed by the bridge listening to Kafka
 	headers, exists := msg["headers"]
@@ -134,6 +154,8 @@ func (w *webhooks) processMsg(ctx context.Context, msg map[string]interface{}, a
 			return nil, 400, errors.Errorf(errors.WebhooksInvalidMsgFromMissing)
 		}
 		key = from.(string)
+	case messages.MsgTypeQuery:
+		return w.syncCallContract(ctx, msg)
 	default:
 		return nil, 400, errors.Errorf(errors.WebhooksInvalidMsgType, msgType)
 	}

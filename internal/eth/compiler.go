@@ -50,7 +50,7 @@ var defaultSolc string
 func getSolcExecutable(requestedVersion string) (string, error) {
 	log.Infof("Solidity compiler requested: %s", requestedVersion)
 	if solcVerChecker == nil {
-		solcVerChecker, _ = regexp.Compile("^([0-9]+)\\.?([0-9]+)")
+		solcVerChecker, _ = regexp.Compile(`^([0-9]+)\.?([0-9]+)`)
 	}
 	defaultSolc = utils.GetenvOrDefaultLowerCase(utils.GetenvOrDefaultUpperCase("PREFIX_SHORT", "fly")+"_SOLC_DEFAULT", "solc")
 	solc := defaultSolc

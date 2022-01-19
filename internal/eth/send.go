@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/hex"
 	"math/big"
+	"regexp"
 	"strings"
 	"time"
 
@@ -98,6 +99,31 @@ func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res
 	log.Debugf("eth_call response: %s", hexString)
 	res = ethbind.API.FromHex(hexString)
 	return
+}
+
+func (tx *Txn) CallAndProcessReply(ctx context.Context, rpc RPCClient, blocknumber string) (map[string]interface{}, error) {
+	callOption := "latest"
+	// only allowed values are "earliest/latest/pending", "", a number string "12345" or a hex number "0xab23"
+	// "latest" and "" (no fly-blocknumber given) are equivalent
+	if blocknumber != "" && blocknumber != "latest" {
+		isHex, _ := regexp.MatchString(`^0x[0-9a-fA-F]+$`, blocknumber)
+		if isHex || blocknumber == "earliest" || blocknumber == "pending" {
+			callOption = blocknumber
+		} else {
+			n := new(big.Int)
+			n, ok := n.SetString(blocknumber, 10)
+			if !ok {
+				return nil, errors.Errorf(errors.TransactionCallInvalidBlockNumber)
+			}
+			callOption = ethbind.API.EncodeBig(n)
+		}
+	}
+
+	retBytes, err := tx.Call(ctx, rpc, callOption)
+	if err != nil || retBytes == nil {
+		return nil, err
+	}
+	return ProcessRLPBytes(tx.Method.Outputs, retBytes), nil
 }
 
 // Send sends an individual transaction, choosing external or internal signing

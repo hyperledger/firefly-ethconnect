@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"math/big"
 	"reflect"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -47,6 +46,7 @@ type Txn struct {
 	PrivateFor       []string
 	PrivacyGroupID   string
 	Signer           TXSigner
+	Method           *ethbinding.ABIMethod
 }
 
 // TxnReceipt is the receipt obtained over JSON/RPC from the ethereum client
@@ -146,28 +146,7 @@ func CallMethod(ctx context.Context, rpc RPCClient, signer TXSigner, from, addr 
 	if err != nil {
 		return nil, err
 	}
-	callOption := "latest"
-	// only allowed values are "earliest/latest/pending", "", a number string "12345" or a hex number "0xab23"
-	// "latest" and "" (no fly-blocknumber given) are equivalent
-	if blocknumber != "" && blocknumber != "latest" {
-		isHex, _ := regexp.MatchString(`^0x[0-9a-fA-F]+$`, blocknumber)
-		if isHex || blocknumber == "earliest" || blocknumber == "pending" {
-			callOption = blocknumber
-		} else {
-			n := new(big.Int)
-			n, ok := n.SetString(blocknumber, 10)
-			if !ok {
-				return nil, errors.Errorf(errors.TransactionCallInvalidBlockNumber)
-			}
-			callOption = ethbind.API.EncodeBig(n)
-		}
-	}
-
-	retBytes, err := tx.Call(ctx, rpc, callOption)
-	if err != nil || retBytes == nil {
-		return nil, err
-	}
-	return ProcessRLPBytes(methodABI.Outputs, retBytes), nil
+	return tx.CallAndProcessReply(ctx, rpc, blocknumber)
 }
 
 // Decode the "input" bytes from a transaction, which are composed of a method ID + encoded arguments
@@ -391,7 +370,10 @@ func NewNilTX(from string, nonce int64, signer TXSigner) (tx *Txn, err error) {
 }
 
 func buildTX(signer TXSigner, msgFrom, msgTo string, msgNonce, msgValue, msgGas, msgGasPrice json.Number, methodABI *ethbinding.ABIMethod, params []interface{}) (tx *Txn, err error) {
-	tx = &Txn{Signer: signer}
+	tx = &Txn{
+		Signer: signer,
+		Method: methodABI,
+	}
 
 	// Build correctly typed args for the ethereum call
 	typedArgs, err := tx.generateTypedArgs(params, methodABI)
@@ -641,7 +623,7 @@ func (tx *Txn) generateTypedArg(requiredType *ethbinding.ABIType, param interfac
 		if suppliedType.Kind() == reflect.Slice {
 			paramV := reflect.ValueOf(param)
 			bSliceLen := paramV.Len()
-			bSlice = make([]byte, bSliceLen, bSliceLen)
+			bSlice = make([]byte, bSliceLen)
 			for i := 0; i < bSliceLen; i++ {
 				valV := paramV.Index(i)
 				if valV.Kind() == reflect.Interface {

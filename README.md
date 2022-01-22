@@ -95,22 +95,24 @@ params:
   - 12345
 gas: 1000000
 solidity: |-
-  pragma solidity >=0.4.22 <0.6.0;
+  // SPDX-License-Identifier: UNLICENSED
+
+  pragma solidity >=0.7;
 
   contract simplestorage {
-     uint public storedData;
+    uint public storedData;
 
-     function simplestorage(uint initVal) public {
-        storedData = initVal;
-     }
+    constructor(uint initVal) public {
+      storedData = initVal;
+    }
 
-     function set(uint x) public {
-        storedData = x;
-     }
+    function set(uint x) public {
+      storedData = x;
+    }
 
-     function get() public view returns (uint retVal) {
-        return storedData;
-     }
+    function get() public view returns (uint retVal) {
+      return storedData;
+    }
   }
 ```
 

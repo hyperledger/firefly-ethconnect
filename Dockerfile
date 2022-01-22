@@ -15,6 +15,7 @@ RUN make clean all
 
 FROM debian:buster-slim
 WORKDIR /ethconnect
+COPY --from=builder /usr/bin/solc /usr/bin/solc
 COPY --from=builder /ethconnect/ethconnect .
 COPY --from=builder /ethconnect/ethbinding.so .
 COPY --from=builder /ethconnect/start.sh .

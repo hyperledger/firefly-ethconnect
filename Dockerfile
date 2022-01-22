@@ -18,6 +18,13 @@ WORKDIR /ethconnect
 COPY --from=builder /ethconnect/ethconnect .
 COPY --from=builder /ethconnect/ethbinding.so .
 COPY --from=builder /ethconnect/start.sh .
-RUN ln -s /ethconnect/ethconnect /usr/bin/ethconnect
+
+# get the latest CA certs and symlink the ethconnect binary
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && update-ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s /ethconnect/ethconnect /usr/bin/ethconnect
+
 RUN mkdir abis
 ENTRYPOINT [ "./start.sh" ]

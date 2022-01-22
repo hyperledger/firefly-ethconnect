@@ -21,7 +21,9 @@ COPY --from=builder /ethconnect/start.sh .
 
 # get the latest CA certs and symlink the ethconnect binary
 RUN apt-get update \
-    && apt-get install -y ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && update-ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
     && ln -s /ethconnect/ethconnect /usr/bin/ethconnect
 
 RUN mkdir abis

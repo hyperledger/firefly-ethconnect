@@ -59,7 +59,6 @@ func RPCConnect(conf *RPCConnOpts) (RPCClientAll, error) {
 // CobraInitRPC sets the standard command-line parameters for RPC
 func CobraInitRPC(cmd *cobra.Command, rconf *RPCConf) {
 	cmd.Flags().StringVarP(&rconf.RPC.URL, "rpc-url", "r", os.Getenv("ETH_RPC_URL"), "JSON/RPC URL for Ethereum node")
-	return
 }
 
 // rpc.RPCClient methods with original types that we expose - only used within this package.

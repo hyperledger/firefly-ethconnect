@@ -44,7 +44,7 @@ import (
 // REST2EthAsyncDispatcher is passed in to process messages over a streaming system with
 // a receipt store. Only used for POST methods, when fly-sync is not set to true
 type REST2EthAsyncDispatcher interface {
-	DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack, immediateReceipt bool) (*messages.AsyncSentMsg, int, error)
+	DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack, immediateReceipt bool) (messages.WebhookReply, int, error)
 }
 
 // rest2EthSyncDispatcher abstracts the processing of the transactions and queries
@@ -636,7 +636,7 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 		// We are confident in the re-serialization here as we've deserialized from JSON then built our own structure
 		msgBytes, _ := json.Marshal(msg)
 		var mapMsg map[string]interface{}
-		json.Unmarshal(msgBytes, &mapMsg)
+		_ = json.Unmarshal(msgBytes, &mapMsg)
 		if asyncResponse, status, err := r.asyncDispatcher.DispatchMsgAsync(req.Context(), mapMsg, ack, immediateReceipt); err != nil {
 			r.restErrReply(res, req, err, status)
 		} else {
@@ -724,7 +724,7 @@ func (r *rest2eth) lookupTransaction(res http.ResponseWriter, req *http.Request,
 	return
 }
 
-func (r *rest2eth) restAsyncReply(res http.ResponseWriter, req *http.Request, asyncResponse *messages.AsyncSentMsg) {
+func (r *rest2eth) restAsyncReply(res http.ResponseWriter, req *http.Request, asyncResponse messages.WebhookReply) {
 	resBytes, _ := json.Marshal(asyncResponse)
 	status := 202 // accepted
 	log.Infof("<-- %s %s [%d]:\n%s", req.Method, req.URL, status, string(resBytes))

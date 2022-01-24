@@ -324,7 +324,7 @@ func TestDispatchMsgAsyncPassesThroughToWebhooks(t *testing.T) {
 	g := NewRESTGateway(&printYAML)
 	fakeHandler := &mockHandler{}
 	r, _ := newReceiptsTestStore(nil)
-	g.webhooks = newWebhooks(fakeHandler, r, nil)
+	g.webhooks = newWebhooks(fakeHandler, r, nil, nil)
 
 	var fakeMsg map[string]interface{}
 	_, status, err := g.DispatchMsgAsync(context.Background(), fakeMsg, true, true)

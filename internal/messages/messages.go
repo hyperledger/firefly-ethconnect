@@ -29,6 +29,8 @@ const (
 	MsgTypeDeployContract = "DeployContract"
 	// MsgTypeSendTransaction - send a transaction
 	MsgTypeSendTransaction = "SendTransaction"
+	// MsgTypeQuery - perform a call against the blockchain, and return a result
+	MsgTypeQuery = "Query"
 	// MsgTypeTransactionSuccess - a transaction receipt where status is 1
 	MsgTypeTransactionSuccess = "TransactionSuccess"
 	// MsgTypeTransactionFailure - a transaction receipt where status is 0
@@ -37,11 +39,29 @@ const (
 	RecordHeaderAccessToken = "fly-accesstoken"
 )
 
+type WebhookReply interface {
+	RequestID() string
+}
+
 // AsyncSentMsg is a standard response for async requests
 type AsyncSentMsg struct {
 	Sent    bool   `json:"sent"`
 	Request string `json:"id"`
 	Msg     string `json:"msg,omitempty"`
+}
+
+func (asm *AsyncSentMsg) RequestID() string {
+	if asm == nil {
+		return ""
+	}
+	return asm.Request
+}
+
+// SyncQueryReply payload is constructed by txn.CallMethod
+type SyncQueryReply map[string]interface{}
+
+func (sqr SyncQueryReply) RequestID() string {
+	return "n/a"
 }
 
 // CommonHeaders are common to all messages
@@ -117,12 +137,18 @@ type TransactionCommon struct {
 	AckType        string        `json:"acktype,omitempty"`
 }
 
-// SendTransaction message instructs the bridge to install a contract
+// SendTransaction message instructs the bridge to invoke a smart contract
 type SendTransaction struct {
 	TransactionCommon
 	To         string                           `json:"to"`
 	Method     *ethbinding.ABIElementMarshaling `json:"method,omitempty"`
 	MethodName string                           `json:"methodName,omitempty"`
+}
+
+// QueryTransaction message performs a synchronous invocation call to the blockchain
+type QueryTransaction struct {
+	SendTransaction
+	BlockNumber string `json:"blockNumber,omitempty"`
 }
 
 // DeployContract message instructs the bridge to install a contract

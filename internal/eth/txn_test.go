@@ -1908,3 +1908,56 @@ func TestDecodeInputs(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal(expectedArgs, args)
 }
+
+func TestCallAndProcessReply(t *testing.T) {
+	qm := &messages.QueryTransaction{
+		SendTransaction: messages.SendTransaction{
+			Method: &ethbinding.ABIElementMarshaling{
+				Name: "method1",
+				Outputs: []ethbinding.ABIArgumentMarshaling{
+					{Name: "arg1", Type: "uint256"},
+				},
+			},
+		},
+	}
+
+	rpc := &testRPCClient{
+		resultWrangler: func(retString interface{}) {
+			retVal := "0x000000000000000000000000000000000000000000000000000000000003039"
+			reflect.ValueOf(retString).Elem().Set(reflect.ValueOf(retVal))
+		},
+	}
+
+	tx, err := NewSendTxn(&qm.SendTransaction, nil)
+	assert.NoError(t, err)
+
+	res, err := tx.CallAndProcessReply(context.Background(), rpc, "latest")
+	assert.NoError(t, err)
+	assert.Equal(t, "12345", res["arg1"])
+
+}
+
+func TestCallAndProcessReplyNilRet(t *testing.T) {
+	qm := &messages.QueryTransaction{
+		SendTransaction: messages.SendTransaction{
+			Method: &ethbinding.ABIElementMarshaling{
+				Name: "method1",
+			},
+		},
+	}
+
+	rpc := &testRPCClient{
+		resultWrangler: func(retString interface{}) {
+			retVal := ""
+			reflect.ValueOf(retString).Elem().Set(reflect.ValueOf(retVal))
+		},
+	}
+
+	tx, err := NewSendTxn(&qm.SendTransaction, nil)
+	assert.NoError(t, err)
+
+	res, err := tx.CallAndProcessReply(context.Background(), rpc, "latest")
+	assert.NoError(t, err)
+	assert.Empty(t, res)
+
+}

@@ -56,7 +56,7 @@ type mockREST2EthDispatcher struct {
 	deployContractSyncError    error
 }
 
-func (m *mockREST2EthDispatcher) DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack, immediateReceipt bool) (*messages.AsyncSentMsg, int, error) {
+func (m *mockREST2EthDispatcher) DispatchMsgAsync(ctx context.Context, msg map[string]interface{}, ack, immediateReceipt bool) (messages.WebhookReply, int, error) {
 	m.asyncDispatchMsg = msg
 	m.asyncDispatchAck = ack
 	return m.asyncDispatchReply, m.asyncDispatchStatus, m.asyncDispatchError
@@ -712,7 +712,7 @@ func TestDeployContractSyncRemoteRegistryGateway(t *testing.T) {
 	}
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncReceipt: receipt,
-		asyncDispatchStatus: 200,
+		asyncDispatchStatus:        200,
 	}
 
 	r, router, res, _ := newTestREST2EthAndMsg(dispatcher, from, "", bodyMap)
@@ -746,7 +746,7 @@ func TestSendTransactionSyncFail(t *testing.T) {
 	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
 	dispatcher := &mockREST2EthDispatcher{
 		sendTransactionSyncError: fmt.Errorf("pop"),
-		asyncDispatchStatus: 500,
+		asyncDispatchStatus:      500,
 	}
 
 	r, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)
@@ -776,7 +776,7 @@ func TestSendTransactionAsyncFail(t *testing.T) {
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
 	dispatcher := &mockREST2EthDispatcher{
-		asyncDispatchError: fmt.Errorf("pop"),
+		asyncDispatchError:  fmt.Errorf("pop"),
 		asyncDispatchStatus: 500,
 	}
 
@@ -805,7 +805,7 @@ func TestDeployContractAsyncFail(t *testing.T) {
 	bodyMap["s"] = "testing"
 	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
 	dispatcher := &mockREST2EthDispatcher{
-		asyncDispatchError: fmt.Errorf("pop"),
+		asyncDispatchError:  fmt.Errorf("pop"),
 		asyncDispatchStatus: 500,
 	}
 
@@ -838,7 +838,7 @@ func TestSendTransactionAsyncBadMethod(t *testing.T) {
 	to := "0x567a417717cb6c59ddc1035705f02c0fd1ab1872"
 	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
 	dispatcher := &mockREST2EthDispatcher{
-		asyncDispatchError: fmt.Errorf("pop"),
+		asyncDispatchError:  fmt.Errorf("pop"),
 		asyncDispatchStatus: 500,
 	}
 
@@ -869,7 +869,7 @@ func TestSendTransactionBadContract(t *testing.T) {
 	from := "0x66c5fe653e7a9ebb628a6d40f0452d1e358baee8"
 	dispatcher := &mockREST2EthDispatcher{
 		asyncDispatchStatus: 500,
-		asyncDispatchError: fmt.Errorf("pop"),
+		asyncDispatchError:  fmt.Errorf("pop"),
 	}
 
 	r, router, res, req := newTestREST2EthAndMsg(dispatcher, from, to, bodyMap)

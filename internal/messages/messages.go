@@ -145,7 +145,7 @@ type SendTransaction struct {
 	MethodName string                           `json:"methodName,omitempty"`
 }
 
-// QueryTransaction message peforms a synchronous invocation call to the blockchain
+// QueryTransaction message performs a synchronous invocation call to the blockchain
 type QueryTransaction struct {
 	SendTransaction
 	BlockNumber string `json:"blockNumber,omitempty"`

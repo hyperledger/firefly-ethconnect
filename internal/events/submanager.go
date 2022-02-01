@@ -169,7 +169,14 @@ func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *ethbinding.
 }
 
 func (s *subscriptionMGR) AddSubscriptionDirect(ctx context.Context, newSub *SubscriptionCreateDTO) (*SubscriptionInfo, error) {
-	return s.addSubscriptionCommon(ctx, nil, newSub)
+	var abiLocation *contractregistry.ABILocation
+	if newSub.Methods != nil {
+		abiLocation = &contractregistry.ABILocation{
+			ABIType: contractregistry.InlineABI,
+			Inline:  newSub.Methods,
+		}
+	}
+	return s.addSubscriptionCommon(ctx, abiLocation, newSub)
 }
 
 func (s *subscriptionMGR) addSubscriptionCommon(ctx context.Context, abi *contractregistry.ABILocation, newSub *SubscriptionCreateDTO) (*SubscriptionInfo, error) {

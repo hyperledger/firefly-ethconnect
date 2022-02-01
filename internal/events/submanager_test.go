@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hyperledger/firefly-ethconnect/internal/contractregistry"
 	"github.com/hyperledger/firefly-ethconnect/internal/kvstore"
 	"github.com/hyperledger/firefly-ethconnect/mocks/contractregistrymocks"
 	"github.com/hyperledger/firefly-ethconnect/mocks/ethmocks"
@@ -272,6 +273,51 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	sm.db.Close()
 	err = sm.ResetSubscription(ctx, sub.ID, "0")
 	assert.Regexp("Failed to store subscription: leveldb: closed", err)
+
+	close(blockCall)
+	sm.Close(true)
+}
+
+func TestStreamAndSubscriptionInlineMethodArray(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	subscriptionName := "testSub"
+	defer cleanup(t, dir)
+	sm := newTestSubscriptionManager()
+
+	blockCall := make(chan struct{})
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) { <-blockCall }).Return(nil)
+	sm.rpc = rpc
+
+	sm.db, _ = kvstore.NewLDBKeyValueStore(path.Join(dir, "db"))
+	defer sm.db.Close()
+
+	ctx := context.Background()
+	assert.Equal([]*SubscriptionInfo{}, sm.Subscriptions(ctx))
+	assert.Equal([]*StreamInfo{}, sm.Streams(ctx))
+
+	stream, err := sm.AddStream(ctx, &StreamInfo{
+		Type:    "webhook",
+		Webhook: &webhookActionInfo{URL: "http://test.invalid"},
+	})
+	assert.NoError(err)
+
+	sub, err := sm.AddSubscriptionDirect(ctx, &SubscriptionCreateDTO{
+		Name:   subscriptionName,
+		Stream: stream.ID,
+		Event:  &ethbinding.ABIElementMarshaling{Name: "ping"},
+		Methods: ethbinding.ABIMarshaling{
+			{
+				Type: "function",
+				Name: "doPing",
+			},
+		},
+	})
+	assert.NoError(err)
+
+	assert.Equal(contractregistry.InlineABI, sub.ABI.ABIType)
+	assert.Equal("doPing", sub.ABI.Inline[0].Name)
 
 	close(blockCall)
 	sm.Close(true)

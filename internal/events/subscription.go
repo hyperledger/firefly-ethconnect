@@ -46,6 +46,7 @@ type SubscriptionCreateDTO struct {
 	Name      string                           `json:"name,omitempty"`
 	Stream    string                           `json:"stream,omitempty"`
 	Event     *ethbinding.ABIElementMarshaling `json:"event,omitempty"`
+	Methods   ethbinding.ABIMarshaling         `json:"methods,omitempty"` // an inline set of methods that might emit the event
 	FromBlock string                           `json:"fromBlock,omitempty"`
 	Address   *ethbinding.Address              `json:"address,omitempty"`
 }
@@ -130,11 +131,17 @@ func loadABI(cr contractregistry.ContractResolver, location *contractregistry.AB
 	if location == nil {
 		return nil, nil
 	}
-	deployMsg, err := cr.GetABI(*location, false)
-	if err != nil || deployMsg == nil || deployMsg.Contract == nil {
-		return nil, err
+	var abiMarshalling ethbinding.ABIMarshaling
+	if location.ABIType == contractregistry.InlineABI {
+		abiMarshalling = location.Inline
+	} else {
+		deployMsg, err := cr.GetABI(*location, false)
+		if err != nil || deployMsg == nil || deployMsg.Contract == nil {
+			return nil, err
+		}
+		abiMarshalling = deployMsg.Contract.ABI
 	}
-	return ethbind.API.ABIMarshalingToABIRuntime(deployMsg.Contract.ABI)
+	return ethbind.API.ABIMarshalingToABIRuntime(abiMarshalling)
 }
 
 func restoreSubscription(sm subscriptionManager, rpc eth.RPCClient, cr contractregistry.ContractResolver, i *SubscriptionInfo) (*subscription, error) {

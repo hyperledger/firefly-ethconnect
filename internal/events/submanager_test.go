@@ -25,7 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hyperledger/firefly-ethconnect/internal/contractregistry"
 	"github.com/hyperledger/firefly-ethconnect/internal/kvstore"
 	"github.com/hyperledger/firefly-ethconnect/mocks/contractregistrymocks"
 	"github.com/hyperledger/firefly-ethconnect/mocks/ethmocks"
@@ -316,7 +315,7 @@ func TestStreamAndSubscriptionInlineMethodArray(t *testing.T) {
 	})
 	assert.NoError(err)
 
-	assert.Equal(contractregistry.InlineABI, sub.ABI.ABIType)
+	assert.NotNil(sub.ABI.Inline)
 	assert.Equal("doPing", sub.ABI.Inline[0].Name)
 
 	close(blockCall)

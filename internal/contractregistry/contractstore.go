@@ -29,7 +29,6 @@ import (
 
 	"github.com/go-openapi/spec"
 	lru "github.com/hashicorp/golang-lru"
-	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	log "github.com/sirupsen/logrus"
 
 	ethconnecterrors "github.com/hyperledger/firefly-ethconnect/internal/errors"
@@ -124,13 +123,11 @@ const (
 	RemoteGateway abiType = iota
 	RemoteInstance
 	LocalABI
-	InlineABI
 )
 
 type ABILocation struct {
-	ABIType abiType                  `json:"type"`
-	Name    string                   `json:"name"`
-	Inline  ethbinding.ABIMarshaling `json:"inline"`
+	ABIType abiType `json:"type"`
+	Name    string  `json:"name"`
 }
 
 func IsRemote(msg messages.CommonHeaders) bool {

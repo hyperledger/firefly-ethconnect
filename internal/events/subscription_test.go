@@ -377,9 +377,11 @@ func TestGetTransactionInputsLoadABIFail(t *testing.T) {
 
 	s := &subscription{
 		info: &SubscriptionInfo{
-			ABI: &contractregistry.ABILocation{
-				ABIType: contractregistry.LocalABI,
-				Name:    "abi1",
+			ABI: &ABIRefOrInline{
+				ABILocation: contractregistry.ABILocation{
+					ABIType: contractregistry.LocalABI,
+					Name:    "abi1",
+				},
 			},
 		},
 		rpc: rpc,
@@ -407,9 +409,11 @@ func TestGetTransactionInputsMissingABI(t *testing.T) {
 
 	s := &subscription{
 		info: &SubscriptionInfo{
-			ABI: &contractregistry.ABILocation{
-				ABIType: contractregistry.LocalABI,
-				Name:    "abi1",
+			ABI: &ABIRefOrInline{
+				ABILocation: contractregistry.ABILocation{
+					ABIType: contractregistry.LocalABI,
+					Name:    "abi1",
+				},
 			},
 		},
 		rpc: rpc,
@@ -441,9 +445,11 @@ func TestGetTransactionInputsTxnInfoFail(t *testing.T) {
 
 	s := &subscription{
 		info: &SubscriptionInfo{
-			ABI: &contractregistry.ABILocation{
-				ABIType: contractregistry.LocalABI,
-				Name:    "abi1",
+			ABI: &ABIRefOrInline{
+				ABILocation: contractregistry.ABILocation{
+					ABIType: contractregistry.LocalABI,
+					Name:    "abi1",
+				},
 			},
 		},
 		rpc: rpc,
@@ -481,9 +487,11 @@ func TestGetTransactionInputsBadMethod(t *testing.T) {
 
 	s := &subscription{
 		info: &SubscriptionInfo{
-			ABI: &contractregistry.ABILocation{
-				ABIType: contractregistry.LocalABI,
-				Name:    "abi1",
+			ABI: &ABIRefOrInline{
+				ABILocation: contractregistry.ABILocation{
+					ABIType: contractregistry.LocalABI,
+					Name:    "abi1",
+				},
 			},
 		},
 		rpc: rpc,
@@ -546,9 +554,11 @@ func TestGetTransactionInputsSuccess(t *testing.T) {
 
 	s := &subscription{
 		info: &SubscriptionInfo{
-			ABI: &contractregistry.ABILocation{
-				ABIType: contractregistry.LocalABI,
-				Name:    "abi1",
+			ABI: &ABIRefOrInline{
+				ABILocation: contractregistry.ABILocation{
+					ABIType: contractregistry.LocalABI,
+					Name:    "abi1",
+				},
 			},
 		},
 		rpc: rpc,
@@ -592,8 +602,7 @@ func TestGetTransactionInputsSuccessInline(t *testing.T) {
 
 	s := &subscription{
 		info: &SubscriptionInfo{
-			ABI: &contractregistry.ABILocation{
-				ABIType: contractregistry.InlineABI,
+			ABI: &ABIRefOrInline{
 				Inline: ethbinding.ABIMarshaling{
 					{
 						Type: "function",

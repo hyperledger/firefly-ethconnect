@@ -159,7 +159,13 @@ func (s *subscriptionMGR) setInitialBlock(i *SubscriptionInfo, initialBlock stri
 
 // AddSubscription adds a new subscription
 func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *ethbinding.Address, abi *contractregistry.ABILocation, event *ethbinding.ABIElementMarshaling, streamID, initialBlock, name string) (*SubscriptionInfo, error) {
-	return s.addSubscriptionCommon(ctx, abi, &SubscriptionCreateDTO{
+	var abiRef *ABIRefOrInline
+	if abi != nil {
+		abiRef = &ABIRefOrInline{
+			ABILocation: *abi,
+		}
+	}
+	return s.addSubscriptionCommon(ctx, abiRef, &SubscriptionCreateDTO{
 		Address:   addr,
 		Name:      name,
 		Event:     event,
@@ -169,17 +175,16 @@ func (s *subscriptionMGR) AddSubscription(ctx context.Context, addr *ethbinding.
 }
 
 func (s *subscriptionMGR) AddSubscriptionDirect(ctx context.Context, newSub *SubscriptionCreateDTO) (*SubscriptionInfo, error) {
-	var abiLocation *contractregistry.ABILocation
+	var abiLocation *ABIRefOrInline
 	if newSub.Methods != nil {
-		abiLocation = &contractregistry.ABILocation{
-			ABIType: contractregistry.InlineABI,
-			Inline:  newSub.Methods,
+		abiLocation = &ABIRefOrInline{
+			Inline: newSub.Methods,
 		}
 	}
 	return s.addSubscriptionCommon(ctx, abiLocation, newSub)
 }
 
-func (s *subscriptionMGR) addSubscriptionCommon(ctx context.Context, abi *contractregistry.ABILocation, newSub *SubscriptionCreateDTO) (*SubscriptionInfo, error) {
+func (s *subscriptionMGR) addSubscriptionCommon(ctx context.Context, abi *ABIRefOrInline, newSub *SubscriptionCreateDTO) (*SubscriptionInfo, error) {
 	i := &SubscriptionInfo{
 		Name: newSub.Name,
 		TimeSorted: messages.TimeSorted{

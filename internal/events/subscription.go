@@ -51,6 +51,11 @@ type SubscriptionCreateDTO struct {
 	Address   *ethbinding.Address              `json:"address,omitempty"`
 }
 
+type ABIRefOrInline struct {
+	contractregistry.ABILocation
+	Inline ethbinding.ABIMarshaling `json:"inline,omitempty"`
+}
+
 // SubscriptionInfo is the persisted data for the subscription
 type SubscriptionInfo struct {
 	messages.TimeSorted
@@ -62,7 +67,7 @@ type SubscriptionInfo struct {
 	Filter    persistedFilter                  `json:"filter"`
 	Event     *ethbinding.ABIElementMarshaling `json:"event"`
 	FromBlock string                           `json:"fromBlock,omitempty"`
-	ABI       *contractregistry.ABILocation    `json:"abi,omitempty"`
+	ABI       *ABIRefOrInline                  `json:"abi,omitempty"`
 }
 
 // subscription is the runtime that manages the subscription
@@ -127,15 +132,15 @@ func (info *SubscriptionInfo) GetID() string {
 	return info.ID
 }
 
-func loadABI(cr contractregistry.ContractResolver, location *contractregistry.ABILocation) (abi *ethbinding.RuntimeABI, err error) {
+func loadABI(cr contractregistry.ContractResolver, location *ABIRefOrInline) (abi *ethbinding.RuntimeABI, err error) {
 	if location == nil {
 		return nil, nil
 	}
 	var abiMarshalling ethbinding.ABIMarshaling
-	if location.ABIType == contractregistry.InlineABI {
+	if location.Inline != nil {
 		abiMarshalling = location.Inline
 	} else {
-		deployMsg, err := cr.GetABI(*location, false)
+		deployMsg, err := cr.GetABI(location.ABILocation, false)
 		if err != nil || deployMsg == nil || deployMsg.Contract == nil {
 			return nil, err
 		}

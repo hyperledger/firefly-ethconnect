@@ -377,9 +377,11 @@ func TestGetTransactionInputsLoadABIFail(t *testing.T) {
 
 	s := &subscription{
 		info: &SubscriptionInfo{
-			ABI: &contractregistry.ABILocation{
-				ABIType: contractregistry.LocalABI,
-				Name:    "abi1",
+			ABI: &ABIRefOrInline{
+				ABILocation: contractregistry.ABILocation{
+					ABIType: contractregistry.LocalABI,
+					Name:    "abi1",
+				},
 			},
 		},
 		rpc: rpc,
@@ -407,9 +409,11 @@ func TestGetTransactionInputsMissingABI(t *testing.T) {
 
 	s := &subscription{
 		info: &SubscriptionInfo{
-			ABI: &contractregistry.ABILocation{
-				ABIType: contractregistry.LocalABI,
-				Name:    "abi1",
+			ABI: &ABIRefOrInline{
+				ABILocation: contractregistry.ABILocation{
+					ABIType: contractregistry.LocalABI,
+					Name:    "abi1",
+				},
 			},
 		},
 		rpc: rpc,
@@ -441,9 +445,11 @@ func TestGetTransactionInputsTxnInfoFail(t *testing.T) {
 
 	s := &subscription{
 		info: &SubscriptionInfo{
-			ABI: &contractregistry.ABILocation{
-				ABIType: contractregistry.LocalABI,
-				Name:    "abi1",
+			ABI: &ABIRefOrInline{
+				ABILocation: contractregistry.ABILocation{
+					ABIType: contractregistry.LocalABI,
+					Name:    "abi1",
+				},
 			},
 		},
 		rpc: rpc,
@@ -481,16 +487,20 @@ func TestGetTransactionInputsBadMethod(t *testing.T) {
 
 	s := &subscription{
 		info: &SubscriptionInfo{
-			ABI: &contractregistry.ABILocation{
-				ABIType: contractregistry.LocalABI,
-				Name:    "abi1",
+			ABI: &ABIRefOrInline{
+				ABILocation: contractregistry.ABILocation{
+					ABIType: contractregistry.LocalABI,
+					Name:    "abi1",
+				},
 			},
 		},
 		rpc: rpc,
 		cr:  cr,
 	}
+	fromAddr := ethbind.API.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	l := logEntry{
 		TransactionHash: [32]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+		InputSigner:     fromAddr.String(),
 	}
 	lCopy := l
 
@@ -499,6 +509,7 @@ func TestGetTransactionInputsBadMethod(t *testing.T) {
 			res := args[1]
 			*(res.(*eth.TxnInfo)) = eth.TxnInfo{
 				Input: &ethbinding.HexBytes{},
+				From:  &fromAddr,
 			}
 		}).
 		Return(nil)
@@ -546,9 +557,67 @@ func TestGetTransactionInputsSuccess(t *testing.T) {
 
 	s := &subscription{
 		info: &SubscriptionInfo{
-			ABI: &contractregistry.ABILocation{
-				ABIType: contractregistry.LocalABI,
-				Name:    "abi1",
+			ABI: &ABIRefOrInline{
+				ABILocation: contractregistry.ABILocation{
+					ABIType: contractregistry.LocalABI,
+					Name:    "abi1",
+				},
+			},
+		},
+		rpc: rpc,
+		cr:  cr,
+	}
+	l := logEntry{
+		TransactionHash: [32]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+	}
+	lCopy := l
+
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getTransactionByHash", "0x0000000000000000000000000000000000000000000000000000000000000001").
+		Run(func(args mock.Arguments) {
+			res := args[1]
+			*(res.(*eth.TxnInfo)) = eth.TxnInfo{
+				Input: methodInput,
+			}
+		}).
+		Return(nil)
+
+	s.getTransactionInputs(context.Background(), &l)
+
+	result, err := json.Marshal(l)
+	assert.NoError(err)
+	lCopy.InputMethod = "method1"
+	lCopy.InputArgs = expectedArgs
+	defaultLogEntry, err := json.Marshal(lCopy)
+	assert.NoError(err)
+	assert.Equal(string(defaultLogEntry), string(result))
+}
+
+func TestGetTransactionInputsSuccessInline(t *testing.T) {
+	assert := assert.New(t)
+	rpc := &ethmocks.RPCClient{}
+	cr := &contractregistrymocks.ContractStore{}
+
+	methodInput := &ethbinding.HexBytes{
+		0xf4, 0xe1, 0x3d, 0xc5, // ID of method1
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, // "1" as int32
+	}
+	expectedArgs := map[string]interface{}{"arg1": "1"}
+
+	s := &subscription{
+		info: &SubscriptionInfo{
+			ABI: &ABIRefOrInline{
+				Inline: ethbinding.ABIMarshaling{
+					{
+						Type: "function",
+						Name: "method1",
+						Inputs: []ethbinding.ABIArgumentMarshaling{
+							{
+								Name: "arg1",
+								Type: "int32",
+							},
+						},
+					},
+				},
 			},
 		},
 		rpc: rpc,

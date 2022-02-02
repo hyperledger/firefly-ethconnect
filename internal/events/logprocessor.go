@@ -37,6 +37,7 @@ type logEntry struct {
 	Timestamp        uint64                 `json:"timestamp,omitempty"`
 	InputMethod      string                 `json:"inputMethod,omitempty"`
 	InputArgs        map[string]interface{} `json:"inputArgs,omitempty"`
+	InputSigner      string                 `json:"inputSigner,omitempty"`
 }
 
 type eventData struct {
@@ -51,6 +52,7 @@ type eventData struct {
 	Timestamp        string                 `json:"timestamp,omitempty"`
 	InputMethod      string                 `json:"inputMethod,omitempty"`
 	InputArgs        map[string]interface{} `json:"inputArgs,omitempty"`
+	InputSigner      string                 `json:"inputSigner,omitempty"`
 	// Used for callback handling
 	batchComplete func(*eventData)
 }
@@ -129,6 +131,7 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 		LogIndex:         strconv.Itoa(idx),
 		InputMethod:      entry.InputMethod,
 		InputArgs:        entry.InputArgs,
+		InputSigner:      entry.InputSigner,
 		batchComplete:    lp.batchComplete,
 	}
 	if lp.stream.spec.Timestamps {

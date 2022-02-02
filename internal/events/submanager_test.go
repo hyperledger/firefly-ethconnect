@@ -277,6 +277,51 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	sm.Close(true)
 }
 
+func TestStreamAndSubscriptionInlineMethodArray(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	subscriptionName := "testSub"
+	defer cleanup(t, dir)
+	sm := newTestSubscriptionManager()
+
+	blockCall := make(chan struct{})
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) { <-blockCall }).Return(nil)
+	sm.rpc = rpc
+
+	sm.db, _ = kvstore.NewLDBKeyValueStore(path.Join(dir, "db"))
+	defer sm.db.Close()
+
+	ctx := context.Background()
+	assert.Equal([]*SubscriptionInfo{}, sm.Subscriptions(ctx))
+	assert.Equal([]*StreamInfo{}, sm.Streams(ctx))
+
+	stream, err := sm.AddStream(ctx, &StreamInfo{
+		Type:    "webhook",
+		Webhook: &webhookActionInfo{URL: "http://test.invalid"},
+	})
+	assert.NoError(err)
+
+	sub, err := sm.AddSubscriptionDirect(ctx, &SubscriptionCreateDTO{
+		Name:   subscriptionName,
+		Stream: stream.ID,
+		Event:  &ethbinding.ABIElementMarshaling{Name: "ping"},
+		Methods: ethbinding.ABIMarshaling{
+			{
+				Type: "function",
+				Name: "doPing",
+			},
+		},
+	})
+	assert.NoError(err)
+
+	assert.NotNil(sub.ABI.Inline)
+	assert.Equal("doPing", sub.ABI.Inline[0].Name)
+
+	close(blockCall)
+	sm.Close(true)
+}
+
 func TestResetSubscriptionErrors(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)

@@ -37,6 +37,7 @@ type logEntry struct {
 	Timestamp        uint64                 `json:"timestamp,omitempty"`
 	InputMethod      string                 `json:"inputMethod,omitempty"`
 	InputArgs        map[string]interface{} `json:"inputArgs,omitempty"`
+	InputSigner      string                 `json:"inputSigner,omitempty"`
 }
 
 type eventData struct {

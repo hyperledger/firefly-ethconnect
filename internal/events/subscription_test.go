@@ -497,8 +497,10 @@ func TestGetTransactionInputsBadMethod(t *testing.T) {
 		rpc: rpc,
 		cr:  cr,
 	}
+	fromAddr := ethbind.API.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	l := logEntry{
 		TransactionHash: [32]byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1},
+		InputSigner:     fromAddr.String(),
 	}
 	lCopy := l
 
@@ -507,6 +509,7 @@ func TestGetTransactionInputsBadMethod(t *testing.T) {
 			res := args[1]
 			*(res.(*eth.TxnInfo)) = eth.TxnInfo{
 				Input: &ethbinding.HexBytes{},
+				From:  &fromAddr,
 			}
 		}).
 		Return(nil)

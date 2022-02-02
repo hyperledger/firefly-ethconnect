@@ -7,6 +7,7 @@ The following is the list of current maintainers this repo:
 | Peter Broadhurst  | peterbroadhurst | peter.broadhurst@kaleido.io  | peterbroadhurst   |
 | Vinod Damle       | vdamle          | vinod.damle@kaleido.io       | reddevil          |
 | Jim Zhang         | jimthematrix    | jim.zhang@kaleido.io         | jimthematrix      |
+| Andrew Richardson | awrichar        | andrew.richardson@kaleido.io | Andrew.Richardson |
 
 
 This list is to be kept up to date as maintainers are added or removed.

@@ -404,7 +404,6 @@ func (a *eventStream) eventPoller() {
 
 	ctx := auth.NewSystemAuthContext()
 	var checkpoint map[string]*big.Int
-	blockUpdatedFilterStale := false
 	for !a.suspendOrStop() {
 		var err error
 		// Load the checkpoint (should only be first time round)
@@ -428,14 +427,12 @@ func (a *eventStream) eventPoller() {
 					blockHeight, exists := checkpoint[sub.info.ID]
 					if !exists || blockHeight.Cmp(big.NewInt(0)) <= 0 {
 						blockHeight, err = sub.setInitialBlockHeight(ctx)
-					} else {
+					} else if !sub.inCatchupMode() {
 						sub.setCheckpointBlockHeight(blockHeight)
 					}
 					if err == nil {
 						err = sub.restartFilter(ctx, blockHeight)
 					}
-					blockUpdatedFilterStale = true
-					log.Debugf("%s: Checkpoint updated due to stale sub filter: %s", sub.info.ID, blockHeight.String())
 				}
 				if err == nil {
 					err = sub.processNewEvents(ctx)
@@ -453,15 +450,17 @@ func (a *eventStream) eventPoller() {
 				i1 := checkpoint[sub.info.ID]
 				i2 := sub.blockHWM()
 
-				changed = changed || blockUpdatedFilterStale || i1 == nil || i1.Cmp(&i2) != 0
+				subChanged := i1 == nil || i1.Cmp(&i2) != 0
+				if subChanged {
+					log.Debugf("%s: New checkpoint HWM: %s", a.spec.ID, i2.String())
+				}
+				changed = changed || subChanged
 				checkpoint[sub.info.ID] = new(big.Int).Set(&i2)
 			}
 			if changed {
 				if err = a.sm.storeCheckpoint(a.spec.ID, checkpoint); err != nil {
 					log.Errorf("%s: Failed to store checkpoint: %s", a.spec.ID, err)
 				}
-				// set this to false before the next evaluation for stale subscriptions
-				blockUpdatedFilterStale = false
 			}
 		}
 		// the event poller reacts to notification about a stream update, else it starts

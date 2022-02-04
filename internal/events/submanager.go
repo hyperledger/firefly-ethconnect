@@ -414,7 +414,7 @@ func (s *subscriptionMGR) loadCheckpoint(streamID string) (map[string]*big.Int, 
 func (s *subscriptionMGR) storeCheckpoint(streamID string, checkpoint map[string]*big.Int) error {
 	cpID := checkpointIDPrefix + streamID
 	b, _ := json.MarshalIndent(&checkpoint, "", "  ")
-	log.Debugf("Storing checkpoint %s: %s", cpID, string(b))
+	log.Tracef("Storing checkpoint %s: %s", cpID, string(b))
 	return s.db.Put(cpID, b)
 }
 

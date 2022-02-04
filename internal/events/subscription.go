@@ -225,7 +225,7 @@ func (s *subscription) restartFilter(ctx context.Context, checkpoint *big.Int) e
 	defer cancel()
 
 	since := checkpoint
-	if s.catchupBlock != nil {
+	if s.inCatchupMode() {
 		// If we're already in catchup mode, we need to look at the current catchupBlock,
 		// not the checkpoint.
 		since = s.catchupBlock
@@ -238,13 +238,17 @@ func (s *subscription) restartFilter(ctx context.Context, checkpoint *big.Int) e
 	}
 
 	blockGap := new(big.Int).Sub(blockNumber.ToInt(), since).Int64()
-	log.Debugf("%s: restarting. Head=%s Position=%s Gap=%d (catchup threshold: %d)", s.logName, blockNumber.ToInt().String(), since.String(), blockGap, s.catchupModeBlockGap)
+	log.Debugf("%s: new filter. Head=%s Position=%s Gap=%d (catchup threshold: %d)", s.logName, blockNumber.ToInt().String(), since.String(), blockGap, s.catchupModeBlockGap)
 	if s.catchupModeBlockGap > 0 && blockGap > s.catchupModeBlockGap {
 		s.catchupBlock = since // note if we were already in catchup, this does not change anything
 		return nil
 	}
 
 	return s.createFilter(ctx, since)
+}
+
+func (s *subscription) inCatchupMode() bool {
+	return s.catchupBlock != nil
 }
 
 // getEventTimestamp adds the block timestamp to the log entry.

@@ -122,6 +122,10 @@ func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc eth.RPCClient, cr
 	if conf.CatchupModePageSize <= 0 {
 		conf.CatchupModePageSize = defaultCatchupModePageSize
 	}
+	if conf.CatchupModeBlockGap < conf.CatchupModePageSize {
+		log.Warnf("catchupModeBlockGap=%d must be >= catchupModePageSize=%d - setting to %d", conf.CatchupModeBlockGap, conf.CatchupModePageSize, conf.CatchupModePageSize)
+		conf.CatchupModeBlockGap = conf.CatchupModePageSize
+	}
 	return sm
 }
 

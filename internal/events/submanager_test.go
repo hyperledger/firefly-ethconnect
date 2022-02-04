@@ -79,6 +79,17 @@ func newTestSubscriptionManager() *subscriptionMGR {
 	return sm
 }
 
+func TestNestSubscriptionManagerBlockGapValidation(t *testing.T) {
+	smconf := &SubscriptionManagerConf{
+		CatchupModeBlockGap: 10,
+		CatchupModePageSize: 1000,
+	}
+	rpc := &ethmocks.RPCClient{}
+	cr := &contractregistrymocks.ContractStore{}
+	sm := NewSubscriptionManager(smconf, rpc, cr, newMockWebSocket()).(*subscriptionMGR)
+	assert.Equal(t, int64(1000), sm.conf.CatchupModeBlockGap)
+}
+
 func TestCobraInitSubscriptionManager(t *testing.T) {
 	assert := assert.New(t)
 	cmd := cobra.Command{}

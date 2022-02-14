@@ -67,11 +67,13 @@ type logProcessor struct {
 }
 
 func newLogProcessor(subID string, event *ethbinding.ABIEvent, stream *eventStream) *logProcessor {
-	return &logProcessor{
+	lp := &logProcessor{
 		subID:  subID,
 		event:  event,
 		stream: stream,
 	}
+	lp.highestDispatched.SetInt64(-1)
+	return lp
 }
 
 func (lp *logProcessor) batchComplete(newestEvent *eventData) {
@@ -96,9 +98,8 @@ func (lp *logProcessor) getBlockHWM() big.Int {
 func (lp *logProcessor) markNoEvents(blockNumber *big.Int) {
 	lp.hwnSync.Lock()
 	if lp.highestDispatched.Cmp(&lp.blockHWM) < 0 {
-		// Nothing in-flight, its safe to update the HWM
-		lp.blockHWM.Set(blockNumber)
-		log.Debugf("%s: HWM: %s", lp.subID, lp.blockHWM.String())
+		// Nothing in-flight, its safe to update the HWM - to one after the block we're up to
+		lp.blockHWM.Set(new(big.Int).Add(blockNumber, big.NewInt(1)))
 	}
 	lp.hwnSync.Unlock()
 }

@@ -138,7 +138,6 @@ func CobraInitTxnProcessor(cmd *cobra.Command, txconf *TxnProcessorConf) {
 	cmd.Flags().BoolVarP(&txconf.HexValuesInReceipt, "hex-values", "H", false, "Include hex values for large numbers in receipts (as well as numeric strings)")
 	cmd.Flags().BoolVarP(&txconf.AlwaysManageNonce, "predict-nonces", "P", false, "Predict the next nonce before sending (default=false for node-signed txns)")
 	cmd.Flags().BoolVarP(&txconf.OrionPrivateAPIS, "orion-privapi", "G", false, "Use Orion JSON/RPC API semantics for private transactions")
-	return
 }
 
 // OnMessage checks the type and dispatches to the correct logic
@@ -157,14 +156,12 @@ func (p *txnProcessor) OnMessage(txnContext TxnContext) {
 			break
 		}
 		p.OnDeployContractMessage(txnContext, &deployContractMsg)
-		break
 	case messages.MsgTypeSendTransaction:
 		var sendTransactionMsg messages.SendTransaction
 		if unmarshalErr = txnContext.Unmarshal(&sendTransactionMsg); unmarshalErr != nil {
 			break
 		}
 		p.OnSendTransactionMessage(txnContext, &sendTransactionMsg)
-		break
 	default:
 		unmarshalErr = errors.Errorf(errors.TransactionSendMsgTypeUnknown, headers.MsgType)
 	}
@@ -217,14 +214,14 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.T
 		return nil, err
 	} else if p.addressBook != nil {
 		if inflight.rpc, err = p.addressBook.lookup(txnContext.Context(), msg.From); err != nil {
-			return
+			return nil, err
 		}
 	}
 
 	// Validate the from address, and normalize to lower case with 0x prefix
 	from, err := utils.StrToAddress("from", msg.From)
 	if err != nil {
-		return
+		return nil, err
 	}
 	inflight.from = strings.ToLower(from.Hex())
 
@@ -232,12 +229,12 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.T
 	if p.conf.OrionPrivateAPIS {
 		if msg.PrivacyGroupID != "" && len(msg.PrivateFor) > 0 {
 			err = errors.Errorf(errors.TransactionSendPrivateForAndPrivacyGroup)
-			return
+			return nil, err
 		} else if msg.PrivacyGroupID != "" {
 			inflight.privacyGroupID = msg.PrivacyGroupID
 		} else if len(msg.PrivateFor) > 0 {
 			if inflight.privacyGroupID, err = eth.GetOrionPrivacyGroup(txnContext.Context(), p.rpc, &from, msg.PrivateFrom, msg.PrivateFor); err != nil {
-				return
+				return nil, err
 			}
 		}
 	}
@@ -256,10 +253,13 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.T
 	suppliedNonce := msg.Nonce
 	inflightForAddr, exists := p.inflightTxns[inflight.from]
 	// Add the inflight transaction to our tracking structure
+	newEntry := false
 	if !exists {
-		p.inflightTxns[inflight.from] = &inflightTxnState{}
-		inflightForAddr = p.inflightTxns[inflight.from]
+		inflightForAddr = &inflightTxnState{}
 		inflightForAddr.txnsInFlight = []*inflightTxn{}
+		// We don't want this new structure to be added in the case of an early return on failure, so
+		// we just mark here that it should be added, and it gets added only on the success path.
+		newEntry = true
 	}
 
 	if !nodeAssignNonce && suppliedNonce == "" {
@@ -278,7 +278,7 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.T
 	if suppliedNonce != "" {
 		if inflight.nonce, err = suppliedNonce.Int64(); err != nil {
 			err = errors.Errorf(errors.TransactionSendBadNonce, err)
-			return
+			return nil, err
 		}
 	} else if p.conf.OrionPrivateAPIS && (len(msg.PrivateFor) > 0 || msg.PrivacyGroupID != "") {
 		// If are using orion private transactions, then we need the private TX
@@ -287,7 +287,7 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.T
 		//       so attempting to submit more than one per block currently will FAIL
 		if inflight.nonce, err = eth.GetOrionTXCount(txnContext.Context(), p.rpc, &from, inflight.privacyGroupID); err != nil {
 			p.inflightTxnsLock.Unlock()
-			return
+			return nil, err
 		}
 		fromNode = true
 	} else if highestNonce >= 0 {
@@ -306,7 +306,7 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.T
 		// overwriting a transaction)
 		if inflight.nonce, err = eth.GetTransactionCount(txnContext.Context(), p.rpc, &from, "pending"); err != nil {
 			p.inflightTxnsLock.Unlock()
-			return
+			return nil, err
 		}
 		inflightForAddr.highestNonce = inflight.nonce // store the nonce in our inflight txns state
 		fromNode = true
@@ -315,6 +315,9 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.T
 	before := len(inflightForAddr.txnsInFlight)
 	inflightForAddr.txnsInFlight = append(inflightForAddr.txnsInFlight, inflight)
 	inflight.initialWaitDelay = p.inflightTxnDelayer.GetInitialDelay() // Must call under lock
+	if newEntry {
+		p.inflightTxns[inflight.from] = inflightForAddr
+	}
 
 	// Clear lock before logging
 	p.inflightTxnsLock.Unlock()

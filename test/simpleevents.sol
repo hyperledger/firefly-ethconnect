@@ -1,4 +1,4 @@
- pragma solidity >=0.5.2 <=0.7;
+ pragma solidity >=0.5.2 <=0.8;
 /**
   * @title Simple Storage with events
   * @dev Read and write values to the chain

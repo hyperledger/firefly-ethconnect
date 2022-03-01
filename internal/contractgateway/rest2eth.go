@@ -727,7 +727,7 @@ func (r *rest2eth) lookupTransaction(res http.ResponseWriter, req *http.Request,
 func (r *rest2eth) restAsyncReply(res http.ResponseWriter, req *http.Request, asyncResponse messages.WebhookReply) {
 	resBytes, _ := json.Marshal(asyncResponse)
 	status := 202 // accepted
-	log.Infof("<-- %s %s [%d]:\n%s", req.Method, req.URL, status, string(resBytes))
+	log.Infof("<-- %s %s [%d]: %s", req.Method, req.URL, status, string(resBytes))
 	log.Debugf("<-- %s", resBytes)
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(status)

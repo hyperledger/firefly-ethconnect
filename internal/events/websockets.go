@@ -86,6 +86,6 @@ func (w *webSocketAction) attemptBatch(batchNumber, attempt uint64, events []*ev
 	}
 
 	// Pass back any exception from the client
-	log.Infof("Attempt batch %d complete. ok=%t", batchNumber, err == nil)
+	log.Infof("WebSocket event batch %d complete (len=%d). err=%v", batchNumber, len(events), err)
 	return err
 }

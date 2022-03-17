@@ -239,6 +239,7 @@ func (a *eventStream) postUpdateStream() {
 	a.batchCond.L.Lock()
 	a.startEventHandlers(false)
 	a.updateInProgress = false
+	a.inFlight = 0
 	a.batchCond.L.Unlock()
 }
 
@@ -381,12 +382,14 @@ func (a *eventStream) resume() error {
 func (a *eventStream) isBlocked() bool {
 	a.batchCond.L.Lock()
 	inFlight := a.inFlight
-	v := inFlight >= a.spec.BatchSize
+	isBlocked := inFlight >= a.spec.BatchSize
 	a.batchCond.L.Unlock()
-	if v {
+	if isBlocked {
 		log.Warnf("%s: Is currently blocked. InFlight=%d BatchSize=%d", a.spec.ID, inFlight, a.spec.BatchSize)
+	} else if inFlight > 0 {
+		log.Debugf("%s: InFlight=%d BatchSize=%d", a.spec.ID, inFlight, a.spec.BatchSize)
 	}
-	return v
+	return isBlocked
 }
 
 func (a *eventStream) markAllSubscriptionsStale(ctx context.Context) {
@@ -423,7 +426,8 @@ func (a *eventStream) eventPoller() {
 					// Clear any checkpoint
 					delete(checkpoint, sub.info.ID)
 				}
-				if sub.filterStale && !sub.deleting {
+				stale := sub.filterStale
+				if stale && !sub.deleting {
 					blockHeight, exists := checkpoint[sub.info.ID]
 					if !exists || blockHeight.Cmp(big.NewInt(0)) <= 0 {
 						blockHeight, err = sub.setInitialBlockHeight(ctx)

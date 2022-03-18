@@ -1345,7 +1345,7 @@ func TestUpdateStreamSwapType(t *testing.T) {
 	assert.Regexp("The type of an event stream cannot be changed", err)
 }
 
-func TestUpdateStreamInProgress(t *testing.T) {
+func TestUpdateStreamNoOpUpdate(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)
 	defer cleanup(t, dir)
@@ -1363,6 +1363,32 @@ func TestUpdateStreamInProgress(t *testing.T) {
 
 	stream.updateInProgress = true
 	_, err := stream.update(&StreamInfo{})
+	assert.NoError(err)
+}
+
+func TestUpdateStreamInProgress(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+
+	db, _ := kvstore.NewLDBKeyValueStore(dir)
+	_, stream, svr, eventStream := newTestStreamForBatching(
+		&StreamInfo{
+			ErrorHandling: ErrorHandlingSkip,
+			BatchSize:     5,
+			Webhook:       &webhookActionInfo{},
+		}, db, 200)
+	defer svr.Close()
+	defer close(eventStream)
+	defer stream.stop(false)
+
+	stream.updateInProgress = true
+	_, err := stream.update(&StreamInfo{
+		Webhook: &webhookActionInfo{
+			URL: "http://newurl.example.com",
+		},
+		ErrorHandling: ErrorHandlingBlock,
+	})
 	assert.Regexp("Update to event stream already in progress", err)
 }
 
@@ -1419,6 +1445,7 @@ func TestUpdateWebSocket(t *testing.T) {
 
 	ctx := context.Background()
 	updateSpec := &StreamInfo{
+		ErrorHandling: ErrorHandlingSkip,
 		WebSocket: &webSocketActionInfo{
 			Topic: "test2",
 		},
@@ -1427,51 +1454,6 @@ func TestUpdateWebSocket(t *testing.T) {
 	assert.Equal("test2", updatedStream.WebSocket.Topic)
 	assert.Equal("websocket-stream", updatedStream.Name)
 	assert.NoError(err)
-}
-
-func TestUpdateStreamMissingWebhookURL(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir(t)
-	defer cleanup(t, dir)
-
-	db, _ := kvstore.NewLDBKeyValueStore(dir)
-	sm, stream, svr, eventStream := newTestStreamForBatching(
-		&StreamInfo{
-			ErrorHandling: ErrorHandlingBlock,
-			Webhook:       &webhookActionInfo{},
-		}, db, 200)
-	defer svr.Close()
-
-	s := setupTestSubscription(assert, sm, stream, "mySubName")
-	assert.Equal("mySubName", s.Name)
-
-	// We expect three events to be sent to the webhook
-	// With the default batch size of 1, that means three separate requests
-	wg := &sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		<-eventStream
-		<-eventStream
-		<-eventStream
-		wg.Done()
-	}()
-	wg.Wait()
-
-	ctx := context.Background()
-	updateSpec := &StreamInfo{
-		Webhook: &webhookActionInfo{
-			URL:               "",
-			TLSkipHostVerify:  true,
-			RequestTimeoutSec: 5,
-		},
-	}
-	_, err := sm.UpdateStream(ctx, stream.spec.ID, updateSpec)
-	assert.Regexp(errors.EventStreamsWebhookNoURL.Code(), err)
-	err = sm.DeleteSubscription(ctx, s.ID)
-	assert.NoError(err)
-	err = sm.DeleteStream(ctx, stream.spec.ID)
-	assert.NoError(err)
-	sm.Close(true)
 }
 
 func TestUpdateStreamInvalidWebhookURL(t *testing.T) {
@@ -1483,7 +1465,9 @@ func TestUpdateStreamInvalidWebhookURL(t *testing.T) {
 	sm, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			ErrorHandling: ErrorHandlingBlock,
-			Webhook:       &webhookActionInfo{},
+			Webhook: &webhookActionInfo{
+				RequestTimeoutSec: 240,
+			},
 		}, db, 200)
 	defer svr.Close()
 

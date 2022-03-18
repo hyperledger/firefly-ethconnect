@@ -254,8 +254,8 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 
 	blockCall := make(chan struct{})
 	rpc := &ethmocks.RPCClient{}
-	rpc.On("CallContext", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) { <-blockCall }).Return(nil)
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newFilter", mock.Anything).Return(nil).Maybe()
+	rpc.On("CallContext", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) { <-blockCall }).Return(nil)
 	sm.rpc = rpc
 
 	sm.db, _ = kvstore.NewLDBKeyValueStore(path.Join(dir, "db"))

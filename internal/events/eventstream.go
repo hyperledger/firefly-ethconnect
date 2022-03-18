@@ -239,72 +239,112 @@ func (a *eventStream) postUpdateStream() {
 	a.batchCond.L.Lock()
 	a.startEventHandlers(false)
 	a.updateInProgress = false
+	a.inFlight = 0
 	a.batchCond.L.Unlock()
+}
+
+func (a *eventStream) checkUpdate(newSpec *StreamInfo) (updatedSpec *StreamInfo, err error) {
+
+	// setUpdated marks that there is a change, and creates a copied object
+	specCopy := *a.spec
+	setUpdated := func() *StreamInfo {
+		if updatedSpec == nil {
+			updatedSpec = &specCopy
+		}
+		return updatedSpec
+	}
+
+	if newSpec.Type != "" && newSpec.Type != specCopy.Type {
+		return nil, errors.Errorf(errors.EventStreamsCannotUpdateType)
+	}
+	if specCopy.Type == "webhook" && newSpec.Webhook != nil {
+		if newSpec.Webhook.RequestTimeoutSec != 0 && newSpec.Webhook.RequestTimeoutSec != specCopy.Webhook.RequestTimeoutSec {
+			setUpdated().Webhook.RequestTimeoutSec = newSpec.Webhook.RequestTimeoutSec
+		}
+		if newSpec.Webhook.TLSkipHostVerify != specCopy.Webhook.TLSkipHostVerify {
+			setUpdated().Webhook.TLSkipHostVerify = newSpec.Webhook.TLSkipHostVerify
+		}
+		if newSpec.Webhook.URL != "" && newSpec.Webhook.URL != specCopy.Webhook.URL {
+			if _, err = url.Parse(newSpec.Webhook.URL); err != nil {
+				return nil, errors.Errorf(errors.EventStreamsWebhookInvalidURL)
+			}
+			setUpdated().Webhook.URL = newSpec.Webhook.URL
+		}
+		for k, v := range newSpec.Webhook.Headers {
+			if specCopy.Webhook.Headers == nil || specCopy.Webhook.Headers[k] != v {
+				setUpdated().Webhook.Headers = newSpec.Webhook.Headers
+				break
+			}
+		}
+	}
+	if specCopy.Type == "websocket" && newSpec.WebSocket != nil {
+		if newSpec.WebSocket.Topic != specCopy.WebSocket.Topic {
+			setUpdated().WebSocket.Topic = newSpec.WebSocket.Topic
+		}
+		if newSpec.WebSocket.DistributionMode != specCopy.WebSocket.DistributionMode {
+			setUpdated().WebSocket.DistributionMode = newSpec.WebSocket.DistributionMode
+		}
+		// Validate if we changed it
+		if updatedSpec != nil {
+			if err := validateWebSocket(newSpec.WebSocket); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	if specCopy.BatchSize != newSpec.BatchSize && newSpec.BatchSize != 0 && newSpec.BatchSize < MaxBatchSize {
+		setUpdated().BatchSize = newSpec.BatchSize
+	}
+	if specCopy.BatchTimeoutMS != newSpec.BatchTimeoutMS && newSpec.BatchTimeoutMS != 0 {
+		setUpdated().BatchTimeoutMS = newSpec.BatchTimeoutMS
+	}
+	if specCopy.BlockedRetryDelaySec != newSpec.BlockedRetryDelaySec && newSpec.BlockedRetryDelaySec != 0 {
+		setUpdated().BlockedRetryDelaySec = newSpec.BlockedRetryDelaySec
+	}
+	if newSpec.ErrorHandling != "" && newSpec.ErrorHandling != specCopy.ErrorHandling {
+		if strings.ToLower(newSpec.ErrorHandling) == ErrorHandlingBlock {
+			setUpdated().ErrorHandling = ErrorHandlingBlock
+		} else {
+			setUpdated().ErrorHandling = ErrorHandlingSkip
+		}
+	}
+	if newSpec.Name != "" && specCopy.Name != newSpec.Name {
+		setUpdated().Name = newSpec.Name
+	}
+	if specCopy.Timestamps != newSpec.Timestamps {
+		setUpdated().Timestamps = newSpec.Timestamps
+	}
+	if specCopy.Inputs != newSpec.Inputs {
+		setUpdated().Inputs = newSpec.Inputs
+	}
+
+	// Return a non-nil object ONLY if there's a change
+	return updatedSpec, nil
 }
 
 // update modifies an existing eventStream
 func (a *eventStream) update(newSpec *StreamInfo) (spec *StreamInfo, err error) {
 	log.Infof("%s: Update event stream", a.spec.ID)
+	updatedSpec, err := a.checkUpdate(newSpec)
+	if err != nil {
+		return nil, err
+	}
+	if updatedSpec == nil {
+		log.Infof("%s: No change", a.spec.ID)
+		return a.spec, nil
+	}
+
 	// set a flag to indicate updateInProgress
 	// For any go routines that are Wait() ing on the eventListener, wake them up
 	if err := a.preUpdateStream(); err != nil {
 		return nil, err
 	}
+	a.spec = updatedSpec
 	// wait for the poked goroutines to finish up
 	<-a.eventPollerDone
 	<-a.batchProcessorDone
 	<-a.batchDispatcherDone
 	defer a.postUpdateStream()
-
-	if newSpec.Type != "" && newSpec.Type != a.spec.Type {
-		return nil, errors.Errorf(errors.EventStreamsCannotUpdateType)
-	}
-	if a.spec.Type == "webhook" && newSpec.Webhook != nil {
-		if newSpec.Webhook.URL == "" {
-			return nil, errors.Errorf(errors.EventStreamsWebhookNoURL)
-		}
-		if _, err = url.Parse(newSpec.Webhook.URL); err != nil {
-			return nil, errors.Errorf(errors.EventStreamsWebhookInvalidURL)
-		}
-		if newSpec.Webhook.RequestTimeoutSec == 0 {
-			newSpec.Webhook.RequestTimeoutSec = 120
-		}
-		a.spec.Webhook.URL = newSpec.Webhook.URL
-		a.spec.Webhook.RequestTimeoutSec = newSpec.Webhook.RequestTimeoutSec
-		a.spec.Webhook.TLSkipHostVerify = newSpec.Webhook.TLSkipHostVerify
-		a.spec.Webhook.Headers = newSpec.Webhook.Headers
-	}
-	if a.spec.Type == "websocket" && newSpec.WebSocket != nil {
-		a.spec.WebSocket.Topic = newSpec.WebSocket.Topic
-		if err := validateWebSocket(newSpec.WebSocket); err != nil {
-			return nil, err
-		}
-		a.spec.WebSocket.DistributionMode = newSpec.WebSocket.DistributionMode
-	}
-
-	if a.spec.BatchSize != newSpec.BatchSize && newSpec.BatchSize != 0 && newSpec.BatchSize < MaxBatchSize {
-		a.spec.BatchSize = newSpec.BatchSize
-	}
-	if a.spec.BatchTimeoutMS != newSpec.BatchTimeoutMS && newSpec.BatchTimeoutMS != 0 {
-		a.spec.BatchTimeoutMS = newSpec.BatchTimeoutMS
-	}
-	if a.spec.BlockedRetryDelaySec != newSpec.BlockedRetryDelaySec && newSpec.BlockedRetryDelaySec != 0 {
-		a.spec.BlockedRetryDelaySec = newSpec.BlockedRetryDelaySec
-	}
-	if strings.ToLower(newSpec.ErrorHandling) == ErrorHandlingBlock {
-		a.spec.ErrorHandling = ErrorHandlingBlock
-	} else {
-		a.spec.ErrorHandling = ErrorHandlingSkip
-	}
-	if newSpec.Name != "" && a.spec.Name != newSpec.Name {
-		a.spec.Name = newSpec.Name
-	}
-	if a.spec.Timestamps != newSpec.Timestamps {
-		a.spec.Timestamps = newSpec.Timestamps
-	}
-	if a.spec.Inputs != newSpec.Inputs {
-		a.spec.Inputs = newSpec.Inputs
-	}
 	return a.spec, nil
 }
 
@@ -381,12 +421,14 @@ func (a *eventStream) resume() error {
 func (a *eventStream) isBlocked() bool {
 	a.batchCond.L.Lock()
 	inFlight := a.inFlight
-	v := inFlight >= a.spec.BatchSize
+	isBlocked := inFlight >= a.spec.BatchSize
 	a.batchCond.L.Unlock()
-	if v {
+	if isBlocked {
 		log.Warnf("%s: Is currently blocked. InFlight=%d BatchSize=%d", a.spec.ID, inFlight, a.spec.BatchSize)
+	} else if inFlight > 0 {
+		log.Debugf("%s: InFlight=%d BatchSize=%d", a.spec.ID, inFlight, a.spec.BatchSize)
 	}
-	return v
+	return isBlocked
 }
 
 func (a *eventStream) markAllSubscriptionsStale(ctx context.Context) {
@@ -423,7 +465,8 @@ func (a *eventStream) eventPoller() {
 					// Clear any checkpoint
 					delete(checkpoint, sub.info.ID)
 				}
-				if sub.filterStale && !sub.deleting {
+				stale := sub.filterStale
+				if stale && !sub.deleting {
 					blockHeight, exists := checkpoint[sub.info.ID]
 					if !exists || blockHeight.Cmp(big.NewInt(0)) <= 0 {
 						blockHeight, err = sub.setInitialBlockHeight(ctx)

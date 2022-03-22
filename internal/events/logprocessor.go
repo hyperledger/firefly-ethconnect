@@ -137,9 +137,9 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 
 	if entry.Removed {
 		if lp.confirmationManager != nil {
-			lp.confirmationManager.notify(&eventNotification{
-				removed: true,
-				event:   result,
+			lp.confirmationManager.notify(&bcmNotification{
+				nType: bcmRemovedLog,
+				event: result,
 			})
 		}
 		return nil
@@ -200,7 +200,8 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 	lp.hwnSync.Unlock()
 
 	if lp.confirmationManager != nil {
-		lp.confirmationManager.notify(&eventNotification{
+		lp.confirmationManager.notify(&bcmNotification{
+			nType:       bcmNewLog,
 			event:       result,
 			eventStream: lp.stream,
 		})

@@ -231,7 +231,23 @@ func (a *eventStream) preUpdateStream() error {
 	close(a.updateInterrupt)
 	a.batchCond.Broadcast()
 	a.batchCond.L.Unlock()
+
+	a.drainBlockConfirmationManager()
+
 	return nil
+}
+
+func (a *eventStream) drainBlockConfirmationManager() {
+	bcm := a.sm.confirmationManager()
+	if bcm != nil {
+		n := &bcmNotification{
+			nType:       bcmStopStream,
+			eventStream: a,
+			complete:    make(chan struct{}),
+		}
+		bcm.notify(n)
+		<-n.complete
+	}
 }
 
 // postUpdateStream resets flags and kicks off a fresh round of handler go routines
@@ -384,6 +400,7 @@ func (a *eventStream) suspend() {
 	a.spec.Suspended = true
 	a.batchCond.Broadcast()
 	a.batchCond.L.Unlock()
+	a.drainBlockConfirmationManager()
 	<-a.eventPollerDone
 	<-a.batchProcessorDone
 }

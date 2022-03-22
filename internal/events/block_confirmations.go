@@ -42,7 +42,7 @@ type blockConfirmationManager struct {
 	requiredConfirmations int
 	pollingInterval       time.Duration
 	blockCache            *lru.Cache
-	eventNotifications    chan *eventNotification
+	bcmNotifications      chan *bcmNotification
 	highestBlockSeen      uint64
 	includeInPayload      bool
 	pending               map[string]*pendingEvent
@@ -82,10 +82,19 @@ func (pe pendingEvents) Less(i, j int) bool {
 		(pe[i].event.BlockNumber == pe[j].event.BlockNumber && pe[i].event.LogIndex < pe[j].event.LogIndex)
 }
 
-type eventNotification struct {
-	removed     bool
+type bcmEventType int
+
+const (
+	bcmNewLog bcmEventType = iota
+	bcmRemovedLog
+	bcmStopStream
+)
+
+type bcmNotification struct {
+	nType       bcmEventType
 	event       *eventData
 	eventStream *eventStream
+	complete    chan struct{} // for bcmStopStream only
 }
 
 // blockInfo is the information we cache for a block
@@ -131,7 +140,7 @@ func newBlockConfirmationManager(ctx context.Context, rpc eth.RPCClient, conf *b
 		requiredConfirmations: requiredConfirmations,
 		pollingInterval:       pollingInterval,
 		filterStale:           true,
-		eventNotifications:    make(chan *eventNotification, eventQueueLength),
+		bcmNotifications:      make(chan *bcmNotification, eventQueueLength),
 		pending:               make(map[string]*pendingEvent),
 		includeInPayload:      conf.IncludeInPayload,
 	}
@@ -143,8 +152,8 @@ func newBlockConfirmationManager(ctx context.Context, rpc eth.RPCClient, conf *b
 }
 
 // Notify is used to notify the confirmation manager of detection of a new logEntry addition or removal
-func (bcm *blockConfirmationManager) notify(ev *eventNotification) {
-	bcm.eventNotifications <- ev
+func (bcm *blockConfirmationManager) notify(ev *bcmNotification) {
+	bcm.bcmNotifications <- ev
 }
 
 func (bcm *blockConfirmationManager) createBlockFilter() error {
@@ -214,18 +223,24 @@ func (bcm *blockConfirmationManager) getBlockByNumber(number uint64) (*blockInfo
 
 func (bcm *blockConfirmationManager) confirmationsListener() {
 	pollTimer := time.NewTimer(0)
-	notifications := make([]*eventNotification, 0)
+	notifications := make([]*bcmNotification, 0)
 	for {
-		timedOut := false
-		for !timedOut {
+		popped := false
+		for !popped {
 			select {
 			case <-pollTimer.C:
-				timedOut = true
+				popped = true
 			case <-bcm.ctx.Done():
 				bcm.log.Debugf("Block confirmation listener stopping")
 				return
-			case ev := <-bcm.eventNotifications:
-				notifications = append(notifications, ev)
+			case notification := <-bcm.bcmNotifications:
+				if notification.nType == bcmStopStream {
+					// Handle stream notifications immediately
+					bcm.streamStopped(notification)
+				} else {
+					// Defer until after we've got new logs
+					notifications = append(notifications, notification)
+				}
 			}
 		}
 		pollTimer = time.NewTimer(bcm.pollingInterval)
@@ -271,20 +286,34 @@ func (bcm *blockConfirmationManager) keyForEvent(event *eventData) string {
 	return fmt.Sprintf("TX:%s|BLOCK:%s/%s|IDX:%s", event.TransactionHash, event.BlockNumber, event.BlockHash, event.LogIndex)
 }
 
-func (bcm *blockConfirmationManager) processNotifications(notifications []*eventNotification) error {
+func (bcm *blockConfirmationManager) processNotifications(notifications []*bcmNotification) error {
 
 	for _, n := range notifications {
-		if n.removed {
-			bcm.removeEvent(n.event)
-		} else {
+		switch n.nType {
+		case bcmNewLog:
 			pending := bcm.addEvent(n.event, n.eventStream)
 			if err := bcm.walkChainForEvent(pending); err != nil {
 				return err
 			}
+		case bcmRemovedLog:
+			bcm.removeEvent(n.event)
+		default:
+			// Note that streamStopped is handled in the polling loop directly
+			bcm.log.Warnf("Unexpected notification type: %d", n.nType)
 		}
 	}
 
 	return nil
+}
+
+// streamStopped removes all pending work for a given stream, and notifies once done
+func (bcm *blockConfirmationManager) streamStopped(notification *bcmNotification) {
+	for eventKey, pending := range bcm.pending {
+		if pending.eventStream == notification.eventStream {
+			delete(bcm.pending, eventKey)
+		}
+	}
+	close(notification.complete)
 }
 
 // addEvent is called by the goroutine on receipt of a new event notification
@@ -379,7 +408,9 @@ func (bcm *blockConfirmationManager) dispatchConfirmed(confirmed *pendingEvent) 
 	bcm.log.Infof("Confirmed with %d confirmations event=%s", len(confirmed.confirmations), eventKey)
 	delete(bcm.pending, eventKey)
 
-	confirmed.event.Confirmations = confirmed.confirmations
+	if bcm.includeInPayload {
+		confirmed.event.Confirmations = confirmed.confirmations
+	}
 	confirmed.eventStream.handleEvent(confirmed.event)
 }
 

@@ -72,7 +72,8 @@ func newTestSubscriptionManager() *subscriptionMGR {
 	smconf := &SubscriptionManagerConf{}
 	rpc := &ethmocks.RPCClient{}
 	cr := &contractregistrymocks.ContractStore{}
-	sm := NewSubscriptionManager(smconf, rpc, cr, newMockWebSocket()).(*subscriptionMGR)
+	s, _ := NewSubscriptionManager(smconf, rpc, cr, newMockWebSocket())
+	sm := s.(*subscriptionMGR)
 	sm.db = kvstore.NewMockKV(nil)
 	sm.config().WebhooksAllowPrivateIPs = true
 	sm.config().EventPollingIntervalSec = 0
@@ -86,7 +87,9 @@ func TestNestSubscriptionManagerBlockGapValidation(t *testing.T) {
 	}
 	rpc := &ethmocks.RPCClient{}
 	cr := &contractregistrymocks.ContractStore{}
-	sm := NewSubscriptionManager(smconf, rpc, cr, newMockWebSocket()).(*subscriptionMGR)
+	s, err := NewSubscriptionManager(smconf, rpc, cr, newMockWebSocket())
+	assert.NoError(t, err)
+	sm := s.(*subscriptionMGR)
 	assert.Equal(t, int64(1000), sm.conf.CatchupModeBlockGap)
 }
 

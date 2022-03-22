@@ -30,6 +30,7 @@ import (
 type logEntry struct {
 	Address          ethbinding.Address     `json:"address"`
 	BlockNumber      ethbinding.HexBigInt   `json:"blockNumber"`
+	BlockHash        ethbinding.Hash        `json:"blockHash"`
 	TransactionIndex ethbinding.HexUint     `json:"transactionIndex"`
 	TransactionHash  ethbinding.Hash        `json:"transactionHash"`
 	Data             string                 `json:"data"`
@@ -38,11 +39,13 @@ type logEntry struct {
 	InputMethod      string                 `json:"inputMethod,omitempty"`
 	InputArgs        map[string]interface{} `json:"inputArgs,omitempty"`
 	InputSigner      string                 `json:"inputSigner,omitempty"`
+	Removed          bool                   `json:"removed,omitempty"`
 }
 
 type eventData struct {
 	Address          string                 `json:"address"`
 	BlockNumber      string                 `json:"blockNumber"`
+	BlockHash        string                 `json:"blockHash"`
 	TransactionIndex string                 `json:"transactionIndex"`
 	TransactionHash  string                 `json:"transactionHash"`
 	Data             map[string]interface{} `json:"data"`
@@ -53,24 +56,27 @@ type eventData struct {
 	InputMethod      string                 `json:"inputMethod,omitempty"`
 	InputArgs        map[string]interface{} `json:"inputArgs,omitempty"`
 	InputSigner      string                 `json:"inputSigner,omitempty"`
+	Confirmations    []blockConfirmation    `json:"confirmations,omitempty"`
 	// Used for callback handling
 	batchComplete func(*eventData)
 }
 
 type logProcessor struct {
-	subID             string
-	event             *ethbinding.ABIEvent
-	stream            *eventStream
-	blockHWM          big.Int
-	highestDispatched big.Int
-	hwnSync           sync.Mutex
+	subID               string
+	event               *ethbinding.ABIEvent
+	stream              *eventStream
+	confirmationManager *blockConfirmationManager
+	blockHWM            big.Int
+	highestDispatched   big.Int
+	hwnSync             sync.Mutex
 }
 
-func newLogProcessor(subID string, event *ethbinding.ABIEvent, stream *eventStream) *logProcessor {
+func newLogProcessor(subID string, event *ethbinding.ABIEvent, stream *eventStream, confirmationManager *blockConfirmationManager) *logProcessor {
 	lp := &logProcessor{
-		subID:  subID,
-		event:  event,
-		stream: stream,
+		subID:               subID,
+		event:               event,
+		stream:              stream,
+		confirmationManager: confirmationManager,
 	}
 	lp.highestDispatched.SetInt64(-1)
 	return lp
@@ -112,18 +118,11 @@ func (lp *logProcessor) initBlockHWM(intVal *big.Int) {
 
 func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int) (err error) {
 
-	var data []byte
-	if strings.HasPrefix(entry.Data, "0x") {
-		data, err = ethbind.API.HexDecode(entry.Data)
-		if err != nil {
-			return errors.Errorf(errors.EventStreamsLogDecode, subInfo, err)
-		}
-	}
-
 	blockNumber := entry.BlockNumber.ToInt()
 	result := &eventData{
 		Address:          entry.Address.String(),
 		BlockNumber:      blockNumber.String(),
+		BlockHash:        entry.BlockHash.String(),
 		TransactionIndex: entry.TransactionIndex.String(),
 		TransactionHash:  entry.TransactionHash.String(),
 		Signature:        ethbind.API.ABIEventSignature(lp.event),
@@ -135,6 +134,25 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 		InputSigner:      entry.InputSigner,
 		batchComplete:    lp.batchComplete,
 	}
+
+	if entry.Removed {
+		if lp.confirmationManager != nil {
+			lp.confirmationManager.notify(&eventNotification{
+				removed: true,
+				event:   result,
+			})
+		}
+		return nil
+	}
+
+	var data []byte
+	if strings.HasPrefix(entry.Data, "0x") {
+		data, err = ethbind.API.HexDecode(entry.Data)
+		if err != nil {
+			return errors.Errorf(errors.EventStreamsLogDecode, subInfo, err)
+		}
+	}
+
 	if lp.stream.spec.Timestamps {
 		result.Timestamp = strconv.FormatUint(entry.Timestamp, 10)
 	}
@@ -180,7 +198,15 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 		lp.highestDispatched.Set(blockNumber)
 	}
 	lp.hwnSync.Unlock()
-	lp.stream.handleEvent(result)
+
+	if lp.confirmationManager != nil {
+		lp.confirmationManager.notify(&eventNotification{
+			event:       result,
+			eventStream: lp.stream,
+		})
+	} else {
+		lp.stream.handleEvent(result)
+	}
 	return nil
 }
 

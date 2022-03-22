@@ -421,14 +421,16 @@ func TestBuildup(t *testing.T) {
 
 func TestWebSocketUnconfigured(t *testing.T) {
 	assert := assert.New(t)
-	sm := NewSubscriptionManager(&SubscriptionManagerConf{}, nil, nil, nil).(*subscriptionMGR)
+	s, _ := NewSubscriptionManager(&SubscriptionManagerConf{}, nil, nil, nil)
+	sm := s.(*subscriptionMGR)
 	_, err := sm.AddStream(context.Background(), &StreamInfo{Type: "websocket"})
 	assert.Regexp("WebSocket listener not configured", err)
 }
 
 func TestBadTimestampCacheSize(t *testing.T) {
 	assert := assert.New(t)
-	sm := NewSubscriptionManager(&SubscriptionManagerConf{}, nil, nil, nil).(*subscriptionMGR)
+	s, _ := NewSubscriptionManager(&SubscriptionManagerConf{}, nil, nil, nil)
+	sm := s.(*subscriptionMGR)
 	_, err := sm.AddStream(context.Background(), &StreamInfo{
 		TimestampCacheSize: -1,
 	})

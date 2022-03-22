@@ -56,7 +56,7 @@ type eventData struct {
 	InputMethod      string                 `json:"inputMethod,omitempty"`
 	InputArgs        map[string]interface{} `json:"inputArgs,omitempty"`
 	InputSigner      string                 `json:"inputSigner,omitempty"`
-	Confirmations    []blockConfirmation    `json:"confirmations,omitempty"`
+	Confirmations    []*blockInfo           `json:"confirmations,omitempty"`
 	// Used for callback handling
 	batchComplete func(*eventData)
 }

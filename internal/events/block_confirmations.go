@@ -16,6 +16,7 @@ package events
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -66,15 +67,10 @@ type blockConfirmationConf struct {
 type pendingEvent struct {
 	key           string
 	added         time.Time
-	confirmations []blockConfirmation
+	confirmations []*blockInfo
 	blockNumber   uint64
 	event         *eventData
 	eventStream   *eventStream
-}
-
-type blockConfirmation struct {
-	BlockNumber uint64 `json:"number"`
-	BlockHash   string `json:"hash"`
 }
 
 type pendingEvents []*pendingEvent
@@ -93,26 +89,21 @@ type eventNotification struct {
 }
 
 // blockInfo is the information we cache for a block
-// We omit some information that's not used and potentially large:
-// - extraData
-// - uncles
 type blockInfo struct {
-	Number           ethbinding.HexUint64  `json:"number"`
-	Hash             ethbinding.Hash       `json:"hash"`
-	ParentHash       ethbinding.Hash       `json:"parentHash"`
-	Nonce            ethbinding.BlockNonce `json:"nonce"`
-	SHA3Uncles       ethbinding.Hash       `json:"sha3Uncles"`
-	TransactionsRoot ethbinding.Hash       `json:"transactionsRoot"`
-	StateRoot        ethbinding.Hash       `json:"stateRoot"`
-	ReceiptsRoot     ethbinding.Hash       `json:"receiptsRoot"`
-	Miner            ethbinding.Address    `json:"miner"`
-	Difficulty       ethbinding.HexBigInt  `json:"difficulty"`
-	TotalDifficulty  ethbinding.HexBigInt  `json:"totalDifficulty"`
-	Size             ethbinding.HexUint64  `json:"size"`
-	GasLimit         ethbinding.HexUint64  `json:"gasLimit"`
-	GasUsed          ethbinding.HexUint64  `json:"gasUsed"`
-	Timestamp        ethbinding.HexUint64  `json:"timestamp"`
-	Transactions     []*ethbinding.Hash    `json:"transactions"`
+	Number     ethbinding.HexUint `json:"number"`
+	Hash       ethbinding.Hash    `json:"hash"`
+	ParentHash ethbinding.Hash    `json:"parentHash"`
+	Timestamp  ethbinding.HexUint `json:"timestamp"`
+}
+
+// MarshalJSON for more consistent JSON output in confirmations array of event
+func (bi *blockInfo) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"number":     strconv.FormatUint(uint64(bi.Number), 10),
+		"hash":       bi.Hash,
+		"parentHash": bi.ParentHash,
+		"timestamp":  strconv.FormatUint(uint64(bi.Timestamp), 10),
+	})
 }
 
 func newBlockConfirmationManager(ctx context.Context, rpc eth.RPCClient, conf *blockConfirmationConf) (bcm *blockConfirmationManager, err error) {
@@ -306,7 +297,7 @@ func (bcm *blockConfirmationManager) addEvent(event *eventData, eventStream *eve
 	pending := &pendingEvent{
 		key:           bcm.keyForEvent(event),
 		added:         time.Now(),
-		confirmations: make([]blockConfirmation, 0, bcm.requiredConfirmations),
+		confirmations: make([]*blockInfo, 0, bcm.requiredConfirmations),
 		blockNumber:   blockNumber,
 		event:         event,
 		eventStream:   eventStream,
@@ -357,16 +348,13 @@ func (bcm *blockConfirmationManager) processBlock(block *blockInfo) error {
 		expectedBlockNumber := pending.blockNumber + 1
 		for i := 0; i < (len(pending.confirmations) + 1); i++ {
 			if parentStr == expectedParentHash && blockNumber == expectedBlockNumber {
-				pending.confirmations = append(pending.confirmations[0:i], blockConfirmation{
-					BlockNumber: blockNumber,
-					BlockHash:   block.Hash.String(),
-				})
+				pending.confirmations = append(pending.confirmations[0:i], block)
 				bcm.log.Infof("Confirmation %d at block %d / %s event=%s",
 					len(pending.confirmations), block.Number, block.Hash.String(), bcm.keyForEvent(pending.event))
 				break
 			}
 			if i < len(pending.confirmations) {
-				expectedParentHash = pending.confirmations[i].BlockHash
+				expectedParentHash = pending.confirmations[i].Hash.String()
 			}
 			expectedBlockNumber++
 		}
@@ -452,10 +440,7 @@ func (bcm *blockConfirmationManager) walkChainForEvent(pending *pendingEvent) (e
 			bcm.log.Infof("Block mismatch in confirmations: block=%d expected=%s actual=%s confirmations=%d event=%s", blockNumber, expectedParentHash, candidateParentHash, len(pending.confirmations), eventKey)
 			return nil
 		}
-		pending.confirmations = append(pending.confirmations, blockConfirmation{
-			BlockNumber: uint64(block.Number),
-			BlockHash:   block.Hash.String(),
-		})
+		pending.confirmations = append(pending.confirmations, block)
 		if len(pending.confirmations) >= bcm.requiredConfirmations {
 			// Ready for dispatch
 			bcm.dispatchConfirmed(pending)

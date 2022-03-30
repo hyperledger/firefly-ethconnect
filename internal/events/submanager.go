@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"math/big"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -88,15 +89,16 @@ type SubscriptionManagerConf struct {
 }
 
 type subscriptionMGR struct {
-	conf          *SubscriptionManagerConf
-	db            kvstore.KVStore
-	rpc           eth.RPCClient
-	subscriptions map[string]*subscription
-	bcm           *blockConfirmationManager
-	streams       map[string]*eventStream
-	closed        bool
-	cr            contractregistry.ContractResolver
-	wsChannels    ws.WebSocketChannels
+	conf               *SubscriptionManagerConf
+	db                 kvstore.KVStore
+	rpc                eth.RPCClient
+	subscriptions      map[string]*subscription
+	bcm                *blockConfirmationManager
+	streams            map[string]*eventStream
+	closed             bool
+	cr                 contractregistry.ContractResolver
+	wsChannels         ws.WebSocketChannels
+	subscriptionsMutex sync.Mutex
 }
 
 // CobraInitSubscriptionManager standard naming for cobra command params
@@ -220,8 +222,11 @@ func (s *subscriptionMGR) addSubscriptionCommon(ctx context.Context, abi *ABIRef
 	if err != nil {
 		return nil, err
 	}
+	s.subscriptionsMutex.Lock()
 	s.subscriptions[sub.info.ID] = sub
-	return s.storeSubscription(sub.info)
+	subInfo, err := s.storeSubscription(sub.info)
+	s.subscriptionsMutex.Unlock()
+	return subInfo, err
 }
 
 func (s *subscriptionMGR) config() *SubscriptionManagerConf {

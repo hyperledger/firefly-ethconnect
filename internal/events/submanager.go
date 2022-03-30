@@ -502,9 +502,9 @@ func (s *subscriptionMGR) recoverSubscriptions() {
 			if err != nil {
 				log.Errorf("Failed to recover subscription '%s': %s", subInfo.ID, err)
 			} else {
-				s.subscriptionsMutex.RLock()
+				s.subscriptionsMutex.Lock()
 				s.subscriptions[subInfo.ID] = sub
-				s.subscriptionsMutex.RUnlock()
+				s.subscriptionsMutex.Unlock()
 			}
 		}
 	}

@@ -98,7 +98,7 @@ type subscriptionMGR struct {
 	closed             bool
 	cr                 contractregistry.ContractResolver
 	wsChannels         ws.WebSocketChannels
-	subscriptionsMutex sync.Mutex
+	subscriptionsMutex sync.RWMutex
 }
 
 // CobraInitSubscriptionManager standard naming for cobra command params
@@ -151,10 +151,12 @@ func (s *subscriptionMGR) SubscriptionByID(ctx context.Context, id string) (*Sub
 
 // Subscriptions used externally to get list subscriptions
 func (s *subscriptionMGR) Subscriptions(ctx context.Context) []*SubscriptionInfo {
+	s.subscriptionsMutex.RLock()
 	l := make([]*SubscriptionInfo, 0, len(s.subscriptions))
 	for _, sub := range s.subscriptions {
 		l = append(l, sub.info)
 	}
+	s.subscriptionsMutex.RUnlock()
 	return l
 }
 
@@ -265,11 +267,13 @@ func (s *subscriptionMGR) DeleteSubscription(ctx context.Context, id string) err
 }
 
 func (s *subscriptionMGR) deleteSubscription(ctx context.Context, sub *subscription) error {
+	s.subscriptionsMutex.Lock()
 	delete(s.subscriptions, sub.info.ID)
 	_ = sub.unsubscribe(ctx, true)
 	if err := s.db.Delete(sub.info.ID); err != nil {
 		return err
 	}
+	s.subscriptionsMutex.Unlock()
 	return nil
 }
 
@@ -292,7 +296,7 @@ func (s *subscriptionMGR) StreamByID(ctx context.Context, id string) (*StreamInf
 
 // Streams used externally to get list streams
 func (s *subscriptionMGR) Streams(ctx context.Context) []*StreamInfo {
-	l := make([]*StreamInfo, 0, len(s.subscriptions))
+	l := make([]*StreamInfo, 0, len(s.streams))
 	for _, stream := range s.streams {
 		l = append(l, stream.spec)
 	}
@@ -333,18 +337,26 @@ func (s *subscriptionMGR) storeStream(spec *StreamInfo) (*StreamInfo, error) {
 	return spec, nil
 }
 
-// DeleteStream deletes a streamm
+// DeleteStream deletes a stream
 func (s *subscriptionMGR) DeleteStream(ctx context.Context, id string) error {
 	stream, err := s.streamByID(id)
 	if err != nil {
 		return err
 	}
 	// We have to clean up all the associated subs
+	s.subscriptionsMutex.RLock()
+	subs := make([]*subscription, 0)
 	for _, sub := range s.subscriptions {
 		if sub.info.Stream == stream.spec.ID {
-			_ = s.deleteSubscription(ctx, sub)
+			subs = append(subs, sub)
 		}
 	}
+	s.subscriptionsMutex.RUnlock()
+
+	for _, sub := range subs {
+		_ = s.deleteSubscription(ctx, sub)
+	}
+
 	delete(s.streams, stream.spec.ID)
 	stream.stop(false)
 	if err = s.db.Delete(stream.spec.ID); err != nil {
@@ -355,16 +367,18 @@ func (s *subscriptionMGR) DeleteStream(ctx context.Context, id string) error {
 }
 
 func (s *subscriptionMGR) subscriptionsForStream(id string) []*subscription {
+	s.subscriptionsMutex.RLock()
 	subIDs := make([]*subscription, 0)
 	for _, sub := range s.subscriptions {
 		if sub.info.Stream == id {
 			subIDs = append(subIDs, sub)
 		}
 	}
+	s.subscriptionsMutex.RUnlock()
 	return subIDs
 }
 
-// SuspendStream suspends a streamm from firing
+// SuspendStream suspends a stream from firing
 func (s *subscriptionMGR) SuspendStream(ctx context.Context, id string) error {
 	stream, err := s.streamByID(id)
 	if err != nil {
@@ -392,7 +406,9 @@ func (s *subscriptionMGR) ResumeStream(ctx context.Context, id string) error {
 
 // subscriptionByID used internally to lookup full objects
 func (s *subscriptionMGR) subscriptionByID(id string) (*subscription, error) {
+	s.subscriptionsMutex.RLock()
 	sub, exists := s.subscriptions[id]
+	s.subscriptionsMutex.RUnlock()
 	if !exists {
 		return nil, errors.Errorf(errors.EventStreamsSubscriptionNotFound, id)
 	}
@@ -486,7 +502,9 @@ func (s *subscriptionMGR) recoverSubscriptions() {
 			if err != nil {
 				log.Errorf("Failed to recover subscription '%s': %s", subInfo.ID, err)
 			} else {
+				s.subscriptionsMutex.RLock()
 				s.subscriptions[subInfo.ID] = sub
+				s.subscriptionsMutex.RUnlock()
 			}
 		}
 	}

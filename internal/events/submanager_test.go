@@ -22,6 +22,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path"
+	"sync"
 	"testing"
 	"time"
 
@@ -398,4 +399,48 @@ func TestRecoverErrors(t *testing.T) {
 
 	assert.Equal(0, len(sm.streams))
 	assert.Equal(0, len(sm.subscriptions))
+}
+
+func TestAddSubscriptionConcurrently(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+	sm := newTestSubscriptionManager()
+	ctx := context.Background()
+
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_blockNumber").Return(nil)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newFilter", mock.Anything).Return(nil)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterLogs", mock.Anything).Return(nil)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_uninstallFilter", mock.Anything).Return(nil)
+
+	sm.rpc = rpc
+
+	stream, err := sm.AddStream(ctx, &StreamInfo{
+		Type:    "webhook",
+		Webhook: &webhookActionInfo{URL: "http://test.invalid"},
+	})
+	assert.NoError(err)
+
+	abi := &ABIRefOrInline{
+		Inline: ethbinding.ABIMarshaling{
+			ethbinding.ABIElementMarshaling{Name: "ping"},
+		},
+	}
+
+	dto := &SubscriptionCreateDTO{
+		Stream: stream.ID,
+		Event:  &ethbinding.ABIElementMarshaling{Name: "ping"},
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := sm.addSubscriptionCommon(ctx, abi, dto)
+			assert.NoError(err)
+		}()
+	}
+	wg.Wait()
 }

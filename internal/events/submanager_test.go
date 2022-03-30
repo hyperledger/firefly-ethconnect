@@ -443,4 +443,5 @@ func TestAddSubscriptionConcurrently(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+	sm.Close(true)
 }

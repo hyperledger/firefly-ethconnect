@@ -408,6 +408,14 @@ func TestAddSubscriptionConcurrently(t *testing.T) {
 	sm := newTestSubscriptionManager()
 	ctx := context.Background()
 
+	rpc := &ethmocks.RPCClient{}
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_blockNumber").Return(nil)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newFilter", mock.Anything).Return(nil)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterLogs", mock.Anything).Return(nil)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_uninstallFilter", mock.Anything).Return(nil)
+
+	sm.rpc = rpc
+
 	stream, err := sm.AddStream(ctx, &StreamInfo{
 		Type:    "webhook",
 		Webhook: &webhookActionInfo{URL: "http://test.invalid"},

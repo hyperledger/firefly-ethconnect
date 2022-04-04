@@ -1,3 +1,9 @@
 {
-  "go.lintTool": "golangci-lint"
+  "go.lintTool": "golangci-lint",
+  "cSpell.words": [
+    "Debugf",
+    "hashicorp",
+    "Infof",
+    "Warnf"
+  ]
 }

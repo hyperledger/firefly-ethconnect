@@ -4,6 +4,7 @@ require (
 	github.com/Shopify/sarama v1.30.0
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/dsnet/compress v0.0.1 // indirect
+	github.com/ethereum/go-ethereum v1.10.12
 	github.com/globalsign/mgo v0.0.0-20181015135952-eeefdecb41b8
 	github.com/go-openapi/jsonreference v0.19.6
 	github.com/go-openapi/spec v0.20.4

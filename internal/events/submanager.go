@@ -80,12 +80,12 @@ type subscriptionManager interface {
 
 // SubscriptionManagerConf configuration
 type SubscriptionManagerConf struct {
-	EventLevelDBPath        string                `json:"eventsDB"`
-	EventPollingIntervalSec uint64                `json:"eventPollingIntervalSec,omitempty"`
-	CatchupModeBlockGap     int64                 `json:"catchupModeBlockGap,omitempty"`
-	CatchupModePageSize     int64                 `json:"catchupModePageSize,omitempty"`
-	WebhooksAllowPrivateIPs bool                  `json:"webhooksAllowPrivateIPs,omitempty"`
-	Confirmations           blockConfirmationConf `json:"confirmations,omitempty"`
+	EventLevelDBPath        string          `json:"eventsDB"`
+	EventPollingIntervalSec uint64          `json:"eventPollingIntervalSec,omitempty"`
+	CatchupModeBlockGap     int64           `json:"catchupModeBlockGap,omitempty"`
+	CatchupModePageSize     int64           `json:"catchupModePageSize,omitempty"`
+	WebhooksAllowPrivateIPs bool            `json:"webhooksAllowPrivateIPs,omitempty"`
+	Confirmations           bcmConfExternal `json:"confirmations,omitempty"`
 }
 
 type subscriptionMGR struct {
@@ -132,10 +132,11 @@ func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc eth.RPCClient, cr
 		conf.CatchupModeBlockGap = conf.CatchupModePageSize
 	}
 	if conf.Confirmations.Enabled {
-		sm.bcm, err = newBlockConfirmationManager(context.Background(), sm.rpc, &conf.Confirmations)
+		sm.bcm, err = newBlockConfirmationManager(context.Background(), sm.rpc, parseBCMConfig(&conf.Confirmations))
 		if err != nil {
 			return nil, err
 		}
+		sm.bcm.start()
 	}
 	return SubscriptionManager(sm), nil
 }
@@ -517,6 +518,9 @@ func (s *subscriptionMGR) Close(wait bool) {
 	}
 	if !s.closed && s.db != nil {
 		s.db.Close()
+	}
+	if s.bcm != nil {
+		s.bcm.stop()
 	}
 	s.closed = true
 }

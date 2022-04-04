@@ -35,6 +35,7 @@ import (
 // dispatched to the relevant listener.
 type blockConfirmationManager struct {
 	ctx                   context.Context
+	cancelFunc            func()
 	log                   *log.Entry
 	filterID              ethbinding.HexBigInt
 	filterStale           bool
@@ -46,22 +47,33 @@ type blockConfirmationManager struct {
 	highestBlockSeen      uint64
 	includeInPayload      bool
 	pending               map[string]*pendingEvent
+	done                  chan struct{}
 }
 
 const (
-	defaultConfirmations    = 35
+	defaultConfirmations    = 20 /* no perfect answer here for a default, as it's chain and risk assessment dependent */
 	defaultBlockCacheSize   = 1000
 	defaultEventQueueLength = 100
 	defaultPollingInterval  = 1 * time.Second
 )
 
-type blockConfirmationConf struct {
+// bcmConfExternal is the YAML/JSON parsable external configuration, with pointers to allow defaults to be applied, and units
+type bcmConfExternal struct {
 	Enabled                 bool `json:"enabled,omitempty"`
 	RequiredConfirmations   *int `json:"requiredConfirmations,omitempty"`
 	BlockCacheSize          *int `json:"blockCacheSize,omitempty"`
 	BlockPollingIntervalSec *int `json:"pollingIntervalSec,omitempty"`
 	EventQueueLength        *int `json:"eventQueueLength,omitempty"`
 	IncludeInPayload        bool `json:"includeInPayload,omitempty"`
+}
+
+// bcmConfInternal is the parsed config ready to use
+type bcmConfInternal struct {
+	requiredConfirmations int
+	blockCacheSize        int
+	pollingInterval       time.Duration
+	eventQueueLength      int
+	includeInPayload      bool
 }
 
 type pendingEvent struct {
@@ -115,40 +127,57 @@ func (bi *blockInfo) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func newBlockConfirmationManager(ctx context.Context, rpc eth.RPCClient, conf *blockConfirmationConf) (bcm *blockConfirmationManager, err error) {
-	requiredConfirmations := defaultConfirmations
+func parseBCMConfig(conf *bcmConfExternal) *bcmConfInternal {
+	intConf := &bcmConfInternal{
+		requiredConfirmations: defaultConfirmations,
+		blockCacheSize:        defaultBlockCacheSize,
+		pollingInterval:       defaultPollingInterval,
+		eventQueueLength:      defaultEventQueueLength,
+	}
 	if conf.RequiredConfirmations != nil {
-		requiredConfirmations = *conf.RequiredConfirmations
+		intConf.requiredConfirmations = *conf.RequiredConfirmations
 	}
-	blockCacheSize := defaultBlockCacheSize
 	if conf.BlockCacheSize != nil {
-		blockCacheSize = *conf.BlockCacheSize
+		intConf.blockCacheSize = *conf.BlockCacheSize
 	}
-	pollingInterval := defaultPollingInterval
 	if conf.BlockPollingIntervalSec != nil {
-		pollingInterval = time.Duration(*conf.BlockPollingIntervalSec) * time.Second
+		intConf.pollingInterval = time.Duration(*conf.BlockPollingIntervalSec) * time.Second
 	}
-	eventQueueLength := defaultEventQueueLength
 	if conf.EventQueueLength != nil {
-		eventQueueLength = *conf.EventQueueLength
+		intConf.eventQueueLength = *conf.EventQueueLength
 	}
+	return intConf
+}
 
+func newBlockConfirmationManager(ctx context.Context, rpc eth.RPCClient, conf *bcmConfInternal) (bcm *blockConfirmationManager, err error) {
+
+	bcmCtx, cancelFunc := context.WithCancel(ctx)
 	bcm = &blockConfirmationManager{
-		ctx:                   ctx,
+		ctx:                   bcmCtx,
+		cancelFunc:            cancelFunc,
 		rpc:                   rpc,
 		log:                   log.WithField("job", "blockConfirmationManager"),
-		requiredConfirmations: requiredConfirmations,
-		pollingInterval:       pollingInterval,
+		requiredConfirmations: conf.requiredConfirmations,
+		pollingInterval:       conf.pollingInterval,
 		filterStale:           true,
-		bcmNotifications:      make(chan *bcmNotification, eventQueueLength),
+		bcmNotifications:      make(chan *bcmNotification, conf.eventQueueLength),
 		pending:               make(map[string]*pendingEvent),
-		includeInPayload:      conf.IncludeInPayload,
+		includeInPayload:      conf.includeInPayload,
 	}
-	if bcm.blockCache, err = lru.New(blockCacheSize); err != nil {
+	if bcm.blockCache, err = lru.New(conf.blockCacheSize); err != nil {
 		return nil, errors.Errorf(errors.EventStreamsCreateStreamResourceErr, err)
 	}
-	go bcm.confirmationsListener()
 	return bcm, nil
+}
+
+func (bcm *blockConfirmationManager) start() {
+	bcm.done = make(chan struct{})
+	go bcm.confirmationsListener()
+}
+
+func (bcm *blockConfirmationManager) stop() {
+	bcm.cancelFunc()
+	<-bcm.done
 }
 
 // Notify is used to notify the confirmation manager of detection of a new logEntry addition or removal
@@ -194,7 +223,7 @@ func (bcm *blockConfirmationManager) getBlockByHash(blockHash *ethbinding.Hash) 
 		return nil, nil
 	}
 	bcm.blockCache.Add(blockInfo.Hash.String(), blockInfo)
-	bcm.log.Debugf("Downloded block header: %d / %s (by hash)", blockInfo.Number, blockInfo.Hash)
+	bcm.log.Debugf("Downloaded block header: %d / %s (by hash)", blockInfo.Number, blockInfo.Hash)
 
 	// Store it by number in the cache we use for walking the chain
 	bcm.blockCache.Add(blockInfo.Number, blockInfo)
@@ -213,7 +242,7 @@ func (bcm *blockConfirmationManager) getBlockByNumber(number uint64) (*blockInfo
 	if blockInfo == nil {
 		return nil, nil
 	}
-	bcm.log.Debugf("Downloded block header: %d / %s (by number)", blockInfo.Number, blockInfo.Hash)
+	bcm.log.Debugf("Downloaded block header: %d / %s (by number)", blockInfo.Number, blockInfo.Hash)
 
 	// Store it by number in the cache we use for walking the chain
 	bcm.blockCache.Add(blockInfo.Number, blockInfo)
@@ -222,6 +251,7 @@ func (bcm *blockConfirmationManager) getBlockByNumber(number uint64) (*blockInfo
 }
 
 func (bcm *blockConfirmationManager) confirmationsListener() {
+	defer close(bcm.done)
 	pollTimer := time.NewTimer(0)
 	notifications := make([]*bcmNotification, 0)
 	for {
@@ -351,7 +381,7 @@ func (bcm *blockConfirmationManager) processBlockHashes(blockHashes []*ethbindin
 			continue
 		}
 
-		// Get the block header
+		// Process the block for confirmations
 		if err = bcm.processBlock(block); err != nil {
 			bcm.log.Errorf("Failed to process block %d / %s: %s", block.Number, block.Hash, err)
 			continue
@@ -446,7 +476,7 @@ func (bcm *blockConfirmationManager) walkChainForEvent(pending *pendingEvent) (e
 	pending.confirmations = pending.confirmations[:0]
 	for {
 		// No point in walking past the highest block we've seen via the notifier
-		if bcm.highestBlockSeen > 0 && blockNumber >= bcm.highestBlockSeen {
+		if bcm.highestBlockSeen > 0 && blockNumber > bcm.highestBlockSeen {
 			bcm.log.Debugf("Waiting for confirmation after block %d event=%s", blockNumber, eventKey)
 			return nil
 		}

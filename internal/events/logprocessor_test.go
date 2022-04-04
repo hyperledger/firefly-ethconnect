@@ -194,8 +194,8 @@ func TestProcessLogEntryRemovedWithConfirmationManager(t *testing.T) {
 		Timestamps: false,
 	}
 	stream := &eventStream{
-		spec:                      spec,
-		hexFormatTransactionIndex: true,
+		spec:                    spec,
+		decimalTransactionIndex: false,
 	}
 
 	eventABI := `{
@@ -238,8 +238,8 @@ func TestProcessLogEntryDispatchWithConfirmationManager(t *testing.T) {
 		Timestamps: false,
 	}
 	stream := &eventStream{
-		spec:                      spec,
-		hexFormatTransactionIndex: false,
+		spec:                    spec,
+		decimalTransactionIndex: true,
 	}
 
 	eventABI := `{

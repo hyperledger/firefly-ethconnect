@@ -93,24 +93,24 @@ type webSocketActionInfo struct {
 }
 
 type eventStream struct {
-	sm                        subscriptionManager
-	allowPrivateIPs           bool
-	spec                      *StreamInfo
-	eventStream               chan *eventData
-	stopped                   bool
-	pollingInterval           time.Duration
-	inFlight                  uint64
-	batchCond                 *sync.Cond
-	batchQueue                *list.List
-	batchCount                uint64
-	initialRetryDelay         time.Duration
-	backoffFactor             float64
-	updateInProgress          bool
-	updateInterrupt           chan struct{} // a zero-sized struct used only for signaling (hand rolled alternative to context)
-	blockTimestampCache       *lru.Cache
-	action                    eventStreamAction
-	wsChannels                ws.WebSocketChannels
-	hexFormatTransactionIndex bool
+	sm                      subscriptionManager
+	allowPrivateIPs         bool
+	spec                    *StreamInfo
+	eventStream             chan *eventData
+	stopped                 bool
+	pollingInterval         time.Duration
+	inFlight                uint64
+	batchCond               *sync.Cond
+	batchQueue              *list.List
+	batchCount              uint64
+	initialRetryDelay       time.Duration
+	backoffFactor           float64
+	updateInProgress        bool
+	updateInterrupt         chan struct{} // a zero-sized struct used only for signaling (hand rolled alternative to context)
+	blockTimestampCache     *lru.Cache
+	action                  eventStreamAction
+	wsChannels              ws.WebSocketChannels
+	decimalTransactionIndex bool
 
 	eventPollerDone     chan struct{}
 	batchProcessorDone  chan struct{}
@@ -155,17 +155,17 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo, wsChannels ws.WebS
 	}
 
 	a = &eventStream{
-		sm:                        sm,
-		spec:                      spec,
-		allowPrivateIPs:           sm.config().WebhooksAllowPrivateIPs,
-		eventStream:               make(chan *eventData),
-		batchCond:                 sync.NewCond(&sync.Mutex{}),
-		batchQueue:                list.New(),
-		initialRetryDelay:         DefaultExponentialBackoffInitial,
-		backoffFactor:             DefaultExponentialBackoffFactor,
-		pollingInterval:           time.Duration(sm.config().EventPollingIntervalSec) * time.Second,
-		wsChannels:                wsChannels,
-		hexFormatTransactionIndex: *sm.config().HexFormatTransactionIndex,
+		sm:                      sm,
+		spec:                    spec,
+		allowPrivateIPs:         sm.config().WebhooksAllowPrivateIPs,
+		eventStream:             make(chan *eventData),
+		batchCond:               sync.NewCond(&sync.Mutex{}),
+		batchQueue:              list.New(),
+		initialRetryDelay:       DefaultExponentialBackoffInitial,
+		backoffFactor:           DefaultExponentialBackoffFactor,
+		pollingInterval:         time.Duration(sm.config().EventPollingIntervalSec) * time.Second,
+		wsChannels:              wsChannels,
+		decimalTransactionIndex: sm.config().DecimalTransactionIndex,
 	}
 
 	if a.blockTimestampCache, err = lru.New(spec.TimestampCacheSize); err != nil {
@@ -205,10 +205,10 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo, wsChannels ws.WebS
 // hex string on the return. This was a bug in earlier version of ethconnect, and an option
 // is provided to restore the old behavior in case an application was depending on it.
 func (a *eventStream) formatTransactionIndex(txIndex ethbinding.HexUint) string {
-	if a.hexFormatTransactionIndex {
-		return txIndex.String()
+	if a.decimalTransactionIndex {
+		return strconv.FormatUint(uint64(txIndex), 10)
 	}
-	return strconv.FormatUint(uint64(txIndex), 10)
+	return txIndex.String()
 }
 
 // helper to kick off go routines and any tracking entities

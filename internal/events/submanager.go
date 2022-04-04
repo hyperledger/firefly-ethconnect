@@ -45,9 +45,8 @@ const (
 	streamIDPrefix     = "es-"
 	checkpointIDPrefix = "cp-"
 
-	defaultCatchupModeBlockGap     = int64(250)
-	defaultCatchupModePageSize     = int64(250)
-	defaultDecimalTransactionIndex = false // for backwards compatibility
+	defaultCatchupModeBlockGap = int64(250)
+	defaultCatchupModePageSize = int64(250)
 )
 
 // SubscriptionManager provides REST APIs for managing events

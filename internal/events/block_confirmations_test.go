@@ -84,10 +84,11 @@ func TestBlockConfirmationManagerE2ENewEvent(t *testing.T) {
 		eventStream: make(chan *eventData, 1),
 	}
 	eventToConfirm := &eventData{
-		TransactionHash: "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
-		BlockNumber:     "1001",
-		BlockHash:       "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
-		LogIndex:        "10",
+		TransactionHash:  "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
+		BlockHash:        "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
+		blockNumber:      1001,
+		transactionIndex: 5,
+		logIndex:         10,
 	}
 	lastBlockDetected := false
 
@@ -195,10 +196,11 @@ func TestBlockConfirmationManagerE2EFork(t *testing.T) {
 		eventStream: make(chan *eventData, 1),
 	}
 	eventToConfirm := &eventData{
-		TransactionHash: "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
-		BlockNumber:     "1001",
-		BlockHash:       "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
-		LogIndex:        "10",
+		TransactionHash:  "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
+		BlockHash:        "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
+		blockNumber:      1001,
+		transactionIndex: 5,
+		logIndex:         10,
 	}
 	lastBlockDetected := false
 
@@ -306,10 +308,11 @@ func TestBlockConfirmationManagerE2EHistoricalEvent(t *testing.T) {
 		eventStream: make(chan *eventData, 1),
 	}
 	eventToConfirm := &eventData{
-		TransactionHash: "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
-		BlockNumber:     "1001",
-		BlockHash:       "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
-		LogIndex:        "10",
+		TransactionHash:  "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
+		BlockHash:        "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
+		blockNumber:      1001,
+		transactionIndex: 5,
+		logIndex:         10,
 	}
 	bcm.notify(&bcmNotification{
 		nType:       bcmNewLog,
@@ -374,17 +377,19 @@ func TestBlockConfirmationManagerE2EHistoricalEvent(t *testing.T) {
 
 func TestSortPendingEvents(t *testing.T) {
 	events := pendingEvents{
-		{blockNumber: 1000, logIndex: 10},
-		{blockNumber: 1003, logIndex: 10},
-		{blockNumber: 1000, logIndex: 5},
-		{blockNumber: 1002, logIndex: 0},
+		{event: &eventData{blockNumber: 1000, transactionIndex: 10, logIndex: 2}},
+		{event: &eventData{blockNumber: 1003, transactionIndex: 0, logIndex: 10}},
+		{event: &eventData{blockNumber: 1000, transactionIndex: 5, logIndex: 5}},
+		{event: &eventData{blockNumber: 1000, transactionIndex: 10, logIndex: 0}},
+		{event: &eventData{blockNumber: 1002, transactionIndex: 0, logIndex: 0}},
 	}
 	sort.Sort(events)
 	assert.Equal(t, pendingEvents{
-		{blockNumber: 1000, logIndex: 5},
-		{blockNumber: 1000, logIndex: 10},
-		{blockNumber: 1002, logIndex: 0},
-		{blockNumber: 1003, logIndex: 10},
+		{event: &eventData{blockNumber: 1000, transactionIndex: 5, logIndex: 5}},
+		{event: &eventData{blockNumber: 1000, transactionIndex: 10, logIndex: 0}},
+		{event: &eventData{blockNumber: 1000, transactionIndex: 10, logIndex: 2}},
+		{event: &eventData{blockNumber: 1002, transactionIndex: 0, logIndex: 0}},
+		{event: &eventData{blockNumber: 1003, transactionIndex: 0, logIndex: 10}},
 	}, events)
 }
 
@@ -429,10 +434,11 @@ func TestConfirmationsListenerFailWalkingChain(t *testing.T) {
 		eventStream: make(chan *eventData, 1),
 	}
 	eventToConfirm := &eventData{
-		TransactionHash: "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
-		BlockNumber:     "1001",
-		BlockHash:       "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
-		LogIndex:        "10",
+		TransactionHash:  "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
+		BlockHash:        "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
+		blockNumber:      1001,
+		transactionIndex: 5,
+		logIndex:         10,
 	}
 	bcm.addEvent(eventToConfirm, testStream)
 
@@ -497,10 +503,11 @@ func TestConfirmationsListenerFailWalkingChainForNewEvent(t *testing.T) {
 		eventStream: make(chan *eventData, 1),
 	}
 	eventToConfirm := &eventData{
-		TransactionHash: "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
-		BlockNumber:     "1001",
-		BlockHash:       "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
-		LogIndex:        "10",
+		TransactionHash:  "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
+		BlockHash:        "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
+		blockNumber:      1001,
+		transactionIndex: 5,
+		logIndex:         10,
 	}
 	bcm.notify(&bcmNotification{
 		nType:       bcmNewLog,
@@ -535,10 +542,11 @@ func TestConfirmationsListenerStopStream(t *testing.T) {
 		eventStream: make(chan *eventData, 1),
 	}
 	eventToConfirm := &eventData{
-		TransactionHash: "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
-		BlockNumber:     "1001",
-		BlockHash:       "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
-		LogIndex:        "10",
+		TransactionHash:  "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
+		BlockHash:        "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
+		blockNumber:      1001,
+		transactionIndex: 5,
+		logIndex:         10,
 	}
 	completed := make(chan struct{})
 	bcm.addEvent(eventToConfirm, testStream)
@@ -575,10 +583,11 @@ func TestConfirmationsRemoveEvent(t *testing.T) {
 		eventStream: make(chan *eventData, 1),
 	}
 	event := &eventData{
-		TransactionHash: "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
-		BlockNumber:     "1001",
-		BlockHash:       "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
-		LogIndex:        "10",
+		TransactionHash:  "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
+		BlockHash:        "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
+		blockNumber:      1001,
+		transactionIndex: 5,
+		logIndex:         10,
 	}
 	bcm.addEvent(event, testStream)
 	bcm.notify(&bcmNotification{
@@ -614,10 +623,11 @@ func TestWalkChainForEventBlockNotAvailable(t *testing.T) {
 
 	testStream := &eventStream{}
 	pendingEvent := bcm.addEvent(&eventData{
-		TransactionHash: "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
-		BlockNumber:     "1001",
-		BlockHash:       "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
-		LogIndex:        "10",
+		TransactionHash:  "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
+		BlockHash:        "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
+		blockNumber:      1001,
+		transactionIndex: 5,
+		logIndex:         10,
 	}, testStream)
 
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getBlockByNumber", mock.MatchedBy(func(i hexutil.Uint64) bool {
@@ -638,10 +648,11 @@ func TestWalkChainForEventBlockNotInConfirmationChain(t *testing.T) {
 
 	testStream := &eventStream{}
 	pendingEvent := bcm.addEvent(&eventData{
-		TransactionHash: "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
-		BlockNumber:     "1001",
-		BlockHash:       "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
-		LogIndex:        "10",
+		TransactionHash:  "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
+		BlockHash:        "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
+		blockNumber:      1001,
+		transactionIndex: 5,
+		logIndex:         10,
 	}, testStream)
 
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getBlockByNumber", mock.MatchedBy(func(i hexutil.Uint64) bool {
@@ -666,10 +677,11 @@ func TestWalkChainForEventBlockLookupFail(t *testing.T) {
 
 	testStream := &eventStream{}
 	pendingEvent := bcm.addEvent(&eventData{
-		TransactionHash: "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
-		BlockNumber:     "1001",
-		BlockHash:       "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
-		LogIndex:        "10",
+		TransactionHash:  "0x531e219d98d81dc9f9a14811ac537479f5d77a74bdba47629bfbebe2d7663ce7",
+		BlockHash:        "0x0e32d749a86cfaf551d528b5b121cea456f980a39e5b8136eb8e85dbc744a542",
+		blockNumber:      1001,
+		transactionIndex: 5,
+		logIndex:         10,
 	}, testStream)
 
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getBlockByNumber", mock.MatchedBy(func(i hexutil.Uint64) bool {

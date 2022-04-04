@@ -4,6 +4,10 @@
     "Debugf",
     "hashicorp",
     "Infof",
+    "kvstore",
+    "smconf",
+    "stretchr",
+    "Unconfigured",
     "Warnf"
   ]
 }

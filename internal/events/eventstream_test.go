@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/hyperledger/firefly-ethconnect/internal/contractregistry"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
@@ -93,6 +94,44 @@ func testEvent(subID string) *eventData {
 	return &eventData{
 		SubID:         subID,
 		batchComplete: func(*eventData) {},
+	}
+}
+
+func newTestStreamForConfirmations(t *testing.T) (*eventStream, func()) {
+	db := kvstore.NewMockKV(nil)
+	sm := newTestSubscriptionManagerConf(&SubscriptionManagerConf{
+		Confirmations: bcmConfExternal{
+			Enabled: true,
+		},
+	})
+
+	// Mock the RPC calls for the block confirmations manager that will just spin returning no results
+	rpc := sm.rpc.(*ethmocks.RPCClient)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newBlockFilter").Run(func(args mock.Arguments) {
+		args[1].(*hexutil.Big).ToInt().SetString("1977", 10)
+	}).Return(nil).Maybe()
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
+		return i.ToInt().Int64() == int64(1977)
+	})).Run(func(args mock.Arguments) {
+		*(args[1].(*[]*ethbinding.Hash)) = []*ethbinding.Hash{}
+	}).Return(nil).Maybe()
+
+	// Lock the event poller, so it doesn't do anything, until close
+	blockEventPollerThread := make(chan struct{})
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newFilter", mock.Anything).Run(func(args mock.Arguments) {
+		<-blockEventPollerThread
+	}).Return(fmt.Errorf("test complete")).Maybe()
+
+	sm.config().EventPollingIntervalSec = 0
+	sm.db = db
+	ctx := context.Background()
+	stream, err := sm.AddStream(ctx, &StreamInfo{
+		Type: "websocket",
+	})
+	assert.NoError(t, err)
+	return sm.streams[stream.ID], func() {
+		close(blockEventPollerThread)
+		sm.Close(true)
 	}
 }
 
@@ -249,12 +288,13 @@ func TestStreamName(t *testing.T) {
 
 func TestBlockingBehavior(t *testing.T) {
 	assert := assert.New(t)
+	one := uint64(1)
 	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize:            1,
 			Webhook:              &webhookActionInfo{},
 			ErrorHandling:        ErrorHandlingBlock,
-			BlockedRetryDelaySec: 1,
+			BlockedRetryDelaySec: &one,
 		}, nil, 404)
 	defer close(eventStream)
 	defer svr.Close()
@@ -274,12 +314,13 @@ func TestBlockingBehavior(t *testing.T) {
 }
 
 func TestSkippingBehavior(t *testing.T) {
+	one := uint64(1)
 	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize:            1,
 			Webhook:              &webhookActionInfo{},
 			ErrorHandling:        ErrorHandlingSkip,
-			BlockedRetryDelaySec: 1,
+			BlockedRetryDelaySec: &one,
 		}, nil, 404 /* fail the requests */)
 	defer close(eventStream)
 	defer svr.Close()
@@ -302,13 +343,14 @@ func TestSkippingBehavior(t *testing.T) {
 
 func TestBackoffRetry(t *testing.T) {
 	assert := assert.New(t)
+	one := uint64(1)
 	_, stream, svr, eventStream := newTestStreamForBatching(
 		&StreamInfo{
 			BatchSize:            1,
 			Webhook:              &webhookActionInfo{},
 			ErrorHandling:        ErrorHandlingBlock,
 			RetryTimeoutSec:      1,
-			BlockedRetryDelaySec: 1,
+			BlockedRetryDelaySec: &one,
 		}, nil, 404, 500, 503, 504, 200)
 	defer close(eventStream)
 	defer svr.Close()
@@ -722,7 +764,7 @@ func TestProcessEventsEnd2EndWebSocket(t *testing.T) {
 			WebSocket:  &webSocketActionInfo{},
 			Timestamps: false,
 		}, db, 200)
-	mockWebSocket.receiver <- fmt.Errorf("Spurious ack from a previvous socket - to be ignored")
+	mockWebSocket.receiver <- fmt.Errorf("Spurious ack from a previous socket - to be ignored")
 
 	s := setupTestSubscription(assert, sm, stream, "mySubName")
 	assert.Equal("mySubName", s.Name)
@@ -1282,10 +1324,11 @@ func TestUpdateStream(t *testing.T) {
 	ctx := context.Background()
 	headers := make(map[string]string)
 	headers["test-h1"] = "val1"
+	five := uint64(5)
 	updateSpec := &StreamInfo{
 		BatchSize:            4,
 		BatchTimeoutMS:       10000,
-		BlockedRetryDelaySec: 5,
+		BlockedRetryDelaySec: &five,
 		ErrorHandling:        ErrorHandlingBlock,
 		Name:                 "new-name",
 		Webhook: &webhookActionInfo{
@@ -1303,7 +1346,7 @@ func TestUpdateStream(t *testing.T) {
 	assert.Equal(updatedStream.Inputs, true)
 	assert.Equal(updatedStream.BatchSize, uint64(4))
 	assert.Equal(updatedStream.BatchTimeoutMS, uint64(10000))
-	assert.Equal(updatedStream.BlockedRetryDelaySec, uint64(5))
+	assert.Equal(*updatedStream.BlockedRetryDelaySec, uint64(5))
 	assert.Equal(updatedStream.ErrorHandling, ErrorHandlingBlock)
 	assert.Equal(updatedStream.Webhook.URL, "http://foo.url")
 	assert.Equal(updatedStream.Webhook.Headers["test-h1"], "val1")
@@ -1318,6 +1361,13 @@ func TestUpdateStreamFail(t *testing.T) {
 	updatedStream, err := sm.UpdateStream(context.Background(), "1", &StreamInfo{})
 	assert.Regexp("Stream with ID '1' not found", err)
 	assert.Nil(updatedStream)
+}
+
+func TestTypoMigration(t *testing.T) {
+	typoConf := &StreamInfo{
+		TypoReryDelaySec: 999,
+	}
+	assert.Equal(t, uint64(999), typoConf.blockedRetryDelaySec())
 }
 
 func TestUpdateStreamSwapType(t *testing.T) {
@@ -1530,4 +1580,11 @@ func TestIsDone(t *testing.T) {
 	assert.False(t, isChannelDone(c))
 	close(c)
 	assert.True(t, isChannelDone(c))
+}
+
+func TestDrainBlockConfirmationManager(t *testing.T) {
+	stream, cancel := newTestStreamForConfirmations(t)
+	defer cancel()
+
+	stream.drainBlockConfirmationManager()
 }

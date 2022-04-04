@@ -59,6 +59,11 @@ type eventData struct {
 	Confirmations    []*blockInfo           `json:"confirmations,omitempty"`
 	// Used for callback handling
 	batchComplete func(*eventData)
+
+	// Used to avoid string serialization/de-serialization to block confirmation manager
+	blockNumber      uint64
+	transactionIndex uint64
+	logIndex         uint64
 }
 
 type logProcessor struct {
@@ -123,7 +128,7 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 		Address:          entry.Address.String(),
 		BlockNumber:      blockNumber.String(),
 		BlockHash:        entry.BlockHash.String(),
-		TransactionIndex: entry.TransactionIndex.String(),
+		TransactionIndex: lp.stream.formatTransactionIndex(entry.TransactionIndex),
 		TransactionHash:  entry.TransactionHash.String(),
 		Signature:        ethbind.API.ABIEventSignature(lp.event),
 		Data:             make(map[string]interface{}),
@@ -133,6 +138,10 @@ func (lp *logProcessor) processLogEntry(subInfo string, entry *logEntry, idx int
 		InputArgs:        entry.InputArgs,
 		InputSigner:      entry.InputSigner,
 		batchComplete:    lp.batchComplete,
+
+		blockNumber:      blockNumber.Uint64(),
+		transactionIndex: uint64(entry.TransactionIndex),
+		logIndex:         uint64(idx),
 	}
 
 	if entry.Removed {

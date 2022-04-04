@@ -70,7 +70,9 @@ func newMockWebSocket() *mockWebSocket {
 }
 
 func newTestSubscriptionManager() *subscriptionMGR {
-	smconf := &SubscriptionManagerConf{}
+	return newTestSubscriptionManagerConf(&SubscriptionManagerConf{})
+}
+func newTestSubscriptionManagerConf(smconf *SubscriptionManagerConf) *subscriptionMGR {
 	rpc := &ethmocks.RPCClient{}
 	cr := &contractregistrymocks.ContractStore{}
 	s, _ := NewSubscriptionManager(smconf, rpc, cr, newMockWebSocket())

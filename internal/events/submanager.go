@@ -45,8 +45,9 @@ const (
 	streamIDPrefix     = "es-"
 	checkpointIDPrefix = "cp-"
 
-	defaultCatchupModeBlockGap = int64(250)
-	defaultCatchupModePageSize = int64(250)
+	defaultCatchupModeBlockGap       = int64(250)
+	defaultCatchupModePageSize       = int64(250)
+	defaultHexFormatTransactionIndex = true // for backwards compatibility
 )
 
 // SubscriptionManager provides REST APIs for managing events
@@ -80,12 +81,13 @@ type subscriptionManager interface {
 
 // SubscriptionManagerConf configuration
 type SubscriptionManagerConf struct {
-	EventLevelDBPath        string          `json:"eventsDB"`
-	EventPollingIntervalSec uint64          `json:"eventPollingIntervalSec,omitempty"`
-	CatchupModeBlockGap     int64           `json:"catchupModeBlockGap,omitempty"`
-	CatchupModePageSize     int64           `json:"catchupModePageSize,omitempty"`
-	WebhooksAllowPrivateIPs bool            `json:"webhooksAllowPrivateIPs,omitempty"`
-	Confirmations           bcmConfExternal `json:"confirmations,omitempty"`
+	EventLevelDBPath          string          `json:"eventsDB"`
+	EventPollingIntervalSec   uint64          `json:"eventPollingIntervalSec,omitempty"`
+	CatchupModeBlockGap       int64           `json:"catchupModeBlockGap,omitempty"`
+	CatchupModePageSize       int64           `json:"catchupModePageSize,omitempty"`
+	WebhooksAllowPrivateIPs   bool            `json:"webhooksAllowPrivateIPs,omitempty"`
+	HexFormatTransactionIndex *bool           `json:"hexFormatTransactionIndex"`
+	Confirmations             bcmConfExternal `json:"confirmations,omitempty"`
 }
 
 type subscriptionMGR struct {
@@ -130,6 +132,10 @@ func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc eth.RPCClient, cr
 	if conf.CatchupModeBlockGap < conf.CatchupModePageSize {
 		log.Warnf("catchupModeBlockGap=%d must be >= catchupModePageSize=%d - setting to %d", conf.CatchupModeBlockGap, conf.CatchupModePageSize, conf.CatchupModePageSize)
 		conf.CatchupModeBlockGap = conf.CatchupModePageSize
+	}
+	if conf.HexFormatTransactionIndex == nil {
+		hexFormatTransactionIndex := defaultHexFormatTransactionIndex
+		conf.HexFormatTransactionIndex = &hexFormatTransactionIndex
 	}
 	if conf.Confirmations.Enabled {
 		sm.bcm, err = newBlockConfirmationManager(context.Background(), sm.rpc, parseBCMConfig(&conf.Confirmations))

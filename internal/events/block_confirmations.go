@@ -80,8 +80,6 @@ type pendingEvent struct {
 	key           string
 	added         time.Time
 	confirmations []*blockInfo
-	blockNumber   uint64
-	logIndex      uint64
 	event         *eventData
 	eventStream   *eventStream
 }
@@ -91,8 +89,9 @@ type pendingEvents []*pendingEvent
 func (pe pendingEvents) Len() int      { return len(pe) }
 func (pe pendingEvents) Swap(i, j int) { pe[i], pe[j] = pe[j], pe[i] }
 func (pe pendingEvents) Less(i, j int) bool {
-	return pe[i].blockNumber < pe[j].blockNumber ||
-		(pe[i].blockNumber == pe[j].blockNumber && pe[i].logIndex < pe[j].logIndex)
+	return pe[i].event.blockNumber < pe[j].event.blockNumber ||
+		(pe[i].event.blockNumber == pe[j].event.blockNumber && (pe[i].event.transactionIndex < pe[j].event.transactionIndex ||
+			(pe[i].event.transactionIndex == pe[j].event.transactionIndex && pe[i].event.logIndex < pe[j].event.logIndex)))
 }
 
 type bcmEventType int
@@ -331,7 +330,7 @@ func (bcm *blockConfirmationManager) confirmationsListener() {
 }
 
 func (bcm *blockConfirmationManager) keyForEvent(event *eventData) string {
-	return fmt.Sprintf("TX:%s|BLOCK:%s/%s|IDX:%s", event.TransactionHash, event.BlockNumber, event.BlockHash, event.LogIndex)
+	return fmt.Sprintf("TX:%s|BLOCK:%s/%s|INDEX:%s|LOG:%s", event.TransactionHash, event.BlockNumber, event.BlockHash, event.TransactionIndex, event.LogIndex)
 }
 
 func (bcm *blockConfirmationManager) processNotifications(notifications []*bcmNotification) error {
@@ -366,9 +365,6 @@ func (bcm *blockConfirmationManager) streamStopped(notification *bcmNotification
 
 // addEvent is called by the goroutine on receipt of a new event notification
 func (bcm *blockConfirmationManager) addEvent(event *eventData, eventStream *eventStream) *pendingEvent {
-	// We have settled on a string for block number / log index on the external interface, but need to compare & sort it here
-	blockNumber, _ := strconv.ParseUint(event.BlockNumber, 10, 64)
-	logIndex, _ := strconv.ParseUint(event.LogIndex, 10, 64)
 
 	// Add the event
 	eventKey := bcm.keyForEvent(event)
@@ -376,8 +372,6 @@ func (bcm *blockConfirmationManager) addEvent(event *eventData, eventStream *eve
 		key:           bcm.keyForEvent(event),
 		added:         time.Now(),
 		confirmations: make([]*blockInfo, 0, bcm.requiredConfirmations),
-		blockNumber:   blockNumber,
-		logIndex:      logIndex,
 		event:         event,
 		eventStream:   eventStream,
 	}
@@ -425,7 +419,7 @@ func (bcm *blockConfirmationManager) processBlock(block *blockInfo) {
 	for eventKey, pending := range bcm.pending {
 		// The block might appear at any point in the confirmation list
 		expectedParentHash := pending.event.BlockHash
-		expectedBlockNumber := pending.blockNumber + 1
+		expectedBlockNumber := pending.event.blockNumber + 1
 		for i := 0; i < (len(pending.confirmations) + 1); i++ {
 			if parentStr == expectedParentHash && blockNumber == expectedBlockNumber {
 				pending.confirmations = append(pending.confirmations[0:i], block)
@@ -491,7 +485,7 @@ func (bcm *blockConfirmationManager) walkChainForEvent(pending *pendingEvent) (e
 
 	eventKey := bcm.keyForEvent(pending.event)
 
-	blockNumber := pending.blockNumber + 1
+	blockNumber := pending.event.blockNumber + 1
 	expectedParentHash := pending.event.BlockHash
 	pending.confirmations = pending.confirmations[:0]
 	for {

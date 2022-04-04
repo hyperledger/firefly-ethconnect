@@ -81,6 +81,7 @@ type pendingEvent struct {
 	added         time.Time
 	confirmations []*blockInfo
 	blockNumber   uint64
+	logIndex      uint64
 	event         *eventData
 	eventStream   *eventStream
 }
@@ -90,8 +91,8 @@ type pendingEvents []*pendingEvent
 func (pe pendingEvents) Len() int      { return len(pe) }
 func (pe pendingEvents) Swap(i, j int) { pe[i], pe[j] = pe[j], pe[i] }
 func (pe pendingEvents) Less(i, j int) bool {
-	return pe[i].event.BlockNumber < pe[j].event.BlockNumber ||
-		(pe[i].event.BlockNumber == pe[j].event.BlockNumber && pe[i].event.LogIndex < pe[j].event.LogIndex)
+	return pe[i].blockNumber < pe[j].blockNumber ||
+		(pe[i].blockNumber == pe[j].blockNumber && pe[i].logIndex < pe[j].logIndex)
 }
 
 type bcmEventType int
@@ -210,7 +211,17 @@ func (bcm *blockConfirmationManager) pollBlockFilter() ([]*ethbinding.Hash, erro
 	return blockHashes, nil
 }
 
+func (bcm *blockConfirmationManager) addToCache(blockInfo *blockInfo) {
+	bcm.blockCache.Add(blockInfo.Hash.String(), blockInfo)
+	bcm.blockCache.Add(strconv.FormatUint(uint64(blockInfo.Number), 10), blockInfo)
+}
+
 func (bcm *blockConfirmationManager) getBlockByHash(blockHash *ethbinding.Hash) (*blockInfo, error) {
+	cached, ok := bcm.blockCache.Get(blockHash.String())
+	if ok {
+		return cached.(*blockInfo), nil
+	}
+
 	ctx, cancel := context.WithTimeout(bcm.ctx, 30*time.Second)
 	defer cancel()
 
@@ -222,31 +233,38 @@ func (bcm *blockConfirmationManager) getBlockByHash(blockHash *ethbinding.Hash) 
 	if blockInfo == nil {
 		return nil, nil
 	}
-	bcm.blockCache.Add(blockInfo.Hash.String(), blockInfo)
-	bcm.log.Debugf("Downloaded block header: %d / %s (by hash)", blockInfo.Number, blockInfo.Hash)
+	bcm.log.Debugf("Downloaded block header by hash: %d / %s parent=%s", blockInfo.Number, blockInfo.Hash, blockInfo.ParentHash)
 
-	// Store it by number in the cache we use for walking the chain
-	bcm.blockCache.Add(blockInfo.Number, blockInfo)
-
+	bcm.addToCache(blockInfo)
 	return blockInfo, nil
 }
 
-func (bcm *blockConfirmationManager) getBlockByNumber(number uint64) (*blockInfo, error) {
+func (bcm *blockConfirmationManager) getBlockByNumber(blockNumber uint64, expectedParentHash string) (*blockInfo, error) {
+	cached, ok := bcm.blockCache.Get(strconv.FormatUint(blockNumber, 10))
+	if ok {
+		blockInfo := cached.(*blockInfo)
+		parentHash := blockInfo.ParentHash.String()
+		if parentHash != expectedParentHash {
+			// Treat a missing block, or a mismatched block, both as a cache miss and query the node
+			bcm.log.Debugf("Block cache miss due to parent hash mismatch: %d / %s parent=%s required=%s ", blockInfo.Number, blockInfo.Hash, parentHash, expectedParentHash)
+		} else {
+			return blockInfo, nil
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(bcm.ctx, 30*time.Second)
 	defer cancel()
 	var blockInfo *blockInfo
-	err := bcm.rpc.CallContext(ctx, &blockInfo, "eth_getBlockByNumber", ethbinding.HexUint64(number), false /* only the txn hashes */)
+	err := bcm.rpc.CallContext(ctx, &blockInfo, "eth_getBlockByNumber", ethbinding.HexUint64(blockNumber), false /* only the txn hashes */)
 	if err != nil {
 		return nil, errors.Errorf(errors.RPCCallReturnedError, "eth_getBlockByNumber", err)
 	}
 	if blockInfo == nil {
 		return nil, nil
 	}
-	bcm.log.Debugf("Downloaded block header: %d / %s (by number)", blockInfo.Number, blockInfo.Hash)
+	bcm.log.Debugf("Downloaded block header by number: %d / %s parent=%s", blockInfo.Number, blockInfo.Hash, blockInfo.ParentHash)
 
-	// Store it by number in the cache we use for walking the chain
-	bcm.blockCache.Add(blockInfo.Number, blockInfo)
-
+	bcm.addToCache(blockInfo)
 	return blockInfo, nil
 }
 
@@ -348,8 +366,9 @@ func (bcm *blockConfirmationManager) streamStopped(notification *bcmNotification
 
 // addEvent is called by the goroutine on receipt of a new event notification
 func (bcm *blockConfirmationManager) addEvent(event *eventData, eventStream *eventStream) *pendingEvent {
-	// We have settled on a string for block number on the external interface, but need to compare it here
+	// We have settled on a string for block number / log index on the external interface, but need to compare & sort it here
 	blockNumber, _ := strconv.ParseUint(event.BlockNumber, 10, 64)
+	logIndex, _ := strconv.ParseUint(event.LogIndex, 10, 64)
 
 	// Add the event
 	eventKey := bcm.keyForEvent(event)
@@ -358,6 +377,7 @@ func (bcm *blockConfirmationManager) addEvent(event *eventData, eventStream *eve
 		added:         time.Now(),
 		confirmations: make([]*blockInfo, 0, bcm.requiredConfirmations),
 		blockNumber:   blockNumber,
+		logIndex:      logIndex,
 		event:         event,
 		eventStream:   eventStream,
 	}
@@ -373,19 +393,20 @@ func (bcm *blockConfirmationManager) removeEvent(event *eventData) {
 }
 
 func (bcm *blockConfirmationManager) processBlockHashes(blockHashes []*ethbinding.Hash) {
+	if len(blockHashes) > 0 {
+		bcm.log.Debugf("New block notifications %v", blockHashes)
+	}
+
 	for _, blockHash := range blockHashes {
 		// Get the block header
 		block, err := bcm.getBlockByHash(blockHash)
 		if err != nil || block == nil {
-			bcm.log.Errorf("Failed to retrieve block %s: %s", blockHash, err)
+			bcm.log.Errorf("Failed to retrieve block %s: %v", blockHash, err)
 			continue
 		}
 
 		// Process the block for confirmations
-		if err = bcm.processBlock(block); err != nil {
-			bcm.log.Errorf("Failed to process block %d / %s: %s", block.Number, block.Hash, err)
-			continue
-		}
+		bcm.processBlock(block)
 
 		// Update the highest block (used for efficiency in chain walks)
 		if uint64(block.Number) > bcm.highestBlockSeen {
@@ -394,7 +415,7 @@ func (bcm *blockConfirmationManager) processBlockHashes(blockHashes []*ethbindin
 	}
 }
 
-func (bcm *blockConfirmationManager) processBlock(block *blockInfo) error {
+func (bcm *blockConfirmationManager) processBlock(block *blockInfo) {
 
 	// Go through all the events, adding in the confirmations, and popping any out
 	// that have reached their threshold. Then drop the log before logging/processing them.
@@ -428,7 +449,6 @@ func (bcm *blockConfirmationManager) processBlock(block *blockInfo) error {
 	for _, c := range confirmed {
 		bcm.dispatchConfirmed(c)
 	}
-	return nil
 
 }
 
@@ -477,20 +497,12 @@ func (bcm *blockConfirmationManager) walkChainForEvent(pending *pendingEvent) (e
 	for {
 		// No point in walking past the highest block we've seen via the notifier
 		if bcm.highestBlockSeen > 0 && blockNumber > bcm.highestBlockSeen {
-			bcm.log.Debugf("Waiting for confirmation after block %d event=%s", blockNumber, eventKey)
+			bcm.log.Debugf("Waiting for confirmation after block %d event=%s", bcm.highestBlockSeen, eventKey)
 			return nil
 		}
-		var block *blockInfo
-		cached, ok := bcm.blockCache.Get(blockNumber)
-		if ok {
-			block = cached.(*blockInfo)
-		}
-		// Treat a missing block, or a mismatched block, both as a cache miss and query the node
-		if block == nil || block.ParentHash.String() != expectedParentHash {
-			block, err = bcm.getBlockByNumber(blockNumber)
-			if err != nil {
-				return err
-			}
+		block, err := bcm.getBlockByNumber(blockNumber, expectedParentHash)
+		if err != nil {
+			return err
 		}
 		if block == nil {
 			bcm.log.Infof("Block %d unavailable walking chain event=%s", blockNumber, eventKey)

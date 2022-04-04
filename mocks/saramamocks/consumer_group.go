@@ -57,3 +57,23 @@ func (_m *ConsumerGroup) Errors() <-chan error {
 
 	return r0
 }
+
+// Pause provides a mock function with given fields: partitions
+func (_m *ConsumerGroup) Pause(partitions map[string][]int32) {
+	_m.Called(partitions)
+}
+
+// PauseAll provides a mock function with given fields:
+func (_m *ConsumerGroup) PauseAll() {
+	_m.Called()
+}
+
+// Resume provides a mock function with given fields: partitions
+func (_m *ConsumerGroup) Resume(partitions map[string][]int32) {
+	_m.Called(partitions)
+}
+
+// ResumeAll provides a mock function with given fields:
+func (_m *ConsumerGroup) ResumeAll() {
+	_m.Called()
+}

@@ -78,7 +78,7 @@ func TestNewContractDeployTxnSimpleStorage(t *testing.T) {
 	assert.Nil(err)
 	rpc := testRPCClient{}
 
-	tx.Send(context.Background(), &rpc)
+	tx.Send(context.Background(), &rpc, 1.2)
 
 	assert.Equal("eth_sendTransaction", rpc.capturedMethod)
 	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
@@ -108,7 +108,7 @@ func TestNewContractDeployTxnSimpleStorageCalcGas(t *testing.T) {
 	assert.Nil(err)
 	rpc := testRPCClient{}
 
-	tx.Send(context.Background(), &rpc)
+	tx.Send(context.Background(), &rpc, 1.2)
 
 	assert.Equal("eth_estimateGas", rpc.capturedMethod)
 	assert.Equal("eth_sendTransaction", rpc.capturedMethod2)
@@ -141,7 +141,7 @@ func TestNewContractDeployTxnSimpleStoragePrivate(t *testing.T) {
 	assert.Nil(err)
 	rpc := testRPCClient{}
 
-	tx.Send(context.Background(), &rpc)
+	tx.Send(context.Background(), &rpc, 1.2)
 
 	assert.Equal("eth_estimateGas", rpc.capturedMethod)
 	assert.Equal("eth_sendTransaction", rpc.capturedMethod2)
@@ -172,7 +172,7 @@ func TestNewContractDeployTxnSimpleStoragePrivateOrion(t *testing.T) {
 	tx.PrivacyGroupID = "P8SxRUussJKqZu4+nUkMJpscQeWOR3HqbAXLakatsk8="
 	rpc := testRPCClient{}
 
-	tx.Send(context.Background(), &rpc)
+	tx.Send(context.Background(), &rpc, 1.2)
 
 	assert.Equal("eth_estimateGas", rpc.capturedMethod)
 	assert.Equal("eea_sendTransaction", rpc.capturedMethod2)
@@ -203,7 +203,7 @@ func TestNewContractDeployTxnSimpleStoragePrivateOrionMissingPrivateFrom(t *test
 	tx.PrivacyGroupID = "s6a3mQ8I+rI2ZgHqHZlJaELiJs10HxlZNIwNd669FH4="
 	rpc := testRPCClient{}
 
-	err = tx.Send(context.Background(), &rpc)
+	err = tx.Send(context.Background(), &rpc, 1.2)
 	assert.Regexp("private-from is required when submitting private transactions via Orion", err)
 }
 func TestNewContractDeployTxnSimpleStorageCalcGasFailAndCallSucceeds(t *testing.T) {
@@ -221,7 +221,7 @@ func TestNewContractDeployTxnSimpleStorageCalcGasFailAndCallSucceeds(t *testing.
 	rpc := testRPCClient{}
 
 	rpc.mockError = fmt.Errorf("pop")
-	err = tx.Send(context.Background(), &rpc)
+	err = tx.Send(context.Background(), &rpc, 1.2)
 	assert.Regexp("Failed to calculate gas for transaction: pop", err)
 }
 
@@ -241,7 +241,7 @@ func TestNewContractDeployTxnSimpleStorageCalcGasFailAndCallFailsAsExpected(t *t
 
 	rpc.mockError = fmt.Errorf("estimate gas fails")
 	rpc.mockError2 = fmt.Errorf("call fails")
-	err = tx.Send(context.Background(), &rpc)
+	err = tx.Send(context.Background(), &rpc, 1.2)
 	assert.Regexp("Call failed: call fails", err)
 }
 
@@ -278,7 +278,7 @@ func TestNewContractDeployPrecompiledSimpleStorage(t *testing.T) {
 	assert.Nil(err)
 	rpc := testRPCClient{}
 
-	tx.Send(context.Background(), &rpc)
+	tx.Send(context.Background(), &rpc, 1.2)
 
 	assert.Equal("eth_sendTransaction", rpc.capturedMethod)
 	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
@@ -630,7 +630,7 @@ func TestSendTxnABIParam(t *testing.T) {
 
 	rpc := testRPCClient{}
 
-	tx.Send(context.Background(), &rpc)
+	tx.Send(context.Background(), &rpc, 1.2)
 	assert.Equal("eth_sendTransaction", rpc.capturedMethod)
 	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
 	var jsonSent map[string]interface{}
@@ -683,7 +683,7 @@ func TestSendTxnInlineParam(t *testing.T) {
 
 	rpc := testRPCClient{}
 
-	tx.Send(context.Background(), &rpc)
+	tx.Send(context.Background(), &rpc, 1.2)
 	assert.Equal("eth_sendTransaction", rpc.capturedMethod)
 	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
 	var jsonSent map[string]interface{}
@@ -994,7 +994,7 @@ func TestSendTxnNodeAssignNonce(t *testing.T) {
 	rpc := testRPCClient{}
 
 	tx.NodeAssignNonce = true
-	tx.Send(context.Background(), &rpc)
+	tx.Send(context.Background(), &rpc, 1.2)
 	assert.Equal("eth_sendTransaction", rpc.capturedMethod)
 	jsonBytesSent, _ := json.Marshal(rpc.capturedArgs[0])
 	var jsonSent map[string]interface{}
@@ -1029,7 +1029,7 @@ func TestSendWithTXSignerContractOK(t *testing.T) {
 
 	rpc := testRPCClient{}
 
-	tx.Send(context.Background(), &rpc)
+	tx.Send(context.Background(), &rpc, 1.2)
 	assert.Equal("eth_estimateGas", rpc.capturedMethod)
 	assert.Equal("eth_sendRawTransaction", rpc.capturedMethod2)
 	assert.Equal("0x746573746279746573", rpc.capturedArgs2[0])
@@ -1058,7 +1058,7 @@ func TestSendWithTXSignerOK(t *testing.T) {
 
 	rpc := testRPCClient{}
 
-	tx.Send(context.Background(), &rpc)
+	tx.Send(context.Background(), &rpc, 1.2)
 	assert.Equal("0x2b8c0ECc76d0759a8F50b2E14A6881367D805832", signer.capturedTX.To().String())
 	assert.Equal("eth_estimateGas", rpc.capturedMethod)
 	assert.Equal("eth_sendRawTransaction", rpc.capturedMethod2)
@@ -1090,7 +1090,7 @@ func TestSendWithTXSignerFail(t *testing.T) {
 
 	rpc := testRPCClient{}
 
-	err = tx.Send(context.Background(), &rpc)
+	err = tx.Send(context.Background(), &rpc, 1.2)
 	assert.Regexp("pop", err)
 }
 
@@ -1120,7 +1120,7 @@ func TestSendWithTXSignerFailPrivate(t *testing.T) {
 
 	rpc := testRPCClient{}
 
-	err = tx.Send(context.Background(), &rpc)
+	err = tx.Send(context.Background(), &rpc, 1.2)
 	assert.Regexp("Signing with mock signer is not currently supported with private transactions", err)
 }
 
@@ -1148,7 +1148,7 @@ func TestNewContractWithTXSignerOK(t *testing.T) {
 
 	rpc := testRPCClient{}
 
-	tx.Send(context.Background(), &rpc)
+	tx.Send(context.Background(), &rpc, 1.2)
 	assert.Equal("789", signer.capturedTX.GasPrice().String())
 	assert.Equal("eth_sendRawTransaction", rpc.capturedMethod)
 	assert.Equal("0x746573746279746573", rpc.capturedArgs[0])
@@ -1175,7 +1175,7 @@ func TestNewNilTXSignerOK(t *testing.T) {
 
 	rpc := testRPCClient{}
 
-	tx.Send(context.Background(), &rpc)
+	tx.Send(context.Background(), &rpc, 1.2)
 	assert.Equal("0", signer.capturedTX.GasPrice().String())
 	assert.Equal(uint64(90000), signer.capturedTX.Gas())
 	assert.Equal(uint64(12345), signer.capturedTX.Nonce())
@@ -1204,7 +1204,7 @@ func TestSendTxnRPFError(t *testing.T) {
 		mockError: fmt.Errorf("pop"),
 	}
 
-	err = tx.Send(context.Background(), &rpc)
+	err = tx.Send(context.Background(), &rpc, 1.2)
 	assert.Regexp("pop", err)
 }
 

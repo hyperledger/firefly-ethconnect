@@ -506,6 +506,10 @@ var (
 	FFCInvalidTXData = e(100215, "Failed to parse transaction data as hex '%s': %s")
 	// FFCReceiptNotAvailable is returned when a receipt is not found
 	FFCReceiptNotAvailable = e(100216, "Receipt not available for transaction '%s'")
+	// FFCRequestTypeNotImplemented is returned when an operation is not supported
+	FFCRequestTypeNotImplemented = e(100217, "FFCAPI request '%s' not currently supported")
+	// FFCBlockNotAvailable is returned when a receipt is not found
+	FFCBlockNotAvailable = e(100218, "Block not available")
 )
 
 type EthconnectError interface {

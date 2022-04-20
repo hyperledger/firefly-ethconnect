@@ -219,11 +219,9 @@ func TestMapFFCAPIToEthBadParams(t *testing.T) {
 
 	s, _ := newTestFFCAPIServer()
 
-	_, err := s.mapFFCAPIToEth(&ffcapi.PrepareTransactionRequest{
-		TransactionPrepareInputs: ffcapi.TransactionPrepareInputs{
-			Method: "{}",
-			Params: []fftypes.JSONAny{"!wrong"},
-		},
+	_, err := s.mapFFCAPIToEth(&ffcapi.TransactionInput{
+		Method: "{}",
+		Params: []*fftypes.JSONAny{fftypes.JSONAnyPtr("!wrong")},
 	})
 	assert.Regexp(t, "FFEC100213", err)
 

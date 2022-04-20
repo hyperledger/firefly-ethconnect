@@ -55,10 +55,15 @@ func NewFFCServer(rpc eth.RPCClient, conf *FFCServerConf) FFCServer {
 		gasEstimationFactor: conf.GasEstimationFactor,
 	}
 	s.handlerMap = map[ffcapi.RequestType]ffcHandler{
-		ffcapi.RequestTypePrepareTransaction: s.prepareTransaction,
-		ffcapi.RequestTypeSendTransaction:    s.sendTransaction,
-		ffcapi.RequestTypeGetReceipt:         s.getReceipt,
-		ffcapi.RequestTypeGetNextNonce:       s.getNextNonce,
+		ffcapi.RequestTypePrepareTransaction:   s.prepareTransaction,
+		ffcapi.RequestTypeSendTransaction:      s.sendTransaction,
+		ffcapi.RequestTypeGetReceipt:           s.getReceipt,
+		ffcapi.RequestTypeExecQuery:            s.execQuery,
+		ffcapi.RequestTypeGetNextNonce:         s.getNextNonce,
+		ffcapi.RequestTypeCreateBlockListener:  s.createBlockListener,
+		ffcapi.RequestTypeGetNewBlockHashes:    s.getNewBlockHashes,
+		ffcapi.RequestTypeGetBlockInfoByNumber: s.getBlockInfoByNumber,
+		ffcapi.RequestTypeGetBlockInfoByHash:   s.getBlockInfoByHash,
 	}
 	s.versionCheck, _ = semver.NewConstraint(supportedAPIVersions)
 	return s

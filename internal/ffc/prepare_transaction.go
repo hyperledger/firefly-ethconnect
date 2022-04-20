@@ -39,7 +39,7 @@ func (s *ffcServer) prepareTransaction(ctx context.Context, payload []byte) (int
 	}
 
 	// Parse the input over to the standard EthConnect format
-	sendTx, err := s.mapFFCAPIToEth(&req)
+	sendTx, err := s.mapFFCAPIToEth(&req.TransactionInput)
 	if err != nil {
 		return nil, ffcapi.ErrorReasonInvalidInputs, err
 	}
@@ -76,7 +76,7 @@ func (s *ffcServer) prepareTransaction(ctx context.Context, payload []byte) (int
 
 }
 
-func (s *ffcServer) mapFFCAPIToEth(req *ffcapi.PrepareTransactionRequest) (*messages.SendTransaction, error) {
+func (s *ffcServer) mapFFCAPIToEth(req *ffcapi.TransactionInput) (*messages.SendTransaction, error) {
 
 	// Parse the method ABI
 	var ethMethod *ethbinding.ABIElementMarshaling
@@ -88,9 +88,11 @@ func (s *ffcServer) mapFFCAPIToEth(req *ffcapi.PrepareTransactionRequest) (*mess
 	// Parse the params to go interface type, as handled by ethconnect standard SendTransaction handling
 	ethParams := make([]interface{}, len(req.Params))
 	for i, p := range req.Params {
-		err := json.Unmarshal([]byte(p), &ethParams[i])
-		if err != nil {
-			return nil, errors.Errorf(errors.FFCUnmarshalParamFail, i, err)
+		if p != nil {
+			err := json.Unmarshal([]byte(*p), &ethParams[i])
+			if err != nil {
+				return nil, errors.Errorf(errors.FFCUnmarshalParamFail, i, err)
+			}
 		}
 	}
 

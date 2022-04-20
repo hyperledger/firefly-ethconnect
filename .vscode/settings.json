@@ -5,8 +5,13 @@
     "Debugf",
     "ffcapi",
     "fftypes",
+    "hashicorp",
     "Infof",
+    "kvstore",
+    "smconf",
+    "stretchr",
     "Tracef",
+    "Unconfigured",
     "Warnf"
   ]
 }

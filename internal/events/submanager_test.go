@@ -70,10 +70,13 @@ func newMockWebSocket() *mockWebSocket {
 }
 
 func newTestSubscriptionManager() *subscriptionMGR {
-	smconf := &SubscriptionManagerConf{}
+	return newTestSubscriptionManagerConf(&SubscriptionManagerConf{})
+}
+func newTestSubscriptionManagerConf(smconf *SubscriptionManagerConf) *subscriptionMGR {
 	rpc := &ethmocks.RPCClient{}
 	cr := &contractregistrymocks.ContractStore{}
-	sm := NewSubscriptionManager(smconf, rpc, cr, newMockWebSocket()).(*subscriptionMGR)
+	s, _ := NewSubscriptionManager(smconf, rpc, cr, newMockWebSocket())
+	sm := s.(*subscriptionMGR)
 	sm.db = kvstore.NewMockKV(nil)
 	sm.config().WebhooksAllowPrivateIPs = true
 	sm.config().EventPollingIntervalSec = 0
@@ -87,7 +90,9 @@ func TestNestSubscriptionManagerBlockGapValidation(t *testing.T) {
 	}
 	rpc := &ethmocks.RPCClient{}
 	cr := &contractregistrymocks.ContractStore{}
-	sm := NewSubscriptionManager(smconf, rpc, cr, newMockWebSocket()).(*subscriptionMGR)
+	s, err := NewSubscriptionManager(smconf, rpc, cr, newMockWebSocket())
+	assert.NoError(t, err)
+	sm := s.(*subscriptionMGR)
 	assert.Equal(t, int64(1000), sm.conf.CatchupModeBlockGap)
 }
 
@@ -257,6 +262,7 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	blockCall := make(chan struct{})
 	rpc := &ethmocks.RPCClient{}
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newFilter", mock.Anything).Return(nil).Maybe()
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterLogs", mock.Anything).Return(nil).Maybe()
 	rpc.On("CallContext", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) { <-blockCall }).Return(nil)
 	sm.rpc = rpc
 

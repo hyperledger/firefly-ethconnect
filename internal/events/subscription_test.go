@@ -61,6 +61,10 @@ func (m *mockSubMgr) loadCheckpoint(string) (map[string]*big.Int, error) { retur
 
 func (m *mockSubMgr) storeCheckpoint(string, map[string]*big.Int) error { return nil }
 
+func (m *mockSubMgr) confirmationManager() *blockConfirmationManager {
+	return nil
+}
+
 func newTestStream() *eventStream {
 	a, _ := newEventStream(newTestSubscriptionManager(), &StreamInfo{
 		ID:   "123",
@@ -212,7 +216,7 @@ func TestProcessEventsCannotProcess(t *testing.T) {
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_uninstallFilter", mock.Anything).Return(nil)
 	s := &subscription{
 		rpc: rpc,
-		lp:  newLogProcessor("", &ethbinding.ABIEvent{}, newTestStream()),
+		lp:  newLogProcessor("", &ethbinding.ABIEvent{}, newTestStream(), nil),
 	}
 	err := s.processNewEvents(context.Background())
 	// We swallow the error in this case - as we simply couldn't read the event

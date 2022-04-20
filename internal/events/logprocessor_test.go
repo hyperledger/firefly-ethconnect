@@ -16,6 +16,7 @@ package events
 
 import (
 	"encoding/json"
+	"math/big"
 	"testing"
 
 	"github.com/hyperledger/firefly-ethconnect/internal/ethbind"
@@ -182,4 +183,91 @@ func TestProcessLogSampleEvent(t *testing.T) {
 		"data1": "0x51b201b016025d42c9a0718b75aacc12b1e9c7f16e4bd2c6618aa944ca399156",
 		"data2": "1000",
 	}, ev.Data)
+}
+
+func TestProcessLogEntryRemovedWithConfirmationManager(t *testing.T) {
+	assert := assert.New(t)
+
+	bcm, _ := newTestBlockConfirmationManager(t, false)
+
+	spec := &StreamInfo{
+		Timestamps: false,
+	}
+	stream := &eventStream{
+		spec:                    spec,
+		decimalTransactionIndex: false,
+	}
+
+	eventABI := `{
+		"name": "testEvent",
+		"anonymous": true,
+		"inputs": []
+	}`
+	var marshaling ethbinding.ABIElementMarshaling
+	json.Unmarshal([]byte(eventABI), &marshaling)
+	event, err := ethbind.API.ABIElementMarshalingToABIEvent(&marshaling)
+	assert.NoError(err)
+
+	lp := &logProcessor{
+		event:               event,
+		stream:              stream,
+		confirmationManager: bcm,
+	}
+	err = lp.processLogEntry("ut", &logEntry{
+		BlockNumber:      ethbinding.HexBigInt(*big.NewInt(255)),
+		TransactionIndex: ethbinding.HexUint(10),
+		Removed:          true,
+	}, 2)
+	assert.NoError(err)
+	notification := <-bcm.bcmNotifications
+	assert.Equal(bcmRemovedLog, notification.nType)
+	assert.Equal("255", notification.event.BlockNumber)
+	assert.Equal("0xa", notification.event.TransactionIndex)
+	assert.Equal("2", notification.event.LogIndex)
+	assert.Equal(uint64(255), notification.event.blockNumber)
+	assert.Equal(uint64(10), notification.event.transactionIndex)
+	assert.Equal(uint64(2), notification.event.logIndex)
+}
+
+func TestProcessLogEntryDispatchWithConfirmationManager(t *testing.T) {
+	assert := assert.New(t)
+
+	bcm, _ := newTestBlockConfirmationManager(t, false)
+
+	spec := &StreamInfo{
+		Timestamps: false,
+	}
+	stream := &eventStream{
+		spec:                    spec,
+		decimalTransactionIndex: true,
+	}
+
+	eventABI := `{
+		"name": "testEvent",
+		"anonymous": true,
+		"inputs": []
+	}`
+	var marshaling ethbinding.ABIElementMarshaling
+	json.Unmarshal([]byte(eventABI), &marshaling)
+	event, err := ethbind.API.ABIElementMarshalingToABIEvent(&marshaling)
+	assert.NoError(err)
+
+	lp := &logProcessor{
+		event:               event,
+		stream:              stream,
+		confirmationManager: bcm,
+	}
+	err = lp.processLogEntry("ut", &logEntry{
+		BlockNumber:      ethbinding.HexBigInt(*big.NewInt(255)),
+		TransactionIndex: ethbinding.HexUint(10),
+	}, 2)
+	assert.NoError(err)
+	notification := <-bcm.bcmNotifications
+	assert.Equal(bcmNewLog, notification.nType)
+	assert.Equal("255", notification.event.BlockNumber)
+	assert.Equal("10", notification.event.TransactionIndex)
+	assert.Equal("2", notification.event.LogIndex)
+	assert.Equal(uint64(255), notification.event.blockNumber)
+	assert.Equal(uint64(10), notification.event.transactionIndex)
+	assert.Equal(uint64(2), notification.event.logIndex)
 }

@@ -20,6 +20,7 @@ import (
 	"math/big"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
 	"github.com/hyperledger/firefly-ethconnect/internal/ws"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 
 	lru "github.com/hashicorp/golang-lru"
 	log "github.com/sirupsen/logrus"
@@ -69,7 +71,8 @@ type StreamInfo struct {
 	BatchTimeoutMS       uint64               `json:"batchTimeoutMS,omitempty"`
 	ErrorHandling        string               `json:"errorHandling,omitempty"`
 	RetryTimeoutSec      uint64               `json:"retryTimeoutSec,omitempty"`
-	BlockedRetryDelaySec uint64               `json:"blockedReryDelaySec,omitempty"`
+	TypoReryDelaySec     uint64               `json:"blockedReryDelaySec,omitempty"`
+	BlockedRetryDelaySec *uint64              `json:"blockedRetryDelaySec,omitempty"`
 	Webhook              *webhookActionInfo   `json:"webhook,omitempty"`
 	WebSocket            *webSocketActionInfo `json:"websocket,omitempty"`
 	Timestamps           bool                 `json:"timestamps,omitempty"` // Include block timestamps in the events generated
@@ -90,23 +93,24 @@ type webSocketActionInfo struct {
 }
 
 type eventStream struct {
-	sm                  subscriptionManager
-	allowPrivateIPs     bool
-	spec                *StreamInfo
-	eventStream         chan *eventData
-	stopped             bool
-	pollingInterval     time.Duration
-	inFlight            uint64
-	batchCond           *sync.Cond
-	batchQueue          *list.List
-	batchCount          uint64
-	initialRetryDelay   time.Duration
-	backoffFactor       float64
-	updateInProgress    bool
-	updateInterrupt     chan struct{} // a zero-sized struct used only for signaling (hand rolled alternative to context)
-	blockTimestampCache *lru.Cache
-	action              eventStreamAction
-	wsChannels          ws.WebSocketChannels
+	sm                      subscriptionManager
+	allowPrivateIPs         bool
+	spec                    *StreamInfo
+	eventStream             chan *eventData
+	stopped                 bool
+	pollingInterval         time.Duration
+	inFlight                uint64
+	batchCond               *sync.Cond
+	batchQueue              *list.List
+	batchCount              uint64
+	initialRetryDelay       time.Duration
+	backoffFactor           float64
+	updateInProgress        bool
+	updateInterrupt         chan struct{} // a zero-sized struct used only for signaling (hand rolled alternative to context)
+	blockTimestampCache     *lru.Cache
+	action                  eventStreamAction
+	wsChannels              ws.WebSocketChannels
+	decimalTransactionIndex bool
 
 	eventPollerDone     chan struct{}
 	batchProcessorDone  chan struct{}
@@ -141,9 +145,6 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo, wsChannels ws.WebS
 	if spec.BatchTimeoutMS == 0 {
 		spec.BatchTimeoutMS = 5000
 	}
-	if spec.BlockedRetryDelaySec == 0 {
-		spec.BlockedRetryDelaySec = 30
-	}
 	if strings.ToLower(spec.ErrorHandling) == ErrorHandlingBlock {
 		spec.ErrorHandling = ErrorHandlingBlock
 	} else {
@@ -154,16 +155,17 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo, wsChannels ws.WebS
 	}
 
 	a = &eventStream{
-		sm:                sm,
-		spec:              spec,
-		allowPrivateIPs:   sm.config().WebhooksAllowPrivateIPs,
-		eventStream:       make(chan *eventData),
-		batchCond:         sync.NewCond(&sync.Mutex{}),
-		batchQueue:        list.New(),
-		initialRetryDelay: DefaultExponentialBackoffInitial,
-		backoffFactor:     DefaultExponentialBackoffFactor,
-		pollingInterval:   time.Duration(sm.config().EventPollingIntervalSec) * time.Second,
-		wsChannels:        wsChannels,
+		sm:                      sm,
+		spec:                    spec,
+		allowPrivateIPs:         sm.config().WebhooksAllowPrivateIPs,
+		eventStream:             make(chan *eventData),
+		batchCond:               sync.NewCond(&sync.Mutex{}),
+		batchQueue:              list.New(),
+		initialRetryDelay:       DefaultExponentialBackoffInitial,
+		backoffFactor:           DefaultExponentialBackoffFactor,
+		pollingInterval:         time.Duration(sm.config().EventPollingIntervalSec) * time.Second,
+		wsChannels:              wsChannels,
+		decimalTransactionIndex: sm.config().DecimalTransactionIndex,
 	}
 
 	if a.blockTimestampCache, err = lru.New(spec.TimestampCacheSize); err != nil {
@@ -199,6 +201,16 @@ func newEventStream(sm subscriptionManager, spec *StreamInfo, wsChannels ws.WebS
 	return a, nil
 }
 
+// formatTransactionIndex honors the configuration for whether transactionIndex should be an `0x`
+// hex string on the return. This was a bug in earlier version of ethconnect, and an option
+// is provided to restore the old behavior in case an application was depending on it.
+func (a *eventStream) formatTransactionIndex(txIndex ethbinding.HexUint) string {
+	if a.decimalTransactionIndex {
+		return strconv.FormatUint(uint64(txIndex), 10)
+	}
+	return txIndex.String()
+}
+
 // helper to kick off go routines and any tracking entities
 func (a *eventStream) startEventHandlers(resume bool) {
 	// create a context that can be used to indicate an update to the eventstream
@@ -219,6 +231,17 @@ func (spec *StreamInfo) GetID() string {
 	return spec.ID
 }
 
+func (spec *StreamInfo) blockedRetryDelaySec() uint64 {
+	if spec.BlockedRetryDelaySec == nil {
+		if spec.TypoReryDelaySec > 0 {
+			return spec.TypoReryDelaySec
+		} else {
+			return 30
+		}
+	}
+	return *spec.BlockedRetryDelaySec
+}
+
 // preUpdateStream sets a flag to indicate updateInProgress and wakes up goroutines waiting on condition variable
 func (a *eventStream) preUpdateStream() error {
 	a.batchCond.L.Lock()
@@ -231,7 +254,23 @@ func (a *eventStream) preUpdateStream() error {
 	close(a.updateInterrupt)
 	a.batchCond.Broadcast()
 	a.batchCond.L.Unlock()
+
+	a.drainBlockConfirmationManager()
+
 	return nil
+}
+
+func (a *eventStream) drainBlockConfirmationManager() {
+	bcm := a.sm.confirmationManager()
+	if bcm != nil {
+		n := &bcmNotification{
+			nType:       bcmStopStream,
+			eventStream: a,
+			complete:    make(chan struct{}),
+		}
+		bcm.notify(n)
+		<-n.complete
+	}
 }
 
 // postUpdateStream resets flags and kicks off a fresh round of handler go routines
@@ -298,8 +337,9 @@ func (a *eventStream) checkUpdate(newSpec *StreamInfo) (updatedSpec *StreamInfo,
 	if specCopy.BatchTimeoutMS != newSpec.BatchTimeoutMS && newSpec.BatchTimeoutMS != 0 {
 		setUpdated().BatchTimeoutMS = newSpec.BatchTimeoutMS
 	}
-	if specCopy.BlockedRetryDelaySec != newSpec.BlockedRetryDelaySec && newSpec.BlockedRetryDelaySec != 0 {
-		setUpdated().BlockedRetryDelaySec = newSpec.BlockedRetryDelaySec
+	if newSpec.BlockedRetryDelaySec != nil && specCopy.blockedRetryDelaySec() != newSpec.blockedRetryDelaySec() {
+		blockedRetryDelaySec := newSpec.blockedRetryDelaySec()
+		setUpdated().BlockedRetryDelaySec = &blockedRetryDelaySec
 	}
 	if newSpec.ErrorHandling != "" && newSpec.ErrorHandling != specCopy.ErrorHandling {
 		if strings.ToLower(newSpec.ErrorHandling) == ErrorHandlingBlock {
@@ -384,6 +424,7 @@ func (a *eventStream) suspend() {
 	a.spec.Suspended = true
 	a.batchCond.Broadcast()
 	a.batchCond.L.Unlock()
+	a.drainBlockConfirmationManager()
 	<-a.eventPollerDone
 	<-a.batchProcessorDone
 }
@@ -637,7 +678,7 @@ func (a *eventStream) batchProcessor() {
 
 // processBatch is the blocking function to process a batch of events
 // It never returns an error, and uses the chosen block/skip ErrorHandling
-// behaviour combined with the parameters on the event itself
+// behavior combined with the parameters on the event itself
 func (a *eventStream) processBatch(batchNumber uint64, events []*eventData) {
 	if len(events) == 0 {
 		return
@@ -651,7 +692,7 @@ func (a *eventStream) processBatch(batchNumber uint64, events []*eventData) {
 				// we were notified by the caller about an ongoing update, no need to continue
 				log.Infof("%s: Notified of an ongoing stream update, terminating process batch", a.spec.ID)
 				return
-			case <-time.After(time.Duration(a.spec.BlockedRetryDelaySec) * time.Second): //fall through and continue
+			case <-time.After(time.Duration(a.spec.blockedRetryDelaySec()) * time.Second): //fall through and continue
 			}
 		}
 		attempt++

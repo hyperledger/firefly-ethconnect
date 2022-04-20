@@ -1,3 +1,13 @@
 {
-  "go.lintTool": "golangci-lint"
+  "go.lintTool": "golangci-lint",
+  "cSpell.words": [
+    "Debugf",
+    "hashicorp",
+    "Infof",
+    "kvstore",
+    "smconf",
+    "stretchr",
+    "Unconfigured",
+    "Warnf"
+  ]
 }

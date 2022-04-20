@@ -75,15 +75,18 @@ type subscriptionManager interface {
 	subscriptionsForStream(string) []*subscription
 	loadCheckpoint(string) (map[string]*big.Int, error)
 	storeCheckpoint(string, map[string]*big.Int) error
+	confirmationManager() *blockConfirmationManager
 }
 
 // SubscriptionManagerConf configuration
 type SubscriptionManagerConf struct {
-	EventLevelDBPath        string `json:"eventsDB"`
-	EventPollingIntervalSec uint64 `json:"eventPollingIntervalSec,omitempty"`
-	CatchupModeBlockGap     int64  `json:"catchupModeBlockGap,omitempty"`
-	CatchupModePageSize     int64  `json:"catchupModePageSize,omitempty"`
-	WebhooksAllowPrivateIPs bool   `json:"webhooksAllowPrivateIPs,omitempty"`
+	EventLevelDBPath        string          `json:"eventsDB"`
+	EventPollingIntervalSec uint64          `json:"eventPollingIntervalSec,omitempty"`
+	CatchupModeBlockGap     int64           `json:"catchupModeBlockGap,omitempty"`
+	CatchupModePageSize     int64           `json:"catchupModePageSize,omitempty"`
+	WebhooksAllowPrivateIPs bool            `json:"webhooksAllowPrivateIPs,omitempty"`
+	DecimalTransactionIndex bool            `json:"decimalTransactionIndex,omitempty"`
+	Confirmations           bcmConfExternal `json:"confirmations,omitempty"`
 }
 
 type subscriptionMGR struct {
@@ -91,6 +94,7 @@ type subscriptionMGR struct {
 	db                 kvstore.KVStore
 	rpc                eth.RPCClient
 	subscriptions      map[string]*subscription
+	bcm                *blockConfirmationManager
 	streams            map[string]*eventStream
 	closed             bool
 	cr                 contractregistry.ContractResolver
@@ -106,7 +110,7 @@ func CobraInitSubscriptionManager(cmd *cobra.Command, conf *SubscriptionManagerC
 }
 
 // NewSubscriptionManager constructor
-func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc eth.RPCClient, cr contractregistry.ContractResolver, wsChannels ws.WebSocketChannels) SubscriptionManager {
+func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc eth.RPCClient, cr contractregistry.ContractResolver, wsChannels ws.WebSocketChannels) (s SubscriptionManager, err error) {
 	sm := &subscriptionMGR{
 		conf:          conf,
 		rpc:           rpc,
@@ -128,7 +132,14 @@ func NewSubscriptionManager(conf *SubscriptionManagerConf, rpc eth.RPCClient, cr
 		log.Warnf("catchupModeBlockGap=%d must be >= catchupModePageSize=%d - setting to %d", conf.CatchupModeBlockGap, conf.CatchupModePageSize, conf.CatchupModePageSize)
 		conf.CatchupModeBlockGap = conf.CatchupModePageSize
 	}
-	return sm
+	if conf.Confirmations.Enabled {
+		sm.bcm, err = newBlockConfirmationManager(context.Background(), sm.rpc, parseBCMConfig(&conf.Confirmations))
+		if err != nil {
+			return nil, err
+		}
+		sm.bcm.start()
+	}
+	return SubscriptionManager(sm), nil
 }
 
 // SubscriptionByID used externally to get serializable details
@@ -509,5 +520,12 @@ func (s *subscriptionMGR) Close(wait bool) {
 	if !s.closed && s.db != nil {
 		s.db.Close()
 	}
+	if s.bcm != nil {
+		s.bcm.stop()
+	}
 	s.closed = true
+}
+
+func (s *subscriptionMGR) confirmationManager() *blockConfirmationManager {
+	return s.bcm
 }

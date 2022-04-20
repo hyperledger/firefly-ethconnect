@@ -33,7 +33,8 @@ import (
 )
 
 const (
-	defaultSendConcurrency = 1
+	defaultSendConcurrency     = 1
+	defaultGasEstimationFactor = 1.2
 )
 
 // TxnProcessor interface is called for each message, as is responsible
@@ -77,14 +78,15 @@ func (i *inflightTxn) String() string {
 
 // TxnProcessorConf configuration for the message processor
 type TxnProcessorConf struct {
-	AlwaysManageNonce  bool            `json:"alwaysManageNonce"`
-	AttemptGapFill     bool            `json:"attemptGapFill"`
-	MaxTXWaitTime      int             `json:"maxTXWaitTime"`
-	SendConcurrency    int             `json:"sendConcurrency"`
-	OrionPrivateAPIS   bool            `json:"orionPrivateAPIs"`
-	HexValuesInReceipt bool            `json:"hexValuesInReceipt"`
-	AddressBookConf    AddressBookConf `json:"addressBook"`
-	HDWalletConf       HDWalletConf    `json:"hdWallet"`
+	AlwaysManageNonce   bool            `json:"alwaysManageNonce"`
+	AttemptGapFill      bool            `json:"attemptGapFill"`
+	MaxTXWaitTime       int             `json:"maxTXWaitTime"`
+	SendConcurrency     int             `json:"sendConcurrency"`
+	OrionPrivateAPIS    bool            `json:"orionPrivateAPIs"`
+	HexValuesInReceipt  bool            `json:"hexValuesInReceipt"`
+	AddressBookConf     AddressBookConf `json:"addressBook"`
+	HDWalletConf        HDWalletConf    `json:"hdWallet"`
+	GasEstimationFactor float64         `json:"gasEstimationFactor"`
 }
 
 type inflightTxnState struct {
@@ -93,16 +95,17 @@ type inflightTxnState struct {
 }
 
 type txnProcessor struct {
-	maxTXWaitTime      time.Duration
-	inflightTxnsLock   *sync.Mutex
-	inflightTxns       map[string]*inflightTxnState
-	inflightTxnDelayer TxnDelayTracker
-	rpc                eth.RPCClient
-	addressBook        AddressBook
-	hdwallet           HDWallet
-	conf               *TxnProcessorConf
-	rpcConf            *eth.RPCConf
-	concurrencySlots   chan bool
+	maxTXWaitTime       time.Duration
+	inflightTxnsLock    *sync.Mutex
+	inflightTxns        map[string]*inflightTxnState
+	inflightTxnDelayer  TxnDelayTracker
+	rpc                 eth.RPCClient
+	addressBook         AddressBook
+	hdwallet            HDWallet
+	conf                *TxnProcessorConf
+	rpcConf             *eth.RPCConf
+	concurrencySlots    chan bool
+	gasEstimationFactor float64
 }
 
 // NewTxnProcessor constructor for message procss
@@ -110,13 +113,17 @@ func NewTxnProcessor(conf *TxnProcessorConf, rpcConf *eth.RPCConf) TxnProcessor 
 	if conf.SendConcurrency == 0 {
 		conf.SendConcurrency = defaultSendConcurrency
 	}
+	if conf.GasEstimationFactor <= 0 {
+		conf.GasEstimationFactor = defaultGasEstimationFactor
+	}
 	p := &txnProcessor{
-		inflightTxnsLock:   &sync.Mutex{},
-		inflightTxns:       make(map[string]*inflightTxnState),
-		inflightTxnDelayer: NewTxnDelayTracker(),
-		conf:               conf,
-		rpcConf:            rpcConf,
-		concurrencySlots:   make(chan bool, conf.SendConcurrency),
+		inflightTxnsLock:    &sync.Mutex{},
+		inflightTxns:        make(map[string]*inflightTxnState),
+		inflightTxnDelayer:  NewTxnDelayTracker(),
+		conf:                conf,
+		rpcConf:             rpcConf,
+		concurrencySlots:    make(chan bool, conf.SendConcurrency),
+		gasEstimationFactor: conf.GasEstimationFactor,
 	}
 	return p
 }
@@ -380,7 +387,7 @@ func (p *txnProcessor) submitGapFillTX(inflight *inflightTxn) {
 		tx, err := eth.NewNilTX(inflight.from, inflight.nonce, inflight.signer)
 		if err == nil {
 			inflight.gapFillTxHash = tx.EthTX.Hash().String()
-			err = tx.Send(inflight.txnContext.Context(), inflight.rpc)
+			err = tx.Send(inflight.txnContext.Context(), inflight.rpc, p.gasEstimationFactor)
 			if err != nil {
 				inflight.gapFillSucceeded = false
 				log.Warnf("Submission of gap-fill TX '%s' failed: %s", tx.Hash, err)
@@ -570,7 +577,7 @@ func (p *txnProcessor) sendTransactionCommon(txnContext TxnContext, inflight *in
 }
 
 func (p *txnProcessor) sendAndTrackMining(txnContext TxnContext, inflight *inflightTxn, tx *eth.Txn) {
-	err := tx.Send(txnContext.Context(), inflight.rpc)
+	err := tx.Send(txnContext.Context(), inflight.rpc, p.gasEstimationFactor)
 	if p.conf.SendConcurrency > 1 {
 		<-p.concurrencySlots // return our slot as soon as send is complete, to let an awaiting send go
 	}

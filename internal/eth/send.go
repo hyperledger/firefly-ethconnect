@@ -35,7 +35,7 @@ const (
 
 // calculateGas uses eth_estimateGas to estimate the gas required, providing a buffer
 // of 20% for variation as the chain changes between estimation and submission.
-func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXArgs, gas *ethbinding.HexUint64) (err error) {
+func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXArgs, gas *ethbinding.HexUint64, estimationFactor float64) (err error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -49,7 +49,7 @@ func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXAr
 		// If the call succeeds, after estimate completed - we still need to fail with the estimate error
 		return estError
 	}
-	*gas = ethbinding.HexUint64(float64(*gas) * 1.2)
+	*gas = ethbinding.HexUint64(float64(*gas) * estimationFactor)
 	return nil
 }
 
@@ -127,7 +127,7 @@ func (tx *Txn) CallAndProcessReply(ctx context.Context, rpc RPCClient, blocknumb
 }
 
 // Send sends an individual transaction, choosing external or internal signing
-func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
+func (tx *Txn) Send(ctx context.Context, rpc RPCClient, estimationFactor float64) (err error) {
 	start := time.Now().UTC()
 
 	gas := ethbinding.HexUint64(tx.EthTX.Gas())
@@ -143,7 +143,7 @@ func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
 		txArgs.To = to.Hex()
 	}
 	if uint64(gas) == uint64(0) {
-		if err = tx.calculateGas(ctx, rpc, txArgs, &gas); err != nil {
+		if err = tx.calculateGas(ctx, rpc, txArgs, &gas, estimationFactor); err != nil {
 			return err
 		}
 		// Re-encode the EthTX (for external HD Wallet signing)

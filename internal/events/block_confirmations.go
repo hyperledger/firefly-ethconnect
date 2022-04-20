@@ -1,4 +1,4 @@
-// Copyright 2019 Kaleido
+// Copyright 2022 Kaleido
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -318,7 +318,7 @@ func (bcm *blockConfirmationManager) confirmationsListener() {
 		// Process any new notifications - we do this at the end, so it can benefit
 		// from knowing the latest highestBlockSeen
 		if err := bcm.processNotifications(notifications); err != nil {
-			bcm.log.Errorf("Failed processing notifications: %s", err)
+			bcm.log.Errorf("Failed to process notifications: %s", err)
 			continue
 		}
 
@@ -450,7 +450,6 @@ func (bcm *blockConfirmationManager) processBlock(block *blockInfo) {
 func (bcm *blockConfirmationManager) dispatchConfirmed(confirmed *pendingEvent) {
 	eventKey := bcm.keyForEvent(confirmed.event)
 	bcm.log.Infof("Confirmed with %d confirmations event=%s", len(confirmed.confirmations), eventKey)
-	delete(bcm.pending, eventKey)
 
 	if bcm.includeInPayload {
 		confirmed.event.Confirmations = confirmed.confirmations

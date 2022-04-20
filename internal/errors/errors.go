@@ -487,6 +487,23 @@ var (
 
 	// EventSupportNotConfiugred is returned when event support is not configured
 	EventSupportNotConfiugred = e(100207, "Event support is not configured on this gateway")
+
+	// FFCBadVersion is returned when an FFCAPI request has a bad version header
+	FFCBadVersion = e(100208, "Bad FFCAPI Version '%s': %s")
+	// FFCUnsupportedVersion is returned when there is a bad version supplied on an FFCAPI request
+	FFCUnsupportedVersion = e(100209, "Unsupported FFCAPI Version '%s'")
+	// FFCUnsupportedRequestType is returned when the request type is unsupported for an FFCAPI request
+	FFCUnsupportedRequestType = e(100210, "Unsupported FFCAPI request type '%s'")
+	// FFCMissingRequestID is returned when the request ID is missing
+	FFCMissingRequestID = e(100211, "Missing FFCAPI request id")
+	// FFCUnmarshalABIFail is returned when failing to unmarshal a parameter to a generic go struct
+	FFCUnmarshalABIFail = e(100212, "Failed to parse method ABI: %s")
+	// FFCUnmarshalParamFail is returned when failing to unmarshal a parameter to a generic go struct
+	FFCUnmarshalParamFail = e(100213, "Failed to parse parameter %d: %s")
+	// FFCInvalidGasPrice is returned when the gas price cannot be parsed as a number (support for London fork not yet in place)
+	FFCInvalidGasPrice = e(100214, "Failed to parse gasPrice '%s': %s")
+	// FFCInvalidTXData is returned when the transaction input data cannot be parsed as hex
+	FFCInvalidTXData = e(100215, "Failed to parse transaction data as hex '%s': %s")
 )
 
 type EthconnectError interface {

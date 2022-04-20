@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 
@@ -35,7 +36,7 @@ const (
 
 // calculateGas uses eth_estimateGas to estimate the gas required, providing a buffer
 // of 20% for variation as the chain changes between estimation and submission.
-func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXArgs, gas *ethbinding.HexUint64) (err error) {
+func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXArgs, gas *ethbinding.HexUint64) (reverted bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
@@ -43,18 +44,30 @@ func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXAr
 		// Now we attempt a call of the transaction, because that will return us a useful error in the case, of a revert.
 		estError := errors.Errorf(errors.TransactionSendGasEstimateFailed, err)
 		log.Errorf(estError.Error())
-		if _, err := tx.Call(ctx, rpc, "latest"); err != nil {
-			return err
+		if _, reverted, err := tx.Call(ctx, rpc, "latest"); err != nil {
+			return reverted, err
 		}
 		// If the call succeeds, after estimate completed - we still need to fail with the estimate error
-		return estError
+		return false, estError
 	}
 	*gas = ethbinding.HexUint64(float64(*gas) * 1.2)
-	return nil
+	return false, nil
+}
+
+func (tx *Txn) Estimate(ctx context.Context, rpc RPCClient) (data hexutil.Bytes, gas ethbinding.HexUint64, reverted bool, err error) {
+	data = ethbinding.HexBytes(tx.EthTX.Data())
+	txArgs := &SendTXArgs{
+		From:     tx.From.Hex(),
+		GasPrice: ethbinding.HexBigInt(*tx.EthTX.GasPrice()),
+		Value:    ethbinding.HexBigInt(*tx.EthTX.Value()),
+		Data:     &data,
+	}
+	reverted, err = tx.calculateGas(ctx, rpc, txArgs, &gas)
+	return data, gas, reverted, err
 }
 
 // Call synchronously calls the method, without mining a transaction, and returns the result as RLP encoded bytes or nil
-func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res []byte, err error) {
+func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res []byte, reverted bool, err error) {
 	data := ethbinding.HexBytes(tx.EthTX.Data())
 	txArgs := &SendTXArgs{
 		From:     tx.From.Hex(),
@@ -72,10 +85,10 @@ func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res
 
 	var hexString string
 	if err = rpc.CallContext(ctx, &hexString, "eth_call", txArgs, blocknumber); err != nil {
-		return nil, errors.Errorf(errors.TransactionSendCallFailedNoRevert, err)
+		return nil, false, errors.Errorf(errors.TransactionSendCallFailedNoRevert, err)
 	}
 	if len(hexString) == 0 || hexString == "0x" {
-		return nil, nil
+		return nil, false, nil
 	}
 	retStrLen := uint64(len(hexString))
 	if strings.HasPrefix(hexString, errorFunctionSelector) && retStrLen > 138 {
@@ -92,9 +105,9 @@ func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res
 		errorStringBytes, err := hex.DecodeString(errorStringHex)
 		log.Warnf("EVM Reverted. Message='%s' Offset='%s'", errorStringBytes, dataOffsetHex.Text(10))
 		if err != nil {
-			return nil, errors.Errorf(errors.TransactionSendCallFailedRevertNoMessage)
+			return nil, true, errors.Errorf(errors.TransactionSendCallFailedRevertNoMessage)
 		}
-		return nil, errors.Errorf(errors.TransactionSendCallFailedRevertMessage, errorStringBytes)
+		return nil, true, errors.Errorf(errors.TransactionSendCallFailedRevertMessage, errorStringBytes)
 	}
 	log.Debugf("eth_call response: %s", hexString)
 	res = ethbind.API.FromHex(hexString)
@@ -119,7 +132,7 @@ func (tx *Txn) CallAndProcessReply(ctx context.Context, rpc RPCClient, blocknumb
 		}
 	}
 
-	retBytes, err := tx.Call(ctx, rpc, callOption)
+	retBytes, _, err := tx.Call(ctx, rpc, callOption)
 	if err != nil || retBytes == nil {
 		return nil, err
 	}
@@ -143,7 +156,7 @@ func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
 		txArgs.To = to.Hex()
 	}
 	if uint64(gas) == uint64(0) {
-		if err = tx.calculateGas(ctx, rpc, txArgs, &gas); err != nil {
+		if _, err = tx.calculateGas(ctx, rpc, txArgs, &gas); err != nil {
 			return err
 		}
 		// Re-encode the EthTX (for external HD Wallet signing)

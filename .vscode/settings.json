@@ -4,6 +4,7 @@
     "ABIID",
     "Debugf",
     "ffcapi",
+    "ffcmocks",
     "fftypes",
     "hashicorp",
     "Infof",

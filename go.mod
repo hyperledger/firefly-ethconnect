@@ -1,7 +1,7 @@
 module github.com/hyperledger/firefly-ethconnect
 
 require (
-	github.com/Masterminds/semver v1.5.0 // indirect
+	github.com/Masterminds/semver v1.5.0
 	github.com/Shopify/sarama v1.32.0
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/bketelsen/crypt v0.0.4 // indirect
@@ -15,7 +15,7 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d
-	github.com/hyperledger/firefly v1.0.0-rc.4.0.20220419045021-4e8daade6f4d // indirect
+	github.com/hyperledger/firefly v1.0.0-rc.4.0.20220419045021-4e8daade6f4d
 	github.com/hyperledger/firefly-transaction-manager v0.0.0-20220420042453-d821a32b524b
 	github.com/icza/dyno v0.0.0-20210726202311-f1bafe5d9996
 	github.com/julienschmidt/httprouter v1.3.0

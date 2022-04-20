@@ -32,7 +32,7 @@ import (
 var supportedAPIVersions = "1.0.x"
 
 type FFCServer interface {
-	ServeFFCAPI(ctx context.Context, header *ffcapi.Header, payload []byte, w http.ResponseWriter)
+	ServeFFCAPI(ctx context.Context, payload []byte, w http.ResponseWriter)
 }
 
 type FFCServerConf struct {
@@ -69,15 +69,17 @@ func NewFFCServer(rpc eth.RPCClient, conf *FFCServerConf) FFCServer {
 	return s
 }
 
-func (s *ffcServer) ServeFFCAPI(ctx context.Context, header *ffcapi.Header, payload []byte, w http.ResponseWriter) {
+func (s *ffcServer) ServeFFCAPI(ctx context.Context, payload []byte, w http.ResponseWriter) {
+	var resBase ffcapi.RequestBase
+	_ = json.Unmarshal(payload, &resBase)
 	var resBody interface{}
 	status := 200
 	reason := ffcapi.ErrorReasonInvalidInputs
-	handler, err := s.validateHeader(header)
+	handler, err := s.validateHeader(&resBase.FFCAPI)
 	if err == nil {
-		log.Tracef("--> %s %s", header.RequestType, payload)
+		log.Tracef("--> %s %s", resBase.FFCAPI.RequestType, payload)
 		resBody, reason, err = handler(ctx, payload)
-		log.Tracef("<-- %s %s %v", header.RequestType, reason, err)
+		log.Tracef("<-- %s %s %v", resBase.FFCAPI.RequestType, reason, err)
 	}
 	if err != nil {
 		log.Errorf("Request failed: %s", err)

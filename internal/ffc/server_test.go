@@ -37,9 +37,11 @@ func TestServerBadVersion(t *testing.T) {
 
 	s, _ := newTestFFCAPIServer()
 	recorder := httptest.NewRecorder()
-	s.ServeFFCAPI(context.Background(), &ffcapi.Header{
-		Version: ffcapi.Version("not a sem ver"),
-	}, []byte{}, recorder)
+	s.ServeFFCAPI(context.Background(), []byte(`{
+		"ffcapi": {
+			"version": "not a sem ver"
+		}
+	}`), recorder)
 
 	assert.Equal(t, recorder.Result().StatusCode, 400)
 	var errRes ffcapi.ErrorResponse
@@ -54,9 +56,11 @@ func TestServerIncompatibleVersion(t *testing.T) {
 
 	s, _ := newTestFFCAPIServer()
 	recorder := httptest.NewRecorder()
-	s.ServeFFCAPI(context.Background(), &ffcapi.Header{
-		Version: ffcapi.Version("v99.0.0"),
-	}, []byte{}, recorder)
+	s.ServeFFCAPI(context.Background(), []byte(`{
+		"ffcapi": {
+			"version": "v99.0.0"
+		}
+	}`), recorder)
 
 	assert.Equal(t, recorder.Result().StatusCode, 400)
 	var errRes ffcapi.ErrorResponse
@@ -71,9 +75,11 @@ func TestServerMissingID(t *testing.T) {
 
 	s, _ := newTestFFCAPIServer()
 	recorder := httptest.NewRecorder()
-	s.ServeFFCAPI(context.Background(), &ffcapi.Header{
-		Version: ffcapi.Version("v1.0.1"),
-	}, []byte{}, recorder)
+	s.ServeFFCAPI(context.Background(), []byte(`{
+		"ffcapi": {
+			"version": "v1.0.1"
+		}
+	}`), recorder)
 
 	assert.Equal(t, recorder.Result().StatusCode, 400)
 	var errRes ffcapi.ErrorResponse
@@ -88,11 +94,13 @@ func TestServerUnknownRequestType(t *testing.T) {
 
 	s, _ := newTestFFCAPIServer()
 	recorder := httptest.NewRecorder()
-	s.ServeFFCAPI(context.Background(), &ffcapi.Header{
-		Version:     ffcapi.Version("v1.0.1"),
-		RequestID:   fftypes.NewUUID(),
-		RequestType: "test",
-	}, []byte{}, recorder)
+	s.ServeFFCAPI(context.Background(), []byte(`{
+		"ffcapi": {
+			"version": "v1.0.1",
+			"id": "`+fftypes.NewUUID().String()+`",
+			"type": "test"
+		}
+	}`), recorder)
 
 	assert.Equal(t, recorder.Result().StatusCode, 400)
 	var errRes ffcapi.ErrorResponse
@@ -112,11 +120,13 @@ func TestServerUnknownRequestOK(t *testing.T) {
 		}, "", nil
 	}
 	recorder := httptest.NewRecorder()
-	s.ServeFFCAPI(context.Background(), &ffcapi.Header{
-		Version:     ffcapi.Version("v1.0.1"),
-		RequestID:   fftypes.NewUUID(),
-		RequestType: "test",
-	}, []byte{}, recorder)
+	s.ServeFFCAPI(context.Background(), []byte(`{
+		"ffcapi": {
+			"version": "v1.0.1",
+			"id": "`+fftypes.NewUUID().String()+`",
+			"type": "test"
+		}
+	}`), recorder)
 
 	assert.Equal(t, recorder.Result().StatusCode, 200)
 	var mapRes map[string]interface{}

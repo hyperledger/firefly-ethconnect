@@ -920,6 +920,8 @@ github.com/hyperledger/firefly-transaction-manager v0.0.0-20220419204653-dc67b8e
 github.com/hyperledger/firefly-transaction-manager v0.0.0-20220419204653-dc67b8effbc5/go.mod h1:bdRmuFqbKbpghA8MkLdGq2Qn7Ob9y/FiO+L/w34DRBk=
 github.com/hyperledger/firefly-transaction-manager v0.0.0-20220420004231-789091043941 h1:HLbUFgLSi7gAFLZMjyWzPvNaZLB0YSDrnytSvKvh7eM=
 github.com/hyperledger/firefly-transaction-manager v0.0.0-20220420004231-789091043941/go.mod h1:bdRmuFqbKbpghA8MkLdGq2Qn7Ob9y/FiO+L/w34DRBk=
+github.com/hyperledger/firefly-transaction-manager v0.0.0-20220420015900-14381b038ab4 h1:0yAJinGBFlqA+132rWdnV9V3teuy0+us3ldHnWSZuLE=
+github.com/hyperledger/firefly-transaction-manager v0.0.0-20220420015900-14381b038ab4/go.mod h1:bdRmuFqbKbpghA8MkLdGq2Qn7Ob9y/FiO+L/w34DRBk=
 github.com/iancoleman/strcase v0.2.0/go.mod h1:iwCmte+B7n89clKwxIoIXy/HfoL7AsD47ZCWhYzw7ho=
 github.com/ianlancetaylor/demangle v0.0.0-20181102032728-5e5cf60278f6/go.mod h1:aSSvb/t6k1mPoxDqO4vJh6VOCGPwU4O0C2/Eqndh1Sc=
 github.com/ianlancetaylor/demangle v0.0.0-20200824232613-28f6c0f3b639/go.mod h1:aSSvb/t6k1mPoxDqO4vJh6VOCGPwU4O0C2/Eqndh1Sc=

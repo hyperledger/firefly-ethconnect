@@ -31,7 +31,7 @@ const sampleSendTX = `{
 	"ffcapi": {
 		"version": "v1.0.0",
 		"id": "904F177C-C790-4B01-BDF4-F2B4E52E607E",
-		"type": "SendTransaction"
+		"type": "send_transaction"
 	},
 	"from": "0xb480F96c0a3d6E9e9a263e4665a39bFa6c4d01E8",
 	"to": "0xe1a078b9e2b145d0a7387f09277c6ae1d9470771",
@@ -45,7 +45,7 @@ const sampleSendTXBadInputs = `{
 	"ffcapi": {
 		"version": "v1.0.0",
 		"id": "904F177C-C790-4B01-BDF4-F2B4E52E607E",
-		"type": "SendTransaction"
+		"type": "send_transaction"
 	}
 }`
 
@@ -53,7 +53,7 @@ const sampleSendTXBadData = `{
 	"ffcapi": {
 		"version": "v1.0.0",
 		"id": "904F177C-C790-4B01-BDF4-F2B4E52E607E",
-		"type": "SendTransaction"
+		"type": "send_transaction"
 	},
 	"transactionData": "not hex"
 }`
@@ -62,7 +62,7 @@ const sampleSendTXBadGasPrice = `{
 	"ffcapi": {
 		"version": "v1.0.0",
 		"id": "904F177C-C790-4B01-BDF4-F2B4E52E607E",
-		"type": "SendTransaction"
+		"type": "send_transaction"
 	},
 	"gasPrice": "not a number"
 }`

@@ -33,7 +33,7 @@ const samplePrepareTXWithGas = `{
 	"ffcapi": {
 		"version": "v1.0.0",
 		"id": "904F177C-C790-4B01-BDF4-F2B4E52E607E",
-		"type": "SendTransaction"
+		"type": "prepare_transaction"
 	},
 	"from": "0xb480F96c0a3d6E9e9a263e4665a39bFa6c4d01E8",
 	"to": "0xe1a078b9e2b145d0a7387f09277c6ae1d9470771",
@@ -54,7 +54,7 @@ const samplePrepareTXEstimateGas = `{
 	"ffcapi": {
 		"version": "v1.0.0",
 		"id": "904F177C-C790-4B01-BDF4-F2B4E52E607E",
-		"type": "SendTransaction"
+		"type": "prepare_transaction"
 	},
 	"from": "0xb480F96c0a3d6E9e9a263e4665a39bFa6c4d01E8",
 	"to": "0xe1a078b9e2b145d0a7387f09277c6ae1d9470771",
@@ -86,7 +86,7 @@ const samplePrepareTXBadMethod = `{
 	"ffcapi": {
 		"version": "v1.0.0",
 		"id": "904F177C-C790-4B01-BDF4-F2B4E52E607E",
-		"type": "SendTransaction"
+		"type": "prepare_transaction"
 	},
 	"from": "0xb480F96c0a3d6E9e9a263e4665a39bFa6c4d01E8",
 	"to": "0xe1a078b9e2b145d0a7387f09277c6ae1d9470771",
@@ -99,7 +99,7 @@ const samplePrepareTXBadParam = `{
 	"ffcapi": {
 		"version": "v1.0.0",
 		"id": "904F177C-C790-4B01-BDF4-F2B4E52E607E",
-		"type": "SendTransaction"
+		"type": "prepare_transaction"
 	},
 	"from": "0xb480F96c0a3d6E9e9a263e4665a39bFa6c4d01E8",
 	"to": "0xe1a078b9e2b145d0a7387f09277c6ae1d9470771",

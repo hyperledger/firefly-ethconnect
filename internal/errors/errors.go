@@ -504,6 +504,8 @@ var (
 	FFCInvalidGasPrice = e(100214, "Failed to parse gasPrice '%s': %s")
 	// FFCInvalidTXData is returned when the transaction input data cannot be parsed as hex
 	FFCInvalidTXData = e(100215, "Failed to parse transaction data as hex '%s': %s")
+	// FFCReceiptNotAvailable is returned when a receipt is not found
+	FFCReceiptNotAvailable = e(100216, "Receipt not available for transaction '%s'")
 )
 
 type EthconnectError interface {

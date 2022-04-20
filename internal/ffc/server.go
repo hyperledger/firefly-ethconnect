@@ -57,6 +57,7 @@ func NewFFCServer(rpc eth.RPCClient, conf *FFCServerConf) FFCServer {
 	s.handlerMap = map[ffcapi.RequestType]ffcHandler{
 		ffcapi.RequestTypePrepareTransaction: s.prepareTransaction,
 		ffcapi.RequestTypeSendTransaction:    s.sendTransaction,
+		ffcapi.RequestTypeGetReceipt:         s.getReceipt,
 	}
 	s.versionCheck, _ = semver.NewConstraint(supportedAPIVersions)
 	return s

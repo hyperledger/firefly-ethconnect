@@ -58,6 +58,7 @@ func NewFFCServer(rpc eth.RPCClient, conf *FFCServerConf) FFCServer {
 		ffcapi.RequestTypePrepareTransaction: s.prepareTransaction,
 		ffcapi.RequestTypeSendTransaction:    s.sendTransaction,
 		ffcapi.RequestTypeGetReceipt:         s.getReceipt,
+		ffcapi.RequestTypeGetNextNonce:       s.getNextNonce,
 	}
 	s.versionCheck, _ = semver.NewConstraint(supportedAPIVersions)
 	return s

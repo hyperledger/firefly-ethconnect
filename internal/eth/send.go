@@ -30,16 +30,26 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type EthCommonConf struct {
+	GasEstimationFactor float64 `json:"gasEstimationFactor"`
+}
+
 const (
-	errorFunctionSelector = "0x08c379a0" // per https://solidity.readthedocs.io/en/v0.4.24/control-structures.html the signature of Error(string)
+	defaultGasEstimationFactor = 1.2
+	errorFunctionSelector      = "0x08c379a0" // per https://solidity.readthedocs.io/en/v0.4.24/control-structures.html the signature of Error(string)
 )
 
 // calculateGas uses eth_estimateGas to estimate the gas required, providing a buffer
 // of 20% for variation as the chain changes between estimation and submission.
-func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXArgs, gas *ethbinding.HexUint64) (reverted bool, err error) {
+func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXArgs, gas *ethbinding.HexUint64, estimationFactor float64) (reverted bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	if estimationFactor <= 0 {
+		estimationFactor = defaultGasEstimationFactor
+	}
+
+	beforeEstimate := time.Now()
 	if err := rpc.CallContext(ctx, &gas, "eth_estimateGas", txArgs); err != nil {
 		// Now we attempt a call of the transaction, because that will return us a useful error in the case, of a revert.
 		estError := errors.Errorf(errors.TransactionSendGasEstimateFailed, err)
@@ -50,11 +60,14 @@ func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXAr
 		// If the call succeeds, after estimate completed - we still need to fail with the estimate error
 		return false, estError
 	}
-	*gas = ethbinding.HexUint64(float64(*gas) * 1.2)
+	beforeFactor := *gas
+	*gas = ethbinding.HexUint64(float64(*gas) * estimationFactor)
+	log.Infof("Gas estimate tx=%s gas=%d estimate=%d factor=%.2f time=%dms", tx.EthTX.Hash(), beforeFactor, *gas, estimationFactor, time.Since(beforeEstimate).Milliseconds())
+
 	return false, nil
 }
 
-func (tx *Txn) Estimate(ctx context.Context, rpc RPCClient) (data hexutil.Bytes, gas ethbinding.HexUint64, reverted bool, err error) {
+func (tx *Txn) Estimate(ctx context.Context, rpc RPCClient, estimationFactor float64) (data hexutil.Bytes, gas ethbinding.HexUint64, reverted bool, err error) {
 	data = ethbinding.HexBytes(tx.EthTX.Data())
 	txArgs := &SendTXArgs{
 		From:     tx.From.Hex(),
@@ -62,7 +75,7 @@ func (tx *Txn) Estimate(ctx context.Context, rpc RPCClient) (data hexutil.Bytes,
 		Value:    ethbinding.HexBigInt(*tx.EthTX.Value()),
 		Data:     &data,
 	}
-	reverted, err = tx.calculateGas(ctx, rpc, txArgs, &gas)
+	reverted, err = tx.calculateGas(ctx, rpc, txArgs, &gas, estimationFactor)
 	return data, gas, reverted, err
 }
 
@@ -140,7 +153,7 @@ func (tx *Txn) CallAndProcessReply(ctx context.Context, rpc RPCClient, blocknumb
 }
 
 // Send sends an individual transaction, choosing external or internal signing
-func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
+func (tx *Txn) Send(ctx context.Context, rpc RPCClient, estimationFactor float64) (err error) {
 	start := time.Now().UTC()
 
 	gas := ethbinding.HexUint64(tx.EthTX.Gas())
@@ -156,7 +169,7 @@ func (tx *Txn) Send(ctx context.Context, rpc RPCClient) (err error) {
 		txArgs.To = to.Hex()
 	}
 	if uint64(gas) == uint64(0) {
-		if _, err = tx.calculateGas(ctx, rpc, txArgs, &gas); err != nil {
+		if _, err = tx.calculateGas(ctx, rpc, txArgs, &gas, estimationFactor); err != nil {
 			return err
 		}
 		// Re-encode the EthTX (for external HD Wallet signing)

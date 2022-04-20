@@ -53,7 +53,7 @@ func (s *ffcServer) prepareTransaction(ctx context.Context, payload []byte) (int
 	if uint64(gas) == 0 {
 		// If a value for gas has not been supplied, do a gas estimate
 		var reverted bool
-		data, gas, reverted, err = tx.Estimate(ctx, s.rpc)
+		data, gas, reverted, err = tx.Estimate(ctx, s.rpc, s.gasEstimationFactor)
 		if err != nil {
 			var reason ffcapi.ErrorReason
 			if reverted {

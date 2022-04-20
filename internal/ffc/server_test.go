@@ -30,7 +30,7 @@ import (
 
 func newTestFFCAPIServer() (*ffcServer, *ethmocks.RPCClient) {
 	mRpc := &ethmocks.RPCClient{}
-	return NewFFCServer(mRpc).(*ffcServer), mRpc
+	return NewFFCServer(mRpc, &FFCServerConf{}).(*ffcServer), mRpc
 }
 
 func TestServerBadVersion(t *testing.T) {

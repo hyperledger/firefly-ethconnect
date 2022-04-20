@@ -57,7 +57,7 @@ func (s *ffcServer) sendTransaction(ctx context.Context, payload []byte) (interf
 		return nil, ffcapi.ErrorReasonInvalidInputs, err
 	}
 
-	err = tx.Send(ctx, s.rpc)
+	err = tx.Send(ctx, s.rpc, s.gasEstimationFactor)
 	if err != nil {
 		return nil, s.mapSendError(err.Error()), err
 	}

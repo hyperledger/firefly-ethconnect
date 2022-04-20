@@ -35,17 +35,24 @@ type FFCServer interface {
 	ServeFFCAPI(ctx context.Context, header *ffcapi.Header, payload []byte, w http.ResponseWriter)
 }
 
+type FFCServerConf struct {
+	eth.EthCommonConf
+}
+
 type ffcServer struct {
 	rpc          eth.RPCClient
 	versionCheck *semver.Constraints
 	handlerMap   map[ffcapi.RequestType]ffcHandler
+
+	gasEstimationFactor float64
 }
 
 type ffcHandler func(ctx context.Context, payload []byte) (res interface{}, reason ffcapi.ErrorReason, err error)
 
-func NewFFCServer(rpc eth.RPCClient) FFCServer {
+func NewFFCServer(rpc eth.RPCClient, conf *FFCServerConf) FFCServer {
 	s := &ffcServer{
-		rpc: rpc,
+		rpc:                 rpc,
+		gasEstimationFactor: conf.GasEstimationFactor,
 	}
 	s.handlerMap = map[ffcapi.RequestType]ffcHandler{
 		ffcapi.RequestTypePrepareTransaction: s.prepareTransaction,

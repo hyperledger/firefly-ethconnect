@@ -67,20 +67,7 @@ func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXAr
 	return false, nil
 }
 
-func (tx *Txn) Estimate(ctx context.Context, rpc RPCClient, estimationFactor float64) (data hexutil.Bytes, gas ethbinding.HexUint64, reverted bool, err error) {
-	data = ethbinding.HexBytes(tx.EthTX.Data())
-	txArgs := &SendTXArgs{
-		From:     tx.From.Hex(),
-		GasPrice: ethbinding.HexBigInt(*tx.EthTX.GasPrice()),
-		Value:    ethbinding.HexBigInt(*tx.EthTX.Value()),
-		Data:     &data,
-	}
-	reverted, err = tx.calculateGas(ctx, rpc, txArgs, &gas, estimationFactor)
-	return data, gas, reverted, err
-}
-
-// Call synchronously calls the method, without mining a transaction, and returns the result as RLP encoded bytes or nil
-func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res []byte, reverted bool, err error) {
+func (tx *Txn) buildCallArgs() *SendTXArgs {
 	data := ethbinding.HexBytes(tx.EthTX.Data())
 	txArgs := &SendTXArgs{
 		From:     tx.From.Hex(),
@@ -92,6 +79,18 @@ func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res
 	if to != nil {
 		txArgs.To = to.Hex()
 	}
+	return txArgs
+}
+
+func (tx *Txn) Estimate(ctx context.Context, rpc RPCClient, estimationFactor float64) (data hexutil.Bytes, gas ethbinding.HexUint64, reverted bool, err error) {
+	txArgs := tx.buildCallArgs()
+	reverted, err = tx.calculateGas(ctx, rpc, txArgs, &gas, estimationFactor)
+	return *txArgs.Data, gas, reverted, err
+}
+
+// Call synchronously calls the method, without mining a transaction, and returns the result as RLP encoded bytes or nil
+func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res []byte, reverted bool, err error) {
+	txArgs := tx.buildCallArgs()
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()

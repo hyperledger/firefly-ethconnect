@@ -19,6 +19,7 @@ package ffc
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
@@ -60,6 +61,12 @@ func (s *ffcServer) prepareTransaction(ctx context.Context, payload []byte) (int
 				reason = ffcapi.ErrorReasonTransactionReverted
 			}
 			return nil, reason, err
+		}
+		// We have a new gas estimation now - so we need to rebuild the TX
+		sendTx.Gas = json.Number(strconv.FormatUint(uint64(gas), 10))
+		tx, err = eth.NewSendTxn(sendTx, nil)
+		if err != nil {
+			return nil, ffcapi.ErrorReasonInvalidInputs, err
 		}
 	} else {
 		// Otherwise just serialize the data

@@ -564,6 +564,11 @@ func TestConfirmationsListenerStopStream(t *testing.T) {
 	})).Run(func(args mock.Arguments) {
 		*(args[1].(*[]*ethbinding.Hash)) = []*ethbinding.Hash{}
 	}).Return(nil)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getBlockByNumber", mock.MatchedBy(func(i hexutil.Uint64) bool {
+		return uint64(i) == 1002
+	}), false).Run(func(args mock.Arguments) {
+		*(args[1].(**blockInfo)) = nil
+	}).Return(nil).Maybe()
 
 	bcm.start()
 

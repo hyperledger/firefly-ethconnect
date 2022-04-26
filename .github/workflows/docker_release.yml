@@ -18,8 +18,8 @@ jobs:
             --label commit=$GITHUB_SHA \
             --label build_date=$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
             --label tag=${GITHUB_REF##*/} \
-            --tag ghcr.io/hyperledger/firefly-ethconnect:${GITHUB_REF##*/}" \
-            --tag ghcr.io/hyperledger/firefly-ethconnect:head" \
+            --tag ghcr.io/hyperledger/firefly-ethconnect:${GITHUB_REF##*/} \
+            --tag ghcr.io/hyperledger/firefly-ethconnect:head \
             .
 
       - name: Tag release

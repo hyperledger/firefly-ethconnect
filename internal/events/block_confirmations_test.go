@@ -564,6 +564,11 @@ func TestConfirmationsListenerStopStream(t *testing.T) {
 	})).Run(func(args mock.Arguments) {
 		*(args[1].(*[]*ethbinding.Hash)) = []*ethbinding.Hash{}
 	}).Return(nil)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getBlockByNumber", mock.MatchedBy(func(i hexutil.Uint64) bool {
+		return uint64(i) == 1002
+	}), false).Run(func(args mock.Arguments) {
+		*(args[1].(**blockInfo)) = nil
+	}).Return(nil).Maybe()
 
 	bcm.start()
 
@@ -595,6 +600,7 @@ func TestConfirmationsRemoveEvent(t *testing.T) {
 		event: event,
 	})
 
+	changeCount := 0
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newBlockFilter").Run(func(args mock.Arguments) {
 		args[1].(*hexutil.Big).ToInt().SetString("1977", 10)
 	}).Return(nil).Maybe()
@@ -602,8 +608,11 @@ func TestConfirmationsRemoveEvent(t *testing.T) {
 		return i.ToInt().Int64() == int64(1977)
 	})).Run(func(args mock.Arguments) {
 		*(args[1].(*[]*ethbinding.Hash)) = []*ethbinding.Hash{}
-		bcm.cancelFunc()
-	}).Return(nil).Maybe()
+		changeCount++
+		if changeCount > 1 {
+			bcm.cancelFunc()
+		}
+	}).Return(nil)
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getBlockByNumber", mock.MatchedBy(func(i hexutil.Uint64) bool {
 		return uint64(i) == 1002
 	}), false).Run(func(args mock.Arguments) {

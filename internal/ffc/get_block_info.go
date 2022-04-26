@@ -26,8 +26,8 @@ import (
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 )
 
-// blockInfoJSONPPC are the fields we parse from the JSON/RPC response
-type blockInfoJSONPPC struct {
+// blockInfoJSONRPC are the fields we parse from the JSON/RPC response
+type blockInfoJSONRPC struct {
 	Number       ethbinding.HexUint `json:"number"`
 	Hash         ethbinding.Hash    `json:"hash"`
 	ParentHash   ethbinding.Hash    `json:"parentHash"`
@@ -35,7 +35,7 @@ type blockInfoJSONPPC struct {
 	Transactions []ethbinding.Hash  `json:"transactions"`
 }
 
-func transformBlockInfo(bi *blockInfoJSONPPC, t *ffcapi.BlockInfo) {
+func transformBlockInfo(bi *blockInfoJSONRPC, t *ffcapi.BlockInfo) {
 	t.BlockNumber = fftypes.NewFFBigInt(int64(bi.Number))
 	t.BlockHash = bi.Hash.String()
 	t.ParentHash = bi.ParentHash.String()
@@ -55,7 +55,7 @@ func (s *ffcServer) getBlockInfoByNumber(ctx context.Context, payload []byte) (i
 	}
 
 	blockNumber := ethbinding.HexUint64(req.BlockNumber.Uint64())
-	var blockInfo *blockInfoJSONPPC
+	var blockInfo *blockInfoJSONRPC
 	err = s.rpc.CallContext(ctx, &blockInfo, "eth_getBlockByNumber", blockNumber, false /* only the txn hashes */)
 	if err != nil {
 		return nil, "", err
@@ -78,7 +78,7 @@ func (s *ffcServer) getBlockInfoByHash(ctx context.Context, payload []byte) (int
 		return nil, ffcapi.ErrorReasonInvalidInputs, err
 	}
 
-	var blockInfo *blockInfoJSONPPC
+	var blockInfo *blockInfoJSONRPC
 	err = s.rpc.CallContext(ctx, &blockInfo, "eth_getBlockByHash", req.BlockHash, false /* only the txn hashes */)
 	if err != nil {
 		return nil, "", err

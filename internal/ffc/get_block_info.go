@@ -28,10 +28,22 @@ import (
 
 // blockInfoJSONPPC are the fields we parse from the JSON/RPC response
 type blockInfoJSONPPC struct {
-	Number     ethbinding.HexUint `json:"number"`
-	Hash       ethbinding.Hash    `json:"hash"`
-	ParentHash ethbinding.Hash    `json:"parentHash"`
-	Timestamp  ethbinding.HexUint `json:"timestamp"`
+	Number       ethbinding.HexUint `json:"number"`
+	Hash         ethbinding.Hash    `json:"hash"`
+	ParentHash   ethbinding.Hash    `json:"parentHash"`
+	Timestamp    ethbinding.HexUint `json:"timestamp"`
+	Transactions []ethbinding.Hash  `json:"transactions"`
+}
+
+func transformBlockInfo(bi *blockInfoJSONPPC, t *ffcapi.BlockInfo) {
+	t.BlockNumber = fftypes.NewFFBigInt(int64(bi.Number))
+	t.BlockHash = bi.Hash.String()
+	t.ParentHash = bi.ParentHash.String()
+	stringHashes := make([]string, len(bi.Transactions))
+	for i, th := range bi.Transactions {
+		stringHashes[i] = th.String()
+	}
+	t.TransactionHashes = stringHashes
 }
 
 func (s *ffcServer) getBlockInfoByNumber(ctx context.Context, payload []byte) (interface{}, ffcapi.ErrorReason, error) {
@@ -52,13 +64,9 @@ func (s *ffcServer) getBlockInfoByNumber(ctx context.Context, payload []byte) (i
 		return nil, ffcapi.ErrorReasonNotFound, errors.Errorf(errors.FFCBlockNotAvailable)
 	}
 
-	return &ffcapi.GetBlockInfoByNumberResponse{
-		BlockInfo: ffcapi.BlockInfo{
-			BlockNumber: fftypes.NewFFBigInt(int64(blockInfo.Number)),
-			BlockHash:   blockInfo.Hash.String(),
-			ParentHash:  blockInfo.ParentHash.String(),
-		},
-	}, "", nil
+	res := &ffcapi.GetBlockInfoByNumberResponse{}
+	transformBlockInfo(blockInfo, &res.BlockInfo)
+	return res, "", nil
 
 }
 
@@ -79,12 +87,8 @@ func (s *ffcServer) getBlockInfoByHash(ctx context.Context, payload []byte) (int
 		return nil, ffcapi.ErrorReasonNotFound, errors.Errorf(errors.FFCBlockNotAvailable)
 	}
 
-	return &ffcapi.GetBlockInfoByHashResponse{
-		BlockInfo: ffcapi.BlockInfo{
-			BlockNumber: fftypes.NewFFBigInt(int64(blockInfo.Number)),
-			BlockHash:   blockInfo.Hash.String(),
-			ParentHash:  blockInfo.ParentHash.String(),
-		},
-	}, "", nil
+	res := &ffcapi.GetBlockInfoByHashResponse{}
+	transformBlockInfo(blockInfo, &res.BlockInfo)
+	return res, "", nil
 
 }

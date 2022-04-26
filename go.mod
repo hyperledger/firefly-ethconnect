@@ -16,7 +16,7 @@ require (
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d
 	github.com/hyperledger/firefly v1.0.0-rc.4.0.20220420070806-f5b009100566
-	github.com/hyperledger/firefly-transaction-manager v0.0.0-20220422223848-b32fe362d406
+	github.com/hyperledger/firefly-transaction-manager v0.0.0-20220426174359-05291b07ed70
 	github.com/icza/dyno v0.0.0-20210726202311-f1bafe5d9996
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/kaleido-io/ethbinding v0.0.0-20220405144420-999853435d9e

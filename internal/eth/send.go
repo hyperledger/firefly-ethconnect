@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 
@@ -29,32 +30,44 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type EthCommonConf struct {
+	GasEstimationFactor float64 `json:"gasEstimationFactor"`
+}
+
 const (
-	errorFunctionSelector = "0x08c379a0" // per https://solidity.readthedocs.io/en/v0.4.24/control-structures.html the signature of Error(string)
+	defaultGasEstimationFactor = 1.2
+	errorFunctionSelector      = "0x08c379a0" // per https://solidity.readthedocs.io/en/v0.4.24/control-structures.html the signature of Error(string)
 )
 
 // calculateGas uses eth_estimateGas to estimate the gas required, providing a buffer
 // of 20% for variation as the chain changes between estimation and submission.
-func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXArgs, gas *ethbinding.HexUint64, estimationFactor float64) (err error) {
+func (tx *Txn) calculateGas(ctx context.Context, rpc RPCClient, txArgs *SendTXArgs, gas *ethbinding.HexUint64, estimationFactor float64) (reverted bool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
+	if estimationFactor <= 0 {
+		estimationFactor = defaultGasEstimationFactor
+	}
+
+	beforeEstimate := time.Now()
 	if err := rpc.CallContext(ctx, &gas, "eth_estimateGas", txArgs); err != nil {
 		// Now we attempt a call of the transaction, because that will return us a useful error in the case, of a revert.
 		estError := errors.Errorf(errors.TransactionSendGasEstimateFailed, err)
 		log.Errorf(estError.Error())
-		if _, err := tx.Call(ctx, rpc, "latest"); err != nil {
-			return err
+		if _, reverted, err := tx.Call(ctx, rpc, "latest"); err != nil {
+			return reverted, err
 		}
 		// If the call succeeds, after estimate completed - we still need to fail with the estimate error
-		return estError
+		return false, estError
 	}
+	beforeFactor := *gas
 	*gas = ethbinding.HexUint64(float64(*gas) * estimationFactor)
-	return nil
+	log.Infof("Gas estimate tx=%s gas=%d estimate=%d factor=%.2f time=%dms", tx.EthTX.Hash(), beforeFactor, *gas, estimationFactor, time.Since(beforeEstimate).Milliseconds())
+
+	return false, nil
 }
 
-// Call synchronously calls the method, without mining a transaction, and returns the result as RLP encoded bytes or nil
-func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res []byte, err error) {
+func (tx *Txn) buildCallArgs() *SendTXArgs {
 	data := ethbinding.HexBytes(tx.EthTX.Data())
 	txArgs := &SendTXArgs{
 		From:     tx.From.Hex(),
@@ -66,16 +79,28 @@ func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res
 	if to != nil {
 		txArgs.To = to.Hex()
 	}
+	return txArgs
+}
+
+func (tx *Txn) Estimate(ctx context.Context, rpc RPCClient, estimationFactor float64) (data hexutil.Bytes, gas ethbinding.HexUint64, reverted bool, err error) {
+	txArgs := tx.buildCallArgs()
+	reverted, err = tx.calculateGas(ctx, rpc, txArgs, &gas, estimationFactor)
+	return *txArgs.Data, gas, reverted, err
+}
+
+// Call synchronously calls the method, without mining a transaction, and returns the result as RLP encoded bytes or nil
+func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res []byte, reverted bool, err error) {
+	txArgs := tx.buildCallArgs()
 
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	var hexString string
 	if err = rpc.CallContext(ctx, &hexString, "eth_call", txArgs, blocknumber); err != nil {
-		return nil, errors.Errorf(errors.TransactionSendCallFailedNoRevert, err)
+		return nil, false, errors.Errorf(errors.TransactionSendCallFailedNoRevert, err)
 	}
 	if len(hexString) == 0 || hexString == "0x" {
-		return nil, nil
+		return nil, false, nil
 	}
 	retStrLen := uint64(len(hexString))
 	if strings.HasPrefix(hexString, errorFunctionSelector) && retStrLen > 138 {
@@ -92,9 +117,9 @@ func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res
 		errorStringBytes, err := hex.DecodeString(errorStringHex)
 		log.Warnf("EVM Reverted. Message='%s' Offset='%s'", errorStringBytes, dataOffsetHex.Text(10))
 		if err != nil {
-			return nil, errors.Errorf(errors.TransactionSendCallFailedRevertNoMessage)
+			return nil, true, errors.Errorf(errors.TransactionSendCallFailedRevertNoMessage)
 		}
-		return nil, errors.Errorf(errors.TransactionSendCallFailedRevertMessage, errorStringBytes)
+		return nil, true, errors.Errorf(errors.TransactionSendCallFailedRevertMessage, errorStringBytes)
 	}
 	log.Debugf("eth_call response: %s", hexString)
 	res = ethbind.API.FromHex(hexString)
@@ -119,7 +144,7 @@ func (tx *Txn) CallAndProcessReply(ctx context.Context, rpc RPCClient, blocknumb
 		}
 	}
 
-	retBytes, err := tx.Call(ctx, rpc, callOption)
+	retBytes, _, err := tx.Call(ctx, rpc, callOption)
 	if err != nil || retBytes == nil {
 		return nil, err
 	}
@@ -143,7 +168,7 @@ func (tx *Txn) Send(ctx context.Context, rpc RPCClient, estimationFactor float64
 		txArgs.To = to.Hex()
 	}
 	if uint64(gas) == uint64(0) {
-		if err = tx.calculateGas(ctx, rpc, txArgs, &gas, estimationFactor); err != nil {
+		if _, err = tx.calculateGas(ctx, rpc, txArgs, &gas, estimationFactor); err != nil {
 			return err
 		}
 		// Re-encode the EthTX (for external HD Wallet signing)

@@ -1,12 +1,17 @@
 {
   "go.lintTool": "golangci-lint",
   "cSpell.words": [
+    "ABIID",
     "Debugf",
+    "ffcapi",
+    "ffcmocks",
+    "fftypes",
     "hashicorp",
     "Infof",
     "kvstore",
     "smconf",
     "stretchr",
+    "Tracef",
     "Unconfigured",
     "Warnf"
   ]

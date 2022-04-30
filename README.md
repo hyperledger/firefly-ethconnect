@@ -1,39 +1,44 @@
-# github.com/hyperledger/firefly-ethconnect
+[![codecov](https://codecov.io/gh/hyperledger/firefly-ethconnect/branch/main/graph/badge.svg?token=nO6ihSAzpV)](https://codecov.io/gh/hyperledger/firefly-ethconnect) [![Go Report Card](https://goreportcard.com/badge/github.com/hyperledger/firefly-ethconnect)](https://goreportcard.com/report/github.com/hyperledger/firefly-ethconnect)
 
-[![codecov](https://codecov.io/gh/hyperledger/firefly-ethconnect/branch/master/graph/badge.svg?token=RWlSbY389z)](https://codecov.io/gh/hyperledger/firefly-ethconnect) [![Go Report Card](https://goreportcard.com/badge/github.com/hyperledger/firefly-ethconnect)](https://goreportcard.com/report/github.com/hyperledger/firefly-ethconnect)
+## EthConnect - Hyperledger FireFly connector for Ethereum networks
 
-- [github.com/hyperledger/firefly-ethconnect](#githubcomhyperledgerfirefly-ethconnect)
-  - [Ethconnect REST Gateway](#ethconnect-rest-gateway)
-  - [License](#license)
-  - [Example payloads](#example-payloads)
-    - [YAML to submit a transaction](#yaml-to-submit-a-transaction)
-    - [YAML to deploy a contract](#yaml-to-deploy-a-contract)
-  - [Why put a Web / Messaging API in front of an Ethereum node?](#why-put-a-web--messaging-api-in-front-of-an-ethereum-node)
-  - [Why Messaging?](#why-messaging)
-  - [The asynchronous nature of Ethereum transactions](#the-asynchronous-nature-of-ethereum-transactions)
-    - [Ethereum Webhooks and the REST Receipt Store (MongoDB)](#ethereum-webhooks-and-the-rest-receipt-store-mongodb)
-    - [Nonce management for Scale and Message Ordering](#nonce-management-for-scale-and-message-ordering)
-  - [Why Kafka?](#why-kafka)
-  - [Topics](#topics)
-  - [Messages](#messages)
-    - [Example transaction receipt](#example-transaction-receipt)
-    - [Example error](#example-error)
-  - [Running the Bridge](#running-the-bridge)
-    - [Installation](#installation)
-  - [Development environment](#development-environment)
-    - [Ways to run](#ways-to-run)
-    - [Running the Kafka->Ethereum bridge via cmdline params](#running-the-kafka-ethereum-bridge-via-cmdline-params)
-    - [Running the Webhooks->Kafka bridge via cmdline params](#running-the-webhooks-kafka-bridge-via-cmdline-params)
-    - [Example server YAML definition](#example-server-yaml-definition)
-  - [Tuning](#tuning)
-    - [Maximum messages to hold in-flight (maxinflight)](#maximum-messages-to-hold-in-flight-maxinflight)
-    - [Maximum wait time for an individual transaction (tx-timeout)](#maximum-wait-time-for-an-individual-transaction-tx-timeout)
+This repo has evolved and now contains two related components of the Hyperledger FireFly
+ecosystem.
 
-## Ethconnect REST Gateway
+## 1) FireFly EthConnect FFCAPI Connector - for public networks
+
+See [FireFly architecture for public chains](https://hyperledger.github.io/firefly/overview/public_vs_permissioned.html#firefly-architecture-for-public-chains) in the Hyperledger FireFly
+documentation for details on how the requirements for transaction
+management in public chains (confirmations, gas management, policy-based
+transaction re-submission) are managed.
+
+In this architecture, the policy engine of
+[FireFly Transaction Manager](https://github.com/hyperledger/firefly-transaction-manager) works in tandem with FireFly Core to form a sophisticated "brain" for managing
+transactions through from submission to eventual mining (whether that
+takes seconds, hours or days).
+
+The connectors themselves are highly pluggable, and easy to build for a new
+blockchain ecosystem. The first reference implementation of the FireFly Connector API (FFCAPI)
+is provided in this repo:
+
+- See the [internal/ffc](./internal/ffc) folder for that implementation
+
+> A separate trimmed-down repository containing just a reference FFCAPI connector
+> for EVM-based blockchain networks is a roadmap item for the Hyperledger FireFly community.
+> Related to this is the [hyperledger/firefly-signer](https://github.com/hyperledger/firefly-signer)
+> repo, which contains RLP encoding, and signing utility functions (Apache 2.0 licensed).
+
+## 2) FireFly EthConnect REST Gateway - for permissioned chains
+
+Since creation in 2018 a large amount of function has evolved through
+use in production projects. Primarily this function has been driven by
+private sidechains, using Quorum, Hyperledger Besu and Go-Ethereum with
+finality friendly high-throughput consensus algorithms such as
+IBFT and QBFT (and RAFT for latency optimized projects).
 
 A Web and Messaging API, taking the hassle out of submitting Ethereum transactions:
 - REST API generation for any ABI
-- Reliable event streaming
+- Reliable event streaming - using Apache Kafka
 - High throughput tx submission
 - Concurrency management
 - Nonce management

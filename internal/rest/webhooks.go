@@ -23,6 +23,7 @@ import (
 	"github.com/hyperledger/firefly-ethconnect/internal/contractgateway"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
+	"github.com/hyperledger/firefly-ethconnect/internal/ffc"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
 	"github.com/hyperledger/firefly-ethconnect/internal/utils"
 	"github.com/julienschmidt/httprouter"
@@ -41,14 +42,18 @@ type webhooks struct {
 	handler         webhooksHandler
 	receipts        *receiptStore
 	rpcClient       eth.RPCClient
+	ffc             ffc.FFCServer
 }
 
-func newWebhooks(handler webhooksHandler, receipts *receiptStore, smartContractGW contractgateway.SmartContractGateway, rpcClient eth.RPCClient) *webhooks {
+func newWebhooks(handler webhooksHandler, receipts *receiptStore, smartContractGW contractgateway.SmartContractGateway, rpcClient eth.RPCClient, ethCommonConf eth.EthCommonConf) *webhooks {
 	return &webhooks{
 		handler:         handler,
 		receipts:        receipts,
 		smartContractGW: smartContractGW,
 		rpcClient:       rpcClient,
+		ffc: ffc.NewFFCServer(rpcClient, &ffc.FFCServerConf{
+			EthCommonConf: ethCommonConf,
+		}),
 	}
 }
 
@@ -89,13 +94,21 @@ func (w *webhooks) webhookHandlerNoAck(res http.ResponseWriter, req *http.Reques
 }
 
 func (w *webhooks) webhookHandler(res http.ResponseWriter, req *http.Request, ack bool) {
-	log.Infof("--> %s %s", req.Method, req.URL)
-
 	msg, err := utils.YAMLorJSONPayload(req)
 	if err != nil {
 		w.hookErrReply(res, req, err, 400)
 		return
 	}
+
+	// FFCAPI calls are handled separately
+	_, exists := msg["ffcapi"]
+	if exists {
+		payload, _ := json.Marshal(msg)
+		w.ffc.ServeFFCAPI(req.Context(), payload, res)
+		return
+	}
+
+	log.Infof("--> %s %s", req.Method, req.URL)
 
 	// Special body parameter on webhook to ask for an immediate receipt
 	immediateReceipt := false

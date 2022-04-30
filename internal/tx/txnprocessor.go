@@ -33,8 +33,7 @@ import (
 )
 
 const (
-	defaultSendConcurrency     = 1
-	defaultGasEstimationFactor = 1.2
+	defaultSendConcurrency = 1
 )
 
 // TxnProcessor interface is called for each message, as is responsible
@@ -78,15 +77,15 @@ func (i *inflightTxn) String() string {
 
 // TxnProcessorConf configuration for the message processor
 type TxnProcessorConf struct {
-	AlwaysManageNonce   bool            `json:"alwaysManageNonce"`
-	AttemptGapFill      bool            `json:"attemptGapFill"`
-	MaxTXWaitTime       int             `json:"maxTXWaitTime"`
-	SendConcurrency     int             `json:"sendConcurrency"`
-	OrionPrivateAPIS    bool            `json:"orionPrivateAPIs"`
-	HexValuesInReceipt  bool            `json:"hexValuesInReceipt"`
-	AddressBookConf     AddressBookConf `json:"addressBook"`
-	HDWalletConf        HDWalletConf    `json:"hdWallet"`
-	GasEstimationFactor float64         `json:"gasEstimationFactor"`
+	eth.EthCommonConf
+	AlwaysManageNonce  bool            `json:"alwaysManageNonce"`
+	AttemptGapFill     bool            `json:"attemptGapFill"`
+	MaxTXWaitTime      int             `json:"maxTXWaitTime"`
+	SendConcurrency    int             `json:"sendConcurrency"`
+	OrionPrivateAPIS   bool            `json:"orionPrivateAPIs"`
+	HexValuesInReceipt bool            `json:"hexValuesInReceipt"`
+	AddressBookConf    AddressBookConf `json:"addressBook"`
+	HDWalletConf       HDWalletConf    `json:"hdWallet"`
 }
 
 type inflightTxnState struct {
@@ -112,9 +111,6 @@ type txnProcessor struct {
 func NewTxnProcessor(conf *TxnProcessorConf, rpcConf *eth.RPCConf) TxnProcessor {
 	if conf.SendConcurrency == 0 {
 		conf.SendConcurrency = defaultSendConcurrency
-	}
-	if conf.GasEstimationFactor <= 0 {
-		conf.GasEstimationFactor = defaultGasEstimationFactor
 	}
 	p := &txnProcessor{
 		inflightTxnsLock:    &sync.Mutex{},

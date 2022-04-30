@@ -33,6 +33,7 @@ import (
 	"github.com/hyperledger/firefly-ethconnect/internal/auth"
 	"github.com/hyperledger/firefly-ethconnect/internal/auth/authtest"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger/firefly-ethconnect/internal/kafka"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
 	"github.com/julienschmidt/httprouter"
@@ -108,7 +109,7 @@ func newTestWebhooks() (*webhooks, *webhooksKafka, *testKafkaCommon, *httptest.S
 	k := newTestKafkaComon()
 	wk := newWebhooksKafkaBase(r)
 	wk.kafka = k
-	w := newWebhooks(wk, wk.receipts, nil, nil)
+	w := newWebhooks(wk, wk.receipts, nil, nil, eth.EthCommonConf{})
 	router := &httprouter.Router{}
 	w.addRoutes(router)
 	ts := httptest.NewUnstartedServer(router)

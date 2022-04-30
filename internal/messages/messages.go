@@ -19,6 +19,7 @@ import (
 	"reflect"
 
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger/firefly-transaction-manager/pkg/ffcapi"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 )
 
@@ -76,6 +77,7 @@ type CommonHeaders struct {
 // RequestCommon is a common interface to all requests
 type RequestCommon struct {
 	Headers RequestHeaders `json:"headers"`
+	FFCAPI  *ffcapi.Header `json:"ffcapi,omitempty"`
 }
 
 // RequestHeaders are common to all replies

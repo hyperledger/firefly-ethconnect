@@ -11,7 +11,7 @@ RUN go get github.com/kaleido-io/ethbinding
 RUN go mod download
 ADD . .
 RUN cp go.mod.new go.mod
-RUN make clean all
+RUN make clean deps build
 
 FROM debian:buster-slim
 WORKDIR /ethconnect

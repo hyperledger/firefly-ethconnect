@@ -19,7 +19,6 @@ package ffc
 import (
 	"context"
 	"encoding/json"
-	"strings"
 
 	"github.com/hyperledger/firefly-transaction-manager/pkg/ffcapi"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
@@ -38,10 +37,7 @@ func (s *ffcServer) getNewBlockHashes(ctx context.Context, payload []byte) (inte
 	var blockHashes []string
 	err = s.rpc.CallContext(ctx, &blockHashes, "eth_getFilterChanges", &listenerID)
 	if err != nil {
-		if strings.Contains(err.Error(), "filter not found") {
-			return nil, ffcapi.ErrorReasonNotFound, err
-		}
-		return nil, "", err
+		return nil, mapError(filterRPCMethods, err), err
 	}
 
 	return &ffcapi.GetNewBlockHashesResponse{

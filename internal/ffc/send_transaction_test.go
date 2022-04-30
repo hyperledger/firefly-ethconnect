@@ -116,11 +116,10 @@ func TestSendTransactionFail(t *testing.T) {
 
 func TestSendErrorMapping(t *testing.T) {
 
-	s, _ := newTestFFCAPIServer()
-
-	assert.Equal(t, ffcapi.ErrorReasonNonceTooLow, s.mapSendError("nonce too low"))
-	assert.Equal(t, ffcapi.ErrorReasonInsufficientFunds, s.mapSendError("insufficient funds"))
-	assert.Equal(t, ffcapi.ErrorReasonTransactionUnderpriced, s.mapSendError("transaction underpriced"))
+	assert.Equal(t, ffcapi.ErrorReasonNonceTooLow, mapError(sendRPCMethods, fmt.Errorf("nonce too low")))
+	assert.Equal(t, ffcapi.ErrorReasonInsufficientFunds, mapError(sendRPCMethods, fmt.Errorf("insufficient funds")))
+	assert.Equal(t, ffcapi.ErrorReasonTransactionUnderpriced, mapError(sendRPCMethods, fmt.Errorf("transaction underpriced")))
+	assert.Equal(t, ffcapi.ErrorKnownTransaction, mapError(sendRPCMethods, fmt.Errorf("known transaction")))
 
 }
 

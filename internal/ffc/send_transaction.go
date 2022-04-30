@@ -59,23 +59,10 @@ func (s *ffcServer) sendTransaction(ctx context.Context, payload []byte) (interf
 
 	err = tx.Send(ctx, s.rpc, s.gasEstimationFactor)
 	if err != nil {
-		return nil, s.mapSendError(err.Error()), err
+		return nil, mapError(sendRPCMethods, err), err
 	}
 	return &ffcapi.SendTransactionResponse{
 		TransactionHash: tx.Hash,
 	}, "", nil
 
-}
-
-func (s *ffcServer) mapSendError(errString string) ffcapi.ErrorReason {
-	switch {
-	case strings.Contains(errString, "nonce too low"):
-		return ffcapi.ErrorReasonNonceTooLow
-	case strings.Contains(errString, "insufficient funds"):
-		return ffcapi.ErrorReasonInsufficientFunds
-	case strings.Contains(errString, "transaction underpriced"):
-		return ffcapi.ErrorReasonTransactionUnderpriced
-	default:
-		return ""
-	}
 }

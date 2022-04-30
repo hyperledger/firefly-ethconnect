@@ -1,7 +1,6 @@
-# github.com/hyperledger/firefly-ethconnect
 [![codecov](https://codecov.io/gh/hyperledger/firefly-ethconnect/branch/main/graph/badge.svg?token=nO6ihSAzpV)](https://codecov.io/gh/hyperledger/firefly-ethconnect) [![Go Report Card](https://goreportcard.com/badge/github.com/hyperledger/firefly-ethconnect)](https://goreportcard.com/report/github.com/hyperledger/firefly-ethconnect)
 
-## Hyperledger FireFly EthConnect - connector for Ethereum networks
+## EthConnect - Hyperledger FireFly connector for Ethereum networks
 
 This repo has evolved and now contains two related components of the Hyperledger FireFly
 ecosystem.

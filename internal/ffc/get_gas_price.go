@@ -34,7 +34,8 @@ func (s *ffcServer) getGasPrice(ctx context.Context, payload []byte) (interface{
 		return nil, ffcapi.ErrorReasonInvalidInputs, err
 	}
 
-	// Note we use pre-London gas fee approach
+	// Note we use simple (pre London fork) gas fee approach.
+	// See https://github.com/ethereum/pm/issues/328#issuecomment-853234014 for a bit of color
 	var gasPrice ethbinding.HexBigInt
 	err = s.rpc.CallContext(ctx, &gasPrice, "eth_gasPrice")
 	if err != nil {

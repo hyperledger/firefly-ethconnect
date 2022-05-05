@@ -14,34 +14,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ffc
+package ffcapiconnector
 
 import (
 	"context"
 	"encoding/json"
 
-	"github.com/hyperledger/firefly-transaction-manager/pkg/ffcapi"
+	"github.com/hyperledger/firefly-common/pkg/ffcapi"
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 )
 
-func (s *ffcServer) getNewBlockHashes(ctx context.Context, payload []byte) (interface{}, ffcapi.ErrorReason, error) {
+func (s *ffcServer) getNextNonce(ctx context.Context, payload []byte) (interface{}, ffcapi.ErrorReason, error) {
 
-	var req ffcapi.GetNewBlockHashesRequest
+	var req ffcapi.GetNextNonceRequest
 	err := json.Unmarshal(payload, &req)
 	if err != nil {
 		return nil, ffcapi.ErrorReasonInvalidInputs, err
 	}
 
-	var listenerID ethbinding.HexBigInt
-	listenerID.ToInt().SetString(req.ListenerID, 0 /* big.Int strips the 0x */)
-	var blockHashes []string
-	err = s.rpc.CallContext(ctx, &blockHashes, "eth_getFilterChanges", &listenerID)
+	var txnCount ethbinding.HexUint64
+	err = s.rpc.CallContext(ctx, &txnCount, "eth_getTransactionCount", req.Signer, "pending")
 	if err != nil {
-		return nil, mapError(filterRPCMethods, err), err
+		return nil, "", err
 	}
 
-	return &ffcapi.GetNewBlockHashesResponse{
-		BlockHashes: blockHashes,
+	return &ffcapi.GetNextNonceResponse{
+		Nonce: fftypes.NewFFBigInt(int64(txnCount)),
 	}, "", nil
 
 }

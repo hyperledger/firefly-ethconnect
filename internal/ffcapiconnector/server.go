@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ffc
+package ffcapiconnector
 
 import (
 	"context"
@@ -23,9 +23,9 @@ import (
 	"strconv"
 
 	"github.com/Masterminds/semver"
+	"github.com/hyperledger/firefly-common/pkg/ffcapi"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
-	"github.com/hyperledger/firefly-transaction-manager/pkg/ffcapi"
 	log "github.com/sirupsen/logrus"
 )
 

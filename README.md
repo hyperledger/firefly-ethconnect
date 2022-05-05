@@ -21,7 +21,7 @@ The connectors themselves are highly pluggable, and easy to build for a new
 blockchain ecosystem. The first reference implementation of the FireFly Connector API (FFCAPI)
 is provided in this repo:
 
-- See the [internal/ffc](./internal/ffc) folder for that implementation
+- See the [internal/ffcapiconnector](./internal/ffcapiconnector) folder for that implementation
 
 > A separate trimmed-down repository containing just a reference FFCAPI connector
 > for EVM-based blockchain networks is a roadmap item for the Hyperledger FireFly community.

@@ -14,15 +14,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ffc
+package ffcapiconnector
 
 import (
 	"context"
 	"fmt"
 	"testing"
 
+	"github.com/hyperledger/firefly-common/pkg/ffcapi"
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
-	"github.com/hyperledger/firefly-transaction-manager/pkg/ffcapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

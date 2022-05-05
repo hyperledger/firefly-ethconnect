@@ -14,16 +14,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ffc
+package ffcapiconnector
 
 import (
 	"context"
 	"encoding/json"
 
+	"github.com/hyperledger/firefly-common/pkg/ffcapi"
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
-	"github.com/hyperledger/firefly-transaction-manager/pkg/ffcapi"
-	"github.com/hyperledger/firefly/pkg/fftypes"
 )
 
 func (s *ffcServer) getReceipt(ctx context.Context, payload []byte) (interface{}, ffcapi.ErrorReason, error) {

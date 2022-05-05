@@ -14,19 +14,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ffc
+package ffcapiconnector
 
 import (
 	"context"
+	"encoding/json"
 
-	"github.com/hyperledger/firefly-ethconnect/internal/errors"
-	"github.com/hyperledger/firefly-transaction-manager/pkg/ffcapi"
+	"github.com/hyperledger/firefly-common/pkg/ffcapi"
+	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 )
 
-func (s *ffcServer) execQuery(ctx context.Context, payload []byte) (interface{}, ffcapi.ErrorReason, error) {
+func (s *ffcServer) createBlockListener(ctx context.Context, payload []byte) (interface{}, ffcapi.ErrorReason, error) {
 
-	// TODO - currently ethconnect returns parameters as a map, and this seems inconsistent.
-	//        We should reconcile this in the FFCAPI implementation, while maintaining existing behavior for EthConnect default paths.
-	return nil, "", errors.Errorf(errors.FFCRequestTypeNotImplemented, ffcapi.RequestTypeExecQuery)
+	var req ffcapi.CreateBlockListenerRequest
+	err := json.Unmarshal(payload, &req)
+	if err != nil {
+		return nil, ffcapi.ErrorReasonInvalidInputs, err
+	}
+
+	var listenerID ethbinding.HexBigInt
+	err = s.rpc.CallContext(ctx, &listenerID, "eth_newBlockFilter")
+	if err != nil {
+		return nil, "", err
+	}
+
+	return &ffcapi.CreateBlockListenerResponse{
+		ListenerID: listenerID.String(),
+	}, "", nil
 
 }

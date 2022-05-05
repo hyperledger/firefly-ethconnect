@@ -14,36 +14,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ffc
+package ffcapiconnector
 
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
-	"github.com/hyperledger/firefly-transaction-manager/pkg/ffcapi"
-	"github.com/hyperledger/firefly/pkg/fftypes"
+	"github.com/hyperledger/firefly-common/pkg/ffcapi"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 )
 
-func (s *ffcServer) getGasPrice(ctx context.Context, payload []byte) (interface{}, ffcapi.ErrorReason, error) {
+func (s *ffcServer) getNewBlockHashes(ctx context.Context, payload []byte) (interface{}, ffcapi.ErrorReason, error) {
 
-	var req ffcapi.GetGasPriceRequest
+	var req ffcapi.GetNewBlockHashesRequest
 	err := json.Unmarshal(payload, &req)
 	if err != nil {
 		return nil, ffcapi.ErrorReasonInvalidInputs, err
 	}
 
-	// Note we use simple (pre London fork) gas fee approach.
-	// See https://github.com/ethereum/pm/issues/328#issuecomment-853234014 for a bit of color
-	var gasPrice ethbinding.HexBigInt
-	err = s.rpc.CallContext(ctx, &gasPrice, "eth_gasPrice")
+	var listenerID ethbinding.HexBigInt
+	listenerID.ToInt().SetString(req.ListenerID, 0 /* big.Int strips the 0x */)
+	var blockHashes []string
+	err = s.rpc.CallContext(ctx, &blockHashes, "eth_getFilterChanges", &listenerID)
 	if err != nil {
-		return nil, "", err
+		return nil, mapError(filterRPCMethods, err), err
 	}
 
-	return &ffcapi.GetGasPriceResponse{
-		GasPrice: fftypes.JSONAnyPtr(fmt.Sprintf(`"%s"`, gasPrice.ToInt().Text(10))),
+	return &ffcapi.GetNewBlockHashesResponse{
+		BlockHashes: blockHashes,
 	}, "", nil
 
 }

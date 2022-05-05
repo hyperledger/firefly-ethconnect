@@ -18,8 +18,8 @@ import (
 	"encoding/json"
 	"reflect"
 
+	"github.com/hyperledger/firefly-common/pkg/ffcapi"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
-	"github.com/hyperledger/firefly-transaction-manager/pkg/ffcapi"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 )
 

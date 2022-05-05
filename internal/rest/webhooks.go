@@ -23,7 +23,7 @@ import (
 	"github.com/hyperledger/firefly-ethconnect/internal/contractgateway"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
-	"github.com/hyperledger/firefly-ethconnect/internal/ffc"
+	"github.com/hyperledger/firefly-ethconnect/internal/ffcapiconnector"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
 	"github.com/hyperledger/firefly-ethconnect/internal/utils"
 	"github.com/julienschmidt/httprouter"
@@ -42,7 +42,7 @@ type webhooks struct {
 	handler         webhooksHandler
 	receipts        *receiptStore
 	rpcClient       eth.RPCClient
-	ffc             ffc.FFCServer
+	ffc             ffcapiconnector.FFCServer
 }
 
 func newWebhooks(handler webhooksHandler, receipts *receiptStore, smartContractGW contractgateway.SmartContractGateway, rpcClient eth.RPCClient, ethCommonConf eth.EthCommonConf) *webhooks {
@@ -51,7 +51,7 @@ func newWebhooks(handler webhooksHandler, receipts *receiptStore, smartContractG
 		receipts:        receipts,
 		smartContractGW: smartContractGW,
 		rpcClient:       rpcClient,
-		ffc: ffc.NewFFCServer(rpcClient, &ffc.FFCServerConf{
+		ffc: ffcapiconnector.NewFFCServer(rpcClient, &ffcapiconnector.FFCServerConf{
 			EthCommonConf: ethCommonConf,
 		}),
 	}

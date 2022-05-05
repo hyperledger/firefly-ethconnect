@@ -14,15 +14,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ffc
+package ffcapiconnector
 
 import (
 	"context"
 	"encoding/json"
 
+	"github.com/hyperledger/firefly-common/pkg/ffcapi"
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
-	"github.com/hyperledger/firefly-transaction-manager/pkg/ffcapi"
-	"github.com/hyperledger/firefly/pkg/fftypes"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 )
 

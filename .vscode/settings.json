@@ -4,6 +4,8 @@
     "ABIID",
     "Debugf",
     "ffcapi",
+    "ffcapiconnector",
+    "ffcapiconnectormocks",
     "ffcmocks",
     "fftypes",
     "hashicorp",

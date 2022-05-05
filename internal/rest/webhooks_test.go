@@ -27,7 +27,7 @@ import (
 
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
 	"github.com/hyperledger/firefly-ethconnect/mocks/ethmocks"
-	"github.com/hyperledger/firefly-ethconnect/mocks/ffcmocks"
+	"github.com/hyperledger/firefly-ethconnect/mocks/ffcapiconnectormocks"
 	"github.com/julienschmidt/httprouter"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	"github.com/stretchr/testify/assert"
@@ -241,7 +241,7 @@ func TestWebhookHandlerFFCAPI(t *testing.T) {
 		},
 		"blockNumber": "12345"
 	}`)))
-	ffcMocks := &ffcmocks.FFCServer{}
+	ffcMocks := &ffcapiconnectormocks.FFCServer{}
 	ffcMocks.On("ServeFFCAPI", mock.Anything, mock.Anything, mock.Anything).Return().Run(func(args mock.Arguments) {
 		w := args[2].(http.ResponseWriter)
 		w.Write([]byte(`{"ok": true}`))

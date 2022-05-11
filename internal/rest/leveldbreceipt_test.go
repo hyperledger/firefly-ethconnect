@@ -113,7 +113,7 @@ func TestLevelDBReceiptsAddReceiptOK(t *testing.T) {
 
 	receipt := make(map[string]interface{})
 	receipt["prop1"] = "value1"
-	err = r.AddReceipt(utils.UUIDv4(), &receipt)
+	err = r.AddReceipt(utils.UUIDv4(), &receipt, false)
 	assert.NoError(err)
 
 	itr := r.store.NewIterator()
@@ -132,7 +132,7 @@ func TestLevelDBReceiptsAddReceiptOK(t *testing.T) {
 	}
 }
 
-func TestLevelDBReceiptsAddReceiptIdempotencyCehck(t *testing.T) {
+func TestLevelDBReceiptsAddReceiptIdempotencyCheck(t *testing.T) {
 	assert := assert.New(t)
 
 	conf := &LevelDBReceiptStoreConf{
@@ -144,11 +144,36 @@ func TestLevelDBReceiptsAddReceiptIdempotencyCehck(t *testing.T) {
 	receipt := make(map[string]interface{})
 	receipt["prop1"] = "value1"
 	uuid := utils.UUIDv4()
-	err = r.AddReceipt(uuid, &receipt)
+	err = r.AddReceipt(uuid, &receipt, false)
 	assert.NoError(err)
 
-	err = r.AddReceipt(uuid, &receipt)
+	err = r.AddReceipt(uuid, &receipt, false)
 	assert.Regexp("FFEC100219", err)
+}
+
+func TestLevelDBReceiptsAddReceiptOverwrite(t *testing.T) {
+	assert := assert.New(t)
+
+	conf := &LevelDBReceiptStoreConf{
+		Path: tmpdir,
+	}
+	r, err := newLevelDBReceipts(conf)
+	defer r.store.Close()
+
+	receipt := make(map[string]interface{})
+	receipt["prop1"] = "value1"
+	uuid := utils.UUIDv4()
+	err = r.AddReceipt(uuid, &receipt, false)
+	assert.NoError(err)
+
+	receipt = make(map[string]interface{})
+	receipt["prop1"] = "value2"
+	err = r.AddReceipt(uuid, &receipt, true)
+	assert.NoError(err)
+
+	receiptRetrieved, err := r.GetReceipt(uuid)
+	assert.NoError(err)
+	assert.Equal("value2", (*receiptRetrieved)["prop1"])
 }
 
 func TestLevelDBReceiptsAddReceiptFailed(t *testing.T) {
@@ -166,7 +191,7 @@ func TestLevelDBReceiptsAddReceiptFailed(t *testing.T) {
 	}
 
 	receipt := make(map[string]interface{})
-	err := r.AddReceipt("key", &receipt)
+	err := r.AddReceipt("key", &receipt, false)
 	assert.Regexp("pop", err)
 }
 
@@ -183,19 +208,19 @@ func TestLevelDBReceiptsGetReceiptsOK(t *testing.T) {
 	receipt1 := make(map[string]interface{})
 	receipt1["_id"] = id1
 	receipt1["prop1"] = "value2"
-	err = r.AddReceipt(id1, &receipt1)
+	err = r.AddReceipt(id1, &receipt1, false)
 
 	id2 := utils.UUIDv4()
 	receipt2 := make(map[string]interface{})
 	receipt2["_id"] = id1
 	receipt2["prop1"] = "value1"
-	err = r.AddReceipt(id2, &receipt2)
+	err = r.AddReceipt(id2, &receipt2, false)
 
 	id3 := utils.UUIDv4()
 	receipt3 := make(map[string]interface{})
 	receipt3["_id"] = id3
 	receipt3["prop1"] = "value3"
-	err = r.AddReceipt(id3, &receipt3)
+	err = r.AddReceipt(id3, &receipt3, false)
 
 	results, err := r.GetReceipts(0, 0, nil, 0, "", "", "")
 	assert.NoError(err)
@@ -220,7 +245,7 @@ func TestLevelDBReceiptsGetReceiptsWithStartEnd(t *testing.T) {
 	receipt1["prop1"] = "value1"
 	receipt1["from"] = "0xc1f617aa2e1b22be21b5ef4a93d49678533a9662"
 	receipt1["receivedAt"] = 1626405000000
-	err := r.AddReceipt(id1, &receipt1)
+	err := r.AddReceipt(id1, &receipt1, false)
 	assert.NoError(err)
 
 	id2 := utils.UUIDv4()
@@ -229,7 +254,7 @@ func TestLevelDBReceiptsGetReceiptsWithStartEnd(t *testing.T) {
 	receipt2["prop1"] = "value2"
 	receipt2["from"] = "0xc1f617aa2e1b22be21b5ef4a93d49678533a9662"
 	receipt1["receivedAt"] = 1626406000001
-	err = r.AddReceipt(id2, &receipt2)
+	err = r.AddReceipt(id2, &receipt2, false)
 	assert.NoError(err)
 
 	id3 := utils.UUIDv4()
@@ -238,7 +263,7 @@ func TestLevelDBReceiptsGetReceiptsWithStartEnd(t *testing.T) {
 	receipt3["prop1"] = "value3"
 	receipt3["from"] = "0xc1f617aa2e1b22be21b5ef4a93d49678533a9662"
 	receipt1["receivedAt"] = 1626407000002
-	err = r.AddReceipt(id3, &receipt3)
+	err = r.AddReceipt(id3, &receipt3, false)
 	assert.NoError(err)
 
 	id4 := utils.UUIDv4()
@@ -247,7 +272,7 @@ func TestLevelDBReceiptsGetReceiptsWithStartEnd(t *testing.T) {
 	receipt4["prop1"] = "value4"
 	receipt4["from"] = "0xc1f617aa2e1b22be21b5ef4a93d49678533a9662"
 	receipt1["receivedAt"] = 1626407000003
-	err = r.AddReceipt(id4, &receipt4)
+	err = r.AddReceipt(id4, &receipt4, false)
 	assert.NoError(err)
 
 	// Some test debug info
@@ -302,7 +327,7 @@ func TestLevelDBReceiptsFilterByIDs(t *testing.T) {
 	receipt1["receivedAt"] = receivedAt
 	receipt1["from"] = "addr1"
 	receipt1["to"] = "addr2"
-	err = r.AddReceipt("r1", &receipt1)
+	err = r.AddReceipt("r1", &receipt1, false)
 
 	receipt2 := make(map[string]interface{})
 	receipt2["_id"] = "r2"
@@ -310,14 +335,14 @@ func TestLevelDBReceiptsFilterByIDs(t *testing.T) {
 	receipt2["receivedAt"] = receivedAt
 	receipt2["from"] = "addr1"
 	receipt2["to"] = "addr2"
-	err = r.AddReceipt("r2", &receipt2)
+	err = r.AddReceipt("r2", &receipt2, false)
 
 	receipt3 := make(map[string]interface{})
 	receipt3["_id"] = "r3"
 	receipt3["prop1"] = "value3"
 	receipt3["receivedAt"] = receivedAt
 	receipt3["from"] = "addr1"
-	err = r.AddReceipt("r3", &receipt3)
+	err = r.AddReceipt("r3", &receipt3, false)
 
 	results, err := r.GetReceipts(1, 2, []string{"r1", "r2"}, int64((now.UnixNano()/int64(time.Millisecond))-10), "", "", "")
 	assert.NoError(err)
@@ -345,7 +370,7 @@ func TestLevelDBReceiptsFilterByIDsAndFromTo(t *testing.T) {
 	receipt1["receivedAt"] = receivedAt
 	receipt1["from"] = "addr1"
 	receipt1["to"] = "addr2"
-	err = r.AddReceipt("r1", &receipt1)
+	err = r.AddReceipt("r1", &receipt1, false)
 
 	receipt2 := make(map[string]interface{})
 	receipt2["_id"] = "r2"
@@ -353,14 +378,14 @@ func TestLevelDBReceiptsFilterByIDsAndFromTo(t *testing.T) {
 	receipt2["receivedAt"] = receivedAt
 	receipt2["from"] = "addr1.1"
 	receipt2["to"] = "addr2"
-	err = r.AddReceipt("r2", &receipt2)
+	err = r.AddReceipt("r2", &receipt2, false)
 
 	receipt3 := make(map[string]interface{})
 	receipt3["_id"] = "r3"
 	receipt3["prop1"] = "value3"
 	receipt3["receivedAt"] = receivedAt
 	receipt3["from"] = "addr1"
-	err = r.AddReceipt("r3", &receipt3)
+	err = r.AddReceipt("r3", &receipt3, false)
 
 	results, err := r.GetReceipts(1, 3, []string{"r1", "r2"}, 0, "addr1", "addr2", "")
 	assert.NoError(err)
@@ -387,7 +412,7 @@ func TestLevelDBReceiptsFilterFromTo(t *testing.T) {
 	receipt1["receivedAt"] = receivedAt
 	receipt1["from"] = "addr1"
 	receipt1["to"] = "addr2"
-	err = r.AddReceipt("r1", &receipt1)
+	err = r.AddReceipt("r1", &receipt1, false)
 
 	receipt2 := make(map[string]interface{})
 	receipt2["_id"] = "r2"
@@ -395,14 +420,14 @@ func TestLevelDBReceiptsFilterFromTo(t *testing.T) {
 	receipt2["receivedAt"] = receivedAt
 	receipt2["from"] = "addr1.1"
 	receipt2["to"] = "addr2"
-	err = r.AddReceipt("r2", &receipt2)
+	err = r.AddReceipt("r2", &receipt2, false)
 
 	receipt3 := make(map[string]interface{})
 	receipt3["_id"] = "r3"
 	receipt3["prop1"] = "value3"
 	receipt3["receivedAt"] = receivedAt
 	receipt3["from"] = "addr1"
-	err = r.AddReceipt("r3", &receipt3)
+	err = r.AddReceipt("r3", &receipt3, false)
 
 	results, err := r.GetReceipts(1, 3, []string{}, 0, "addr1", "addr2", "")
 	assert.NoError(err)
@@ -441,7 +466,7 @@ func TestLevelDBReceiptsFilterNotFound(t *testing.T) {
 	receipt1["receivedAt"] = receivedAt
 	receipt1["from"] = "addr1"
 	receipt1["to"] = "addr2"
-	err = r.AddReceipt("r1", &receipt1)
+	err = r.AddReceipt("r1", &receipt1, false)
 
 	receipt2 := make(map[string]interface{})
 	receipt2["_id"] = "r2"
@@ -449,13 +474,13 @@ func TestLevelDBReceiptsFilterNotFound(t *testing.T) {
 	receipt2["receivedAt"] = receivedAt
 	receipt2["from"] = "addr1"
 	receipt2["to"] = "addr2"
-	err = r.AddReceipt("r2", &receipt2)
+	err = r.AddReceipt("r2", &receipt2, false)
 
 	receipt3 := make(map[string]interface{})
 	receipt3["_id"] = "r3"
 	receipt3["prop1"] = "value3"
 	receipt3["receivedAt"] = receivedAt
-	err = r.AddReceipt("r3", &receipt3)
+	err = r.AddReceipt("r3", &receipt3, false)
 
 	// not found due to IDs
 	results, err := r.GetReceipts(0, 2, []string{"r4", "r5"}, int64((now.UnixNano()/int64(time.Millisecond))-10), "addr1", "addr2", "")
@@ -491,7 +516,7 @@ func TestLevelDBReceiptsGetReceiptOK(t *testing.T) {
 	receipt1["prop1"] = "value1"
 	receipt1["from"] = "addr1"
 	receipt1["to"] = "addr2"
-	err = r.AddReceipt("r1", &receipt1)
+	err = r.AddReceipt("r1", &receipt1, false)
 
 	result, err := r.GetReceipt("r1")
 	assert.NoError(err)

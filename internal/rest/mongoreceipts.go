@@ -76,8 +76,13 @@ func (m *mongoReceipts) connect() (err error) {
 
 // AddReceipt processes an individual reply message, and contains all errors
 // To account for any transitory failures writing to mongoDB, it retries adding receipt with a backoff
-func (m *mongoReceipts) AddReceipt(requestID string, receipt *map[string]interface{}) (err error) {
-	return m.collection.Insert(*receipt)
+func (m *mongoReceipts) AddReceipt(requestID string, receipt *map[string]interface{}, overwrite bool) (err error) {
+	if overwrite {
+		query := m.collection.Find(bson.M{"_id": requestID})
+		return m.collection.Upsert(query, *receipt)
+	} else {
+		return m.collection.Insert(*receipt)
+	}
 }
 
 // GetReceipts Returns recent receipts with skip & limit

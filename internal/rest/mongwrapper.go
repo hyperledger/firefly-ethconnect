@@ -35,6 +35,7 @@ type MongoDatabase interface {
 // MongoCollection is the subset of mgo that we use, allowing stubbing
 type MongoCollection interface {
 	Insert(...interface{}) error
+	Upsert(query interface{}, doc interface{}) error
 	Create(info *mgo.CollectionInfo) error
 	EnsureIndex(index mgo.Index) error
 	Find(query interface{}) MongoQuery
@@ -71,6 +72,11 @@ func (m *collWrapper) EnsureIndex(index mgo.Index) error {
 
 func (m *collWrapper) Find(query interface{}) MongoQuery {
 	return m.coll.Find(query)
+}
+
+func (m *collWrapper) Upsert(query interface{}, doc interface{}) error {
+	_, err := m.coll.Upsert(query, doc)
+	return err
 }
 
 // MongoQuery is the subset of mgo that we use, allowing stubbing

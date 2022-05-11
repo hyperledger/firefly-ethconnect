@@ -58,6 +58,11 @@ func (m *mockCollection) Insert(payloads ...interface{}) error {
 	return m.insertErr
 }
 
+func (m *mockCollection) Upsert(query interface{}, payload interface{}) error {
+	m.inserted = payload.(map[string]interface{})
+	return m.insertErr
+}
+
 func (m *mockCollection) Create(info *mgo.CollectionInfo) error {
 	m.collInfo = info
 	return m.collErr
@@ -181,7 +186,7 @@ func TestMongoReceiptsConnectIdxErr(t *testing.T) {
 	assert.Regexp("Unable to create index: pop", err)
 }
 
-func TestMongoReceiptsAddReceiptOK(t *testing.T) {
+func TestMongoReceiptsInsertReceiptOK(t *testing.T) {
 	assert := assert.New(t)
 
 	mgoMock := &mockMongo{}
@@ -192,7 +197,22 @@ func TestMongoReceiptsAddReceiptOK(t *testing.T) {
 
 	r.connect()
 	receipt := make(map[string]interface{})
-	err := r.AddReceipt("key", &receipt)
+	err := r.AddReceipt("key", &receipt, false)
+	assert.NoError(err)
+}
+
+func TestMongoReceiptsUpsertReceiptOK(t *testing.T) {
+	assert := assert.New(t)
+
+	mgoMock := &mockMongo{}
+	r := &mongoReceipts{
+		conf: &MongoDBReceiptStoreConf{},
+		mgo:  mgoMock,
+	}
+
+	r.connect()
+	receipt := make(map[string]interface{})
+	err := r.AddReceipt("key", &receipt, true)
 	assert.NoError(err)
 }
 
@@ -208,7 +228,7 @@ func TestMongoReceiptsAddReceiptFailed(t *testing.T) {
 
 	r.connect()
 	receipt := make(map[string]interface{})
-	err := r.AddReceipt("key", &receipt)
+	err := r.AddReceipt("key", &receipt, false)
 	assert.Regexp("pop", err)
 }
 

@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/hyperledger/firefly-ethconnect/internal/auth"
@@ -50,6 +51,8 @@ type receiptStore struct {
 	conf            *ReceiptStoreConf
 	persistence     ReceiptStorePersistence
 	smartContractGW contractgateway.SmartContractGateway
+	reservedIDs     map[string]bool
+	reservationMux  sync.Mutex
 }
 
 func newReceiptStore(conf *ReceiptStoreConf, persistence ReceiptStorePersistence, smartContractGW contractgateway.SmartContractGateway) *receiptStore {
@@ -66,6 +69,7 @@ func newReceiptStore(conf *ReceiptStoreConf, persistence ReceiptStorePersistence
 		conf:            conf,
 		persistence:     persistence,
 		smartContractGW: smartContractGW,
+		reservedIDs:     make(map[string]bool),
 	}
 }
 
@@ -84,15 +88,35 @@ func (r *receiptStore) extractHeaders(parsedMsg map[string]interface{}) map[stri
 	return nil
 }
 
+func (r *receiptStore) reserveID(msgID string) (release func(), err error) {
+
+	r.reservationMux.Lock()
+	defer r.reservationMux.Unlock()
+
+	m, err := r.persistence.GetReceipt(msgID)
+	if err != nil {
+		return nil, err
+	}
+	if m != nil || r.reservedIDs[msgID] {
+		return nil, errors.Errorf(errors.ReceiptStoreKeyNotUnique)
+	}
+
+	r.reservedIDs[msgID] = true
+	return func() {
+		r.reservationMux.Lock()
+		defer r.reservationMux.Unlock()
+
+		delete(r.reservedIDs, msgID)
+	}, nil
+
+}
+
 func (r *receiptStore) writeAccepted(msgID, msgAck string, msg map[string]interface{}) error {
 	msg["receivedAt"] = time.Now().UnixNano() / int64(time.Millisecond)
 	msg["pending"] = true
 	msg["msgAck"] = msgAck
 	msg["_id"] = msgID
-	if msgID != "" && r.persistence != nil {
-		return r.writeReceipt(msgID, msg, false)
-	}
-	return nil
+	return r.writeReceipt(msgID, msg, false)
 }
 
 func (r *receiptStore) processReply(msgBytes []byte) {

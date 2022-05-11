@@ -511,8 +511,8 @@ var (
 	// FFCBlockNotAvailable is returned when a receipt is not found
 	FFCBlockNotAvailable = e(100218, "Block not available")
 
-	// ReceiptStoreLevelDBKeyNotUnique idempotency check failed on request ID
-	ReceiptStoreLevelDBKeyNotUnique = e(100219, "Request ID is not unique")
+	// ReceiptStoreKeyNotUnique non-unique request ID
+	ReceiptStoreKeyNotUnique = e(100219, "Request ID is not unique")
 )
 
 type EthconnectError interface {

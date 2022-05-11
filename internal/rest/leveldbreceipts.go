@@ -72,7 +72,7 @@ func (l *levelDBReceipts) AddReceipt(requestID string, receipt *map[string]inter
 		if overwrite {
 			lookupKey = string(existingKey)
 		} else {
-			return errors.Errorf(errors.ReceiptStoreLevelDBKeyNotUnique)
+			return errors.Errorf(errors.ReceiptStoreKeyNotUnique)
 		}
 	}
 

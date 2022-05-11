@@ -565,3 +565,32 @@ func TestSendReplyBroadcast(t *testing.T) {
 
 	r.processReply(replyMsgBytes)
 }
+
+func TestReserveID(t *testing.T) {
+	assert := assert.New(t)
+	r, _ := newReceiptsTestStore(func(message interface{}) {
+		assert.NotNil(message)
+	})
+
+	release, err := r.reserveID("12345")
+	assert.NoError(err)
+
+	_, err = r.reserveID("12345")
+	assert.Regexp("FFEC100219", err)
+
+	release()
+
+	release, err = r.reserveID("12345")
+	assert.NoError(err)
+
+	release()
+}
+
+func TestReserveIDFail(t *testing.T) {
+	assert := assert.New(t)
+	r, ts := newReceiptsErrTestServer(fmt.Errorf("pop"))
+	defer ts.Close()
+
+	_, err := r.reserveID("12345")
+	assert.Regexp("pop", err)
+}

@@ -31,8 +31,9 @@ func TestMemReceiptsWrapping(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		receipt := make(map[string]interface{})
-		receipt["key"] = fmt.Sprintf("receipt_%d", i)
-		r.AddReceipt("key", &receipt, false)
+		reqID := fmt.Sprintf("receipt_%d", i)
+		receipt["_id"] = reqID
+		r.AddReceipt(reqID, &receipt, false)
 	}
 
 	assert.Equal(50, r.receipts.Len())
@@ -40,7 +41,7 @@ func TestMemReceiptsWrapping(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		expectedKey := fmt.Sprintf("receipt_%d", 100-i-1)
 		val := *currItem.Value.(*map[string]interface{})
-		assert.Equal(val["key"], expectedKey)
+		assert.Equal(val["_id"], expectedKey)
 		currItem = currItem.Next()
 	}
 }

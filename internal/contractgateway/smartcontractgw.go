@@ -54,7 +54,7 @@ import (
 
 var (
 	maxFormParsingMemory   int64 = 32 << 20 // 32 MB
-	errEventSupportMissing       = errors.Errorf(errors.EventSupportNotConfiugred)
+	errEventSupportMissing       = errors.Errorf(errors.EventSupportNotConfigured)
 )
 
 // remoteContractInfo is the ABI raw data back out of the REST API gateway with bytecode

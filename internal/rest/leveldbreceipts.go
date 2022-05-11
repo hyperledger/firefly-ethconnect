@@ -60,11 +60,20 @@ func (l *levelDBReceipts) AddReceipt(requestID string, receipt *map[string]inter
 	// insert an entry with a composite key to track the insertion order
 	l.entropyLock.Lock()
 	newID := ulid.MustNew(ulid.Timestamp(time.Now()), l.idEntropy)
+	// We check for key uniqueness in this lock, to provide an idempotent interface
+	_, err = l.store.Get(requestID)
 	l.entropyLock.Unlock()
+
+	if err == kvstore.ErrorNotFound {
+		// This is what we expect
+		err = nil
+	} else if err == nil {
+		return errors.Errorf(errors.ReceiptStoreLevelDBKeyNotUnique)
+	}
+
 	// add "z" prefix so these entries come after the lookup entries
 	// because for iteration we start from last backwards
 	lookupKey := fmt.Sprintf("z%s", newID)
-
 	b, _ := json.MarshalIndent(receipt, "", "  ")
 	err = l.store.Put(lookupKey, b)
 

@@ -196,7 +196,7 @@ func (w *webhooks) processMsg(ctx context.Context, msg map[string]interface{}, a
 	if ack && immediateReceipt {
 		release, err := w.receipts.reserveID(msgID)
 		if err != nil {
-			return nil, 500, err
+			return nil, 409 /* conflict */, err
 		}
 		defer release()
 	}

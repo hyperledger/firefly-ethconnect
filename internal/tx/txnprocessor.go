@@ -216,9 +216,10 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.T
 	} else if err != nil {
 		return nil, err
 	} else if p.addressBook != nil {
-		if inflight.rpc, err = p.addressBook.lookup(txnContext.Context(), msg.From); err != nil {
-			return nil, err
-		}
+		// We set the rpc to nil on this single-threaded processing, so that the
+		// parallel worker threads (in concurrency > 0 mode) can do the address
+		// book lookup.
+		inflight.rpc = nil
 	}
 
 	// Validate the from address, and normalize to lower case with 0x prefix
@@ -573,6 +574,19 @@ func (p *txnProcessor) sendTransactionCommon(txnContext TxnContext, inflight *in
 }
 
 func (p *txnProcessor) sendAndTrackMining(txnContext TxnContext, inflight *inflightTxn, tx *eth.Txn) {
+
+	// If the RPC client is nil here, we need to resolve it.
+	if inflight.rpc == nil {
+		rpc, err := p.addressBook.lookup(txnContext.Context(), inflight.from)
+		if err != nil {
+			p.cancelInFlight(inflight, false /* definitely not submitted at this point */)
+			// No need for gap fill here
+			txnContext.SendErrorReply(500, err)
+			return
+		}
+		inflight.rpc = rpc
+	}
+
 	err := tx.Send(txnContext.Context(), inflight.rpc, p.gasEstimationFactor)
 	if p.conf.SendConcurrency > 1 {
 		<-p.concurrencySlots // return our slot as soon as send is complete, to let an awaiting send go

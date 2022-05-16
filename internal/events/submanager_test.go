@@ -142,6 +142,7 @@ func TestActionAndSubscriptionLifecycle(t *testing.T) {
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_blockNumber").Return(nil)
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newFilter", mock.Anything).Return(nil)
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterLogs", mock.Anything).Return(nil)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.Anything).Return(nil).Maybe()
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_uninstallFilter", mock.Anything).Return(nil)
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_uninstallFilter", mock.Anything).Return(nil).Maybe()
 
@@ -231,6 +232,7 @@ func TestActionChildCleanup(t *testing.T) {
 	rpc.On("CallContext", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) { <-blockCall }).Return(nil)
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newFilter", mock.Anything).Return(nil)
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterLogs", mock.Anything).Return(nil).Maybe()
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.Anything).Return(nil).Maybe()
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_uninstallFilter", mock.Anything).Return(nil).Maybe()
 	sm.rpc = rpc
 
@@ -266,6 +268,7 @@ func TestStreamAndSubscriptionErrors(t *testing.T) {
 	rpc := &ethmocks.RPCClient{}
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newFilter", mock.Anything).Return(nil).Maybe()
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterLogs", mock.Anything).Return(nil).Maybe()
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.Anything).Return(nil).Maybe()
 	rpc.On("CallContext", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) { <-blockCall }).Return(nil)
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_uninstallFilter", mock.Anything).Return(nil).Maybe()
 	sm.rpc = rpc
@@ -423,6 +426,7 @@ func TestAddSubscriptionConcurrently(t *testing.T) {
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_blockNumber").Return(nil)
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newFilter", mock.Anything).Return(nil)
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterLogs", mock.Anything).Return(nil)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.Anything).Return(nil).Maybe()
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_uninstallFilter", mock.Anything).Return(nil)
 
 	sm.rpc = rpc

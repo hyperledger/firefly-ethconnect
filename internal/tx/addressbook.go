@@ -28,7 +28,8 @@ import (
 )
 
 const (
-	defaultRPCEndpointProp = "endpoint"
+	defaultRPCEndpointProp      = "endpoint"
+	defaultHealthcheckFrequency = 30 * time.Second
 )
 
 // AddressBook looks up RPC URLs based on a remote registry, and optionally
@@ -40,9 +41,10 @@ type AddressBook interface {
 // AddressBookConf configuration
 type AddressBookConf struct {
 	utils.HTTPRequesterConf
-	AddressbookURLPrefix string                   `json:"urlPrefix"`
-	HostsFile            string                   `json:"hostsFile"`
-	PropNames            AddressBookPropNamesConf `json:"propNames"`
+	AddressbookURLPrefix    string                   `json:"urlPrefix"`
+	HostsFile               string                   `json:"hostsFile"`
+	PropNames               AddressBookPropNamesConf `json:"propNames"`
+	HealthcheckFrequencySec *int                     `json:"healthcheckFrequencySec"`
 }
 
 // AddressBookPropNamesConf configures the JSON property names to extract from the GET response on the API
@@ -50,14 +52,14 @@ type AddressBookPropNamesConf struct {
 	RPCEndpoint string `json:"endpoint"`
 }
 
-// NewAddressBook construtor
+// NewAddressBook constructor
 func NewAddressBook(conf *AddressBookConf, rpcConf *eth.RPCConf) AddressBook {
 	ab := &addressBook{
 		conf:                conf,
 		fallbackRPCEndpoint: rpcConf.RPC.URL,
 		hr:                  utils.NewHTTPRequester("Addressbook", &conf.HTTPRequesterConf),
 		addrToHost:          make(map[string]string),
-		hostToRPC:           make(map[string]eth.RPCClientAll),
+		hostToRPC:           make(map[string]*cachedRPC),
 	}
 	propNames := &conf.PropNames
 	if propNames.RPCEndpoint == "" {
@@ -66,16 +68,26 @@ func NewAddressBook(conf *AddressBookConf, rpcConf *eth.RPCConf) AddressBook {
 	if ab.conf.AddressbookURLPrefix != "" && !strings.HasSuffix(ab.conf.AddressbookURLPrefix, "/") {
 		ab.conf.AddressbookURLPrefix += "/"
 	}
+	ab.healthcheckFrequency = defaultHealthcheckFrequency
+	if ab.conf.HealthcheckFrequencySec != nil {
+		ab.healthcheckFrequency = time.Duration(*ab.conf.HealthcheckFrequencySec) * time.Second
+	}
 	return ab
 }
 
+type cachedRPC struct {
+	lastChecked time.Time
+	rpc         eth.RPCClientAll
+}
+
 type addressBook struct {
-	conf                *AddressBookConf
-	hr                  *utils.HTTPRequester
-	mtx                 sync.Mutex
-	fallbackRPCEndpoint string
-	addrToHost          map[string]string
-	hostToRPC           map[string]eth.RPCClientAll
+	conf                 *AddressBookConf
+	hr                   *utils.HTTPRequester
+	mtx                  sync.Mutex
+	fallbackRPCEndpoint  string
+	healthcheckFrequency time.Duration
+	addrToHost           map[string]string
+	hostToRPC            map[string]*cachedRPC
 }
 
 // testRPC uses a simple net_version JSON/RPC call to test the health of a cached connection
@@ -126,14 +138,19 @@ func (ab *addressBook) mapEndpoint(ctx context.Context, endpoint string) (eth.RP
 	defer ab.mtx.Unlock()
 
 	// Hopefully we already have a client in our map, and it's healthy
-	rpc, ok := ab.hostToRPC[endpoint]
+	cached, ok := ab.hostToRPC[endpoint]
 	if ok {
-		if ab.testRPC(ctx, rpc) {
-			log.Infof("Using cached RPC connection for signing")
-			return rpc, nil
+		log.Debugf("Using cached RPC connection for signing")
+		if time.Since(cached.lastChecked) < ab.healthcheckFrequency {
+			return cached.rpc, nil
+		}
+		if ab.testRPC(ctx, cached.rpc) {
+			cached.lastChecked = time.Now()
+			return cached.rpc, nil
 		}
 		// Clean up our cache entry as it is stale
-		rpc.Close()
+		log.Warnf("Cached RPC connection failed healthcheck - reconnecting")
+		cached.rpc.Close()
 		delete(ab.hostToRPC, endpoint)
 	}
 
@@ -143,12 +160,16 @@ func (ab *addressBook) mapEndpoint(ctx context.Context, endpoint string) (eth.RP
 	}
 
 	// Connect and cache the RPC connection
-	if rpc, err = eth.RPCConnect(&eth.RPCConnOpts{
+	rpc, err := eth.RPCConnect(&eth.RPCConnOpts{
 		URL: url.String(),
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, err
 	}
-	ab.hostToRPC[endpoint] = rpc
+	ab.hostToRPC[endpoint] = &cachedRPC{
+		lastChecked: time.Now(),
+		rpc:         rpc,
+	}
 	return rpc, err
 }
 

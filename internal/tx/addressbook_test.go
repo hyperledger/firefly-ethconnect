@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
 	"github.com/julienschmidt/httprouter"
@@ -40,15 +41,18 @@ func TestNewAddressBookDefaultPropNames(t *testing.T) {
 func TestNewAddressBookCustomPropNames(t *testing.T) {
 	assert := assert.New(t)
 
+	ten := 10
 	a := NewAddressBook(&AddressBookConf{
 		AddressbookURLPrefix: "http://localhost:12345",
 		PropNames: AddressBookPropNamesConf{
 			RPCEndpoint: "rpcEndpointProp",
 		},
+		HealthcheckFrequencySec: &ten,
 	}, &eth.RPCConf{})
 	ab := a.(*addressBook)
 	assert.Equal("http://localhost:12345/", ab.conf.AddressbookURLPrefix)
 	assert.Equal("rpcEndpointProp", ab.conf.PropNames.RPCEndpoint)
+	assert.Equal(10*time.Second, ab.healthcheckFrequency)
 }
 
 func TestLookupWithCaching(t *testing.T) {
@@ -93,17 +97,31 @@ func TestLookupWithCaching(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal(rpc, rpcCachedSameHost)
 
+	failRPC = true
+	rpcCachedSameAddrCachedHealthcheck, err := ab.lookup(ctx, "0x125b194949a37d7ea6e2bac5bd21097d37a36974")
+
+	assert.NoError(err)
+	assert.Equal(rpc, rpcCachedSameAddrCachedHealthcheck)
+
+	// Force healthcheck
+	ab.healthcheckFrequency = 0
+
+	failRPC = false
 	rpcCachedSameAddr, err := ab.lookup(ctx, "0x125b194949a37d7ea6e2bac5bd21097d37a36974")
 
 	assert.NoError(err)
 	assert.Equal(rpc, rpcCachedSameAddr)
 
 	failRPC = true
-
 	rpcNewAfterFailure, err := ab.lookup(ctx, "0x125b194949a37d7ea6e2bac5bd21097d37a36974")
 
 	assert.NoError(err)
 	assert.NotEqual(rpc, rpcNewAfterFailure)
+
+	// Now make the connect fail
+	serverURL = "wrong::::"
+	_, err = ab.lookup(ctx, "0x5f97772b3a87ce23c9b409d28af40d462352053e")
+	assert.Regexp("FFEC100136", err)
 
 }
 

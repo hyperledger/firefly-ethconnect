@@ -151,7 +151,8 @@ func (p *txnProcessor) OnMessage(txnContext TxnContext) {
 
 	var unmarshalErr error
 	headers := txnContext.Headers()
-	log.Debugf("Processing %+v", headers)
+	log.Infof("--> OnMessage %s", headers.ID)
+	defer log.Infof("<-- OnMessage %s", headers.ID)
 	switch headers.MsgType {
 	case messages.MsgTypeDeployContract:
 		var deployContractMsg messages.DeployContract
@@ -574,6 +575,9 @@ func (p *txnProcessor) sendTransactionCommon(txnContext TxnContext, inflight *in
 }
 
 func (p *txnProcessor) sendAndTrackMining(txnContext TxnContext, inflight *inflightTxn, tx *eth.Txn) {
+
+	log.Infof("--> sending %s/%d (concurrency=%d)", inflight.from, inflight.nonce, p.conf.SendConcurrency)
+	defer log.Infof("<-- sent %s/%d", inflight.from, inflight.nonce)
 
 	// If the RPC client is nil here, we need to resolve it.
 	if inflight.rpc == nil {

@@ -176,11 +176,15 @@ func (ab *addressBook) mapEndpoint(ctx context.Context, endpoint string) (eth.RP
 // lookup the RPC URL to use for a given from address, performing hostname resolution
 // based on a custom hosts file (if configured)
 func (ab *addressBook) lookup(ctx context.Context, fromAddr string) (eth.RPCClient, error) {
-	// First check if we already know the base (non host translated) endpoint
-	// to use for this address
-	log.Infof("Resolving signing address: %s", fromAddr)
+
+	// First check if we already know the base (non host translated) endpoint  to use for this address
+	// Simple locking on our cache for now (covers long-lived async test+connect operations)
+	ab.mtx.Lock()
 	endpoint, found := ab.addrToHost[fromAddr]
+	ab.mtx.Unlock()
+
 	if !found || endpoint == "" {
+		log.Infof("Resolving signing address (not cached): %s", fromAddr)
 		url := ab.conf.AddressbookURLPrefix + fromAddr
 		body, err := ab.hr.DoRequest("GET", url, nil)
 		if err != nil {
@@ -197,7 +201,9 @@ func (ab *addressBook) lookup(ctx context.Context, fromAddr string) (eth.RPCClie
 				return nil, err
 			}
 			// We've found a conclusive hit. Use this endpoint from now on for this address.
+			ab.mtx.Lock()
 			ab.addrToHost[fromAddr] = endpoint
+			ab.mtx.Unlock()
 		}
 	}
 

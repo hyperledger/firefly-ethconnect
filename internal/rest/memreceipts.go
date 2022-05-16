@@ -25,6 +25,7 @@ import (
 type memoryReceipts struct {
 	conf     *ReceiptStoreConf
 	receipts *list.List
+	byID     map[string]*map[string]interface{}
 	mux      sync.Mutex
 }
 
@@ -32,6 +33,7 @@ func newMemoryReceipts(conf *ReceiptStoreConf) *memoryReceipts {
 	r := &memoryReceipts{
 		conf:     conf,
 		receipts: list.New(),
+		byID:     make(map[string]*map[string]interface{}),
 	}
 	log.Debugf("Memory receipt store created, with MaxDocs=%d", r.conf.MaxDocs)
 	return r
@@ -61,26 +63,30 @@ func (m *memoryReceipts) GetReceipt(requestID string) (*map[string]interface{}, 
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
-	curElem := m.receipts.Front()
-	for curElem != nil {
-		r := *curElem.Value.(*map[string]interface{})
-		id, exists := r["_id"]
-		if exists && id == requestID {
-			return &r, nil
-		}
-		curElem = curElem.Next()
+	receipt, exists := m.byID[requestID]
+	if exists {
+		return receipt, nil
 	}
 	return nil, nil
 }
 
-func (m *memoryReceipts) AddReceipt(requestID string, receipt *map[string]interface{}) error {
+func (m *memoryReceipts) AddReceipt(requestID string, receipt *map[string]interface{}, overwrite bool) error {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
 	curLen := m.receipts.Len()
 	if curLen > 0 && curLen >= m.conf.MaxDocs {
-		m.receipts.Remove(m.receipts.Back())
+		back := m.receipts.Back()
+		if back != nil {
+			receipt := *(back.Value.(*map[string]interface{}))
+			existingID, ok := receipt["_id"]
+			if ok {
+				delete(m.byID, existingID.(string))
+			}
+			m.receipts.Remove(back)
+		}
 	}
 	m.receipts.PushFront(receipt)
+	m.byID[requestID] = receipt
 	return nil
 }

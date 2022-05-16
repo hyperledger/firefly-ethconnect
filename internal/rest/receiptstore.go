@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/hyperledger/firefly-ethconnect/internal/auth"
@@ -34,6 +35,7 @@ const (
 	defaultReceiptLimit      = 10
 	defaultRetryTimeout      = 120 * 1000
 	defaultRetryInitialDelay = 500
+	defaultMaxDocs           = 250
 )
 
 var uuidCharsVerifier, _ = regexp.Compile("^[0-9a-zA-Z-]+$")
@@ -42,13 +44,15 @@ var uuidCharsVerifier, _ = regexp.Compile("^[0-9a-zA-Z-]+$")
 type ReceiptStorePersistence interface {
 	GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to, start string) (*[]map[string]interface{}, error)
 	GetReceipt(requestID string) (*map[string]interface{}, error)
-	AddReceipt(requestID string, receipt *map[string]interface{}) error
+	AddReceipt(requestID string, receipt *map[string]interface{}, overwriteAndRetry bool) error
 }
 
 type receiptStore struct {
 	conf            *ReceiptStoreConf
 	persistence     ReceiptStorePersistence
 	smartContractGW contractgateway.SmartContractGateway
+	reservedIDs     map[string]bool
+	reservationMux  sync.Mutex
 }
 
 func newReceiptStore(conf *ReceiptStoreConf, persistence ReceiptStorePersistence, smartContractGW contractgateway.SmartContractGateway) *receiptStore {
@@ -58,10 +62,14 @@ func newReceiptStore(conf *ReceiptStoreConf, persistence ReceiptStorePersistence
 	if conf.RetryInitialDelayMS <= 0 {
 		conf.RetryInitialDelayMS = defaultRetryInitialDelay
 	}
+	if conf.MaxDocs <= 0 {
+		conf.MaxDocs = defaultMaxDocs
+	}
 	return &receiptStore{
 		conf:            conf,
 		persistence:     persistence,
 		smartContractGW: smartContractGW,
+		reservedIDs:     make(map[string]bool),
 	}
 }
 
@@ -80,14 +88,35 @@ func (r *receiptStore) extractHeaders(parsedMsg map[string]interface{}) map[stri
 	return nil
 }
 
-func (r *receiptStore) writeAccepted(msgID, msgAck string, msg map[string]interface{}) {
+func (r *receiptStore) reserveID(msgID string) (release func(), err error) {
+
+	r.reservationMux.Lock()
+	defer r.reservationMux.Unlock()
+
+	m, err := r.persistence.GetReceipt(msgID)
+	if err != nil {
+		return nil, err
+	}
+	if m != nil || r.reservedIDs[msgID] {
+		return nil, errors.Errorf(errors.ReceiptStoreKeyNotUnique)
+	}
+
+	r.reservedIDs[msgID] = true
+	return func() {
+		r.reservationMux.Lock()
+		defer r.reservationMux.Unlock()
+
+		delete(r.reservedIDs, msgID)
+	}, nil
+
+}
+
+func (r *receiptStore) writeAccepted(msgID, msgAck string, msg map[string]interface{}) error {
 	msg["receivedAt"] = time.Now().UnixNano() / int64(time.Millisecond)
 	msg["pending"] = true
 	msg["msgAck"] = msgAck
 	msg["_id"] = msgID
-	if msgID != "" && r.persistence != nil {
-		r.writeReceipt(msgID, msg)
-	}
+	return r.writeReceipt(msgID, msg, false)
 }
 
 func (r *receiptStore) processReply(msgBytes []byte) {
@@ -137,14 +166,14 @@ func (r *receiptStore) processReply(msgBytes []byte) {
 	parsedMsg["receivedAt"] = time.Now().UnixNano() / int64(time.Millisecond)
 	parsedMsg["_id"] = requestID
 
-	// Insert the receipt into persistence - captures errors
+	// Insert the receipt into persistence - performs retry for errors, so will succeed or panic
 	if requestID != "" && r.persistence != nil {
-		r.writeReceipt(requestID, parsedMsg)
+		_ = r.writeReceipt(requestID, parsedMsg, true /* overwrite, and succeed or panic */)
 	}
 
 }
 
-func (r *receiptStore) writeReceipt(requestID string, receipt map[string]interface{}) {
+func (r *receiptStore) writeReceipt(requestID string, receipt map[string]interface{}, overwriteAndRetry bool) error {
 	startTime := time.Now()
 	delay := time.Duration(r.conf.RetryInitialDelayMS) * time.Millisecond
 	attempt := 0
@@ -157,21 +186,17 @@ func (r *receiptStore) writeReceipt(requestID string, receipt map[string]interfa
 			delay = time.Duration(float64(delay) * backoffFactor)
 		}
 		attempt++
-		err := r.persistence.AddReceipt(requestID, &receipt)
+		err := r.persistence.AddReceipt(requestID, &receipt, overwriteAndRetry)
 		if err == nil {
 			log.Infof("%s: Inserted receipt into receipt store", receipt["_id"])
 			break
 		}
 
-		log.Errorf("%s: addReceipt attempt: %d failed, err: %s", requestID, attempt, err)
-
-		// Check if the reason is that there is a receipt already
-		existing, qErr := r.persistence.GetReceipt(requestID)
-		if qErr == nil && existing != nil {
-			log.Debugf("%s: existing   receipt: %+v", requestID, *existing)
-			log.Debugf("%s: duplicate receipt: %+v", requestID, receipt)
-			break
+		if !overwriteAndRetry {
+			return err
 		}
+
+		log.Errorf("%s: addReceipt attempt: %d failed, err: %s", requestID, attempt, err)
 
 		timeRetrying := time.Since(startTime)
 		if timeRetrying > retryTimeout {
@@ -182,6 +207,7 @@ func (r *receiptStore) writeReceipt(requestID string, receipt map[string]interfa
 	if r.smartContractGW != nil {
 		r.smartContractGW.SendReply(receipt)
 	}
+	return nil
 }
 
 func (r *receiptStore) marshalAndReply(res http.ResponseWriter, req *http.Request, result interface{}) {

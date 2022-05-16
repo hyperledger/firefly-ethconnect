@@ -190,15 +190,31 @@ func (w *webhooks) processMsg(ctx context.Context, msg map[string]interface{}, a
 		}
 	}
 
+	// We reserve the ID before we do the call to Kafka. This is as good as we
+	// can get for idempotence in this model - there is still a window where it's possible
+	// Kafka accepts the message, but we are terminated before we get an error back.
+	if ack && immediateReceipt {
+		release, err := w.receipts.reserveID(msgID)
+		if err != nil {
+			return nil, 409 /* conflict */, err
+		}
+		defer release()
+	}
+
 	// Pass to the handler
 	log.Infof("Webhook accepted message. MsgID: %s Type: %s", msgID, msgType)
 	msgAck, status, err := w.handler.sendWebhookMsg(ctx, key, msgID, msg, ack)
 	if err != nil {
 		return nil, status, err
 	}
+
 	if ack && immediateReceipt {
-		w.receipts.writeAccepted(msgID, msgAck, msg)
+		err := w.receipts.writeAccepted(msgID, msgAck, msg)
+		if err != nil {
+			return nil, 500, err
+		}
 	}
+
 	return &messages.AsyncSentMsg{
 		Sent:    true,
 		Request: msgID,

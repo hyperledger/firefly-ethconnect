@@ -485,8 +485,8 @@ var (
 	// CircuitBreakerTripped is returned when the Kafka circuit breaker has deemed it unsafe to produce more messages
 	CircuitBreakerTripped = e(100206, "Unable to send Kafka message as the gap of %d messages between consumer and producer is too large. Estimated at %.2fKb")
 
-	// EventSupportNotConfiugred is returned when event support is not configured
-	EventSupportNotConfiugred = e(100207, "Event support is not configured on this gateway")
+	// EventSupportNotConfigured is returned when event support is not configured
+	EventSupportNotConfigured = e(100207, "Event support is not configured on this gateway")
 
 	// FFCBadVersion is returned when an FFCAPI request has a bad version header
 	FFCBadVersion = e(100208, "Bad FFCAPI Version '%s': %s")
@@ -510,6 +510,9 @@ var (
 	FFCRequestTypeNotImplemented = e(100217, "FFCAPI request '%s' not currently supported")
 	// FFCBlockNotAvailable is returned when a receipt is not found
 	FFCBlockNotAvailable = e(100218, "Block not available")
+
+	// ReceiptStoreKeyNotUnique non-unique request ID
+	ReceiptStoreKeyNotUnique = e(100219, "Request ID is not unique")
 )
 
 type EthconnectError interface {

@@ -48,7 +48,7 @@ func (m *mockReceiptErrs) GetReceipt(requestID string) (*map[string]interface{},
 	return m.getReceiptVal, m.getReceiptErr
 }
 
-func (m *mockReceiptErrs) AddReceipt(requestID string, receipt *map[string]interface{}) error {
+func (m *mockReceiptErrs) AddReceipt(requestID string, receipt *map[string]interface{}, overwrite bool) error {
 	m.addReceiptCalled = true
 	return m.addReceiptErr
 }
@@ -204,33 +204,6 @@ func TestReplyProcessorWithPeristenceErrorPanics(t *testing.T) {
 	})
 }
 
-func TestReplyProcessorWithPeristenceErrorDuplicateSwallows(t *testing.T) {
-	existing := map[string]interface{}{"some": "existing"}
-	mr := &mockReceiptErrs{
-		addReceiptErr: fmt.Errorf("pop"),
-		getReceiptErr: nil,
-		getReceiptVal: &existing,
-	}
-	r := newReceiptStore(&ReceiptStoreConf{
-		RetryTimeoutMS:      1,
-		RetryInitialDelayMS: 1,
-	}, mr, nil)
-
-	replyMsg := &messages.TransactionReceipt{}
-	replyMsg.Headers.MsgType = messages.MsgTypeTransactionSuccess
-	replyMsg.Headers.ID = utils.UUIDv4()
-	replyMsg.Headers.ReqID = utils.UUIDv4()
-	replyMsg.Headers.ReqOffset = "topic:1:2"
-	txHash := ethbind.API.HexToHash("0x02587104e9879911bea3d5bf6ccd7e1a6cb9a03145b8a1141804cebd6aa67c5c")
-	replyMsg.TransactionHash = &txHash
-	replyMsgBytes, _ := json.Marshal(&replyMsg)
-
-	r.processReply(replyMsgBytes)
-
-	assert.True(t, mr.addReceiptCalled)
-
-}
-
 func TestReplyProcessorWithErrorReply(t *testing.T) {
 	assert := assert.New(t)
 
@@ -348,11 +321,11 @@ func TestGetReplyOK(t *testing.T) {
 	fakeReply1 := make(map[string]interface{})
 	fakeReply1["_id"] = "ABCDEFG"
 	fakeReply1["field1"] = "value1"
-	p.AddReceipt("_id", &fakeReply1)
+	p.AddReceipt("ABCDEFG", &fakeReply1, true)
 	fakeReply2 := make(map[string]interface{})
 	fakeReply2["_id"] = "BCDEFG"
 	fakeReply2["field1"] = "value2"
-	p.AddReceipt("_id", &fakeReply2)
+	p.AddReceipt("BCDEFG", &fakeReply2, true)
 	status, respJSON, httpErr := testGETObject(ts, "/reply/ABCDEFG")
 	assert.NoError(httpErr)
 	assert.Equal(200, status)
@@ -369,7 +342,7 @@ func TestGetReplyBadData(t *testing.T) {
 	unserializable := make(map[interface{}]interface{})
 	unserializable[true] = "not for json"
 	fakeReply["badness"] = unserializable
-	p.AddReceipt("_id", &fakeReply)
+	p.AddReceipt("ABCDEFG", &fakeReply, true)
 	status, respJSON, httpErr := testGETObject(ts, "/reply/ABCDEFG")
 	assert.NoError(httpErr)
 	assert.Equal(500, status)
@@ -429,7 +402,7 @@ func TestGetRepliesDefaultLimit(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		fakeReply := make(map[string]interface{})
 		fakeReply["_id"] = fmt.Sprintf("reply%d", i)
-		p.AddReceipt("_id", &fakeReply)
+		p.AddReceipt("_id", &fakeReply, true)
 	}
 
 	status, respArr, httpErr := testGETArray(ts, "/replies")
@@ -449,7 +422,7 @@ func TestGetRepliesCustomSkipLimit(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		fakeReply := make(map[string]interface{})
 		fakeReply["_id"] = fmt.Sprintf("reply%d", i)
-		p.AddReceipt("_id", &fakeReply)
+		p.AddReceipt("_id", &fakeReply, true)
 	}
 
 	status, respArr, httpErr := testGETArray(ts, "/replies?skip=5&limit=20")
@@ -469,7 +442,7 @@ func TestGetRepliesCustomFiltersISO(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		fakeReply := make(map[string]interface{})
 		fakeReply["_id"] = fmt.Sprintf("reply%d", i)
-		p.AddReceipt("_id", &fakeReply)
+		p.AddReceipt("_id", &fakeReply, true)
 	}
 
 	status, resObj, httpErr := testGETObject(ts, "/replies?from=abc&to=bcd&since=2019-01-01T00:00:00Z")
@@ -486,7 +459,7 @@ func TestGetRepliesCustomFiltersTS(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		fakeReply := make(map[string]interface{})
 		fakeReply["_id"] = fmt.Sprintf("reply%d", i)
-		p.AddReceipt("_id", &fakeReply)
+		p.AddReceipt("_id", &fakeReply, true)
 	}
 
 	status, resObj, httpErr := testGETObject(ts, "/replies?from=abc&to=bcd&since=1580435959")
@@ -503,7 +476,7 @@ func TestGetRepliesBadSinceTS(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		fakeReply := make(map[string]interface{})
 		fakeReply["_id"] = fmt.Sprintf("reply%d", i)
-		p.AddReceipt("_id", &fakeReply)
+		p.AddReceipt("_id", &fakeReply, true)
 	}
 
 	status, resObj, httpErr := testGETObject(ts, "/replies?from=abc&to=bcd&since=badness")
@@ -591,4 +564,33 @@ func TestSendReplyBroadcast(t *testing.T) {
 	replyMsgBytes, _ := json.Marshal(&replyMsg)
 
 	r.processReply(replyMsgBytes)
+}
+
+func TestReserveID(t *testing.T) {
+	assert := assert.New(t)
+	r, _ := newReceiptsTestStore(func(message interface{}) {
+		assert.NotNil(message)
+	})
+
+	release, err := r.reserveID("12345")
+	assert.NoError(err)
+
+	_, err = r.reserveID("12345")
+	assert.Regexp("FFEC100219", err)
+
+	release()
+
+	release, err = r.reserveID("12345")
+	assert.NoError(err)
+
+	release()
+}
+
+func TestReserveIDFail(t *testing.T) {
+	assert := assert.New(t)
+	r, ts := newReceiptsErrTestServer(fmt.Errorf("pop"))
+	defer ts.Close()
+
+	_, err := r.reserveID("12345")
+	assert.Regexp("pop", err)
 }

@@ -28,10 +28,10 @@ import (
 )
 
 const (
-	defaultRPCEndpointProp      = "endpoint"
-	defaultHealthcheckFrequency = 30 * time.Second
-	defaultRetryDelay           = 3 * time.Second
-	defaultMaxRetries           = 100
+	defaultRPCEndpointProp       = "endpoint"
+	defaultHealthcheckFrequency  = 30 * time.Second
+	defaultAddressbookRetryDelay = 3 * time.Second
+	defaultAddressbookMaxRetries = 100
 )
 
 // AddressBook looks up RPC URLs based on a remote registry, and optionally
@@ -76,11 +76,11 @@ func NewAddressBook(conf *AddressBookConf, rpcConf *eth.RPCConf) AddressBook {
 	if ab.conf.HealthcheckFrequencySec != nil {
 		ab.healthcheckFrequency = time.Duration(*ab.conf.HealthcheckFrequencySec) * time.Second
 	}
-	ab.retryDelay = defaultRetryDelay
+	ab.retryDelay = defaultAddressbookRetryDelay
 	if ab.conf.RetryDelaySec != nil {
 		ab.retryDelay = time.Duration(*ab.conf.RetryDelaySec) * time.Second
 	}
-	ab.maxRetries = defaultMaxRetries
+	ab.maxRetries = defaultAddressbookMaxRetries
 	if ab.conf.MaxRetries != nil {
 		ab.maxRetries = *ab.conf.MaxRetries
 	}

@@ -260,11 +260,37 @@ func TestOnDeployContractMessageBadJSON(t *testing.T) {
 	assert.Regexp("invalid character", testTxnContext.errorReplies[0].err.Error())
 
 }
+
+func TestInitSendRetryConfig(t *testing.T) {
+	assert := assert.New(t)
+
+	onePointFive := 1.5
+	five := 5
+	ten := 10
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		SendRetryForce:      true,
+		SendRetryMax:        &ten,
+		SendRetryDelayMinMS: &five,
+		SendRetryDelayMaxMS: &ten,
+		SendRetryFactor:     &onePointFive,
+	}, &eth.RPCConf{}).(*txnProcessor)
+	txnProcessor.Init(&testRPC{})
+
+	assert.True(txnProcessor.sendRetryForce)
+	assert.Equal(10, txnProcessor.sendRetryMax)
+	assert.Equal(5*time.Millisecond, txnProcessor.sendRetryDelayMin)
+	assert.Equal(10*time.Millisecond, txnProcessor.sendRetryDelayMax)
+	assert.Equal(float64(1.5), txnProcessor.sendRetryFactor)
+
+}
+
 func TestOnDeployContractMessageGoodTxnErrOnReceipt(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
+		SendRetryMax:  &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodDeployTxnJSON
@@ -323,8 +349,10 @@ func goodMessageRPC() *testRPC {
 func TestOnDeployContractMessageGoodTxnMined(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
+		SendRetryMax:  &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodDeployTxnJSON
@@ -383,11 +411,13 @@ func TestOnDeployContractMessageGoodTxnMinedHDWallet(t *testing.T) {
 	}))
 	defer svr.Close()
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
 		HDWalletConf: HDWalletConf{
 			URLTemplate: svr.URL,
 		},
+		SendRetryMax: &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodHDWalletDeployTxnJSON
@@ -430,7 +460,9 @@ func TestOnDeployContractMessageGoodTxnMinedHDWallet(t *testing.T) {
 func TestOnDeployContractPrivateMessageGoodTxnMined(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		SendRetryMax:  &zero,
 		MaxTXWaitTime: 1,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
@@ -478,9 +510,11 @@ func TestOnDeployContractPrivateMessageGoodTxnMined(t *testing.T) {
 func TestOnDeployContractMessageGoodTxnMinedWithHex(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime:      1,
 		HexValuesInReceipt: true,
+		SendRetryMax:       &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodDeployTxnJSON
@@ -528,8 +562,10 @@ func TestOnDeployContractMessageGoodTxnMinedWithHex(t *testing.T) {
 func TestOnDeployContractMessageFailedTxnMined(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
+		SendRetryMax:  &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodDeployTxnJSON
@@ -554,8 +590,10 @@ func TestOnDeployContractMessageFailedTxnMined(t *testing.T) {
 func TestOnDeployContractMessageFailedTxn(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 5000,
+		SendRetryMax:  &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodDeployTxnJSON
@@ -576,8 +614,10 @@ func TestOnDeployContractMessageFailedTxn(t *testing.T) {
 func TestOnDeployContractMessageFailedToGetNonce(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
+		SendRetryMax:  &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	txnProcessor.conf.AlwaysManageNonce = true
 	testTxnContext := &testTxnContext{}
@@ -684,17 +724,19 @@ func TestOnSendTransactionMessageBadJSON(t *testing.T) {
 func TestOnSendTransactionMessageTxnTimeout(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txHash := "0xac18e98664e160305cdb77e75e5eae32e55447e94ad8ceb0123729589ed09f8b"
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
+		SendRetryMax:  &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodSendTxnJSON
 	testRPC := &testRPC{
 		ethSendTransactionResult: txHash,
 	}
-	txnProcessor.Init(testRPC)                          // configured in seconds for real world
-	txnProcessor.maxTXWaitTime = 250 * time.Millisecond // ... but fail asap for this test
+	txnProcessor.Init(testRPC)                         // configured in seconds for real world
+	txnProcessor.maxTXWaitTime = 10 * time.Millisecond // ... but fail asap for this test
 
 	txnProcessor.OnMessage(testTxnContext)
 	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(testFromAddr)] {
@@ -715,8 +757,10 @@ func TestOnSendTransactionMessageTxnTimeout(t *testing.T) {
 func TestOnSendTransactionMessageFailedTxn(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
+		SendRetryMax:  &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodSendTxnJSON
@@ -737,11 +781,13 @@ func TestOnSendTransactionMessageFailedTxn(t *testing.T) {
 func TestOnSendTransactionMessageFailedWithGapFillOK(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime:     1,
 		SendConcurrency:   10,
 		AlwaysManageNonce: true,
 		AttemptGapFill:    true,
+		SendRetryMax:      &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	testRPC := goodMessageRPC()
 	testRPC.ethSendTransactionErr = fmt.Errorf("pop")
@@ -797,11 +843,13 @@ func TestOnSendTransactionMessageFailedWithGapFillOK(t *testing.T) {
 func TestOnSendTransactionMessageFailedWithGapFillFail(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime:     1,
 		SendConcurrency:   10,
 		AlwaysManageNonce: true,
 		AttemptGapFill:    true,
+		SendRetryMax:      &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	testRPC := goodMessageRPC()
 	testRPC.ethSendTransactionErr = fmt.Errorf("pop")
@@ -857,8 +905,10 @@ func TestOnSendTransactionMessageFailedWithGapFillFail(t *testing.T) {
 func TestOnSendTransactionMessageFailedToGetNonce(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
+		SendRetryMax:  &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	txnProcessor.conf.AlwaysManageNonce = true
 	testTxnContext := &testTxnContext{}
@@ -883,9 +933,11 @@ func TestOnSendTransactionMessageFailedToGetNonce(t *testing.T) {
 func TestOnSendTransactionMessageInflightNonce(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime:     1,
 		AlwaysManageNonce: true,
+		SendRetryMax:      &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] = &inflightTxnState{}
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight = []*inflightTxn{{nonce: 100}, {nonce: 101}}
@@ -915,8 +967,10 @@ func TestOnSendTransactionMessageInflightNonce(t *testing.T) {
 func TestOnSendTransactionMessageFailedToEstimateGas(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
+		SendRetryMax:  &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	txnProcessor.conf.AlwaysManageNonce = true
 	testRPC := goodMessageRPC()
@@ -959,8 +1013,10 @@ func TestOnSendTransactionMessageFailedToEstimateGas(t *testing.T) {
 func TestOnSendTransactionMessageOrionNoPrivacyGroup(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		OrionPrivateAPIS: true,
+		SendRetryMax:     &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
@@ -989,8 +1045,10 @@ func TestOnSendTransactionMessageOrionNoPrivacyGroup(t *testing.T) {
 func TestOnSendTransactionMessageOrionCannotUsePrivacyGroupIdAndPrivateFor(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		OrionPrivateAPIS: true,
+		SendRetryMax:     &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = "{" +
@@ -1015,9 +1073,11 @@ func TestOnSendTransactionMessageOrionCannotUsePrivacyGroupIdAndPrivateFor(t *te
 func TestOnSendTransactionMessageOrionFailNonce(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime:    1,
 		OrionPrivateAPIS: true,
+		SendRetryMax:     &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] = &inflightTxnState{}
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight = []*inflightTxn{{nonce: 100}, {nonce: 101}}
@@ -1053,9 +1113,11 @@ func TestOnSendTransactionMessageOrionFailNonce(t *testing.T) {
 func TestOnSendTransactionMessageOrion(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime:    1,
 		OrionPrivateAPIS: true,
+		SendRetryMax:     &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] = &inflightTxnState{}
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight = []*inflightTxn{{nonce: 100}, {nonce: 101}}
@@ -1090,9 +1152,11 @@ func TestOnSendTransactionMessageOrion(t *testing.T) {
 func TestOnSendTransactionMessageOrionPrivacyGroupId(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime:    1,
 		OrionPrivateAPIS: true,
+		SendRetryMax:     &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"] = &inflightTxnState{}
 	txnProcessor.inflightTxns["0x83dbc8e329b38cba0fc4ed99b1ce9c2a390abdc1"].txnsInFlight = []*inflightTxn{{nonce: 100}, {nonce: 101}}
@@ -1145,12 +1209,14 @@ func TestOnSendTransactionAddressBook(t *testing.T) {
 	server := httptest.NewServer(router)
 	defer server.Close()
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime:    1,
 		OrionPrivateAPIS: true,
 		AddressBookConf: AddressBookConf{
 			AddressbookURLPrefix: server.URL,
 		},
+		SendRetryMax: &zero,
 	}, &eth.RPCConf{
 		RPC: eth.RPCConnOpts{
 			URL: server.URL,
@@ -1209,8 +1275,10 @@ func TestOnDeployContractMessageFailAddressLookup(t *testing.T) {
 func TestOnDeployContractMessageFailHDWalletMissing(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
+		SendRetryMax:  &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodHDWalletDeployTxnJSON
@@ -1231,9 +1299,11 @@ func TestOnDeployContractMessageFailHDWalletMissing(t *testing.T) {
 func TestOnDeployContractMessageFailHDWalletFail(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
 		HDWalletConf:  HDWalletConf{URLTemplate: "   "},
+		SendRetryMax:  &zero,
 	}, &eth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
 	testTxnContext.jsonMsg = goodHDWalletDeployTxnJSON
@@ -1303,4 +1373,89 @@ func TestResolveAddressHDWalletFail(t *testing.T) {
 
 	_, err := txnProcessor.ResolveAddress("hd-testinst-testwallet-1234")
 	assert.Regexp("No HD Wallet Configuration", err)
+}
+
+func TestSendRetryMax(t *testing.T) {
+	assert := assert.New(t)
+
+	one := 1
+	two := 2
+	three := 3
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		SendRetryDelayMinMS: &one,
+		SendRetryDelayMaxMS: &two,
+		SendRetryMax:        &three,
+		SendConcurrency:     1,
+		AlwaysManageNonce:   true,
+	}, &eth.RPCConf{}).(*txnProcessor)
+
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodSendTxnJSON
+	testRPC := &testRPC{
+		ethSendTransactionErr: fmt.Errorf("pop"),
+	}
+	txnProcessor.Init(testRPC)
+
+	txnProcessor.OnMessage(testTxnContext)
+
+	// Transaction count, followed by 4 attempts (3 retries)
+	assert.Equal([]string{"eth_getTransactionCount", "eth_sendTransaction", "eth_sendTransaction", "eth_sendTransaction", "eth_sendTransaction"}, testRPC.calls)
+
+}
+
+func TestSendRetryNoRetryNonce(t *testing.T) {
+	assert := assert.New(t)
+
+	one := 1
+	two := 2
+	three := 3
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		SendRetryDelayMinMS: &one,
+		SendRetryDelayMaxMS: &two,
+		SendRetryMax:        &three,
+		SendConcurrency:     1,
+		AlwaysManageNonce:   true,
+	}, &eth.RPCConf{}).(*txnProcessor)
+
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodSendTxnJSON
+	testRPC := &testRPC{
+		ethSendTransactionErr: fmt.Errorf("nonce too low"),
+	}
+	txnProcessor.Init(testRPC)
+
+	txnProcessor.OnMessage(testTxnContext)
+
+	// No retry
+	assert.Equal([]string{"eth_getTransactionCount", "eth_sendTransaction"}, testRPC.calls)
+
+}
+
+func TestSendRetryForce(t *testing.T) {
+	assert := assert.New(t)
+
+	one := 1
+	two := 2
+	three := 3
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		SendRetryDelayMinMS: &one,
+		SendRetryDelayMaxMS: &two,
+		SendRetryMax:        &three,
+		SendConcurrency:     1,
+		AlwaysManageNonce:   true,
+		SendRetryForce:      true,
+	}, &eth.RPCConf{}).(*txnProcessor)
+
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodSendTxnJSON
+	testRPC := &testRPC{
+		ethSendTransactionErr: fmt.Errorf("nonce"),
+	}
+	txnProcessor.Init(testRPC)
+
+	txnProcessor.OnMessage(testTxnContext)
+
+	// Transaction count, followed by 4 attempts (3 retries)
+	assert.Equal([]string{"eth_getTransactionCount", "eth_sendTransaction", "eth_sendTransaction", "eth_sendTransaction", "eth_sendTransaction"}, testRPC.calls)
+
 }

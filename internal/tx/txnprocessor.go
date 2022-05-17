@@ -34,7 +34,11 @@ import (
 )
 
 const (
-	defaultSendConcurrency = 1
+	defaultSendConcurrency   = 1
+	defaultSendRetryMax      = 5
+	defaultSendRetryMinDelay = 500 * time.Millisecond
+	defaultSendRetryMaxDelay = 5 * time.Second
+	defaultSendRetryFactor   = 2.0
 )
 
 // TxnProcessor interface is called for each message, as is responsible
@@ -80,14 +84,19 @@ func (i *inflightTxn) String() string {
 // TxnProcessorConf configuration for the message processor
 type TxnProcessorConf struct {
 	eth.EthCommonConf
-	AlwaysManageNonce  bool            `json:"alwaysManageNonce"`
-	AttemptGapFill     bool            `json:"attemptGapFill"`
-	MaxTXWaitTime      int             `json:"maxTXWaitTime"`
-	SendConcurrency    int             `json:"sendConcurrency"`
-	OrionPrivateAPIS   bool            `json:"orionPrivateAPIs"`
-	HexValuesInReceipt bool            `json:"hexValuesInReceipt"`
-	AddressBookConf    AddressBookConf `json:"addressBook"`
-	HDWalletConf       HDWalletConf    `json:"hdWallet"`
+	AlwaysManageNonce   bool            `json:"alwaysManageNonce"`
+	AttemptGapFill      bool            `json:"attemptGapFill"`
+	MaxTXWaitTime       int             `json:"maxTXWaitTime"`
+	SendConcurrency     int             `json:"sendConcurrency"`
+	OrionPrivateAPIS    bool            `json:"orionPrivateAPIs"`
+	HexValuesInReceipt  bool            `json:"hexValuesInReceipt"`
+	AddressBookConf     AddressBookConf `json:"addressBook"`
+	HDWalletConf        HDWalletConf    `json:"hdWallet"`
+	SendRetryForce      bool            `json:"sendRetryForce,omitempty"`
+	SendRetryDelayMinMS *int            `json:"sendRetryDelayMinMS,omitempty"`
+	SendRetryDelayMaxMS *int            `json:"sendRetryDelayMaxMS,omitempty"`
+	SendRetryMax        *int            `json:"sendRetryMax,omitempty"`
+	SendRetryFactor     *float64        `json:"sendRetryFactor,omitempty"`
 }
 
 type inflightTxnState struct {
@@ -108,6 +117,12 @@ type txnProcessor struct {
 	concurrencySlots    chan bool
 	concurrency         int64
 	gasEstimationFactor float64
+
+	sendRetryForce    bool
+	sendRetryDelayMin time.Duration
+	sendRetryDelayMax time.Duration
+	sendRetryMax      int
+	sendRetryFactor   float64
 }
 
 // NewTxnProcessor constructor for message procss
@@ -136,6 +151,24 @@ func (p *txnProcessor) Init(rpc eth.RPCClient) {
 		p.hdwallet = newHDWallet(&p.conf.HDWalletConf)
 	}
 	p.concurrencySlots = make(chan bool, p.conf.SendConcurrency)
+
+	p.sendRetryForce = p.conf.SendRetryForce
+	p.sendRetryDelayMin = defaultSendRetryMinDelay
+	p.sendRetryDelayMax = defaultSendRetryMaxDelay
+	p.sendRetryMax = defaultSendRetryMax
+	p.sendRetryFactor = defaultSendRetryFactor
+	if p.conf.SendRetryDelayMinMS != nil {
+		p.sendRetryDelayMin = time.Duration(*p.conf.SendRetryDelayMinMS) * time.Millisecond
+	}
+	if p.conf.SendRetryDelayMaxMS != nil {
+		p.sendRetryDelayMax = time.Duration(*p.conf.SendRetryDelayMaxMS) * time.Millisecond
+	}
+	if p.conf.SendRetryMax != nil {
+		p.sendRetryMax = *p.conf.SendRetryMax
+	}
+	if p.conf.SendRetryFactor != nil {
+		p.sendRetryFactor = *p.conf.SendRetryFactor
+	}
 }
 
 // CobraInitTxnProcessor sets the standard command-line parameters for the txnprocessor
@@ -592,7 +625,7 @@ func (p *txnProcessor) sendAndTrackMining(txnContext TxnContext, inflight *infli
 		inflight.rpc, err = p.addressBook.lookup(txnContext.Context(), inflight.from)
 	}
 	if err == nil {
-		err = tx.Send(txnContext.Context(), inflight.rpc, p.gasEstimationFactor)
+		err = p.sendWithRetry(txnContext, inflight, tx)
 	}
 	if p.conf.SendConcurrency > 1 {
 		<-p.concurrencySlots // return our slot as soon as send is complete, to let an awaiting send go
@@ -606,4 +639,44 @@ func (p *txnProcessor) sendAndTrackMining(txnContext TxnContext, inflight *infli
 	}
 
 	p.trackMining(inflight, tx)
+}
+
+func (p *txnProcessor) sendWithRetry(txnContext TxnContext, inflight *inflightTxn, tx *eth.Txn) error {
+	retries := 0
+	for {
+		err := tx.Send(txnContext.Context(), inflight.rpc, p.gasEstimationFactor)
+		if err == nil {
+			return nil
+		}
+		var retry bool
+		errMsg := strings.ToLower(err.Error())
+		switch {
+		case p.sendRetryForce:
+			// Retry for everything if explicitly told to
+			retry = true
+		case inflight.nodeAssignNonce:
+			// We do not retry if the node is assigning the nonce, as we might duplicate the transaction
+			retry = false
+		case strings.Contains(errMsg, "nonce"), strings.Contains(errMsg, "known"):
+			// No point in retrying if the error is nonce related, or the transcation is known
+			retry = false
+		default:
+			// Retry by default
+			retry = true
+		}
+		retry = retry && (retries < p.sendRetryMax)
+		retryDelay := p.sendRetryDelayMin
+		for i := 0; i < retries; i++ {
+			retryDelay = time.Duration(float64(retryDelay) * p.sendRetryFactor)
+		}
+		if retryDelay > p.sendRetryDelayMax {
+			retryDelay = p.sendRetryDelayMax
+		}
+		log.Errorf("Send %s/%d (msg=%s) failed retries=%d retry=%t (delay=%dms): %s", inflight.from, inflight.nonce, inflight.msgID, retries, retry, retryDelay.Milliseconds(), err)
+		if !retry {
+			return err
+		}
+		time.Sleep(retryDelay)
+		retries++
+	}
 }

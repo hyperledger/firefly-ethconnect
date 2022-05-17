@@ -48,6 +48,7 @@ type TxnProcessor interface {
 var highestID = 1000000
 
 type inflightTxn struct {
+	msgID            string
 	id               int
 	from             string // normalized to 0x prefix and lower case
 	nodeAssignNonce  bool
@@ -153,8 +154,7 @@ func (p *txnProcessor) OnMessage(txnContext TxnContext) {
 
 	var unmarshalErr error
 	headers := txnContext.Headers()
-	log.Infof("--> OnMessage %s", headers.ID)
-	defer log.Infof("<-- OnMessage %s", headers.ID)
+	log.Debugf("--> OnMessage %s", headers.ID)
 	switch headers.MsgType {
 	case messages.MsgTypeDeployContract:
 		var deployContractMsg messages.DeployContract
@@ -175,6 +175,7 @@ func (p *txnProcessor) OnMessage(txnContext TxnContext) {
 	if unmarshalErr != nil {
 		txnContext.SendErrorReply(400, unmarshalErr)
 	}
+	log.Debugf("<-- OnMessage %s", headers.ID)
 
 }
 
@@ -209,6 +210,7 @@ func (p *txnProcessor) resolveSigner(from string) (signer eth.TXSigner, err erro
 func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.TransactionCommon) (inflight *inflightTxn, err error) {
 
 	inflight = &inflightTxn{
+		msgID:      msg.Headers.ID,
 		txnContext: txnContext,
 	}
 
@@ -374,8 +376,10 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, submitted bool) {
 
 	// If we've got a gap potential, we need to submit a gap-fill TX
 	if !submitted && highestNonce > inflight.nonce && !inflight.nodeAssignNonce {
-		log.Warnf("Potential nonce gap. Nonce %d failed to send. Nonce %d in-flight", inflight.nonce, highestNonce)
-		p.submitGapFillTX(inflight)
+		log.Warnf("Potential nonce gap. Nonce %d failed to send. Nonce %d in-flight. Attempting fill=%t", inflight.nonce, highestNonce, inflight.rpc != nil)
+		if inflight.rpc != nil {
+			p.submitGapFillTX(inflight)
+		}
 	}
 }
 
@@ -569,7 +573,7 @@ func (p *txnProcessor) sendTransactionCommon(txnContext TxnContext, inflight *in
 		// The above must happen synchronously for each partition in Kafka - as it is where we assign the nonce.
 		// However, the send to the node can happen at high concurrency.
 		p.concurrencySlots <- true
-		log.Infof("Send with concurrency config=%d", p.conf.SendConcurrency)
+		log.Debugf("Send with concurrency config=%d", p.conf.SendConcurrency)
 		go p.sendAndTrackMining(txnContext, inflight, tx)
 	} else {
 		// For the special case of 1 we do it synchronously, so we don't assign the next nonce until we've sent this one
@@ -580,30 +584,24 @@ func (p *txnProcessor) sendTransactionCommon(txnContext TxnContext, inflight *in
 func (p *txnProcessor) sendAndTrackMining(txnContext TxnContext, inflight *inflightTxn, tx *eth.Txn) {
 
 	concurrency := atomic.AddInt64(&p.concurrency, 1)
-	log.Infof("--> sending %s/%d (concurrency=%d)", inflight.from, inflight.nonce, concurrency)
+	log.Infof("--> send %s/%d (msg=%s,concurrency=%d)", inflight.from, inflight.nonce, inflight.msgID, concurrency)
 
 	// If the RPC client is nil here, we need to resolve it.
 	var err error
-	reachedSend := false
 	if inflight.rpc == nil {
 		inflight.rpc, err = p.addressBook.lookup(txnContext.Context(), inflight.from)
 	}
 	if err == nil {
-		reachedSend = true
 		err = tx.Send(txnContext.Context(), inflight.rpc, p.gasEstimationFactor)
 	}
 	if p.conf.SendConcurrency > 1 {
 		<-p.concurrencySlots // return our slot as soon as send is complete, to let an awaiting send go
 		concurrency = atomic.AddInt64(&p.concurrency, -1)
-		log.Infof("<-- sent %s/%d (concurrency=%d) %v", inflight.from, inflight.nonce, concurrency, err)
+		log.Debugf("<-- send %s/%d (msg=%s,concurrency=%d)", inflight.from, inflight.nonce, inflight.msgID, concurrency)
 	}
 	if err != nil {
 		p.cancelInFlight(inflight, false /* not confirmed as submitted, as send failed */)
-		if reachedSend {
-			txnContext.SendErrorReplyWithGapFill(400, err, inflight.gapFillTxHash, inflight.gapFillSucceeded)
-		} else {
-			txnContext.SendErrorReply(400, err)
-		}
+		txnContext.SendErrorReplyWithGapFill(400, err, inflight.gapFillTxHash, inflight.gapFillSucceeded)
 		return
 	}
 

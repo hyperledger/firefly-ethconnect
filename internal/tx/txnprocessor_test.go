@@ -1182,10 +1182,12 @@ func TestOnSendTransactionAddressBook(t *testing.T) {
 func TestOnDeployContractMessageFailAddressLookup(t *testing.T) {
 	assert := assert.New(t)
 
+	zero := 0
 	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
 		MaxTXWaitTime: 1,
 		AddressBookConf: AddressBookConf{
 			AddressbookURLPrefix: "   ",
+			MaxRetries:           &zero,
 		},
 	}, &eth.RPCConf{}).(*txnProcessor)
 	testTxnContext := &testTxnContext{}
@@ -1200,7 +1202,7 @@ func TestOnDeployContractMessageFailAddressLookup(t *testing.T) {
 		time.Sleep(1 * time.Millisecond)
 	}
 
-	assert.Regexp("Error querying Addressbook", testTxnContext.errorReplies[0].err)
+	assert.Regexp("FFEC100002", testTxnContext.errorReplies[0].err)
 
 }
 

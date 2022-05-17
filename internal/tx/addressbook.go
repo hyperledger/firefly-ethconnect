@@ -30,6 +30,8 @@ import (
 const (
 	defaultRPCEndpointProp      = "endpoint"
 	defaultHealthcheckFrequency = 30 * time.Second
+	defaultRetryDelay           = 3 * time.Second
+	defaultMaxRetries           = 100
 )
 
 // AddressBook looks up RPC URLs based on a remote registry, and optionally
@@ -44,7 +46,9 @@ type AddressBookConf struct {
 	AddressbookURLPrefix    string                   `json:"urlPrefix"`
 	HostsFile               string                   `json:"hostsFile"`
 	PropNames               AddressBookPropNamesConf `json:"propNames"`
+	RetryDelaySec           *int                     `json:"retryDelaySec"`
 	HealthcheckFrequencySec *int                     `json:"healthcheckFrequencySec"`
+	MaxRetries              *int                     `json:"maxRetries"`
 }
 
 // AddressBookPropNamesConf configures the JSON property names to extract from the GET response on the API
@@ -72,6 +76,14 @@ func NewAddressBook(conf *AddressBookConf, rpcConf *eth.RPCConf) AddressBook {
 	if ab.conf.HealthcheckFrequencySec != nil {
 		ab.healthcheckFrequency = time.Duration(*ab.conf.HealthcheckFrequencySec) * time.Second
 	}
+	ab.retryDelay = defaultRetryDelay
+	if ab.conf.RetryDelaySec != nil {
+		ab.retryDelay = time.Duration(*ab.conf.RetryDelaySec) * time.Second
+	}
+	ab.maxRetries = defaultMaxRetries
+	if ab.conf.MaxRetries != nil {
+		ab.maxRetries = *ab.conf.MaxRetries
+	}
 	return ab
 }
 
@@ -88,6 +100,8 @@ type addressBook struct {
 	healthcheckFrequency time.Duration
 	addrToHost           map[string]string
 	hostToRPC            map[string]*cachedRPC
+	retryDelay           time.Duration
+	maxRetries           int
 }
 
 // testRPC uses a simple net_version JSON/RPC call to test the health of a cached connection
@@ -173,9 +187,26 @@ func (ab *addressBook) mapEndpoint(ctx context.Context, endpoint string) (eth.RP
 	return rpc, err
 }
 
+func (ab *addressBook) requestWithRetry(url string) map[string]interface{} {
+	retryCount := 0
+	for {
+		body, err := ab.hr.DoRequest("GET", url, nil)
+		if err == nil {
+			return body
+		}
+		if retryCount > ab.maxRetries {
+			log.Errorf("Non-404 error from address book. Retries exhausted, falling back to default rpc endpoint: %s", err)
+			return nil
+		}
+		retryCount++
+		log.Errorf("Non-404 error from address book - retrying: %s", err)
+		time.Sleep(ab.retryDelay)
+	}
+}
+
 // lookup the RPC URL to use for a given from address, performing hostname resolution
 // based on a custom hosts file (if configured)
-func (ab *addressBook) lookup(ctx context.Context, fromAddr string) (eth.RPCClient, error) {
+func (ab *addressBook) lookup(ctx context.Context, fromAddr string) (rpc eth.RPCClient, err error) {
 
 	// First check if we already know the base (non host translated) endpoint  to use for this address
 	// Simple locking on our cache for now (covers long-lived async test+connect operations)
@@ -186,10 +217,7 @@ func (ab *addressBook) lookup(ctx context.Context, fromAddr string) (eth.RPCClie
 	if !found || endpoint == "" {
 		log.Infof("Resolving signing address (not cached): %s", fromAddr)
 		url := ab.conf.AddressbookURLPrefix + fromAddr
-		body, err := ab.hr.DoRequest("GET", url, nil)
-		if err != nil {
-			return nil, err
-		}
+		body := ab.requestWithRetry(url)
 		if body == nil {
 			if ab.fallbackRPCEndpoint == "" {
 				return nil, errors.Errorf(errors.AddressBookLookupNotFound)

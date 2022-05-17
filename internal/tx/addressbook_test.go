@@ -48,11 +48,15 @@ func TestNewAddressBookCustomPropNames(t *testing.T) {
 			RPCEndpoint: "rpcEndpointProp",
 		},
 		HealthcheckFrequencySec: &ten,
+		RetryDelaySec:           &ten,
+		MaxRetries:              &ten,
 	}, &eth.RPCConf{})
 	ab := a.(*addressBook)
 	assert.Equal("http://localhost:12345/", ab.conf.AddressbookURLPrefix)
 	assert.Equal("rpcEndpointProp", ab.conf.PropNames.RPCEndpoint)
 	assert.Equal(10*time.Second, ab.healthcheckFrequency)
+	assert.Equal(10*time.Second, ab.retryDelay)
+	assert.Equal(10, ab.maxRetries)
 }
 
 func TestLookupWithCaching(t *testing.T) {
@@ -254,18 +258,21 @@ func TestLookupFailureResponse(t *testing.T) {
 	serverURL = server.URL
 	defer server.Close()
 
+	one := 1
 	a := NewAddressBook(&AddressBookConf{
 		AddressbookURLPrefix: serverURL + "/addresses",
 		PropNames: AddressBookPropNamesConf{
 			RPCEndpoint: "rpcEndpointProp",
 		},
+		MaxRetries: &one,
 	}, &eth.RPCConf{})
 	ab := a.(*addressBook)
+	ab.retryDelay = 0
 
 	log.SetLevel(log.DebugLevel)
 	_, err := ab.lookup(context.Background(), "0xdb0997dccd71607bd6ee378723a12ef8478e4ed6")
 
-	assert.Regexp("Could not process Addressbook \\[500\\] response", err)
+	assert.Regexp("FFEC100002", err)
 
 }
 

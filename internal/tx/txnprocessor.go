@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -104,6 +105,7 @@ type txnProcessor struct {
 	conf                *TxnProcessorConf
 	rpcConf             *eth.RPCConf
 	concurrencySlots    chan bool
+	concurrency         int64
 	gasEstimationFactor float64
 }
 
@@ -118,7 +120,6 @@ func NewTxnProcessor(conf *TxnProcessorConf, rpcConf *eth.RPCConf) TxnProcessor 
 		inflightTxnDelayer:  NewTxnDelayTracker(),
 		conf:                conf,
 		rpcConf:             rpcConf,
-		concurrencySlots:    make(chan bool, conf.SendConcurrency),
 		gasEstimationFactor: conf.GasEstimationFactor,
 	}
 	return p
@@ -133,6 +134,7 @@ func (p *txnProcessor) Init(rpc eth.RPCClient) {
 	if p.conf.HDWalletConf.URLTemplate != "" {
 		p.hdwallet = newHDWallet(&p.conf.HDWalletConf)
 	}
+	p.concurrencySlots = make(chan bool, p.conf.SendConcurrency)
 }
 
 // CobraInitTxnProcessor sets the standard command-line parameters for the txnprocessor
@@ -567,6 +569,7 @@ func (p *txnProcessor) sendTransactionCommon(txnContext TxnContext, inflight *in
 		// The above must happen synchronously for each partition in Kafka - as it is where we assign the nonce.
 		// However, the send to the node can happen at high concurrency.
 		p.concurrencySlots <- true
+		log.Infof("Send with concurrency config=%d", p.conf.SendConcurrency)
 		go p.sendAndTrackMining(txnContext, inflight, tx)
 	} else {
 		// For the special case of 1 we do it synchronously, so we don't assign the next nonce until we've sent this one
@@ -576,28 +579,31 @@ func (p *txnProcessor) sendTransactionCommon(txnContext TxnContext, inflight *in
 
 func (p *txnProcessor) sendAndTrackMining(txnContext TxnContext, inflight *inflightTxn, tx *eth.Txn) {
 
-	log.Infof("--> sending %s/%d (concurrency=%d)", inflight.from, inflight.nonce, p.conf.SendConcurrency)
-	defer log.Infof("<-- sent %s/%d", inflight.from, inflight.nonce)
+	concurrency := atomic.AddInt64(&p.concurrency, 1)
+	log.Infof("--> sending %s/%d (concurrency=%d)", inflight.from, inflight.nonce, concurrency)
 
 	// If the RPC client is nil here, we need to resolve it.
+	var err error
+	reachedSend := false
 	if inflight.rpc == nil {
-		rpc, err := p.addressBook.lookup(txnContext.Context(), inflight.from)
-		if err != nil {
-			p.cancelInFlight(inflight, false /* definitely not submitted at this point */)
-			// No need for gap fill here
-			txnContext.SendErrorReply(500, err)
-			return
-		}
-		inflight.rpc = rpc
+		inflight.rpc, err = p.addressBook.lookup(txnContext.Context(), inflight.from)
 	}
-
-	err := tx.Send(txnContext.Context(), inflight.rpc, p.gasEstimationFactor)
+	if err == nil {
+		reachedSend = true
+		err = tx.Send(txnContext.Context(), inflight.rpc, p.gasEstimationFactor)
+	}
 	if p.conf.SendConcurrency > 1 {
 		<-p.concurrencySlots // return our slot as soon as send is complete, to let an awaiting send go
+		concurrency = atomic.AddInt64(&p.concurrency, -1)
+		log.Infof("<-- sent %s/%d (concurrency=%d) %v", inflight.from, inflight.nonce, concurrency, err)
 	}
 	if err != nil {
 		p.cancelInFlight(inflight, false /* not confirmed as submitted, as send failed */)
-		txnContext.SendErrorReplyWithGapFill(400, err, inflight.gapFillTxHash, inflight.gapFillSucceeded)
+		if reachedSend {
+			txnContext.SendErrorReplyWithGapFill(400, err, inflight.gapFillTxHash, inflight.gapFillSucceeded)
+		} else {
+			txnContext.SendErrorReply(400, err)
+		}
 		return
 	}
 

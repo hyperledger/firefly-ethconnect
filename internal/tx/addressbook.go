@@ -46,9 +46,9 @@ type AddressBookConf struct {
 	AddressbookURLPrefix    string                   `json:"urlPrefix"`
 	HostsFile               string                   `json:"hostsFile"`
 	PropNames               AddressBookPropNamesConf `json:"propNames"`
-	RetryDelaySec           *int                     `json:"retryDelaySec"`
-	HealthcheckFrequencySec *int                     `json:"healthcheckFrequencySec"`
-	MaxRetries              *int                     `json:"maxRetries"`
+	RetryDelaySec           *int                     `json:"retryDelaySec,omitempty"`
+	HealthcheckFrequencySec *int                     `json:"healthcheckFrequencySec,omitempty"`
+	MaxRetries              *int                     `json:"maxRetries,omitempty"`
 }
 
 // AddressBookPropNamesConf configures the JSON property names to extract from the GET response on the API

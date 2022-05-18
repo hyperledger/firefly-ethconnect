@@ -45,6 +45,7 @@ func TestCreateBlockListenerOK(t *testing.T) {
 		Run(func(args mock.Arguments) {
 			(args[1].(*ethbinding.HexBigInt)).ToInt().SetString("12345", 10)
 		})
+	mRPC.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.Anything).Return(nil).Maybe()
 
 	iRes, reason, err := s.createBlockListener(ctx, []byte(sampleCreateBlockListener))
 	assert.NoError(t, err)

@@ -28,7 +28,10 @@ import (
 )
 
 const (
-	defaultRPCEndpointProp = "endpoint"
+	defaultRPCEndpointProp       = "endpoint"
+	defaultHealthcheckFrequency  = 30 * time.Second
+	defaultAddressbookRetryDelay = 3 * time.Second
+	defaultAddressbookMaxRetries = 100
 )
 
 // AddressBook looks up RPC URLs based on a remote registry, and optionally
@@ -40,9 +43,12 @@ type AddressBook interface {
 // AddressBookConf configuration
 type AddressBookConf struct {
 	utils.HTTPRequesterConf
-	AddressbookURLPrefix string                   `json:"urlPrefix"`
-	HostsFile            string                   `json:"hostsFile"`
-	PropNames            AddressBookPropNamesConf `json:"propNames"`
+	AddressbookURLPrefix    string                   `json:"urlPrefix"`
+	HostsFile               string                   `json:"hostsFile"`
+	PropNames               AddressBookPropNamesConf `json:"propNames"`
+	RetryDelaySec           *int                     `json:"retryDelaySec,omitempty"`
+	HealthcheckFrequencySec *int                     `json:"healthcheckFrequencySec,omitempty"`
+	MaxRetries              *int                     `json:"maxRetries,omitempty"`
 }
 
 // AddressBookPropNamesConf configures the JSON property names to extract from the GET response on the API
@@ -50,14 +56,14 @@ type AddressBookPropNamesConf struct {
 	RPCEndpoint string `json:"endpoint"`
 }
 
-// NewAddressBook construtor
+// NewAddressBook constructor
 func NewAddressBook(conf *AddressBookConf, rpcConf *eth.RPCConf) AddressBook {
 	ab := &addressBook{
 		conf:                conf,
 		fallbackRPCEndpoint: rpcConf.RPC.URL,
 		hr:                  utils.NewHTTPRequester("Addressbook", &conf.HTTPRequesterConf),
 		addrToHost:          make(map[string]string),
-		hostToRPC:           make(map[string]eth.RPCClientAll),
+		hostToRPC:           make(map[string]*cachedRPC),
 	}
 	propNames := &conf.PropNames
 	if propNames.RPCEndpoint == "" {
@@ -66,16 +72,36 @@ func NewAddressBook(conf *AddressBookConf, rpcConf *eth.RPCConf) AddressBook {
 	if ab.conf.AddressbookURLPrefix != "" && !strings.HasSuffix(ab.conf.AddressbookURLPrefix, "/") {
 		ab.conf.AddressbookURLPrefix += "/"
 	}
+	ab.healthcheckFrequency = defaultHealthcheckFrequency
+	if ab.conf.HealthcheckFrequencySec != nil {
+		ab.healthcheckFrequency = time.Duration(*ab.conf.HealthcheckFrequencySec) * time.Second
+	}
+	ab.retryDelay = defaultAddressbookRetryDelay
+	if ab.conf.RetryDelaySec != nil {
+		ab.retryDelay = time.Duration(*ab.conf.RetryDelaySec) * time.Second
+	}
+	ab.maxRetries = defaultAddressbookMaxRetries
+	if ab.conf.MaxRetries != nil {
+		ab.maxRetries = *ab.conf.MaxRetries
+	}
 	return ab
 }
 
+type cachedRPC struct {
+	lastChecked time.Time
+	rpc         eth.RPCClientAll
+}
+
 type addressBook struct {
-	conf                *AddressBookConf
-	hr                  *utils.HTTPRequester
-	mtx                 sync.Mutex
-	fallbackRPCEndpoint string
-	addrToHost          map[string]string
-	hostToRPC           map[string]eth.RPCClientAll
+	conf                 *AddressBookConf
+	hr                   *utils.HTTPRequester
+	mtx                  sync.Mutex
+	fallbackRPCEndpoint  string
+	healthcheckFrequency time.Duration
+	addrToHost           map[string]string
+	hostToRPC            map[string]*cachedRPC
+	retryDelay           time.Duration
+	maxRetries           int
 }
 
 // testRPC uses a simple net_version JSON/RPC call to test the health of a cached connection
@@ -126,14 +152,19 @@ func (ab *addressBook) mapEndpoint(ctx context.Context, endpoint string) (eth.RP
 	defer ab.mtx.Unlock()
 
 	// Hopefully we already have a client in our map, and it's healthy
-	rpc, ok := ab.hostToRPC[endpoint]
+	cached, ok := ab.hostToRPC[endpoint]
 	if ok {
-		if ab.testRPC(ctx, rpc) {
-			log.Infof("Using cached RPC connection for signing")
-			return rpc, nil
+		log.Debugf("Using cached RPC connection for signing")
+		if time.Since(cached.lastChecked) < ab.healthcheckFrequency {
+			return cached.rpc, nil
+		}
+		if ab.testRPC(ctx, cached.rpc) {
+			cached.lastChecked = time.Now()
+			return cached.rpc, nil
 		}
 		// Clean up our cache entry as it is stale
-		rpc.Close()
+		log.Warnf("Cached RPC connection failed healthcheck - reconnecting")
+		cached.rpc.Close()
 		delete(ab.hostToRPC, endpoint)
 	}
 
@@ -143,28 +174,50 @@ func (ab *addressBook) mapEndpoint(ctx context.Context, endpoint string) (eth.RP
 	}
 
 	// Connect and cache the RPC connection
-	if rpc, err = eth.RPCConnect(&eth.RPCConnOpts{
+	rpc, err := eth.RPCConnect(&eth.RPCConnOpts{
 		URL: url.String(),
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, err
 	}
-	ab.hostToRPC[endpoint] = rpc
+	ab.hostToRPC[endpoint] = &cachedRPC{
+		lastChecked: time.Now(),
+		rpc:         rpc,
+	}
 	return rpc, err
+}
+
+func (ab *addressBook) requestWithRetry(url string) map[string]interface{} {
+	retryCount := 0
+	for {
+		body, err := ab.hr.DoRequest("GET", url, nil)
+		if err == nil {
+			return body
+		}
+		if retryCount > ab.maxRetries {
+			log.Errorf("Non-404 error from address book. Retries exhausted, falling back to default rpc endpoint: %s", err)
+			return nil
+		}
+		retryCount++
+		log.Errorf("Non-404 error from address book - retrying: %s", err)
+		time.Sleep(ab.retryDelay)
+	}
 }
 
 // lookup the RPC URL to use for a given from address, performing hostname resolution
 // based on a custom hosts file (if configured)
-func (ab *addressBook) lookup(ctx context.Context, fromAddr string) (eth.RPCClient, error) {
-	// First check if we already know the base (non host translated) endpoint
-	// to use for this address
-	log.Infof("Resolving signing address: %s", fromAddr)
+func (ab *addressBook) lookup(ctx context.Context, fromAddr string) (rpc eth.RPCClient, err error) {
+
+	// First check if we already know the base (non host translated) endpoint  to use for this address
+	// Simple locking on our cache for now (covers long-lived async test+connect operations)
+	ab.mtx.Lock()
 	endpoint, found := ab.addrToHost[fromAddr]
+	ab.mtx.Unlock()
+
 	if !found || endpoint == "" {
+		log.Infof("Resolving signing address (not cached): %s", fromAddr)
 		url := ab.conf.AddressbookURLPrefix + fromAddr
-		body, err := ab.hr.DoRequest("GET", url, nil)
-		if err != nil {
-			return nil, err
-		}
+		body := ab.requestWithRetry(url)
 		if body == nil {
 			if ab.fallbackRPCEndpoint == "" {
 				return nil, errors.Errorf(errors.AddressBookLookupNotFound)
@@ -176,7 +229,9 @@ func (ab *addressBook) lookup(ctx context.Context, fromAddr string) (eth.RPCClie
 				return nil, err
 			}
 			// We've found a conclusive hit. Use this endpoint from now on for this address.
+			ab.mtx.Lock()
 			ab.addrToHost[fromAddr] = endpoint
+			ab.mtx.Unlock()
 		}
 	}
 

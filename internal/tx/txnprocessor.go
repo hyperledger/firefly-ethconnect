@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -33,7 +34,11 @@ import (
 )
 
 const (
-	defaultSendConcurrency = 1
+	defaultSendConcurrency   = 1
+	defaultSendRetryMax      = 5
+	defaultSendRetryMinDelay = 500 * time.Millisecond
+	defaultSendRetryMaxDelay = 5 * time.Second
+	defaultSendRetryFactor   = 2.0
 )
 
 // TxnProcessor interface is called for each message, as is responsible
@@ -47,6 +52,7 @@ type TxnProcessor interface {
 var highestID = 1000000
 
 type inflightTxn struct {
+	msgID            string
 	id               int
 	from             string // normalized to 0x prefix and lower case
 	nodeAssignNonce  bool
@@ -78,14 +84,19 @@ func (i *inflightTxn) String() string {
 // TxnProcessorConf configuration for the message processor
 type TxnProcessorConf struct {
 	eth.EthCommonConf
-	AlwaysManageNonce  bool            `json:"alwaysManageNonce"`
-	AttemptGapFill     bool            `json:"attemptGapFill"`
-	MaxTXWaitTime      int             `json:"maxTXWaitTime"`
-	SendConcurrency    int             `json:"sendConcurrency"`
-	OrionPrivateAPIS   bool            `json:"orionPrivateAPIs"`
-	HexValuesInReceipt bool            `json:"hexValuesInReceipt"`
-	AddressBookConf    AddressBookConf `json:"addressBook"`
-	HDWalletConf       HDWalletConf    `json:"hdWallet"`
+	AlwaysManageNonce   bool            `json:"alwaysManageNonce"`
+	AttemptGapFill      bool            `json:"attemptGapFill"`
+	MaxTXWaitTime       int             `json:"maxTXWaitTime"`
+	SendConcurrency     int             `json:"sendConcurrency"`
+	OrionPrivateAPIS    bool            `json:"orionPrivateAPIs"`
+	HexValuesInReceipt  bool            `json:"hexValuesInReceipt"`
+	AddressBookConf     AddressBookConf `json:"addressBook"`
+	HDWalletConf        HDWalletConf    `json:"hdWallet"`
+	SendRetryForce      bool            `json:"sendRetryForce,omitempty"`
+	SendRetryDelayMinMS *int            `json:"sendRetryDelayMinMS,omitempty"`
+	SendRetryDelayMaxMS *int            `json:"sendRetryDelayMaxMS,omitempty"`
+	SendRetryMax        *int            `json:"sendRetryMax,omitempty"`
+	SendRetryFactor     *float64        `json:"sendRetryFactor,omitempty"`
 }
 
 type inflightTxnState struct {
@@ -104,7 +115,14 @@ type txnProcessor struct {
 	conf                *TxnProcessorConf
 	rpcConf             *eth.RPCConf
 	concurrencySlots    chan bool
+	concurrency         int64
 	gasEstimationFactor float64
+
+	sendRetryForce    bool
+	sendRetryDelayMin time.Duration
+	sendRetryDelayMax time.Duration
+	sendRetryMax      int
+	sendRetryFactor   float64
 }
 
 // NewTxnProcessor constructor for message procss
@@ -118,7 +136,6 @@ func NewTxnProcessor(conf *TxnProcessorConf, rpcConf *eth.RPCConf) TxnProcessor 
 		inflightTxnDelayer:  NewTxnDelayTracker(),
 		conf:                conf,
 		rpcConf:             rpcConf,
-		concurrencySlots:    make(chan bool, conf.SendConcurrency),
 		gasEstimationFactor: conf.GasEstimationFactor,
 	}
 	return p
@@ -132,6 +149,25 @@ func (p *txnProcessor) Init(rpc eth.RPCClient) {
 	}
 	if p.conf.HDWalletConf.URLTemplate != "" {
 		p.hdwallet = newHDWallet(&p.conf.HDWalletConf)
+	}
+	p.concurrencySlots = make(chan bool, p.conf.SendConcurrency)
+
+	p.sendRetryForce = p.conf.SendRetryForce
+	p.sendRetryDelayMin = defaultSendRetryMinDelay
+	p.sendRetryDelayMax = defaultSendRetryMaxDelay
+	p.sendRetryMax = defaultSendRetryMax
+	p.sendRetryFactor = defaultSendRetryFactor
+	if p.conf.SendRetryDelayMinMS != nil {
+		p.sendRetryDelayMin = time.Duration(*p.conf.SendRetryDelayMinMS) * time.Millisecond
+	}
+	if p.conf.SendRetryDelayMaxMS != nil {
+		p.sendRetryDelayMax = time.Duration(*p.conf.SendRetryDelayMaxMS) * time.Millisecond
+	}
+	if p.conf.SendRetryMax != nil {
+		p.sendRetryMax = *p.conf.SendRetryMax
+	}
+	if p.conf.SendRetryFactor != nil {
+		p.sendRetryFactor = *p.conf.SendRetryFactor
 	}
 }
 
@@ -151,7 +187,7 @@ func (p *txnProcessor) OnMessage(txnContext TxnContext) {
 
 	var unmarshalErr error
 	headers := txnContext.Headers()
-	log.Debugf("Processing %+v", headers)
+	log.Debugf("--> OnMessage %s", headers.ID)
 	switch headers.MsgType {
 	case messages.MsgTypeDeployContract:
 		var deployContractMsg messages.DeployContract
@@ -172,6 +208,7 @@ func (p *txnProcessor) OnMessage(txnContext TxnContext) {
 	if unmarshalErr != nil {
 		txnContext.SendErrorReply(400, unmarshalErr)
 	}
+	log.Debugf("<-- OnMessage %s", headers.ID)
 
 }
 
@@ -206,6 +243,7 @@ func (p *txnProcessor) resolveSigner(from string) (signer eth.TXSigner, err erro
 func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.TransactionCommon) (inflight *inflightTxn, err error) {
 
 	inflight = &inflightTxn{
+		msgID:      msg.Headers.ID,
 		txnContext: txnContext,
 	}
 
@@ -216,9 +254,10 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.T
 	} else if err != nil {
 		return nil, err
 	} else if p.addressBook != nil {
-		if inflight.rpc, err = p.addressBook.lookup(txnContext.Context(), msg.From); err != nil {
-			return nil, err
-		}
+		// We set the rpc to nil on this single-threaded processing, so that the
+		// parallel worker threads (in concurrency > 0 mode) can do the address
+		// book lookup.
+		inflight.rpc = nil
 	}
 
 	// Validate the from address, and normalize to lower case with 0x prefix
@@ -370,8 +409,10 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, submitted bool) {
 
 	// If we've got a gap potential, we need to submit a gap-fill TX
 	if !submitted && highestNonce > inflight.nonce && !inflight.nodeAssignNonce {
-		log.Warnf("Potential nonce gap. Nonce %d failed to send. Nonce %d in-flight", inflight.nonce, highestNonce)
-		p.submitGapFillTX(inflight)
+		log.Warnf("Potential nonce gap. Nonce %d failed to send. Nonce %d in-flight. Attempting fill=%t", inflight.nonce, highestNonce, inflight.rpc != nil)
+		if inflight.rpc != nil {
+			p.submitGapFillTX(inflight)
+		}
 	}
 }
 
@@ -565,6 +606,7 @@ func (p *txnProcessor) sendTransactionCommon(txnContext TxnContext, inflight *in
 		// The above must happen synchronously for each partition in Kafka - as it is where we assign the nonce.
 		// However, the send to the node can happen at high concurrency.
 		p.concurrencySlots <- true
+		log.Debugf("Send with concurrency config=%d", p.conf.SendConcurrency)
 		go p.sendAndTrackMining(txnContext, inflight, tx)
 	} else {
 		// For the special case of 1 we do it synchronously, so we don't assign the next nonce until we've sent this one
@@ -573,9 +615,22 @@ func (p *txnProcessor) sendTransactionCommon(txnContext TxnContext, inflight *in
 }
 
 func (p *txnProcessor) sendAndTrackMining(txnContext TxnContext, inflight *inflightTxn, tx *eth.Txn) {
-	err := tx.Send(txnContext.Context(), inflight.rpc, p.gasEstimationFactor)
+
+	concurrency := atomic.AddInt64(&p.concurrency, 1)
+	log.Infof("--> send %s/%d (msg=%s,concurrency=%d)", inflight.from, inflight.nonce, inflight.msgID, concurrency)
+
+	// If the RPC client is nil here, we need to resolve it.
+	var err error
+	if inflight.rpc == nil {
+		inflight.rpc, err = p.addressBook.lookup(txnContext.Context(), inflight.from)
+	}
+	if err == nil {
+		err = p.sendWithRetry(txnContext, inflight, tx)
+	}
 	if p.conf.SendConcurrency > 1 {
 		<-p.concurrencySlots // return our slot as soon as send is complete, to let an awaiting send go
+		concurrency = atomic.AddInt64(&p.concurrency, -1)
+		log.Debugf("<-- send %s/%d (msg=%s,concurrency=%d)", inflight.from, inflight.nonce, inflight.msgID, concurrency)
 	}
 	if err != nil {
 		p.cancelInFlight(inflight, false /* not confirmed as submitted, as send failed */)
@@ -584,4 +639,44 @@ func (p *txnProcessor) sendAndTrackMining(txnContext TxnContext, inflight *infli
 	}
 
 	p.trackMining(inflight, tx)
+}
+
+func (p *txnProcessor) sendWithRetry(txnContext TxnContext, inflight *inflightTxn, tx *eth.Txn) error {
+	retries := 0
+	for {
+		err := tx.Send(txnContext.Context(), inflight.rpc, p.gasEstimationFactor)
+		if err == nil {
+			return nil
+		}
+		var retry bool
+		errMsg := strings.ToLower(err.Error())
+		switch {
+		case p.sendRetryForce:
+			// Retry for everything if explicitly told to
+			retry = true
+		case inflight.nodeAssignNonce:
+			// We do not retry if the node is assigning the nonce, as we might duplicate the transaction
+			retry = false
+		case strings.Contains(errMsg, "nonce"), strings.Contains(errMsg, "known"):
+			// No point in retrying if the error is nonce related, or the transcation is known
+			retry = false
+		default:
+			// Retry by default
+			retry = true
+		}
+		retry = retry && (retries < p.sendRetryMax)
+		retryDelay := p.sendRetryDelayMin
+		for i := 0; i < retries; i++ {
+			retryDelay = time.Duration(float64(retryDelay) * p.sendRetryFactor)
+		}
+		if retryDelay > p.sendRetryDelayMax {
+			retryDelay = p.sendRetryDelayMax
+		}
+		log.Errorf("Send %s/%d (msg=%s) failed retries=%d retry=%t (delay=%dms): %s", inflight.from, inflight.nonce, inflight.msgID, retries, retry, retryDelay.Milliseconds(), err)
+		if !retry {
+			return err
+		}
+		time.Sleep(retryDelay)
+		retries++
+	}
 }

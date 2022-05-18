@@ -466,7 +466,7 @@ func TestConfirmationsListenerFailPollingBlocks(t *testing.T) {
 	}).Return(nil).Once()
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
 		return i.ToInt().Int64() == 1977
-	})).Return(fmt.Errorf("pop")).Once()
+	})).Return(fmt.Errorf("pop"))
 
 	bcm.confirmationsListener()
 
@@ -487,7 +487,7 @@ func TestConfirmationsListenerLostFilterReestablish(t *testing.T) {
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
 		bcm.cancelFunc()
 		return i.ToInt().Int64() == 1977
-	})).Return(nil).Once()
+	})).Return(nil)
 
 	bcm.confirmationsListener()
 
@@ -517,7 +517,6 @@ func TestConfirmationsListenerFailWalkingChainForNewEvent(t *testing.T) {
 
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newBlockFilter").Run(func(args mock.Arguments) {
 		args[1].(*hexutil.Big).ToInt().SetString("1977", 10)
-		bcm.cancelFunc()
 	}).Return(nil).Once()
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
 		return i.ToInt().Int64() == int64(1977)
@@ -525,8 +524,9 @@ func TestConfirmationsListenerFailWalkingChainForNewEvent(t *testing.T) {
 		*(args[1].(*[]*ethbinding.Hash)) = []*ethbinding.Hash{}
 	}).Return(nil)
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getBlockByNumber", mock.MatchedBy(func(i hexutil.Uint64) bool {
+		bcm.cancelFunc()
 		return uint64(i) == 1002
-	}), false).Return(fmt.Errorf("pop")).Once()
+	}), false).Return(fmt.Errorf("pop"))
 
 	bcm.confirmationsListener()
 

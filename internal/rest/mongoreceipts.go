@@ -78,8 +78,7 @@ func (m *mongoReceipts) connect() (err error) {
 // To account for any transitory failures writing to mongoDB, it retries adding receipt with a backoff
 func (m *mongoReceipts) AddReceipt(requestID string, receipt *map[string]interface{}, overwrite bool) (err error) {
 	if overwrite {
-		query := m.collection.Find(bson.M{"_id": requestID})
-		return m.collection.Upsert(query, *receipt)
+		return m.collection.Upsert(bson.M{"_id": requestID}, *receipt)
 	} else {
 		return m.collection.Insert(*receipt)
 	}

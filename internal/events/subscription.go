@@ -77,7 +77,7 @@ type subscription struct {
 	cr                  contractregistry.ContractResolver
 	lp                  *logProcessor
 	logName             string
-	filterID            ethbinding.HexBigInt
+	filterID            string
 	filteredOnce        bool
 	filterStale         bool
 	deleting            bool
@@ -216,7 +216,7 @@ func (s *subscription) createFilter(ctx context.Context, since *big.Int) error {
 	s.catchupBlock = nil // we are not in catchup mode now
 	s.filteredOnce = false
 	s.markFilterStale(ctx, false)
-	log.Infof("%s: created filter from block %s: %s - %+v", s.logName, since.String(), s.filterID.String(), s.info.Filter)
+	log.Infof("%s: created filter from block %s: %s - %+v", s.logName, since.String(), s.filterID, s.info.Filter)
 	return err
 }
 

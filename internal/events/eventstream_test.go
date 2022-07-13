@@ -26,7 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/hyperledger/firefly-ethconnect/internal/contractregistry"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
@@ -108,10 +107,10 @@ func newTestStreamForConfirmations(t *testing.T) (*eventStream, func()) {
 	// Mock the RPC calls for the block confirmations manager that will just spin returning no results
 	rpc := sm.rpc.(*ethmocks.RPCClient)
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newBlockFilter").Run(func(args mock.Arguments) {
-		args[1].(*hexutil.Big).ToInt().SetString("1977", 10)
+		*args[1].(*string) = "filter_id1"
 	}).Return(nil).Maybe()
-	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
-		return i.ToInt().Int64() == int64(1977)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(f string) bool {
+		return f == "filter_id1"
 	})).Run(func(args mock.Arguments) {
 		*(args[1].(*[]*ethbinding.Hash)) = []*ethbinding.Hash{}
 	}).Return(nil).Maybe()

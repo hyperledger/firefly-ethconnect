@@ -94,12 +94,12 @@ func TestBlockConfirmationManagerE2ENewEvent(t *testing.T) {
 
 	// Establish the block filter
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newBlockFilter").Run(func(args mock.Arguments) {
-		args[1].(*hexutil.Big).ToInt().SetString("1977", 10)
+		*args[1].(*string) = "filter_id1"
 	}).Return(nil).Once()
 
 	// First poll for changes gives nothing, but we load up the event at this point for the next round
-	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
-		return i.ToInt().Int64() == int64(1977)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(f string) bool {
+		return f == "filter_id1"
 	})).Run(func(args mock.Arguments) {
 		*(args[1].(*[]*ethbinding.Hash)) = []*ethbinding.Hash{}
 
@@ -116,8 +116,8 @@ func TestBlockConfirmationManagerE2ENewEvent(t *testing.T) {
 		Hash:       ethbind.API.HexToHash("0x64fd8179b80dd255d52ce60d7f265c0506be810e2f3df52463fadeb44bb4d2df"),
 		ParentHash: ethbind.API.HexToHash("0x46210d224888265c269359529618bf2f6adb2697ff52c63c10f16a2391bdd295"),
 	}
-	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
-		return i.ToInt().Int64() == int64(1977)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(f string) bool {
+		return f == "filter_id1"
 	})).Run(func(args mock.Arguments) {
 		*(args[1].(*[]*ethbinding.Hash)) = []*ethbinding.Hash{
 			&block1003.Hash,
@@ -152,8 +152,8 @@ func TestBlockConfirmationManagerE2ENewEvent(t *testing.T) {
 		Hash:       ethbind.API.HexToHash("0xed21f4f73d150f16f922ae82b7485cd936ae1eca4c027516311b928360a347e8"),
 		ParentHash: ethbind.API.HexToHash("0x64fd8179b80dd255d52ce60d7f265c0506be810e2f3df52463fadeb44bb4d2df"),
 	}
-	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
-		return i.ToInt().Int64() == int64(1977)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(f string) bool {
+		return f == "filter_id1"
 	})).Run(func(args mock.Arguments) {
 		*(args[1].(*[]*ethbinding.Hash)) = []*ethbinding.Hash{
 			&block1004.Hash,
@@ -169,8 +169,8 @@ func TestBlockConfirmationManagerE2ENewEvent(t *testing.T) {
 	}).Return(nil).Once()
 
 	// Subsequent calls get nothing, and blocks until close anyway
-	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
-		return i.ToInt().Int64() == int64(1977)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(f string) bool {
+		return f == "filter_id1"
 	})).Run(func(args mock.Arguments) {
 		*(args[1].(*[]*ethbinding.Hash)) = []*ethbinding.Hash{}
 		if lastBlockDetected {
@@ -206,7 +206,7 @@ func TestBlockConfirmationManagerE2EFork(t *testing.T) {
 
 	// Establish the block filter
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newBlockFilter").Run(func(args mock.Arguments) {
-		args[1].(*hexutil.Big).ToInt().SetString("1977", 10)
+		*args[1].(*string) = "filter_id1"
 	}).Return(nil).Once()
 
 	// The next filter gives us 1002, and a first 1003 block - which will later be removed
@@ -220,8 +220,8 @@ func TestBlockConfirmationManagerE2EFork(t *testing.T) {
 		Hash:       ethbind.API.HexToHash("0x46210d224888265c269359529618bf2f6adb2697ff52c63c10f16a2391bdd295"),
 		ParentHash: ethbind.API.HexToHash("0x64fd8179b80dd255d52ce60d7f265c0506be810e2f3df52463fadeb44bb4d2df"),
 	}
-	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
-		return i.ToInt().Int64() == int64(1977)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(f string) bool {
+		return f == "filter_id1"
 	})).Run(func(args mock.Arguments) {
 		*(args[1].(*[]*ethbinding.Hash)) = []*ethbinding.Hash{
 			&block1002.Hash,
@@ -250,8 +250,8 @@ func TestBlockConfirmationManagerE2EFork(t *testing.T) {
 		Hash:       ethbind.API.HexToHash("0x110282339db2dfe4bfd13d78375f7883048cac6bc12f8393bd080a4e263d5d21"),
 		ParentHash: ethbind.API.HexToHash("0xed21f4f73d150f16f922ae82b7485cd936ae1eca4c027516311b928360a347e8"),
 	}
-	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
-		return i.ToInt().Int64() == int64(1977)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(f string) bool {
+		return f == "filter_id1"
 	})).Run(func(args mock.Arguments) {
 		*(args[1].(*[]*ethbinding.Hash)) = []*ethbinding.Hash{
 			&block1003b.Hash,
@@ -270,8 +270,8 @@ func TestBlockConfirmationManagerE2EFork(t *testing.T) {
 	}).Return(nil).Once()
 
 	// Subsequent calls get nothing, and blocks until close anyway
-	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
-		return i.ToInt().Int64() == int64(1977)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(f string) bool {
+		return f == "filter_id1"
 	})).Run(func(args mock.Arguments) {
 		*(args[1].(*[]*ethbinding.Hash)) = []*ethbinding.Hash{}
 		if lastBlockDetected {
@@ -322,12 +322,12 @@ func TestBlockConfirmationManagerE2EHistoricalEvent(t *testing.T) {
 
 	// Establish the block filter
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newBlockFilter").Run(func(args mock.Arguments) {
-		args[1].(*hexutil.Big).ToInt().SetString("1977", 10)
+		*args[1].(*string) = "filter_id1"
 	}).Return(nil).Once()
 
 	// We don't notify of any new blocks
-	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
-		return i.ToInt().Int64() == int64(1977)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(f string) bool {
+		return f == "filter_id1"
 	})).Run(func(args mock.Arguments) {
 		*(args[1].(*[]*ethbinding.Hash)) = []*ethbinding.Hash{}
 	}).Return(nil)
@@ -443,7 +443,7 @@ func TestConfirmationsListenerFailWalkingChain(t *testing.T) {
 	bcm.addEvent(eventToConfirm, testStream)
 
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newBlockFilter").Run(func(args mock.Arguments) {
-		args[1].(*hexutil.Big).ToInt().SetString("1977", 10)
+		*args[1].(*string) = "filter_id1"
 		bcm.cancelFunc()
 	}).Return(nil).Once()
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getBlockByNumber", mock.MatchedBy(func(i hexutil.Uint64) bool {
@@ -461,11 +461,11 @@ func TestConfirmationsListenerFailPollingBlocks(t *testing.T) {
 	bcm.done = make(chan struct{})
 
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newBlockFilter").Run(func(args mock.Arguments) {
-		args[1].(*hexutil.Big).ToInt().SetString("1977", 10)
+		*args[1].(*string) = "filter_id1"
 		bcm.cancelFunc()
 	}).Return(nil).Once()
-	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
-		return i.ToInt().Int64() == 1977
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(f string) bool {
+		return f == "filter_id1"
 	})).Return(fmt.Errorf("pop"))
 
 	bcm.confirmationsListener()
@@ -479,14 +479,14 @@ func TestConfirmationsListenerLostFilterReestablish(t *testing.T) {
 	bcm.done = make(chan struct{})
 
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newBlockFilter").Run(func(args mock.Arguments) {
-		args[1].(*hexutil.Big).ToInt().SetString("1977", 10)
+		*args[1].(*string) = "filter_id1"
 	}).Return(nil).Twice()
-	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
-		return i.ToInt().Int64() == 1977
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(f string) bool {
+		return f == "filter_id1"
 	})).Return(fmt.Errorf("filter not found")).Once()
-	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(f string) bool {
 		bcm.cancelFunc()
-		return i.ToInt().Int64() == 1977
+		return f == "filter_id1"
 	})).Return(nil)
 
 	bcm.confirmationsListener()
@@ -516,10 +516,10 @@ func TestConfirmationsListenerFailWalkingChainForNewEvent(t *testing.T) {
 	})
 
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newBlockFilter").Run(func(args mock.Arguments) {
-		args[1].(*hexutil.Big).ToInt().SetString("1977", 10)
+		*args[1].(*string) = "filter_id1"
 	}).Return(nil).Once()
-	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
-		return i.ToInt().Int64() == int64(1977)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(f string) bool {
+		return f == "filter_id1"
 	})).Run(func(args mock.Arguments) {
 		*(args[1].(*[]*ethbinding.Hash)) = []*ethbinding.Hash{}
 	}).Return(nil)
@@ -557,10 +557,10 @@ func TestConfirmationsListenerStopStream(t *testing.T) {
 	})
 
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newBlockFilter").Run(func(args mock.Arguments) {
-		args[1].(*hexutil.Big).ToInt().SetString("1977", 10)
+		*args[1].(*string) = "filter_id1"
 	}).Return(nil)
-	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
-		return i.ToInt().Int64() == int64(1977)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(f string) bool {
+		return f == "filter_id1"
 	})).Run(func(args mock.Arguments) {
 		*(args[1].(*[]*ethbinding.Hash)) = []*ethbinding.Hash{}
 	}).Return(nil)
@@ -602,10 +602,10 @@ func TestConfirmationsRemoveEvent(t *testing.T) {
 
 	changeCount := 0
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_newBlockFilter").Run(func(args mock.Arguments) {
-		args[1].(*hexutil.Big).ToInt().SetString("1977", 10)
+		*args[1].(*string) = "filter_id1"
 	}).Return(nil).Maybe()
-	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(i hexutil.Big) bool {
-		return i.ToInt().Int64() == int64(1977)
+	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterChanges", mock.MatchedBy(func(f string) bool {
+		return f == "filter_id1"
 	})).Run(func(args mock.Arguments) {
 		*(args[1].(*[]*ethbinding.Hash)) = []*ethbinding.Hash{}
 		changeCount++

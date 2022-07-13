@@ -37,7 +37,7 @@ type blockConfirmationManager struct {
 	ctx                   context.Context
 	cancelFunc            func()
 	log                   *log.Entry
-	filterID              ethbinding.HexBigInt
+	filterID              string
 	filterStale           bool
 	rpc                   eth.RPCClient
 	requiredConfirmations int
@@ -193,7 +193,7 @@ func (bcm *blockConfirmationManager) createBlockFilter() error {
 		return errors.Errorf(errors.RPCCallReturnedError, "eth_newBlockFilter", err)
 	}
 	bcm.filterStale = false
-	bcm.log.Infof("Created block filter: %s", bcm.filterID.String())
+	bcm.log.Infof("Created block filter: %s", bcm.filterID)
 	return err
 }
 

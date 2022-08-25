@@ -345,6 +345,7 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.T
 
 	// Hold the lock just while we're adding it to the map and dealing with nonce checking.
 	p.inflightTxnsLock.Lock()
+	defer p.inflightTxnsLock.Unlock()
 
 	// The user can supply a nonce and manage them externally, using their own
 	// application-side list of transactions, to prevent the possibility of
@@ -400,7 +401,6 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.T
 		// Note: We do not have highestNonce calculation for in-flight private transactions,
 		//       so attempting to submit more than one per block currently will FAIL
 		if inflight.nonce, err = eth.GetOrionTXCount(txnContext.Context(), p.rpc, &from, inflight.privacyGroupID); err != nil {
-			p.inflightTxnsLock.Unlock()
 			return nil, err
 		}
 		fromNode = true
@@ -419,7 +419,6 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.T
 		// (or if gas price is being varied by the submitter the potential of
 		// overwriting a transaction)
 		if inflight.nonce, err = eth.GetTransactionCount(txnContext.Context(), p.rpc, &from, "pending"); err != nil {
-			p.inflightTxnsLock.Unlock()
 			return nil, err
 		}
 		inflightForAddr.highestNonce = inflight.nonce // store the nonce in our inflight txns state
@@ -432,9 +431,6 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.T
 	if !alreadyInflightForAddr {
 		p.inflightTxns[inflight.from] = inflightForAddr
 	}
-
-	// Clear lock before logging
-	p.inflightTxnsLock.Unlock()
 
 	log.Infof("In-flight %d added. nonce=%d addr=%s before=%d (node=%t)", inflight.id, inflight.nonce, inflight.from, before, fromNode)
 

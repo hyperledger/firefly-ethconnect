@@ -34,9 +34,11 @@ import (
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/mocks/receiptsmocks"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 type errorReply struct {
@@ -105,6 +107,28 @@ var goodSendTxnJSONWithoutGas = "{" +
 	"  \"from\":\"" + testFromAddr + "\"," +
 	"  \"method\":{\"name\":\"test\"}" +
 	"}"
+
+var goodSendTxnJSONIdempotent = `{
+		"headers": {
+			"type": "SendTransaction",
+			"id": "id12345-idempotent"
+		},
+		"from": "` + testFromAddr + `",
+		"gas": "123",
+		"method": {"name":"test"},
+		"acktype": "receipt"
+	}`
+
+var goodDeployTxnJSONIdempotent = `{
+		"headers": {
+			"type": "DeployContract",
+			"id": "id12345-idempotent"
+		},
+		"from": "` + testFromAddr + `",
+		"gas": "123",
+		"solidity": "pragma solidity >=0.4.22 <=0.8; contract t {constructor() public {}}",
+		"acktype": "receipt"
+	}`
 
 var goodDeployTxnPrivateJSON = "{" +
 	"  \"headers\":{\"type\": \"DeployContract\"}," +
@@ -752,6 +776,170 @@ func TestOnSendTransactionMessageTxnTimeout(t *testing.T) {
 	assert.Regexp("Timed out waiting for transaction receipt", testTxnContext.errorReplies[0].err.Error())
 	assert.Equal(txHash, testTxnContext.errorReplies[0].txHash)
 
+}
+
+func TestOnSendTransactionMessageTxnIdempotentStoreOK(t *testing.T) {
+
+	zero := 0
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+		SendRetryMax:  &zero,
+	}, &eth.RPCConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodSendTxnJSONIdempotent
+	testRPC := goodMessageRPC()
+	txnProcessor.Init(testRPC)
+
+	mr := &receiptsmocks.ReceiptStorePersistence{}
+	txnProcessor.SetReceiptStoreForIdempotencyCheck(mr)
+	mr.On("GetReceipt", "id12345-idempotent").Return(&map[string]interface{}{
+		// no transactionSubmitted field
+	}, nil)
+	mr.On("AddReceipt", "id12345-idempotent", mock.MatchedBy(func(r *map[string]interface{}) bool {
+		return (*r)["transactionSubmitted"] == true
+	}), true).Return(nil).Once()
+
+	txnProcessor.OnMessage(testTxnContext)
+	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(testFromAddr)] {
+		time.Sleep(1 * time.Millisecond)
+	}
+	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)].txnsInFlight[0].wg
+	txnWG.Wait()
+
+	mr.AssertExpectations(t)
+}
+
+func TestOnSendTransactionMessageTxnHandleNotFound(t *testing.T) {
+
+	zero := 0
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+		SendRetryMax:  &zero,
+	}, &eth.RPCConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodSendTxnJSONIdempotent
+	testRPC := goodMessageRPC()
+	txnProcessor.Init(testRPC)
+
+	mr := &receiptsmocks.ReceiptStorePersistence{}
+	txnProcessor.SetReceiptStoreForIdempotencyCheck(mr)
+	mr.On("GetReceipt", "id12345-idempotent").Return(nil, nil) // not found on the way in, so disabled
+
+	txnProcessor.OnMessage(testTxnContext)
+	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(testFromAddr)] {
+		time.Sleep(1 * time.Millisecond)
+	}
+	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)].txnsInFlight[0].wg
+	txnWG.Wait()
+
+	mr.AssertExpectations(t)
+}
+
+func TestOnSendTransactionMessageFail(t *testing.T) {
+
+	zero := 0
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+		SendRetryMax:  &zero,
+	}, &eth.RPCConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodSendTxnJSONIdempotent
+	testRPC := goodMessageRPC()
+	txnProcessor.Init(testRPC)
+
+	mr := &receiptsmocks.ReceiptStorePersistence{}
+	txnProcessor.SetReceiptStoreForIdempotencyCheck(mr)
+	mr.On("GetReceipt", "id12345-idempotent").Return(nil, fmt.Errorf("pop"))
+
+	txnProcessor.OnMessage(testTxnContext)
+	assert.Empty(t, txnProcessor.inflightTxns)
+
+	mr.AssertExpectations(t)
+}
+
+func TestOnSendTransactionMessageTxnIdempotentStoreFail(t *testing.T) {
+
+	zero := 0
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+		SendRetryMax:  &zero,
+	}, &eth.RPCConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodSendTxnJSONIdempotent
+	testRPC := goodMessageRPC()
+	txnProcessor.Init(testRPC)
+
+	mr := &receiptsmocks.ReceiptStorePersistence{}
+	txnProcessor.SetReceiptStoreForIdempotencyCheck(mr)
+	mr.On("GetReceipt", "id12345-idempotent").Return(&map[string]interface{}{
+		// no transactionSubmitted field
+	}, nil)
+	mr.On("AddReceipt", "id12345-idempotent", mock.MatchedBy(func(r *map[string]interface{}) bool {
+		return (*r)["transactionSubmitted"] == true
+	}), true).Return(fmt.Errorf("pop")).Once() // swallowed with logging
+
+	txnProcessor.OnMessage(testTxnContext)
+	for inMap := false; !inMap; _, inMap = txnProcessor.inflightTxns[strings.ToLower(testFromAddr)] {
+		time.Sleep(1 * time.Millisecond)
+	}
+	txnWG := &txnProcessor.inflightTxns[strings.ToLower(testFromAddr)].txnsInFlight[0].wg
+	txnWG.Wait()
+
+	mr.AssertExpectations(t)
+}
+
+func TestOnSendTransactionMessageTxnIdempotentSkipInflight(t *testing.T) {
+
+	zero := 0
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+		SendRetryMax:  &zero,
+	}, &eth.RPCConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodDeployTxnJSONIdempotent
+	testRPC := goodMessageRPC()
+	txnProcessor.Init(testRPC)
+
+	txnProcessor.inflightTxns = map[string]*inflightTxnState{
+		strings.ToLower(testFromAddr): {
+			txnsInFlight: []*inflightTxn{
+				{msgID: "id12345-idempotent"},
+			},
+		},
+	}
+
+	mr := &receiptsmocks.ReceiptStorePersistence{}
+	txnProcessor.SetReceiptStoreForIdempotencyCheck(mr)
+
+	txnProcessor.OnMessage(testTxnContext)
+	assert.Len(t, txnProcessor.inflightTxns, 1)
+
+	mr.AssertExpectations(t)
+}
+
+func TestOnSendTransactionMessageTxnIdempotentSkipDuplicate(t *testing.T) {
+
+	zero := 0
+	txnProcessor := NewTxnProcessor(&TxnProcessorConf{
+		MaxTXWaitTime: 1,
+		SendRetryMax:  &zero,
+	}, &eth.RPCConf{}).(*txnProcessor)
+	testTxnContext := &testTxnContext{}
+	testTxnContext.jsonMsg = goodSendTxnJSONIdempotent
+	testRPC := goodMessageRPC()
+	txnProcessor.Init(testRPC)
+
+	mr := &receiptsmocks.ReceiptStorePersistence{}
+	txnProcessor.SetReceiptStoreForIdempotencyCheck(mr)
+	mr.On("GetReceipt", "id12345-idempotent").Return(&map[string]interface{}{
+		"transactionSubmitted": true,
+		"transactionHash":      "0x12345",
+	}, nil).Once()
+
+	txnProcessor.OnMessage(testTxnContext)
+	assert.Empty(t, txnProcessor.inflightTxns)
+
+	mr.AssertExpectations(t)
 }
 
 func TestOnSendTransactionMessageFailedTxn(t *testing.T) {

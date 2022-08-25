@@ -12,6 +12,7 @@
     "idempotency",
     "Infof",
     "kvstore",
+    "receiptsmocks",
     "smconf",
     "stretchr",
     "Tracef",

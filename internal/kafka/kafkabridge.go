@@ -64,11 +64,6 @@ func (k *KafkaBridge) SetConf(conf *KafkaBridgeConf) {
 	k.conf = *conf
 }
 
-// See TxProcessor.SetReceiptStoreForIdempotencyCheck
-func (k *KafkaBridge) SetReceiptStoreForIdempotencyCheck(receiptStore receipts.ReceiptStorePersistence) {
-	k.processor.SetReceiptStoreForIdempotencyCheck(receiptStore)
-}
-
 // ValidateConf validates the configuration
 func (k *KafkaBridge) ValidateConf() (err error) {
 	if k.conf.RPC.URL == "" {
@@ -93,7 +88,7 @@ func (k *KafkaBridge) CobraInit() (cmd *cobra.Command) {
 		Short: "Kafka->Ethereum (JSON/RPC) Bridge",
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			log.Infof("Starting Kafka bridge")
-			err = k.Start()
+			err = k.Start(nil /* only available in full server mode with co-located REST API Gateway */)
 			return
 		},
 		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
@@ -429,7 +424,9 @@ func (k *KafkaBridge) connect() (err error) {
 }
 
 // Start kicks off the bridge
-func (k *KafkaBridge) Start() (err error) {
+func (k *KafkaBridge) Start(receiptStore receipts.ReceiptStorePersistence) (err error) {
+
+	k.processor.SetReceiptStoreForIdempotencyCheck(receiptStore)
 
 	if *k.printYAML {
 		b, err := utils.MarshalToYAML(&k.conf)

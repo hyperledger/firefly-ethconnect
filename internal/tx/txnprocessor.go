@@ -69,6 +69,7 @@ type inflightTxn struct {
 	signer           eth.TXSigner
 	gapFillSucceeded bool
 	gapFillTxHash    string
+	idempotencyCheck bool
 }
 
 func (i *inflightTxn) nonceNumber() json.Number {
@@ -248,8 +249,54 @@ func (p *txnProcessor) resolveSigner(from string) (signer eth.TXSigner, err erro
 	return
 }
 
+// idempotencyCheck called by addInflightWrapper within the inflight lock, in the case the
+// extra ackType=receipt idempotency check is enabled, and possible due to co-location with
+// the REST API Gateway.
+func (p *txnProcessor) idempotencyCheck(inflight *inflightTxn, inflightForAddr *inflightTxnState) (bool, error) {
+	inflight.idempotencyCheck = true
+
+	// First check the in-memory list
+	for _, alreadyInflight := range inflightForAddr.txnsInFlight {
+		if alreadyInflight.msgID == inflight.msgID {
+			log.Warnf("Kafka redelivery of message already inflight: %s", inflight.msgID)
+			// We don't send a new reply here - special nil return
+			return false, nil
+		}
+	}
+	// Then check LevelDB - we should find the entry
+	r, err := p.receiptStore.GetReceipt(inflight.msgID)
+	if err != nil {
+		return false, err
+	}
+	if r == nil {
+		log.Warnf("Did not find acktype=receipt record in receipt store during dispatch: %s", inflight.msgID)
+	} else if _, alreadyDispatched := (*r)["transactionSubmitted"]; alreadyDispatched {
+		log.Warnf("Kafka redelivery of message already dispatched: %s", inflight.msgID)
+		return false, nil
+	}
+	return true, nil
+}
+
+// idempotencyUpdateSubmitted writes the raw reply before removing the in-flight transaction entry.
+// This doesn't stop it being sent to Kafka and then re-written by the REST API Gateway when it receives it,
+// and emits that update on the webhook.
+func (p *txnProcessor) idempotencyUpdateSubmitted(inflight *inflightTxn) {
+	r, err := p.receiptStore.GetReceipt(inflight.msgID)
+	if r != nil && err == nil {
+		// We mark it submitted, and add the transaction hash - this means even if the reply doesn't get through,
+		// anyone checking the receipt store will find the transaction hash and be able to call our API to
+		// check the chain directly for the receipt.
+		(*r)["transactionSubmitted"] = true
+		(*r)["transactionHash"] = inflight.tx.Hash
+		err = p.receiptStore.AddReceipt(inflight.msgID, r, true)
+	}
+	if err != nil {
+		log.Errorf("Failed to write dispatched record %s for idempotency checking: %s", inflight.msgID, err)
+	}
+}
+
 // newInflightWrapper uses the supplied transaction, the inflight txn list
-// and the ethereum node's transction count to determine the right next
+// and the ethereum node's transaction count to determine the right next
 // nonce for the transaction.
 // Builds a new wrapper containing this information, that can be added to
 // the inflight list if the transaction is submitted
@@ -323,28 +370,9 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.T
 	// 2. The user specified fly-acktype=receipt on the REST API Gateway, which propagates into AckType on the message we receive
 	//    - This is the (slightly awkward) spelling to enable an idempotency check on the REST API Gateway
 	if p.receiptStore != nil && msg.AckType == "receipt" {
-		// First check the in-memory list
-		for _, inflight := range inflightForAddr.txnsInFlight {
-			if inflight.msgID == msg.Headers.ID {
-				log.Warnf("Kafka redelivery of message already inflight: %s", inflight.msgID)
-				// We don't send a new reply here - special nil return
-				return nil, nil
-			}
-		}
-		// Then check LevelDB
-		r, err := p.receiptStore.GetReceipt(msg.Headers.ID)
-		if err == nil {
-			return nil, err
-		}
-		if r != nil && (*r)["transactionHash"] != "" {
-			// We can't be sure we successfully sent the reply, so we still duplicate this
-			log.Warnf("Kafka redelivery of message already inflight: %s", inflight.msgID)
-			b, _ := json.Marshal(r)
-			var reply messages.TransactionReceipt
-			_ = json.Unmarshal(b, &reply)
-			// Dispatch the reply asynchronously
-			go inflight.txnContext.Reply(&reply)
-			return nil, nil
+		submit, err := p.idempotencyCheck(inflight, inflightForAddr)
+		if !submit || err != nil {
+			return nil, err // note nil, nil now must be handled by callers
 		}
 	}
 
@@ -447,6 +475,7 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, submitted bool) {
 			}
 		}
 	}
+
 	p.inflightTxnsLock.Unlock()
 
 	log.Infof("In-flight %d complete. nonce=%d addr=%s nan=%t sub=%t before=%d after=%d highest=%d", inflight.id, inflight.nonce, inflight.from, inflight.nodeAssignNonce, submitted, before, after, highestNonce)
@@ -518,6 +547,12 @@ func (p *txnProcessor) waitForCompletion(inflight *inflightTxn, initialWaitDelay
 		}
 	}
 
+	// If this request had the additional idempotency check enabled, then we need to write the reply
+	// in-line here, before we remove the entry from the in-flight list.
+	if inflight.idempotencyCheck {
+		p.idempotencyUpdateSubmitted(inflight)
+	}
+
 	if timedOut {
 		if err != nil {
 			inflight.txnContext.SendErrorReplyWithTX(500, errors.Errorf(errors.TransactionSendReceiptCheckError, retries, err), inflight.tx.Hash)
@@ -582,7 +617,6 @@ func (p *txnProcessor) waitForCompletion(inflight *inflightTxn, initialWaitDelay
 		if receipt.TransactionIndex != nil {
 			reply.TransactionIndexStr = strconv.FormatUint(uint64(*receipt.TransactionIndex), 10)
 		}
-
 		inflight.txnContext.Reply(&reply)
 	}
 
@@ -609,6 +643,10 @@ func (p *txnProcessor) OnDeployContractMessage(txnContext TxnContext, msg *messa
 		txnContext.SendErrorReply(400, err)
 		return
 	}
+	if inflight == nil {
+		// Skip sending due to idempotency check - any reply is already handled
+		return
+	}
 	inflight.registerAs = msg.RegisterAs
 	msg.Nonce = inflight.nonceNumber()
 
@@ -627,6 +665,10 @@ func (p *txnProcessor) OnSendTransactionMessage(txnContext TxnContext, msg *mess
 	inflight, err := p.addInflightWrapper(txnContext, &msg.TransactionCommon)
 	if err != nil {
 		txnContext.SendErrorReply(400, err)
+		return
+	}
+	if inflight == nil {
+		// Skip sending due to idempotency check - any reply is already handled
 		return
 	}
 	msg.Nonce = inflight.nonceNumber()

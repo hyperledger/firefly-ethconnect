@@ -216,12 +216,41 @@ func (g *RESTGateway) newAccessTokenContextHandler(parent http.Handler) http.Han
 }
 
 // ReceiptStorePersistence allows other components to access the receipt store persistence for idempotency checks, when co-located in the same address space
-func (g *RESTGateway) ReceiptStorePersistence() receipts.ReceiptStorePersistence {
-	return g.receipts.persistence
+func (g *RESTGateway) InitReceiptStore() (receipts.ReceiptStorePersistence, error) {
+	var receiptStoreConf *receipts.ReceiptStoreConf
+	var receiptStorePersistence receipts.ReceiptStorePersistence
+	if g.conf.MongoDB.URL != "" {
+		receiptStoreConf = &g.conf.MongoDB.ReceiptStoreConf
+		mongoStore := receipts.NewMongoReceipts(&g.conf.MongoDB)
+		receiptStorePersistence = mongoStore
+		if err := mongoStore.Connect(); err != nil {
+			return nil, err
+		}
+	} else if g.conf.LevelDB.Path != "" {
+		receiptStoreConf = &g.conf.LevelDB.ReceiptStoreConf
+		leveldbStore, err := receipts.NewLevelDBReceipts(&g.conf.LevelDB)
+		if err != nil {
+			return nil, err
+		}
+		receiptStorePersistence = leveldbStore
+	} else {
+		receiptStoreConf = &g.conf.MemStore
+		memStore := receipts.NewMemoryReceipts(&g.conf.MemStore)
+		receiptStorePersistence = memStore
+	}
+	g.receipts = newReceiptStore(receiptStoreConf, receiptStorePersistence, g.smartContractGW)
+	return g.receipts.persistence, nil
 }
 
 // Start kicks off the HTTP listener and router
 func (g *RESTGateway) Start() (err error) {
+
+	// Ensure the receipt store is initialized
+	if g.receipts == nil {
+		if _, err := g.InitReceiptStore(); err != nil {
+			return err
+		}
+	}
 
 	if *g.printYAML {
 		b, err := utils.MarshalToYAML(&g.conf)
@@ -257,31 +286,7 @@ func (g *RESTGateway) Start() (err error) {
 		g.smartContractGW.AddRoutes(router)
 	}
 
-	var receiptStoreConf *receipts.ReceiptStoreConf
-	var receiptStorePersistence receipts.ReceiptStorePersistence
-	if g.conf.MongoDB.URL != "" {
-		receiptStoreConf = &g.conf.MongoDB.ReceiptStoreConf
-		mongoStore := receipts.NewMongoReceipts(&g.conf.MongoDB)
-		receiptStorePersistence = mongoStore
-		if err = mongoStore.Connect(); err != nil {
-			return
-		}
-	} else if g.conf.LevelDB.Path != "" {
-		receiptStoreConf = &g.conf.LevelDB.ReceiptStoreConf
-		leveldbStore, errResult := receipts.NewLevelDBReceipts(&g.conf.LevelDB)
-		if errResult != nil {
-			err = errResult
-			return
-		}
-		receiptStorePersistence = leveldbStore
-	} else {
-		receiptStoreConf = &g.conf.MemStore
-		memStore := receipts.NewMemoryReceipts(&g.conf.MemStore)
-		receiptStorePersistence = memStore
-	}
-
 	router.GET("/status", g.statusHandler)
-	g.receipts = newReceiptStore(receiptStoreConf, receiptStorePersistence, g.smartContractGW)
 	g.receipts.addRoutes(router)
 	if len(g.conf.Kafka.Brokers) > 0 {
 		wk := newWebhooksKafka(&g.conf.Kafka, g.receipts)

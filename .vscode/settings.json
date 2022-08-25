@@ -9,6 +9,7 @@
     "ffcmocks",
     "fftypes",
     "hashicorp",
+    "idempotency",
     "Infof",
     "kvstore",
     "smconf",

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package rest
+package receipts
 
 import (
 	"container/list"
@@ -22,15 +22,15 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type memoryReceipts struct {
+type MemoryReceipts struct {
 	conf     *ReceiptStoreConf
 	receipts *list.List
 	byID     map[string]*map[string]interface{}
 	mux      sync.Mutex
 }
 
-func newMemoryReceipts(conf *ReceiptStoreConf) *memoryReceipts {
-	r := &memoryReceipts{
+func NewMemoryReceipts(conf *ReceiptStoreConf) *MemoryReceipts {
+	r := &MemoryReceipts{
 		conf:     conf,
 		receipts: list.New(),
 		byID:     make(map[string]*map[string]interface{}),
@@ -39,7 +39,11 @@ func newMemoryReceipts(conf *ReceiptStoreConf) *memoryReceipts {
 	return r
 }
 
-func (m *memoryReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to, start string) (*[]map[string]interface{}, error) {
+func (m *MemoryReceipts) Receipts() *list.List {
+	return m.receipts
+}
+
+func (m *MemoryReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to, start string) (*[]map[string]interface{}, error) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
@@ -59,7 +63,7 @@ func (m *memoryReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochMS
 	return &results, nil
 }
 
-func (m *memoryReceipts) GetReceipt(requestID string) (*map[string]interface{}, error) {
+func (m *MemoryReceipts) GetReceipt(requestID string) (*map[string]interface{}, error) {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 
@@ -70,7 +74,7 @@ func (m *memoryReceipts) GetReceipt(requestID string) (*map[string]interface{}, 
 	return nil, nil
 }
 
-func (m *memoryReceipts) AddReceipt(requestID string, receipt *map[string]interface{}, overwrite bool) error {
+func (m *MemoryReceipts) AddReceipt(requestID string, receipt *map[string]interface{}, overwrite bool) error {
 	m.mux.Lock()
 	defer m.mux.Unlock()
 

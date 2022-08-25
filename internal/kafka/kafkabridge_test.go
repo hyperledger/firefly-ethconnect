@@ -29,6 +29,7 @@ import (
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/internal/receipts"
 	"github.com/hyperledger/firefly-ethconnect/internal/tx"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -93,6 +94,10 @@ func (p *testKafkaMsgProcessor) OnMessage(msg tx.TxnContext) {
 	p.messages <- msg
 	return
 }
+
+func (p *testKafkaMsgProcessor) SetReceiptStoreForIdempotencyCheck(receiptStore receipts.ReceiptStorePersistence) {
+}
+
 func TestNewKafkaBridge(t *testing.T) {
 	assert := assert.New(t)
 

@@ -28,6 +28,7 @@ import (
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/internal/receipts"
 	"github.com/hyperledger/firefly-ethconnect/internal/utils"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	log "github.com/sirupsen/logrus"
@@ -47,6 +48,7 @@ type TxnProcessor interface {
 	OnMessage(TxnContext)
 	Init(eth.RPCClient)
 	ResolveAddress(from string) (resolvedFrom string, err error)
+	SetReceiptStoreForIdempotencyCheck(receiptStore receipts.ReceiptStorePersistence)
 }
 
 var highestID = 1000000
@@ -117,6 +119,7 @@ type txnProcessor struct {
 	concurrencySlots    chan bool
 	concurrency         int64
 	gasEstimationFactor float64
+	receiptStore        receipts.ReceiptStorePersistence
 
 	sendRetryForce    bool
 	sendRetryDelayMin time.Duration
@@ -169,6 +172,16 @@ func (p *txnProcessor) Init(rpc eth.RPCClient) {
 	if p.conf.SendRetryFactor != nil {
 		p.sendRetryFactor = *p.conf.SendRetryFactor
 	}
+}
+
+// SetReceiptStoreForIdempotencyCheck is for the common case, that we are running the REST API Gateway
+// component, and the Kafka Bridge component in the same address space.
+// When set, this allows us to re-do the idempotency check that can be used on the REST API Gateway
+// (see fly-acktype=receipt / kld-acktype=receipt) when we are passed messages by Kafka.
+// Then if due to a Kafka reconnect/failover of the consumer group, we have had a redelivery, we can
+// avoid resubmission.
+func (p *txnProcessor) SetReceiptStoreForIdempotencyCheck(receiptStore receipts.ReceiptStorePersistence) {
+	p.receiptStore = receiptStore
 }
 
 // CobraInitTxnProcessor sets the standard command-line parameters for the txnprocessor
@@ -293,21 +306,52 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.T
 	highestID++
 	var highestNonce int64 = -1
 	suppliedNonce := msg.Nonce
-	inflightForAddr, exists := p.inflightTxns[inflight.from]
+	inflightForAddr, alreadyInflightForAddr := p.inflightTxns[inflight.from]
 	// Add the inflight transaction to our tracking structure
-	newEntry := false
-	if !exists {
+	if !alreadyInflightForAddr {
 		inflightForAddr = &inflightTxnState{}
 		inflightForAddr.txnsInFlight = []*inflightTxn{}
 		// We don't want this new structure to be added in the case of an early return on failure, so
 		// we just mark here that it should be added, and it gets added only on the success path.
-		newEntry = true
+	}
+
+	// We do an additional idempotency check before accepting the in-flight messages from Kafka, because
+	// it might be a redelivery.
+	// We can only do the idempotency check if:
+	// 1. We are co-located with the REST API Gateway in the same go process
+	//    - Otherwise SetReceiptStoreForIdempotencyCheck() won't have been called to set p.receiptStore
+	// 2. The user specified fly-acktype=receipt on the REST API Gateway, which propagates into AckType on the message we receive
+	//    - This is the (slightly awkward) spelling to enable an idempotency check on the REST API Gateway
+	if p.receiptStore != nil && msg.AckType == "receipt" {
+		// First check the in-memory list
+		for _, inflight := range inflightForAddr.txnsInFlight {
+			if inflight.msgID == msg.Headers.ID {
+				log.Warnf("Kafka redelivery of message already inflight: %s", inflight.msgID)
+				// We don't send a new reply here - special nil return
+				return nil, nil
+			}
+		}
+		// Then check LevelDB
+		r, err := p.receiptStore.GetReceipt(msg.Headers.ID)
+		if err == nil {
+			return nil, err
+		}
+		if r != nil && (*r)["transactionHash"] != "" {
+			// We can't be sure we successfully sent the reply, so we still duplicate this
+			log.Warnf("Kafka redelivery of message already inflight: %s", inflight.msgID)
+			b, _ := json.Marshal(r)
+			var reply messages.TransactionReceipt
+			_ = json.Unmarshal(b, &reply)
+			// Dispatch the reply asynchronously
+			go inflight.txnContext.Reply(&reply)
+			return nil, nil
+		}
 	}
 
 	if !nodeAssignNonce && suppliedNonce == "" {
 		// Check the currently inflight txns to see if we have a high nonce to use without
 		// needing to query the node to find the highest nonce.
-		if exists {
+		if alreadyInflightForAddr {
 			highestNonce = inflightForAddr.highestNonce
 		}
 	}
@@ -357,7 +401,7 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.T
 	before := len(inflightForAddr.txnsInFlight)
 	inflightForAddr.txnsInFlight = append(inflightForAddr.txnsInFlight, inflight)
 	inflight.initialWaitDelay = p.inflightTxnDelayer.GetInitialDelay() // Must call under lock
-	if newEntry {
+	if !alreadyInflightForAddr {
 		p.inflightTxns[inflight.from] = inflightForAddr
 	}
 

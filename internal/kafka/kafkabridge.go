@@ -27,6 +27,7 @@ import (
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/internal/receipts"
 	"github.com/hyperledger/firefly-ethconnect/internal/tx"
 	"github.com/hyperledger/firefly-ethconnect/internal/utils"
 	log "github.com/sirupsen/logrus"
@@ -61,6 +62,11 @@ func (k *KafkaBridge) Conf() *KafkaBridgeConf {
 // SetConf sets the config for this bridge
 func (k *KafkaBridge) SetConf(conf *KafkaBridgeConf) {
 	k.conf = *conf
+}
+
+// See TxProcessor.SetReceiptStoreForIdempotencyCheck
+func (k *KafkaBridge) SetReceiptStoreForIdempotencyCheck(receiptStore receipts.ReceiptStorePersistence) {
+	k.processor.SetReceiptStoreForIdempotencyCheck(receiptStore)
 }
 
 // ValidateConf validates the configuration

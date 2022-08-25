@@ -168,8 +168,10 @@ func startServer() (err error) {
 
 	anyRoutineFinished := make(chan bool)
 	var dontPrintYaml = false
+	kafkaBridges := make([]*kafka.KafkaBridge, 0)
 	for name, conf := range serverConfig.KafkaBridges {
 		kafkaBridge := kafka.NewKafkaBridge(&dontPrintYaml)
+		kafkaBridges = append(kafkaBridges, kafkaBridge)
 		kafkaBridge.SetConf(conf)
 		if err := kafkaBridge.ValidateConf(); err != nil {
 			return err
@@ -199,7 +201,16 @@ func startServer() (err error) {
 			log.Infof("Starting REST gateway '%s'", name)
 			if err := restGateway.Start(); err != nil {
 				log.Errorf("REST gateway failed: %s", err)
+			} else if len(kafkaBridges) == 1 && len(serverConfig.RESTGateways) == 1 {
+				// This is a slightly awkward cross-component call, to account for the most popular pattern of usage:
+				// - Run in server mode
+				// - Single REST API Gateway
+				// - Single Kafka bridge co-located in the same process
+				// In this scenario, we can pass the receipt store to the Kafka bridge for it to do
+				// additional idempotency checks that prevent res-submission of transactions.
+				kafkaBridges[0].SetReceiptStoreForIdempotencyCheck(restGateway.ReceiptStorePersistence())
 			}
+
 			anyRoutineFinished <- true
 		}(name, anyRoutineFinished)
 	}

@@ -26,6 +26,7 @@ import (
 
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/internal/receipts"
 	"github.com/hyperledger/firefly-ethconnect/internal/tx"
 	"github.com/julienschmidt/httprouter"
 
@@ -41,10 +42,12 @@ func (p *mockProcessor) OnMessage(ctx tx.TxnContext) {
 	p.capturedCtx = ctx.(*msgContext)
 }
 func (p *mockProcessor) Init(eth.RPCClient) {}
+func (p *mockProcessor) SetReceiptStoreForIdempotencyCheck(receiptStore receipts.ReceiptStorePersistence) {
+}
 
-func newTestWebhooksDirect(maxMsgs int) (*webhooksDirect, *memoryReceipts, *mockProcessor) {
-	rsc := &ReceiptStoreConf{}
-	r := newMemoryReceipts(rsc)
+func newTestWebhooksDirect(maxMsgs int) (*webhooksDirect, *receipts.MemoryReceipts, *mockProcessor) {
+	rsc := &receipts.ReceiptStoreConf{}
+	r := receipts.NewMemoryReceipts(rsc)
 	rs := newReceiptStore(rsc, r, nil)
 	conf := &WebhooksDirectConf{
 		MaxInFlight: maxMsgs,
@@ -55,7 +58,7 @@ func newTestWebhooksDirect(maxMsgs int) (*webhooksDirect, *memoryReceipts, *mock
 	return wd, r, p
 }
 
-func newTestWebhooksDirectServer(maxMsgs int) (*webhooksDirect, *httptest.Server, *memoryReceipts, *mockProcessor) {
+func newTestWebhooksDirectServer(maxMsgs int) (*webhooksDirect, *httptest.Server, *receipts.MemoryReceipts, *mockProcessor) {
 	wd, r, p := newTestWebhooksDirect(maxMsgs)
 	router := &httprouter.Router{}
 	wh := newWebhooks(wd, wd.receipts, nil, nil, eth.EthCommonConf{})

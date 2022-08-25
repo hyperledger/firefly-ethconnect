@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package rest
+package receipts
 
 import (
 	"encoding/json"
@@ -86,7 +86,7 @@ func TestNewLevelDBReceiptsCreateOK(t *testing.T) {
 	conf := &LevelDBReceiptStoreConf{
 		Path: tmpdir,
 	}
-	r, err := newLevelDBReceipts(conf)
+	r, err := NewLevelDBReceipts(conf)
 	defer r.store.Close()
 	assert.Equal(conf, r.conf)
 	assert.Nil(err)
@@ -98,7 +98,7 @@ func TestLevelDBReceiptCreateErr(t *testing.T) {
 	conf := &LevelDBReceiptStoreConf{
 		Path: path.Join(tmpdir, "dummyfile"),
 	}
-	_, err := newLevelDBReceipts(conf)
+	_, err := NewLevelDBReceipts(conf)
 	assert.Regexp("Unable to open LevelDB: .*", err)
 }
 
@@ -108,7 +108,7 @@ func TestLevelDBReceiptsAddReceiptOK(t *testing.T) {
 	conf := &LevelDBReceiptStoreConf{
 		Path: tmpdir,
 	}
-	r, err := newLevelDBReceipts(conf)
+	r, err := NewLevelDBReceipts(conf)
 	defer r.store.Close()
 
 	receipt := make(map[string]interface{})
@@ -138,7 +138,7 @@ func TestLevelDBReceiptsAddReceiptIdempotencyCheck(t *testing.T) {
 	conf := &LevelDBReceiptStoreConf{
 		Path: tmpdir,
 	}
-	r, err := newLevelDBReceipts(conf)
+	r, err := NewLevelDBReceipts(conf)
 	defer r.store.Close()
 
 	receipt := make(map[string]interface{})
@@ -157,7 +157,7 @@ func TestLevelDBReceiptsAddReceiptOverwrite(t *testing.T) {
 	conf := &LevelDBReceiptStoreConf{
 		Path: tmpdir,
 	}
-	r, err := newLevelDBReceipts(conf)
+	r, err := NewLevelDBReceipts(conf)
 	defer r.store.Close()
 
 	receipt := make(map[string]interface{})
@@ -184,7 +184,7 @@ func TestLevelDBReceiptsAddReceiptFailed(t *testing.T) {
 	}
 	t1 := time.Unix(1000000, 0)
 	entropy := ulid.Monotonic(rand.New(rand.NewSource(t1.UnixNano())), 0)
-	r := &levelDBReceipts{
+	r := &LevelDBReceipts{
 		conf:      &LevelDBReceiptStoreConf{},
 		store:     kvstoreMock,
 		idEntropy: entropy,
@@ -201,7 +201,7 @@ func TestLevelDBReceiptsGetReceiptsOK(t *testing.T) {
 	conf := &LevelDBReceiptStoreConf{
 		Path: path.Join(tmpdir, "test1"),
 	}
-	r, err := newLevelDBReceipts(conf)
+	r, err := NewLevelDBReceipts(conf)
 	defer r.store.Close()
 
 	id1 := utils.UUIDv4()
@@ -236,7 +236,7 @@ func TestLevelDBReceiptsGetReceiptsWithStartEnd(t *testing.T) {
 	conf := &LevelDBReceiptStoreConf{
 		Path: path.Join(tmpdir, "test1"),
 	}
-	r, _ := newLevelDBReceipts(conf)
+	r, _ := NewLevelDBReceipts(conf)
 	defer r.store.Close()
 
 	id1 := utils.UUIDv4()
@@ -314,7 +314,7 @@ func TestLevelDBReceiptsFilterByIDs(t *testing.T) {
 	conf := &LevelDBReceiptStoreConf{
 		Path: path.Join(tmpdir, "test2"),
 	}
-	r, err := newLevelDBReceipts(conf)
+	r, err := NewLevelDBReceipts(conf)
 	defer r.store.Close()
 
 	now := time.Now()
@@ -357,7 +357,7 @@ func TestLevelDBReceiptsFilterByIDsAndFromTo(t *testing.T) {
 	conf := &LevelDBReceiptStoreConf{
 		Path: path.Join(tmpdir, "test3"),
 	}
-	r, err := newLevelDBReceipts(conf)
+	r, err := NewLevelDBReceipts(conf)
 	defer r.store.Close()
 
 	now := time.Now()
@@ -399,7 +399,7 @@ func TestLevelDBReceiptsFilterFromTo(t *testing.T) {
 	conf := &LevelDBReceiptStoreConf{
 		Path: path.Join(tmpdir, "test4"),
 	}
-	r, err := newLevelDBReceipts(conf)
+	r, err := NewLevelDBReceipts(conf)
 	defer r.store.Close()
 
 	now := time.Now()
@@ -453,7 +453,7 @@ func TestLevelDBReceiptsFilterNotFound(t *testing.T) {
 	conf := &LevelDBReceiptStoreConf{
 		Path: path.Join(tmpdir, "test6"),
 	}
-	r, err := newLevelDBReceipts(conf)
+	r, err := NewLevelDBReceipts(conf)
 	defer r.store.Close()
 
 	now := time.Now()
@@ -509,7 +509,7 @@ func TestLevelDBReceiptsGetReceiptOK(t *testing.T) {
 	conf := &LevelDBReceiptStoreConf{
 		Path: path.Join(tmpdir, "test7"),
 	}
-	r, err := newLevelDBReceipts(conf)
+	r, err := NewLevelDBReceipts(conf)
 	defer r.store.Close()
 	receipt1 := make(map[string]interface{})
 	receipt1["_id"] = "r1"
@@ -530,7 +530,7 @@ func TestLevelDBReceiptsGetReceiptsUnmarshalFailIgnoreReceipt(t *testing.T) {
 	conf := &LevelDBReceiptStoreConf{
 		Path: path.Join(tmpdir, "test8"),
 	}
-	r, err := newLevelDBReceipts(conf)
+	r, err := NewLevelDBReceipts(conf)
 	defer r.store.Close()
 	receipt1 := make(map[string]interface{})
 	receipt1["_id"] = "r1"
@@ -551,7 +551,7 @@ func TestLevelDBReceiptsGetReceiptNotFound(t *testing.T) {
 	conf := &LevelDBReceiptStoreConf{
 		Path: path.Join(tmpdir, "test6"),
 	}
-	r, _ := newLevelDBReceipts(conf)
+	r, _ := NewLevelDBReceipts(conf)
 	defer r.store.Close()
 
 	result, err := r.GetReceipt("receipt1")
@@ -565,7 +565,7 @@ func TestLevelDBReceiptsGetReceiptErrorID(t *testing.T) {
 	kvstoreMock := &mockKVStore{
 		err: fmt.Errorf("pop"),
 	}
-	r := &levelDBReceipts{
+	r := &LevelDBReceipts{
 		conf:  &LevelDBReceiptStoreConf{},
 		store: kvstoreMock,
 	}
@@ -582,7 +582,7 @@ func TestLevelDBReceiptsGetReceiptErrorGeneratedID(t *testing.T) {
 		getFailIdx: 1,
 		getVal:     []byte("generated-id"),
 	}
-	r := &levelDBReceipts{
+	r := &LevelDBReceipts{
 		conf:  &LevelDBReceiptStoreConf{},
 		store: kvstoreMock,
 	}
@@ -597,7 +597,7 @@ func TestLevelDBReceiptsGetReceiptBadDataID(t *testing.T) {
 	kvstoreMock := &mockKVStore{
 		getVal: []byte("!json"),
 	}
-	r := &levelDBReceipts{
+	r := &LevelDBReceipts{
 		conf:  &LevelDBReceiptStoreConf{},
 		store: kvstoreMock,
 	}
@@ -612,7 +612,7 @@ func TestGetReceiptsByLookupKeyLimit(t *testing.T) {
 	kvstoreMock := &mockKVStore{
 		getVal: []byte("{}"),
 	}
-	r := &levelDBReceipts{
+	r := &LevelDBReceipts{
 		conf:  &LevelDBReceiptStoreConf{},
 		store: kvstoreMock,
 	}
@@ -627,7 +627,7 @@ func TestGetReceiptsByLookupKeyGetFail(t *testing.T) {
 	kvstoreMock := &mockKVStore{
 		err: fmt.Errorf("pop"),
 	}
-	r := &levelDBReceipts{
+	r := &LevelDBReceipts{
 		conf:  &LevelDBReceiptStoreConf{},
 		store: kvstoreMock,
 	}
@@ -642,7 +642,7 @@ func TestGetReceiptsByLookupUnmarshalFail(t *testing.T) {
 	kvstoreMock := &mockKVStore{
 		getVal: []byte("!json"),
 	}
-	r := &levelDBReceipts{
+	r := &LevelDBReceipts{
 		conf:  &LevelDBReceiptStoreConf{},
 		store: kvstoreMock,
 	}

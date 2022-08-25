@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/internal/receipts"
 	"github.com/hyperledger/firefly-ethconnect/mocks/ethmocks"
 	"github.com/hyperledger/firefly-ethconnect/mocks/ffcapiconnectormocks"
 	"github.com/julienschmidt/httprouter"
@@ -127,8 +128,8 @@ func TestWebhookHandlerContractGWImmeidateReceiptSuccess(t *testing.T) {
 	}
 	deployMsgBytes, _ := json.Marshal(&deployMsg)
 	req, _ := http.NewRequest("POST", "/any", bytes.NewReader(deployMsgBytes))
-	r := newMemoryReceipts(&ReceiptStoreConf{})
-	rs := newReceiptStore(&ReceiptStoreConf{}, r, nil)
+	r := receipts.NewMemoryReceipts(&receipts.ReceiptStoreConf{})
+	rs := newReceiptStore(&receipts.ReceiptStoreConf{}, r, nil)
 	w := &webhooks{
 		smartContractGW: &mockContractGW{},
 		handler:         &mockHandler{},

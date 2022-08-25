@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package rest
+package receipts
 
 import (
 	"encoding/json"
@@ -30,7 +30,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
-type levelDBReceipts struct {
+type LevelDBReceipts struct {
 	conf         *LevelDBReceiptStoreConf
 	store        kvstore.KVStore
 	entropyLock  sync.Mutex
@@ -38,7 +38,7 @@ type levelDBReceipts struct {
 	defaultLimit int
 }
 
-func newLevelDBReceipts(conf *LevelDBReceiptStoreConf) (*levelDBReceipts, error) {
+func NewLevelDBReceipts(conf *LevelDBReceiptStoreConf) (*LevelDBReceipts, error) {
 	store, err := kvstore.NewLDBKeyValueStore(conf.Path)
 	if err != nil {
 		return nil, errors.Errorf(errors.ReceiptStoreLevelDBConnect, err)
@@ -46,7 +46,7 @@ func newLevelDBReceipts(conf *LevelDBReceiptStoreConf) (*levelDBReceipts, error)
 	t := time.Unix(1000000, 0)
 	entropy := ulid.Monotonic(rand.New(rand.NewSource(t.UnixNano())), 0)
 
-	return &levelDBReceipts{
+	return &LevelDBReceipts{
 		conf:         conf,
 		store:        store,
 		idEntropy:    entropy,
@@ -56,7 +56,7 @@ func newLevelDBReceipts(conf *LevelDBReceiptStoreConf) (*levelDBReceipts, error)
 
 // AddReceipt processes an individual reply message, and contains all errors
 // To account for any transitory failures writing to mongoDB, it retries adding receipt with a backoff
-func (l *levelDBReceipts) AddReceipt(requestID string, receipt *map[string]interface{}, overwrite bool) (err error) {
+func (l *LevelDBReceipts) AddReceipt(requestID string, receipt *map[string]interface{}, overwrite bool) (err error) {
 	// insert an entry with a composite key to track the insertion order
 	l.entropyLock.Lock()
 	newID := ulid.MustNew(ulid.Timestamp(time.Now()), l.idEntropy)
@@ -110,7 +110,7 @@ func (l *levelDBReceipts) AddReceipt(requestID string, receipt *map[string]inter
 }
 
 // GetReceipts Returns recent receipts with skip, limit and other query parameters
-func (l *levelDBReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to, start string) (*[]map[string]interface{}, error) {
+func (l *LevelDBReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to, start string) (*[]map[string]interface{}, error) {
 	// the application of the parameters are implemented to match mongo queries:
 	// - find the starting point:
 	//   - if "start" is present, use it
@@ -172,7 +172,7 @@ func (l *levelDBReceipts) GetReceipts(skip, limit int, ids []string, sinceEpochM
 	return &results, nil
 }
 
-func (l *levelDBReceipts) getReceiptsNoFilter(itr kvstore.KVIterator, skip, limit int, start string) []map[string]interface{} {
+func (l *LevelDBReceipts) getReceiptsNoFilter(itr kvstore.KVIterator, skip, limit int, start string) []map[string]interface{} {
 	results := []map[string]interface{}{}
 	index := 0
 	var valid bool
@@ -209,7 +209,7 @@ func (l *levelDBReceipts) getReceiptsNoFilter(itr kvstore.KVIterator, skip, limi
 }
 
 // getReply handles a HTTP request for an individual reply
-func (l *levelDBReceipts) GetReceipt(requestID string) (*map[string]interface{}, error) {
+func (l *LevelDBReceipts) GetReceipt(requestID string) (*map[string]interface{}, error) {
 	val, err := l.store.Get(requestID)
 	if err != nil {
 		if err == kvstore.ErrorNotFound {
@@ -235,7 +235,7 @@ func (l *levelDBReceipts) GetReceipt(requestID string) (*map[string]interface{},
 	return &result, nil
 }
 
-func (l *levelDBReceipts) findEndPoint(sinceEpochMS int64) string {
+func (l *LevelDBReceipts) findEndPoint(sinceEpochMS int64) string {
 	searchKey := fmt.Sprintf("receivedAt:%d:", sinceEpochMS)
 	itr := l.store.NewIterator()
 	defer itr.Release()
@@ -253,7 +253,7 @@ func (l *levelDBReceipts) findEndPoint(sinceEpochMS int64) string {
 	return ""
 }
 
-func (l *levelDBReceipts) getLookupKeysByIDs(ids []string, start, end string) []string {
+func (l *LevelDBReceipts) getLookupKeysByIDs(ids []string, start, end string) []string {
 	result := []string{}
 	for _, id := range ids {
 		val, err := l.store.Get(id)
@@ -271,7 +271,7 @@ func (l *levelDBReceipts) getLookupKeysByIDs(ids []string, start, end string) []
 	return result
 }
 
-func (l *levelDBReceipts) getLookupKeysByFromAndTo(from, to string, start, end string, limit int) []string {
+func (l *LevelDBReceipts) getLookupKeysByFromAndTo(from, to string, start, end string, limit int) []string {
 
 	var fromKeys []string
 	itr := l.store.NewIterator()
@@ -303,7 +303,7 @@ func (l *levelDBReceipts) getLookupKeysByFromAndTo(from, to string, start, end s
 	return result
 }
 
-func (l *levelDBReceipts) getLookupKeysByPrefix(itr kvstore.KVIterator, prefix string, limit int) []string {
+func (l *LevelDBReceipts) getLookupKeysByPrefix(itr kvstore.KVIterator, prefix string, limit int) []string {
 	lookupKeys := []string{}
 	count := 0
 	found := itr.Seek(prefix)
@@ -333,7 +333,7 @@ func (l *levelDBReceipts) getLookupKeysByPrefix(itr kvstore.KVIterator, prefix s
 	return lookupKeys
 }
 
-func (l *levelDBReceipts) getReceiptsByLookupKey(lookupKeys []string, limit int) *[]map[string]interface{} {
+func (l *LevelDBReceipts) getReceiptsByLookupKey(lookupKeys []string, limit int) *[]map[string]interface{} {
 	length := len(lookupKeys)
 	if limit > 0 && limit < length {
 		length = limit

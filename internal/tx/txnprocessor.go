@@ -270,9 +270,11 @@ func (p *txnProcessor) idempotencyCheck(inflight *inflightTxn, inflightForAddr *
 	}
 	if r == nil {
 		log.Warnf("Did not find acktype=receipt record in receipt store during dispatch: %s", inflight.msgID)
-	} else if _, alreadyDispatched := (*r)["transactionSubmitted"]; alreadyDispatched {
-		log.Warnf("Kafka redelivery of message already dispatched: %s", inflight.msgID)
-		return false, nil
+	} else if txHash, txHashSet := (*r)["transactionHash"]; txHashSet {
+		if hashString, ok := txHash.(string); ok && hashString != "" {
+			log.Warnf("Kafka redelivery of message already dispatched: %s", inflight.msgID)
+			return false, nil
+		}
 	}
 	return true, nil
 }
@@ -283,10 +285,9 @@ func (p *txnProcessor) idempotencyCheck(inflight *inflightTxn, inflightForAddr *
 func (p *txnProcessor) idempotencyUpdateSubmitted(inflight *inflightTxn) {
 	r, err := p.receiptStore.GetReceipt(inflight.msgID)
 	if r != nil && err == nil {
-		// We mark it submitted, and add the transaction hash - this means even if the reply doesn't get through,
+		// We mark it submitted by setting the transaction hash - this means even if the reply doesn't get through,
 		// anyone checking the receipt store will find the transaction hash and be able to call our API to
 		// check the chain directly for the receipt.
-		(*r)["transactionSubmitted"] = true
 		(*r)["transactionHash"] = inflight.tx.Hash
 		err = p.receiptStore.AddReceipt(inflight.msgID, r, true)
 	}

@@ -793,10 +793,10 @@ func TestOnSendTransactionMessageTxnIdempotentStoreOK(t *testing.T) {
 	mr := &receiptsmocks.ReceiptStorePersistence{}
 	txnProcessor.SetReceiptStoreForIdempotencyCheck(mr)
 	mr.On("GetReceipt", "id12345-idempotent").Return(&map[string]interface{}{
-		// no transactionSubmitted field
+		// no transactionHash field
 	}, nil)
 	mr.On("AddReceipt", "id12345-idempotent", mock.MatchedBy(func(r *map[string]interface{}) bool {
-		return (*r)["transactionSubmitted"] == true
+		return (*r)["transactionHash"] == "0xe2215336b09f9b5b82e36e1144ed64f40a42e61b68fdaca82549fd98b8531a89"
 	}), true).Return(nil).Once()
 
 	txnProcessor.OnMessage(testTxnContext)
@@ -872,10 +872,10 @@ func TestOnSendTransactionMessageTxnIdempotentStoreFail(t *testing.T) {
 	mr := &receiptsmocks.ReceiptStorePersistence{}
 	txnProcessor.SetReceiptStoreForIdempotencyCheck(mr)
 	mr.On("GetReceipt", "id12345-idempotent").Return(&map[string]interface{}{
-		// no transactionSubmitted field
+		// no transactionHash field
 	}, nil)
 	mr.On("AddReceipt", "id12345-idempotent", mock.MatchedBy(func(r *map[string]interface{}) bool {
-		return (*r)["transactionSubmitted"] == true
+		return (*r)["transactionHash"] == "0xe2215336b09f9b5b82e36e1144ed64f40a42e61b68fdaca82549fd98b8531a89"
 	}), true).Return(fmt.Errorf("pop")).Once() // swallowed with logging
 
 	txnProcessor.OnMessage(testTxnContext)
@@ -932,8 +932,7 @@ func TestOnSendTransactionMessageTxnIdempotentSkipDuplicate(t *testing.T) {
 	mr := &receiptsmocks.ReceiptStorePersistence{}
 	txnProcessor.SetReceiptStoreForIdempotencyCheck(mr)
 	mr.On("GetReceipt", "id12345-idempotent").Return(&map[string]interface{}{
-		"transactionSubmitted": true,
-		"transactionHash":      "0x12345",
+		"transactionHash": "0xe2215336b09f9b5b82e36e1144ed64f40a42e61b68fdaca82549fd98b8531a89",
 	}, nil).Once()
 
 	txnProcessor.OnMessage(testTxnContext)

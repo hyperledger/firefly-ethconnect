@@ -513,6 +513,8 @@ var (
 
 	// ReceiptStoreKeyNotUnique non-unique request ID
 	ReceiptStoreKeyNotUnique = e(100219, "Request ID is not unique")
+	// ReceiptErrorIdempotencyCheck failed to query receipt during idempotency check
+	ReceiptErrorIdempotencyCheck = e(100220, "Failed querying the receipt store, performing duplicate message check on ackmode=receipt for id %s: %s")
 )
 
 type EthconnectError interface {

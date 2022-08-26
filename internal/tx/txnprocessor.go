@@ -266,6 +266,7 @@ func (p *txnProcessor) idempotencyCheck(inflight *inflightTxn, inflightForAddr *
 	// Then check LevelDB - we should find the entry
 	r, err := p.receiptStore.GetReceipt(inflight.msgID)
 	if err != nil {
+		err = errors.Errorf(errors.ReceiptErrorIdempotencyCheck, inflight.msgID, err)
 		return false, err
 	}
 	if r == nil {

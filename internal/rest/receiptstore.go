@@ -140,9 +140,16 @@ func (r *receiptStore) processReply(msgBytes []byte) {
 	msgType := utils.GetMapString(headers, "type")
 	contractAddr := utils.GetMapString(parsedMsg, "contractAddress")
 	result := ""
-	if msgType == messages.MsgTypeError {
+	switch msgType {
+	case messages.MsgTypeError:
 		result = utils.GetMapString(parsedMsg, "errorMessage")
-	} else {
+	case messages.MsgTypeTransactionRedelivery:
+		// If we receive this, then the Kafka gateway must have written a reply to perform the idempotency check,
+		// and we don't want to overwrite the original reply if we have it. So just ignore it.
+		result = utils.GetMapString(parsedMsg, "transactionHash")
+		log.Warnf("Ignoring redelivery reply message. requestId='%s' reqOffset='%s' type='%s': %s", requestID, reqOffset, msgType, result)
+		return
+	default:
 		result = utils.GetMapString(parsedMsg, "transactionHash")
 	}
 	log.Infof("Received reply message. requestId='%s' reqOffset='%s' type='%s': %s", requestID, reqOffset, msgType, result)

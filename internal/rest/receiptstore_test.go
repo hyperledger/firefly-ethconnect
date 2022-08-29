@@ -567,6 +567,24 @@ func TestSendReplyBroadcast(t *testing.T) {
 	r.processReply(replyMsgBytes)
 }
 
+func TestSendReplyRedelivery(t *testing.T) {
+	assert := assert.New(t)
+	r, _ := newReceiptsTestStore(func(message interface{}) {
+		assert.NotNil(message)
+	})
+
+	replyMsg := &messages.TransactionReceipt{}
+	replyMsg.Headers.MsgType = messages.MsgTypeTransactionRedelivery
+	replyMsg.Headers.ID = utils.UUIDv4()
+	replyMsg.Headers.ReqID = utils.UUIDv4()
+	replyMsg.Headers.ReqOffset = "topic:1:2"
+	txHash := ethbind.API.HexToHash("0x02587104e9879911bea3d5bf6ccd7e1a6cb9a03145b8a1141804cebd6aa67c5c")
+	replyMsg.TransactionHash = &txHash
+	replyMsgBytes, _ := json.Marshal(&replyMsg)
+
+	r.processReply(replyMsgBytes)
+}
+
 func TestReserveID(t *testing.T) {
 	assert := assert.New(t)
 	r, _ := newReceiptsTestStore(func(message interface{}) {

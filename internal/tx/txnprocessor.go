@@ -274,6 +274,11 @@ func (p *txnProcessor) idempotencyCheck(inflight *inflightTxn, inflightForAddr *
 	} else if txHash, txHashSet := (*r)["transactionHash"]; txHashSet {
 		if hashString, ok := txHash.(string); ok && hashString != "" {
 			log.Warnf("Kafka redelivery of message already dispatched: %s", inflight.msgID)
+			// We need to call back to let the Kafka layer know this should be cancelled.
+			var notification messages.TransactionRedeliveryNotification
+			notification.Headers.MsgType = messages.MsgTypeTransactionRedelivery
+			notification.TransactionHash = hashString
+			go inflight.txnContext.Reply(&notification)
 			return false, nil
 		}
 	}
@@ -434,7 +439,7 @@ func (p *txnProcessor) addInflightWrapper(txnContext TxnContext, msg *messages.T
 		p.inflightTxns[inflight.from] = inflightForAddr
 	}
 
-	log.Infof("In-flight %d added. nonce=%d addr=%s before=%d (node=%t)", inflight.id, inflight.nonce, inflight.from, before, fromNode)
+	log.Infof("In-flight %s added (%d). nonce=%d addr=%s before=%d (node=%t)", inflight.msgID, inflight.id, inflight.nonce, inflight.from, before, fromNode)
 
 	return
 }
@@ -476,7 +481,7 @@ func (p *txnProcessor) cancelInFlight(inflight *inflightTxn, submitted bool) {
 
 	p.inflightTxnsLock.Unlock()
 
-	log.Infof("In-flight %d complete. nonce=%d addr=%s nan=%t sub=%t before=%d after=%d highest=%d", inflight.id, inflight.nonce, inflight.from, inflight.nodeAssignNonce, submitted, before, after, highestNonce)
+	log.Infof("In-flight %s complete (%d). nonce=%d addr=%s nan=%t sub=%t before=%d after=%d highest=%d", inflight.msgID, inflight.id, inflight.nonce, inflight.from, inflight.nodeAssignNonce, submitted, before, after, highestNonce)
 
 	// If we've got a gap potential, we need to submit a gap-fill TX
 	if !submitted && highestNonce > inflight.nonce && !inflight.nodeAssignNonce {

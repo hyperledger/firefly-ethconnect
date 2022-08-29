@@ -939,6 +939,14 @@ func TestOnSendTransactionMessageTxnIdempotentSkipDuplicate(t *testing.T) {
 	assert.Empty(t, txnProcessor.inflightTxns)
 
 	mr.AssertExpectations(t)
+
+	for {
+		if len(testTxnContext.replies) > 0 {
+			break
+		}
+		time.Sleep(10 * time.Microsecond)
+	}
+	assert.Equal(t, messages.MsgTypeTransactionRedelivery, testTxnContext.replies[0].ReplyHeaders().MsgType)
 }
 
 func TestOnSendTransactionMessageFailedTxn(t *testing.T) {

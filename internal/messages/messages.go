@@ -36,6 +36,8 @@ const (
 	MsgTypeTransactionSuccess = "TransactionSuccess"
 	// MsgTypeTransactionFailure - a transaction receipt where status is 0
 	MsgTypeTransactionFailure = "TransactionFailure"
+	// MsgTypeTransactionRedelivery - idempotency check caught a redelivery of the message
+	MsgTypeTransactionRedelivery = "TransactionRedelivery"
 	// RecordHeaderAccessToken - record header name for passing JWT token over messaging
 	RecordHeaderAccessToken = "fly-accesstoken"
 )
@@ -192,6 +194,14 @@ type TransactionReceipt struct {
 	TransactionIndexStr  string                `json:"transactionIndex"`
 	TransactionIndexHex  *ethbinding.HexUint   `json:"transactionIndexHex,omitempty"`
 	RegisterAs           string                `json:"registerAs,omitempty"`
+}
+
+// TransactionRedeliveryNotification is sent on redelivery of a message, when the ackmode=receipt
+// idempotency check is enabled. The REST API Gateway (or other consumer), should avoid overwriting
+// any received receipt when it gets this.
+type TransactionRedeliveryNotification struct {
+	ReplyCommon
+	TransactionHash string `json:"transactionHash"`
 }
 
 // TransactionInfo is the detailed transaction info returned by eth_getTransactionByXXXXX

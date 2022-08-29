@@ -146,7 +146,7 @@ func (k *KafkaBridge) addInflightMsg(msg *sarama.ConsumerMessage, producer Kafka
 	// is very important that the consumer of the wrapped context object calls Reply
 	pCtx = &ctx
 	k.inFlight[ctx.reqOffset] = pCtx
-	log.Infof("Message now in-flight: %s", pCtx)
+	log.Debugf("Message now in-flight: %s", pCtx)
 	// Attempt to process the headers from the original message,
 	// which could fail. In which case we still have a msgContext inflight
 	// that needs Reply (and offset commit). So our caller must
@@ -201,19 +201,19 @@ func (k *KafkaBridge) setInFlightComplete(ctx *msgContext, consumer KafkaConsume
 
 	// Build an offset sorted list of the inflight
 	ctx.complete = true
-	var completeInParition []*msgContext
+	var completeInPartition []*msgContext
 	for _, inflight := range k.inFlight {
 		if inflight.saramaMsg.Partition == ctx.saramaMsg.Partition {
-			completeInParition = append(completeInParition, inflight)
+			completeInPartition = append(completeInPartition, inflight)
 		}
 	}
-	sort.Sort(ctxByOffset(completeInParition))
+	sort.Sort(ctxByOffset(completeInPartition))
 
 	// Go forwards until the first that isn't complete
 	var readyToAck []*msgContext
-	for i := 0; i < len(completeInParition); i++ {
-		if completeInParition[i].complete {
-			readyToAck = append(readyToAck, completeInParition[i])
+	for i := 0; i < len(completeInPartition); i++ {
+		if completeInPartition[i].complete {
+			readyToAck = append(readyToAck, completeInPartition[i])
 		} else {
 			break
 		}
@@ -222,7 +222,7 @@ func (k *KafkaBridge) setInFlightComplete(ctx *msgContext, consumer KafkaConsume
 	canMark := len(readyToAck) > 0
 	log.Debugf("Ready=%d:%d CanMark=%t Infight=%d InflightSamePartition=%d ReadyToAck=%d",
 		ctx.saramaMsg.Partition, ctx.saramaMsg.Offset, canMark,
-		len(k.inFlight), len(completeInParition), len(readyToAck))
+		len(k.inFlight), len(completeInPartition), len(readyToAck))
 	if canMark {
 		// Remove all the ready-to-acks from the in-flight list
 		for i := 0; i < len(readyToAck); i++ {
@@ -346,7 +346,7 @@ func (k *KafkaBridge) ConsumerMessagesLoop(consumer KafkaConsumer, producer Kafk
 	log.Debugf("Kafka consumer loop started")
 	for msg := range consumer.Messages() {
 		k.inFlightCond.L.Lock()
-		log.Infof("Kafka consumer received message: Partition=%d Offset=%d", msg.Partition, msg.Offset)
+		log.Debugf("Kafka consumer received message: Partition=%d Offset=%d", msg.Partition, msg.Offset)
 
 		// We cannot build up an infinite number of messages in memory
 		for len(k.inFlight) >= k.conf.MaxInFlight {
@@ -362,6 +362,8 @@ func (k *KafkaBridge) ConsumerMessagesLoop(consumer KafkaConsumer, producer Kafk
 			// This was a dup
 		} else if err == nil {
 			// Dispatch for processing if we parsed the message successfully
+			headers := msgCtx.Headers()
+			log.Infof("Kafka consumer dispatching message '%s' Type=%s ID=%s", msgCtx.reqOffset, headers.MsgType, headers.ID)
 			k.processor.OnMessage(msgCtx)
 		} else {
 			// Dispatch a generic 'bad data' reply
@@ -400,7 +402,8 @@ func (k *KafkaBridge) ProducerSuccessLoop(consumer KafkaConsumer, producer Kafka
 		k.inFlightCond.L.Lock()
 		reqOffset := msg.Metadata.(string)
 		if ctx, ok := k.inFlight[reqOffset]; ok {
-			log.Infof("Reply sent: %s", ctx)
+			headers := ctx.Headers()
+			log.Infof("Kafka consumer replying to message '%s' Type=%s ID=%s", ctx.reqOffset, headers.MsgType, headers.ID)
 			// While still holding the lock, add this to the completed list
 			_ = k.setInFlightComplete(ctx, consumer)
 			// We've reduced the in-flight count - wake any waiting consumer go func

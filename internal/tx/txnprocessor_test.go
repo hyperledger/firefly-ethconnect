@@ -946,7 +946,7 @@ func TestOnSendTransactionMessageTxnIdempotentSkipDuplicate(t *testing.T) {
 		}
 		time.Sleep(10 * time.Microsecond)
 	}
-	assert.Equal(t, messages.MsgTypeTransactionRedelivery, testTxnContext.replies[0].ReplyHeaders().MsgType)
+	assert.Equal(t, messages.MsgTypeTransactionRedeliveryPrevented, testTxnContext.replies[0].ReplyHeaders().MsgType)
 }
 
 func TestOnSendTransactionMessageFailedTxn(t *testing.T) {

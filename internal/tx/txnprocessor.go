@@ -276,7 +276,7 @@ func (p *txnProcessor) idempotencyCheck(inflight *inflightTxn, inflightForAddr *
 			log.Warnf("Kafka redelivery of message already dispatched: %s", inflight.msgID)
 			// We need to call back to let the Kafka layer know this should be cancelled.
 			var notification messages.TransactionRedeliveryNotification
-			notification.Headers.MsgType = messages.MsgTypeTransactionRedelivery
+			notification.Headers.MsgType = messages.MsgTypeTransactionRedeliveryPrevented
 			notification.TransactionHash = hashString
 			go inflight.txnContext.Reply(&notification)
 			return false, nil

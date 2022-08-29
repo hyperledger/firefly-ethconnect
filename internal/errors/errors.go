@@ -515,6 +515,8 @@ var (
 	ReceiptStoreKeyNotUnique = e(100219, "Request ID is not unique")
 	// ReceiptErrorIdempotencyCheck failed to query receipt during idempotency check
 	ReceiptErrorIdempotencyCheck = e(100220, "Failed querying the receipt store, performing duplicate message check on ackmode=receipt for id %s: %s")
+	// ResubmissionPreventedCheckTransactionHash redelivery was prevented by the processor
+	ResubmissionPreventedCheckTransactionHash = e(100221, "Resubmission of this transaction was prevented by the REST API Gateway. Check the status of the transaction by the transaction hash")
 )
 
 type EthconnectError interface {

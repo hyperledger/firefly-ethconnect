@@ -143,12 +143,25 @@ func (r *receiptStore) processReply(msgBytes []byte) {
 	switch msgType {
 	case messages.MsgTypeError:
 		result = utils.GetMapString(parsedMsg, "errorMessage")
-	case messages.MsgTypeTransactionRedelivery:
-		// If we receive this, then the Kafka gateway must have written a reply to perform the idempotency check,
-		// and we don't want to overwrite the original reply if we have it. So just ignore it.
+	case messages.MsgTypeTransactionRedeliveryPrevented:
+		// If we receive this, then we need to make sure either:
+		// a) We have a good receipt in our DB already
+		// b) We swap the status into an error - as the application might have to check the transaction status themselves from the TX Hash
 		result = utils.GetMapString(parsedMsg, "transactionHash")
-		log.Warnf("Ignoring redelivery reply message. requestId='%s' reqOffset='%s' type='%s': %s", requestID, reqOffset, msgType, result)
-		return
+		existingReceipt, err := r.persistence.GetReceipt(requestID)
+		if err == nil && existingReceipt != nil {
+			existingHeaders := r.extractHeaders(*existingReceipt)
+			msgType := utils.GetMapString(existingHeaders, "type")
+			if msgType == messages.MsgTypeTransactionFailure || msgType == messages.MsgTypeTransactionSuccess {
+				// We already have a valid receipt - do not overwrite it
+				log.Warnf("Ignoring redelivery reply message. requestId='%s' reqOffset='%s' type='%s': %s", requestID, reqOffset, msgType, result)
+				return
+			}
+		}
+		// We need to switch to an error to let them know we cannot provide the receipt
+		idempotencyErr := errors.Errorf(errors.ResubmissionPreventedCheckTransactionHash)
+		parsedMsg["errorCode"] = idempotencyErr.Code()
+		parsedMsg["errorMessage"] = idempotencyErr.ErrorNoCode()
 	default:
 		result = utils.GetMapString(parsedMsg, "transactionHash")
 	}

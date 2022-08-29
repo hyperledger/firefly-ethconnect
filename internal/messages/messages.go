@@ -36,8 +36,8 @@ const (
 	MsgTypeTransactionSuccess = "TransactionSuccess"
 	// MsgTypeTransactionFailure - a transaction receipt where status is 0
 	MsgTypeTransactionFailure = "TransactionFailure"
-	// MsgTypeTransactionRedelivery - idempotency check caught a redelivery of the message
-	MsgTypeTransactionRedelivery = "TransactionRedelivery"
+	// MsgTypeTransactionRedeliveryPrevented - idempotency check caught a redelivery of the message
+	MsgTypeTransactionRedeliveryPrevented = "TransactionRedeliveryPrevented"
 	// RecordHeaderAccessToken - record header name for passing JWT token over messaging
 	RecordHeaderAccessToken = "fly-accesstoken"
 )

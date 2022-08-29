@@ -567,14 +567,14 @@ func TestSendReplyBroadcast(t *testing.T) {
 	r.processReply(replyMsgBytes)
 }
 
-func TestSendReplyRedelivery(t *testing.T) {
+func TestSendReplyRedeliveryStore(t *testing.T) {
 	assert := assert.New(t)
 	r, _ := newReceiptsTestStore(func(message interface{}) {
 		assert.NotNil(message)
 	})
 
 	replyMsg := &messages.TransactionReceipt{}
-	replyMsg.Headers.MsgType = messages.MsgTypeTransactionRedelivery
+	replyMsg.Headers.MsgType = messages.MsgTypeTransactionRedeliveryPrevented
 	replyMsg.Headers.ID = utils.UUIDv4()
 	replyMsg.Headers.ReqID = utils.UUIDv4()
 	replyMsg.Headers.ReqOffset = "topic:1:2"
@@ -583,6 +583,45 @@ func TestSendReplyRedelivery(t *testing.T) {
 	replyMsgBytes, _ := json.Marshal(&replyMsg)
 
 	r.processReply(replyMsgBytes)
+
+	rec, err := r.persistence.GetReceipt(replyMsg.Headers.ReqID)
+	assert.NoError(err)
+	assert.NotNil(rec)
+	assert.Equal(messages.MsgTypeTransactionRedeliveryPrevented, (*rec)["headers"].(map[string]interface{})["type"].(string))
+}
+
+func TestSendReplyRedeliverySkip(t *testing.T) {
+	assert := assert.New(t)
+	r, _ := newReceiptsTestStore(func(message interface{}) {
+		assert.NotNil(message)
+	})
+
+	reqID := utils.UUIDv4()
+	replyMsg := &messages.TransactionReceipt{}
+	replyMsg.Headers.MsgType = messages.MsgTypeTransactionSuccess
+	replyMsg.Headers.ID = utils.UUIDv4()
+	replyMsg.Headers.ReqID = reqID
+	replyMsg.Headers.ReqOffset = "topic:1:2"
+	txHash := ethbind.API.HexToHash("0x02587104e9879911bea3d5bf6ccd7e1a6cb9a03145b8a1141804cebd6aa67c5c")
+	replyMsg.TransactionHash = &txHash
+	replyMsgBytes, _ := json.Marshal(&replyMsg)
+
+	r.processReply(replyMsgBytes)
+
+	replyMsg = &messages.TransactionReceipt{}
+	replyMsg.Headers.MsgType = messages.MsgTypeTransactionRedeliveryPrevented
+	replyMsg.Headers.ID = utils.UUIDv4()
+	replyMsg.Headers.ReqID = reqID
+	replyMsg.Headers.ReqOffset = "topic:1:3"
+	replyMsg.TransactionHash = &txHash
+	replyMsgBytes, _ = json.Marshal(&replyMsg)
+
+	r.processReply(replyMsgBytes)
+
+	rec, err := r.persistence.GetReceipt(replyMsg.Headers.ReqID)
+	assert.NoError(err)
+	assert.NotNil(rec)
+	assert.Equal(messages.MsgTypeTransactionSuccess, (*rec)["headers"].(map[string]interface{})["type"].(string))
 }
 
 func TestReserveID(t *testing.T) {

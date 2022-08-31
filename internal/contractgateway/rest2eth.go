@@ -582,13 +582,14 @@ func (r *rest2eth) deployContract(res http.ResponseWriter, req *http.Request, fr
 		}
 	} else {
 		ack := !getFlyParamBool("noack", req) // turn on ack's by default
-		immediateReceipt := strings.EqualFold(getFlyParam("acktype", req), "receipt")
+		deployMsg.AckType = strings.ToLower(getFlyParam("acktype", req))
+		immediateReceipt := deployMsg.AckType == "receipt"
 
 		// Async messages are dispatched as generic map payloads.
 		// We are confident in the re-serialization here as we've deserialized from JSON then built our own structure
 		msgBytes, _ := json.Marshal(deployMsg)
 		var mapMsg map[string]interface{}
-		json.Unmarshal(msgBytes, &mapMsg)
+		_ = json.Unmarshal(msgBytes, &mapMsg)
 		if asyncResponse, status, err := r.asyncDispatcher.DispatchMsgAsync(req.Context(), mapMsg, ack, immediateReceipt); err != nil {
 			r.restErrReply(res, req, err, status)
 		} else {
@@ -630,7 +631,8 @@ func (r *rest2eth) sendTransaction(res http.ResponseWriter, req *http.Request, f
 		}
 	} else {
 		ack := !getFlyParamBool("noack", req) // turn on ack's by default
-		immediateReceipt := strings.EqualFold(getFlyParam("acktype", req), "receipt")
+		msg.AckType = strings.ToLower(getFlyParam("acktype", req))
+		immediateReceipt := msg.AckType == "receipt"
 
 		// Async messages are dispatched as generic map payloads.
 		// We are confident in the re-serialization here as we've deserialized from JSON then built our own structure

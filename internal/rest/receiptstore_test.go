@@ -28,6 +28,7 @@ import (
 	"github.com/hyperledger/firefly-ethconnect/internal/auth/authtest"
 	"github.com/hyperledger/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/internal/receipts"
 	"github.com/hyperledger/firefly-ethconnect/internal/utils"
 	"github.com/julienschmidt/httprouter"
 )
@@ -54,7 +55,7 @@ func (m *mockReceiptErrs) AddReceipt(requestID string, receipt *map[string]inter
 }
 
 func newReceiptsErrTestServer(err error) (*receiptStore, *httptest.Server) {
-	r := newReceiptStore(&ReceiptStoreConf{
+	r := newReceiptStore(&receipts.ReceiptStoreConf{
 		RetryTimeoutMS:      1,
 		RetryInitialDelayMS: 1,
 	}, &mockReceiptErrs{
@@ -67,20 +68,20 @@ func newReceiptsErrTestServer(err error) (*receiptStore, *httptest.Server) {
 	return r, httptest.NewServer(router)
 }
 
-func newReceiptsTestStore(replyCallback func(message interface{})) (*receiptStore, *memoryReceipts) {
+func newReceiptsTestStore(replyCallback func(message interface{})) (*receiptStore, *receipts.MemoryReceipts) {
 	gw := &mockContractGW{
 		replyCallback: replyCallback,
 	}
-	conf := &ReceiptStoreConf{
+	conf := &receipts.ReceiptStoreConf{
 		MaxDocs:    50,
 		QueryLimit: 50,
 	}
-	p := newMemoryReceipts(conf)
+	p := receipts.NewMemoryReceipts(conf)
 	r := newReceiptStore(conf, p, gw)
 	return r, p
 }
 
-func newReceiptsTestServer() (*receiptStore, *memoryReceipts, *httptest.Server) {
+func newReceiptsTestServer() (*receiptStore, *receipts.MemoryReceipts, *httptest.Server) {
 	r, p := newReceiptsTestStore(nil)
 	router := &httprouter.Router{}
 	r.addRoutes(router)
@@ -103,8 +104,8 @@ func TestReplyProcessorWithValidReply(t *testing.T) {
 
 	r.processReply(replyMsgBytes)
 
-	assert.Equal(1, p.receipts.Len())
-	front := *p.receipts.Front().Value.(*map[string]interface{})
+	assert.Equal(1, p.Receipts().Len())
+	front := *p.Receipts().Front().Value.(*map[string]interface{})
 	assert.Equal(replyMsg.Headers.ReqID, front["_id"])
 
 }
@@ -128,8 +129,8 @@ func TestReplyProcessorWithContractGWSuccess(t *testing.T) {
 
 	r.processReply(replyMsgBytes)
 
-	assert.Equal(1, p.receipts.Len())
-	front := *p.receipts.Front().Value.(*map[string]interface{})
+	assert.Equal(1, p.Receipts().Len())
+	front := *p.Receipts().Front().Value.(*map[string]interface{})
 	assert.Equal(replyMsg.Headers.ReqID, front["_id"])
 
 }
@@ -155,8 +156,8 @@ func TestReplyProcessorWithContractGWFailure(t *testing.T) {
 
 	r.processReply(replyMsgBytes)
 
-	assert.Equal(1, p.receipts.Len())
-	front := *p.receipts.Front().Value.(*map[string]interface{})
+	assert.Equal(1, p.Receipts().Len())
+	front := *p.Receipts().Front().Value.(*map[string]interface{})
 	assert.Equal(replyMsg.Headers.ReqID, front["_id"])
 
 }
@@ -183,7 +184,7 @@ func TestReplyProcessorWithInvalidReplySwallowsErr(t *testing.T) {
 }
 
 func TestReplyProcessorWithPeristenceErrorPanics(t *testing.T) {
-	r := newReceiptStore(&ReceiptStoreConf{
+	r := newReceiptStore(&receipts.ReceiptStoreConf{
 		RetryTimeoutMS:      1,
 		RetryInitialDelayMS: 1,
 	}, &mockReceiptErrs{
@@ -220,8 +221,8 @@ func TestReplyProcessorWithErrorReply(t *testing.T) {
 
 	r.processReply(replyMsgBytes)
 
-	assert.Equal(1, p.receipts.Len())
-	front := *p.receipts.Front().Value.(*map[string]interface{})
+	assert.Equal(1, p.Receipts().Len())
+	front := *p.Receipts().Front().Value.(*map[string]interface{})
 	assert.Equal(replyMsg.Headers.ReqID, front["_id"])
 	assert.Equal(replyMsg.ErrorMessage, front["errorMessage"])
 	assert.Equal(replyMsg.OriginalMessage, front["requestPayload"])
@@ -236,7 +237,7 @@ func TestReplyProcessorMissingHeaders(t *testing.T) {
 	msgBytes, _ := json.Marshal(&emptyMsg)
 	r.processReply(msgBytes)
 
-	assert.Equal(0, p.receipts.Len())
+	assert.Equal(0, p.Receipts().Len())
 }
 
 func TestReplyProcessorMissingRequestId(t *testing.T) {
@@ -249,7 +250,7 @@ func TestReplyProcessorMissingRequestId(t *testing.T) {
 
 	r.processReply(replyMsgBytes)
 
-	assert.Equal(0, p.receipts.Len())
+	assert.Equal(0, p.Receipts().Len())
 }
 
 func TestReplyProcessorInsertError(t *testing.T) {
@@ -263,7 +264,7 @@ func TestReplyProcessorInsertError(t *testing.T) {
 
 	r.processReply(replyMsgBytes)
 
-	assert.Equal(1, p.receipts.Len())
+	assert.Equal(1, p.Receipts().Len())
 }
 
 func testGETObject(ts *httptest.Server, path string) (int, map[string]interface{}, error) {
@@ -564,6 +565,63 @@ func TestSendReplyBroadcast(t *testing.T) {
 	replyMsgBytes, _ := json.Marshal(&replyMsg)
 
 	r.processReply(replyMsgBytes)
+}
+
+func TestSendReplyRedeliveryStore(t *testing.T) {
+	assert := assert.New(t)
+	r, _ := newReceiptsTestStore(func(message interface{}) {
+		assert.NotNil(message)
+	})
+
+	replyMsg := &messages.TransactionReceipt{}
+	replyMsg.Headers.MsgType = messages.MsgTypeTransactionRedeliveryPrevented
+	replyMsg.Headers.ID = utils.UUIDv4()
+	replyMsg.Headers.ReqID = utils.UUIDv4()
+	replyMsg.Headers.ReqOffset = "topic:1:2"
+	txHash := ethbind.API.HexToHash("0x02587104e9879911bea3d5bf6ccd7e1a6cb9a03145b8a1141804cebd6aa67c5c")
+	replyMsg.TransactionHash = &txHash
+	replyMsgBytes, _ := json.Marshal(&replyMsg)
+
+	r.processReply(replyMsgBytes)
+
+	rec, err := r.persistence.GetReceipt(replyMsg.Headers.ReqID)
+	assert.NoError(err)
+	assert.NotNil(rec)
+	assert.Equal(messages.MsgTypeTransactionRedeliveryPrevented, (*rec)["headers"].(map[string]interface{})["type"].(string))
+}
+
+func TestSendReplyRedeliverySkip(t *testing.T) {
+	assert := assert.New(t)
+	r, _ := newReceiptsTestStore(func(message interface{}) {
+		assert.NotNil(message)
+	})
+
+	reqID := utils.UUIDv4()
+	replyMsg := &messages.TransactionReceipt{}
+	replyMsg.Headers.MsgType = messages.MsgTypeTransactionSuccess
+	replyMsg.Headers.ID = utils.UUIDv4()
+	replyMsg.Headers.ReqID = reqID
+	replyMsg.Headers.ReqOffset = "topic:1:2"
+	txHash := ethbind.API.HexToHash("0x02587104e9879911bea3d5bf6ccd7e1a6cb9a03145b8a1141804cebd6aa67c5c")
+	replyMsg.TransactionHash = &txHash
+	replyMsgBytes, _ := json.Marshal(&replyMsg)
+
+	r.processReply(replyMsgBytes)
+
+	replyMsg = &messages.TransactionReceipt{}
+	replyMsg.Headers.MsgType = messages.MsgTypeTransactionRedeliveryPrevented
+	replyMsg.Headers.ID = utils.UUIDv4()
+	replyMsg.Headers.ReqID = reqID
+	replyMsg.Headers.ReqOffset = "topic:1:3"
+	replyMsg.TransactionHash = &txHash
+	replyMsgBytes, _ = json.Marshal(&replyMsg)
+
+	r.processReply(replyMsgBytes)
+
+	rec, err := r.persistence.GetReceipt(replyMsg.Headers.ReqID)
+	assert.NoError(err)
+	assert.NotNil(rec)
+	assert.Equal(messages.MsgTypeTransactionSuccess, (*rec)["headers"].(map[string]interface{})["type"].(string))
 }
 
 func TestReserveID(t *testing.T) {

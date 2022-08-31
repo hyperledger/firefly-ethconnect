@@ -32,6 +32,7 @@ import (
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger/firefly-ethconnect/internal/kafka"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/internal/receipts"
 	"github.com/hyperledger/firefly-ethconnect/internal/tx"
 	"github.com/hyperledger/firefly-ethconnect/internal/utils"
 	"github.com/hyperledger/firefly-ethconnect/internal/ws"
@@ -47,35 +48,12 @@ const (
 	MaxHeaderSize = 16 * 1024
 )
 
-// ReceiptStoreConf is the common configuration for all receipt stores
-type ReceiptStoreConf struct {
-	MaxDocs             int `json:"maxDocs"`
-	QueryLimit          int `json:"queryLimit"`
-	RetryInitialDelayMS int `json:"retryInitialDelay"`
-	RetryTimeoutMS      int `json:"retryTimeout"`
-}
-
-// MongoDBReceiptStoreConf is the configuration for a MongoDB receipt store
-type MongoDBReceiptStoreConf struct {
-	ReceiptStoreConf
-	URL              string `json:"url"`
-	Database         string `json:"database"`
-	Collection       string `json:"collection"`
-	ConnectTimeoutMS int    `json:"connectTimeout"`
-}
-
-// LevelDBReceiptStoreConf is the configuration for a LevelDB receipt store
-type LevelDBReceiptStoreConf struct {
-	ReceiptStoreConf
-	Path string `json:"path"`
-}
-
 // RESTGatewayConf defines the YAML config structure for a webhooks bridge instance
 type RESTGatewayConf struct {
 	Kafka    kafka.KafkaCommonConf                    `json:"kafka"`
-	MongoDB  MongoDBReceiptStoreConf                  `json:"mongodb"`
-	LevelDB  LevelDBReceiptStoreConf                  `json:"leveldb"`
-	MemStore ReceiptStoreConf                         `json:"memstore"`
+	MongoDB  receipts.MongoDBReceiptStoreConf         `json:"mongodb"`
+	LevelDB  receipts.LevelDBReceiptStoreConf         `json:"leveldb"`
+	MemStore receipts.ReceiptStoreConf                `json:"memstore"`
 	OpenAPI  contractgateway.SmartContractGatewayConf `json:"openapi"`
 	HTTP     struct {
 		LocalAddr string          `json:"localAddr"`
@@ -237,8 +215,42 @@ func (g *RESTGateway) newAccessTokenContextHandler(parent http.Handler) http.Han
 	})
 }
 
+// ReceiptStorePersistence allows other components to access the receipt store persistence for idempotency checks, when co-located in the same address space
+func (g *RESTGateway) InitReceiptStore() (receipts.ReceiptStorePersistence, error) {
+	var receiptStoreConf *receipts.ReceiptStoreConf
+	var receiptStorePersistence receipts.ReceiptStorePersistence
+	if g.conf.MongoDB.URL != "" {
+		receiptStoreConf = &g.conf.MongoDB.ReceiptStoreConf
+		mongoStore := receipts.NewMongoReceipts(&g.conf.MongoDB)
+		receiptStorePersistence = mongoStore
+		if err := mongoStore.Connect(); err != nil {
+			return nil, err
+		}
+	} else if g.conf.LevelDB.Path != "" {
+		receiptStoreConf = &g.conf.LevelDB.ReceiptStoreConf
+		leveldbStore, err := receipts.NewLevelDBReceipts(&g.conf.LevelDB)
+		if err != nil {
+			return nil, err
+		}
+		receiptStorePersistence = leveldbStore
+	} else {
+		receiptStoreConf = &g.conf.MemStore
+		memStore := receipts.NewMemoryReceipts(&g.conf.MemStore)
+		receiptStorePersistence = memStore
+	}
+	g.receipts = newReceiptStore(receiptStoreConf, receiptStorePersistence, g.smartContractGW)
+	return g.receipts.persistence, nil
+}
+
 // Start kicks off the HTTP listener and router
 func (g *RESTGateway) Start() (err error) {
+
+	// Ensure the receipt store is initialized
+	if g.receipts == nil {
+		if _, err := g.InitReceiptStore(); err != nil {
+			return err
+		}
+	}
 
 	if *g.printYAML {
 		b, err := utils.MarshalToYAML(&g.conf)
@@ -274,31 +286,7 @@ func (g *RESTGateway) Start() (err error) {
 		g.smartContractGW.AddRoutes(router)
 	}
 
-	var receiptStoreConf *ReceiptStoreConf
-	var receiptStorePersistence ReceiptStorePersistence
-	if g.conf.MongoDB.URL != "" {
-		receiptStoreConf = &g.conf.MongoDB.ReceiptStoreConf
-		mongoStore := newMongoReceipts(&g.conf.MongoDB)
-		receiptStorePersistence = mongoStore
-		if err = mongoStore.connect(); err != nil {
-			return
-		}
-	} else if g.conf.LevelDB.Path != "" {
-		receiptStoreConf = &g.conf.LevelDB.ReceiptStoreConf
-		leveldbStore, errResult := newLevelDBReceipts(&g.conf.LevelDB)
-		if errResult != nil {
-			err = errResult
-			return
-		}
-		receiptStorePersistence = leveldbStore
-	} else {
-		receiptStoreConf = &g.conf.MemStore
-		memStore := newMemoryReceipts(&g.conf.MemStore)
-		receiptStorePersistence = memStore
-	}
-
 	router.GET("/status", g.statusHandler)
-	g.receipts = newReceiptStore(receiptStoreConf, receiptStorePersistence, g.smartContractGW)
 	g.receipts.addRoutes(router)
 	if len(g.conf.Kafka.Brokers) > 0 {
 		wk := newWebhooksKafka(&g.conf.Kafka, g.receipts)

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package rest
+package receipts
 
 import (
 	"fmt"
@@ -118,7 +118,7 @@ func (m *mockQuery) One(result interface{}) error {
 func TestNewMongoReceipts(t *testing.T) {
 	assert := assert.New(t)
 	conf := &MongoDBReceiptStoreConf{}
-	r := newMongoReceipts(conf)
+	r := NewMongoReceipts(conf)
 	assert.Equal(conf, r.conf)
 }
 
@@ -126,7 +126,7 @@ func TestMongoReceiptsConnectOK(t *testing.T) {
 	assert := assert.New(t)
 
 	mgoMock := &mockMongo{connErr: nil}
-	r := &mongoReceipts{
+	r := &MongoReceipts{
 		conf: &MongoDBReceiptStoreConf{
 			ReceiptStoreConf: ReceiptStoreConf{MaxDocs: 123},
 			URL:              "testurl",
@@ -136,7 +136,7 @@ func TestMongoReceiptsConnectOK(t *testing.T) {
 		mgo: mgoMock,
 	}
 
-	err := r.connect()
+	err := r.Connect()
 	assert.NoError(err)
 	assert.Equal("testurl", mgoMock.url)
 	assert.Equal("testdb", mgoMock.databaseName)
@@ -149,12 +149,12 @@ func TestMongoReceiptsConnectConnErr(t *testing.T) {
 	assert := assert.New(t)
 
 	mgoMock := &mockMongo{connErr: fmt.Errorf("pop")}
-	r := &mongoReceipts{
+	r := &MongoReceipts{
 		conf: &MongoDBReceiptStoreConf{},
 		mgo:  mgoMock,
 	}
 
-	err := r.connect()
+	err := r.Connect()
 	assert.Regexp("Unable to connect to MongoDB: pop", err)
 }
 
@@ -163,12 +163,12 @@ func TestMongoReceiptsConnectCollErr(t *testing.T) {
 
 	mgoMock := &mockMongo{}
 	mgoMock.collection.collErr = fmt.Errorf("pop")
-	r := &mongoReceipts{
+	r := &MongoReceipts{
 		conf: &MongoDBReceiptStoreConf{},
 		mgo:  mgoMock,
 	}
 
-	err := r.connect()
+	err := r.Connect()
 	assert.NoError(err)
 }
 
@@ -177,12 +177,12 @@ func TestMongoReceiptsConnectIdxErr(t *testing.T) {
 
 	mgoMock := &mockMongo{}
 	mgoMock.collection.ensureIndexErr = fmt.Errorf("pop")
-	r := &mongoReceipts{
+	r := &MongoReceipts{
 		conf: &MongoDBReceiptStoreConf{},
 		mgo:  mgoMock,
 	}
 
-	err := r.connect()
+	err := r.Connect()
 	assert.Regexp("Unable to create index: pop", err)
 }
 
@@ -190,12 +190,12 @@ func TestMongoReceiptsInsertReceiptOK(t *testing.T) {
 	assert := assert.New(t)
 
 	mgoMock := &mockMongo{}
-	r := &mongoReceipts{
+	r := &MongoReceipts{
 		conf: &MongoDBReceiptStoreConf{},
 		mgo:  mgoMock,
 	}
 
-	r.connect()
+	r.Connect()
 	receipt := make(map[string]interface{})
 	err := r.AddReceipt("key", &receipt, false)
 	assert.NoError(err)
@@ -205,12 +205,12 @@ func TestMongoReceiptsUpsertReceiptOK(t *testing.T) {
 	assert := assert.New(t)
 
 	mgoMock := &mockMongo{}
-	r := &mongoReceipts{
+	r := &MongoReceipts{
 		conf: &MongoDBReceiptStoreConf{},
 		mgo:  mgoMock,
 	}
 
-	r.connect()
+	r.Connect()
 	receipt := make(map[string]interface{})
 	err := r.AddReceipt("key", &receipt, true)
 	assert.NoError(err)
@@ -221,12 +221,12 @@ func TestMongoReceiptsAddReceiptFailed(t *testing.T) {
 
 	mgoMock := &mockMongo{}
 	mgoMock.collection.insertErr = fmt.Errorf("pop")
-	r := &mongoReceipts{
+	r := &MongoReceipts{
 		conf: &MongoDBReceiptStoreConf{},
 		mgo:  mgoMock,
 	}
 
-	r.connect()
+	r.Connect()
 	receipt := make(map[string]interface{})
 	err := r.AddReceipt("key", &receipt, false)
 	assert.Regexp("pop", err)
@@ -236,7 +236,7 @@ func TestMongoReceiptsGetReceiptsOK(t *testing.T) {
 	assert := assert.New(t)
 
 	mgoMock := &mockMongo{}
-	r := &mongoReceipts{
+	r := &MongoReceipts{
 		conf: &MongoDBReceiptStoreConf{},
 		mgo:  mgoMock,
 	}
@@ -251,7 +251,7 @@ func TestMongoReceiptsGetReceiptsOK(t *testing.T) {
 		*resArray = append(*resArray, res2)
 	}
 
-	r.connect()
+	r.Connect()
 	results, err := r.GetReceipts(5, 2, nil, 0, "", "", "")
 	assert.NoError(err)
 	assert.Equal(5, mgoMock.collection.mockQuery.skip)
@@ -264,7 +264,7 @@ func TestMongoReceiptsFilter(t *testing.T) {
 	assert := assert.New(t)
 
 	mgoMock := &mockMongo{}
-	r := &mongoReceipts{
+	r := &MongoReceipts{
 		conf: &MongoDBReceiptStoreConf{},
 		mgo:  mgoMock,
 	}
@@ -279,7 +279,7 @@ func TestMongoReceiptsFilter(t *testing.T) {
 		*resArray = append(*resArray, res2)
 	}
 
-	r.connect()
+	r.Connect()
 	now := time.Now()
 	results, err := r.GetReceipts(0, 0, []string{"key1", "key2"}, now.UnixNano()/int64(time.Millisecond), "addr1", "addr2", "")
 	assert.NoError(err)
@@ -298,14 +298,14 @@ func TestMongoReceiptsGetReceiptsNotFound(t *testing.T) {
 	assert := assert.New(t)
 
 	mgoMock := &mockMongo{}
-	r := &mongoReceipts{
+	r := &MongoReceipts{
 		conf: &MongoDBReceiptStoreConf{},
 		mgo:  mgoMock,
 	}
 
 	mgoMock.collection.mockQuery.allErr = mgo.ErrNotFound
 
-	r.connect()
+	r.Connect()
 	results, err := r.GetReceipts(5, 2, nil, 0, "", "", "")
 	assert.NoError(err)
 	assert.Len(*results, 0)
@@ -315,14 +315,14 @@ func TestMongoReceiptsGetReceiptsError(t *testing.T) {
 	assert := assert.New(t)
 
 	mgoMock := &mockMongo{}
-	r := &mongoReceipts{
+	r := &MongoReceipts{
 		conf: &MongoDBReceiptStoreConf{},
 		mgo:  mgoMock,
 	}
 
 	mgoMock.collection.mockQuery.allErr = fmt.Errorf("pop")
 
-	r.connect()
+	r.Connect()
 	_, err := r.GetReceipts(5, 2, nil, 0, "", "", "")
 	assert.Regexp("pop", err)
 }
@@ -331,7 +331,7 @@ func TestMongoReceiptsGetReceiptOK(t *testing.T) {
 	assert := assert.New(t)
 
 	mgoMock := &mockMongo{}
-	r := &mongoReceipts{
+	r := &MongoReceipts{
 		conf: &MongoDBReceiptStoreConf{},
 		mgo:  mgoMock,
 	}
@@ -344,7 +344,7 @@ func TestMongoReceiptsGetReceiptOK(t *testing.T) {
 		*resMap = res1
 	}
 
-	r.connect()
+	r.Connect()
 	result, err := r.GetReceipt("receipt1")
 	assert.NoError(err)
 	assert.Equal("receipt1", (*result)["_id"])
@@ -355,14 +355,14 @@ func TestMongoReceiptsGetReceiptNotFound(t *testing.T) {
 	assert := assert.New(t)
 
 	mgoMock := &mockMongo{}
-	r := &mongoReceipts{
+	r := &MongoReceipts{
 		conf: &MongoDBReceiptStoreConf{},
 		mgo:  mgoMock,
 	}
 
 	mgoMock.collection.mockQuery.oneErr = mgo.ErrNotFound
 
-	r.connect()
+	r.Connect()
 	result, err := r.GetReceipt("receipt1")
 	assert.NoError(err)
 	assert.Nil(result)
@@ -372,14 +372,14 @@ func TestMongoReceiptsGetReceiptError(t *testing.T) {
 	assert := assert.New(t)
 
 	mgoMock := &mockMongo{}
-	r := &mongoReceipts{
+	r := &MongoReceipts{
 		conf: &MongoDBReceiptStoreConf{},
 		mgo:  mgoMock,
 	}
 
 	mgoMock.collection.mockQuery.oneErr = fmt.Errorf("pop")
 
-	r.connect()
+	r.Connect()
 	_, err := r.GetReceipt("receipt1")
 	assert.Regexp("pop", err)
 }

@@ -36,6 +36,7 @@ import (
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger/firefly-ethconnect/internal/kafka"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/internal/receipts"
 	"github.com/julienschmidt/httprouter"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -104,8 +105,8 @@ func newTestKafkaComon() *testKafkaCommon {
 }
 
 func newTestWebhooks() (*webhooks, *webhooksKafka, *testKafkaCommon, *httptest.Server) {
-	p := &memoryReceipts{}
-	r := newReceiptStore(&ReceiptStoreConf{}, p, nil)
+	p := &receipts.MemoryReceipts{}
+	r := newReceiptStore(&receipts.ReceiptStoreConf{}, p, nil)
 	k := newTestKafkaComon()
 	wk := newWebhooksKafkaBase(r)
 	wk.kafka = k

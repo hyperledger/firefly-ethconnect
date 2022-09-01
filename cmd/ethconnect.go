@@ -188,7 +188,7 @@ func startServer() (err error) {
 		// In this scenario, we can pass the receipt store to the Kafka bridge for it to do
 		// additional idempotency checks that prevent res-submission of transactions.
 		if idempotencyCheckReceiptStore == nil {
-			idempotencyCheckReceiptStore, err = restGateway.InitReceiptStore()
+			idempotencyCheckReceiptStore, err = restGateway.Init()
 			if err != nil {
 				return err
 			}

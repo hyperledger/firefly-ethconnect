@@ -216,7 +216,36 @@ func (g *RESTGateway) newAccessTokenContextHandler(parent http.Handler) http.Han
 }
 
 // ReceiptStorePersistence allows other components to access the receipt store persistence for idempotency checks, when co-located in the same address space
-func (g *RESTGateway) InitReceiptStore() (receipts.ReceiptStorePersistence, error) {
+func (g *RESTGateway) Init() (receipts.ReceiptStorePersistence, error) {
+
+	tlsConfig, err := utils.CreateTLSConfiguration(&g.conf.HTTP.TLS)
+	if err != nil {
+		return nil, err
+	}
+
+	router := httprouter.New()
+
+	var processor tx.TxnProcessor
+	var rpcClient eth.RPCClient
+	if g.conf.RPC.URL != "" || g.conf.OpenAPI.StoragePath != "" {
+		rpcClient, err = eth.RPCConnect(&g.conf.RPC)
+		if err != nil {
+			return nil, err
+		}
+		processor = tx.NewTxnProcessor(&g.conf.TxnProcessorConf, &g.conf.RPCConf)
+		processor.Init(rpcClient)
+	}
+
+	g.ws.AddRoutes(router)
+
+	if g.conf.OpenAPI.StoragePath != "" {
+		g.smartContractGW, err = contractgateway.NewSmartContractGateway(&g.conf.OpenAPI, &g.conf.TxnProcessorConf, rpcClient, processor, g, g.ws)
+		if err != nil {
+			return nil, err
+		}
+		g.smartContractGW.AddRoutes(router)
+	}
+
 	var receiptStoreConf *receipts.ReceiptStoreConf
 	var receiptStorePersistence receipts.ReceiptStorePersistence
 	if g.conf.MongoDB.URL != "" {
@@ -238,55 +267,9 @@ func (g *RESTGateway) InitReceiptStore() (receipts.ReceiptStorePersistence, erro
 		memStore := receipts.NewMemoryReceipts(&g.conf.MemStore)
 		receiptStorePersistence = memStore
 	}
-	g.receipts = newReceiptStore(receiptStoreConf, receiptStorePersistence, g.smartContractGW)
-	return g.receipts.persistence, nil
-}
-
-// Start kicks off the HTTP listener and router
-func (g *RESTGateway) Start() (err error) {
-
-	// Ensure the receipt store is initialized
-	if g.receipts == nil {
-		if _, err := g.InitReceiptStore(); err != nil {
-			return err
-		}
-	}
-
-	if *g.printYAML {
-		b, err := utils.MarshalToYAML(&g.conf)
-		print("# YAML Configuration snippet for REST Gateway\n" + string(b))
-		return err
-	}
-
-	tlsConfig, err := utils.CreateTLSConfiguration(&g.conf.HTTP.TLS)
-	if err != nil {
-		return
-	}
-
-	router := httprouter.New()
-
-	var processor tx.TxnProcessor
-	var rpcClient eth.RPCClient
-	if g.conf.RPC.URL != "" || g.conf.OpenAPI.StoragePath != "" {
-		rpcClient, err = eth.RPCConnect(&g.conf.RPC)
-		if err != nil {
-			return err
-		}
-		processor = tx.NewTxnProcessor(&g.conf.TxnProcessorConf, &g.conf.RPCConf)
-		processor.Init(rpcClient)
-	}
-
-	g.ws.AddRoutes(router)
-
-	if g.conf.OpenAPI.StoragePath != "" {
-		g.smartContractGW, err = contractgateway.NewSmartContractGateway(&g.conf.OpenAPI, &g.conf.TxnProcessorConf, rpcClient, processor, g, g.ws)
-		if err != nil {
-			return err
-		}
-		g.smartContractGW.AddRoutes(router)
-	}
 
 	router.GET("/status", g.statusHandler)
+	g.receipts = newReceiptStore(receiptStoreConf, receiptStorePersistence, g.smartContractGW)
 	g.receipts.addRoutes(router)
 	if len(g.conf.Kafka.Brokers) > 0 {
 		wk := newWebhooksKafka(&g.conf.Kafka, g.receipts)
@@ -302,6 +285,25 @@ func (g *RESTGateway) Start() (err error) {
 		TLSConfig:      tlsConfig,
 		Handler:        g.newAccessTokenContextHandler(router),
 		MaxHeaderBytes: MaxHeaderSize,
+	}
+
+	return g.receipts.persistence, nil
+}
+
+// Start kicks off the HTTP listener and router
+func (g *RESTGateway) Start() (err error) {
+
+	if *g.printYAML {
+		b, err := utils.MarshalToYAML(&g.conf)
+		print("# YAML Configuration snippet for REST Gateway\n" + string(b))
+		return err
+	}
+
+	// Check we're initialized (caller can choose to call init explicitly)
+	if g.receipts == nil {
+		if _, err = g.Init(); err != nil {
+			return err
+		}
 	}
 
 	readyToListen := make(chan bool)

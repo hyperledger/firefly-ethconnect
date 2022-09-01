@@ -64,7 +64,6 @@ endef
 $(eval $(call makemock, internal/contractregistry, ContractStore,           contractregistrymocks))
 $(eval $(call makemock, internal/contractregistry, RemoteRegistry,          contractregistrymocks))
 $(eval $(call makemock, internal/eth,              RPCClient,               ethmocks))
-$(eval $(call makemock, internal/ffcapiconnector,  FFCServer,               ffcapiconnectormocks))
 $(eval $(call makemock, internal/receipts,         ReceiptStorePersistence, receiptsmocks))
 $(eval $(call makemock, $$(SARAMA_PATH),           Client,                  saramamocks))
 $(eval $(call makemock, $$(SARAMA_PATH),           ConsumerGroup,           saramamocks))

@@ -217,6 +217,7 @@ func (s *webSocketServer) processReplies() {
 		s.mux.Lock()
 		wsconns := getConnListFromMap(s.replyMap)
 		s.mux.Unlock()
+		log.Debugf("Sending reply to %d WS connections", len(wsconns))
 		s.broadcastToConnections(wsconns, message)
 	}
 }

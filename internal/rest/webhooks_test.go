@@ -28,7 +28,6 @@ import (
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
 	"github.com/hyperledger/firefly-ethconnect/internal/receipts"
 	"github.com/hyperledger/firefly-ethconnect/mocks/ethmocks"
-	"github.com/hyperledger/firefly-ethconnect/mocks/ffcapiconnectormocks"
 	"github.com/julienschmidt/httprouter"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 	"github.com/stretchr/testify/assert"
@@ -229,40 +228,6 @@ func TestWebhookHandlerTransaction(t *testing.T) {
 	err = json.Unmarshal(data, &asyncResponse)
 	assert.NoError(err)
 	assert.Regexp(regexp.MustCompile(`\w{8}-\w{4}-\w{4}-\w{4}-\w{12}`), asyncResponse.Request)
-}
-
-func TestWebhookHandlerFFCAPI(t *testing.T) {
-	assert := assert.New(t)
-
-	req, _ := http.NewRequest("POST", "/any", bytes.NewReader([]byte(`{
-		"ffcapi": {
-			"version": "v1.0.0",
-			"id": "904F177C-C790-4B01-BDF4-F2B4E52E607E",
-			"type": "get_block_info_by_number"
-		},
-		"blockNumber": "12345"
-	}`)))
-	ffcMocks := &ffcapiconnectormocks.FFCServer{}
-	ffcMocks.On("ServeFFCAPI", mock.Anything, mock.Anything, mock.Anything).Return().Run(func(args mock.Arguments) {
-		w := args[2].(http.ResponseWriter)
-		w.Write([]byte(`{"ok": true}`))
-	})
-
-	w := &webhooks{
-		smartContractGW: &mockContractGW{},
-		handler:         &mockHandler{},
-		ffc:             ffcMocks,
-	}
-	rec := httptest.NewRecorder()
-	w.webhookHandler(rec, req, false)
-	res := rec.Result()
-	assert.Equal(200, res.StatusCode)
-
-	defer res.Body.Close()
-	var resMap map[string]interface{}
-	json.NewDecoder(res.Body).Decode(&resMap)
-	assert.True(resMap["ok"].(bool))
-
 }
 
 func TestWebhookHandlerTransactionWithID(t *testing.T) {

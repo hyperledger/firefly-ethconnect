@@ -2,33 +2,13 @@
 
 ## EthConnect - Hyperledger FireFly connector for Ethereum networks
 
-This repo has evolved and now contains two related components of the Hyperledger FireFly
-ecosystem.
+This repo contains the original implementation of the FireFly Connector
+for Ethereum networks.
 
-## 1) FireFly EthConnect FFCAPI Connector - for public networks
-
-See [FireFly architecture for public chains](https://hyperledger.github.io/firefly/overview/public_vs_permissioned.html#firefly-architecture-for-public-chains) in the Hyperledger FireFly
-documentation for details on how the requirements for transaction
-management in public chains (confirmations, gas management, policy-based
-transaction re-submission) are managed.
-
-In this architecture, the policy engine of
-[FireFly Transaction Manager](https://github.com/hyperledger/firefly-transaction-manager) works in tandem with FireFly Core to form a sophisticated "brain" for managing
-transactions through from submission to eventual mining (whether that
-takes seconds, hours or days).
-
-The connectors themselves are highly pluggable, and easy to build for a new
-blockchain ecosystem. The first reference implementation of the FireFly Connector API (FFCAPI)
-is provided in this repo:
-
-- See the [internal/ffcapiconnector](./internal/ffcapiconnector) folder for that implementation
-
-> A separate trimmed-down repository containing just a reference FFCAPI connector
-> for EVM-based blockchain networks is a roadmap item for the Hyperledger FireFly community.
-> Related to this is the [hyperledger/firefly-signer](https://github.com/hyperledger/firefly-signer)
-> repo, which contains RLP encoding, and signing utility functions (Apache 2.0 licensed).
-
-## 2) FireFly EthConnect REST Gateway - for permissioned chains
+> For new projects, you are recommended to use the full Hyperledger FireFly
+> project stack - and consider using the new\
+> [EVMConnect](https://github.com/hyperledger/firefly-evmconnect) connector
+> for connectivity to your EVM based chains (whether public, or private).
 
 Since creation in 2018 a large amount of function has evolved through
 use in production projects. Primarily this function has been driven by

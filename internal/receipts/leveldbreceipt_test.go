@@ -47,7 +47,13 @@ func (m *mockKVStore) Get(key string) ([]byte, error) {
 	}
 	return m.getVal, m.err
 }
+func (m *mockKVStore) GetJSON(key string, obj interface{}) error {
+	return m.err
+}
 func (m *mockKVStore) Put(key string, val []byte) error {
+	return m.err
+}
+func (m *mockKVStore) PutJSON(key string, val interface{}) error {
 	return m.err
 }
 func (m *mockKVStore) Delete(key string) error {
@@ -56,7 +62,7 @@ func (m *mockKVStore) Delete(key string) error {
 func (m *mockKVStore) NewIterator() kvstore.KVIterator {
 	return nil
 }
-func (m *mockKVStore) NewIteratorWithRange(keyRange interface{}) kvstore.KVIterator {
+func (m *mockKVStore) NewIteratorWithRange(keyRange *kvstore.Range) kvstore.KVIterator {
 	return nil
 }
 

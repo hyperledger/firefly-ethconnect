@@ -17,6 +17,7 @@ package contractregistry
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -24,7 +25,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-openapi/spec"
@@ -32,6 +32,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	ethconnecterrors "github.com/hyperledger/firefly-ethconnect/internal/errors"
+	"github.com/hyperledger/firefly-ethconnect/internal/kvstore"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
 )
 
@@ -39,6 +40,11 @@ const (
 	// DefaultABICacheSize is the number of entries we will hold in a LRU cache for ABIs
 	DefaultABICacheSize = 25
 )
+
+type StoredABI struct {
+	ABIInfo
+	DeployMsg *messages.DeployContract `json:"deployMsg"`
+}
 
 type ContractResolver interface {
 	ResolveContractAddress(registeredName string) (string, error)
@@ -52,35 +58,36 @@ type ContractStore interface {
 	Init() error
 	Close()
 	AddContract(addrHexNo0x, abiID, pathName, registerAs string) (*ContractInfo, error)
-	AddABI(id string, deployMsg *messages.DeployContract, createdTime time.Time) *ABIInfo
+	AddABI(id string, deployMsg *messages.DeployContract, createdTime time.Time) (*ABIInfo, error)
 	AddRemoteInstance(lookupStr, address string) error
 	GetLocalABIInfo(abiID string) (*ABIInfo, error)
-	ListContracts() []messages.TimeSortable
-	ListABIs() []messages.TimeSortable
+	ListContracts() ([]messages.TimeSortable, error)
+	ListABIs() ([]messages.TimeSortable, error)
 }
 
 type ContractStoreConf struct {
-	StoragePath string `json:"storagePath"`
-	BaseURL     string `json:"baseURL"`
+	StoragePath  string `json:"storagePath"`
+	BaseURL      string `json:"baseURL"`
+	ABICacheSize *int   `json:"abiCacheSize"`
 }
 
 type contractStore struct {
-	conf                  *ContractStoreConf
-	rr                    RemoteRegistry
-	contractIndex         map[string]messages.TimeSortable
-	contractRegistrations map[string]*ContractInfo
-	idxLock               sync.Mutex
-	abiIndex              map[string]messages.TimeSortable
-	abiCache              *lru.Cache
+	conf     *ContractStoreConf
+	rr       RemoteRegistry
+	db       kvstore.KVStore
+	abiCache *lru.Cache
 }
+
+const (
+	ldbRegisteredNamePrefix  = "registered_name"
+	ldbContractAddressPrefix = "contract_address"
+	ldbABIIDPrefix           = "abi_id"
+)
 
 func NewContractStore(conf *ContractStoreConf, rr RemoteRegistry) ContractStore {
 	return &contractStore{
-		conf:                  conf,
-		rr:                    rr,
-		contractIndex:         make(map[string]messages.TimeSortable),
-		contractRegistrations: make(map[string]*ContractInfo),
-		abiIndex:              make(map[string]messages.TimeSortable),
+		conf: conf,
+		rr:   rr,
 	}
 }
 
@@ -158,23 +165,22 @@ func (cs *contractStore) AddContract(addrHexNo0x, abiID, pathName, registerAs st
 }
 
 func (cs *contractStore) storeContractInfo(info *ContractInfo) error {
-	if err := cs.addToContractIndex(info); err != nil {
+	if err := cs.addToContractNameIndex(info); err != nil {
 		return err
 	}
-	infoFile := path.Join(cs.conf.StoragePath, "contract_"+info.Address+".instance.json")
-	instanceBytes, _ := json.MarshalIndent(info, "", "  ")
-	log.Infof("%s: Storing contract instance JSON to '%s'", info.ABI, infoFile)
-	if err := ioutil.WriteFile(infoFile, instanceBytes, 0664); err != nil {
-		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreContractSave, err)
-	}
-	return nil
+	log.Infof("%s: Storing contract instance JSON for address '%s'", info.ABI, info.Address)
+	return cs.db.PutJSON(fmt.Sprintf("%s/%s", ldbContractAddressPrefix, info.Address), info)
 }
 
 func (cs *contractStore) ResolveContractAddress(registeredName string) (string, error) {
 	nameUnescaped, _ := url.QueryUnescape(registeredName)
-	info, exists := cs.contractRegistrations[nameUnescaped]
-	if !exists {
+	key := fmt.Sprintf("%s/%s", ldbRegisteredNamePrefix, nameUnescaped)
+	var info ContractInfo
+	err := cs.db.GetJSON(key, &info)
+	if err == kvstore.ErrorNotFound {
 		return "", ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreContractLoad, registeredName)
+	} else if err != nil {
+		return "", err
 	}
 	log.Infof("%s -> 0x%s", registeredName, info.Address)
 	return info.Address, nil
@@ -182,23 +188,50 @@ func (cs *contractStore) ResolveContractAddress(registeredName string) (string, 
 
 func (cs *contractStore) GetContractByAddress(addrHex string) (*ContractInfo, error) {
 	addrHexNo0x := strings.TrimPrefix(strings.ToLower(addrHex), "0x")
-	info, exists := cs.contractIndex[addrHexNo0x]
-	if !exists {
+	var info ContractInfo
+	err := cs.db.GetJSON(fmt.Sprintf("%s/%s", ldbContractAddressPrefix, addrHexNo0x), &info)
+	if err == kvstore.ErrorNotFound {
 		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreContractNotFound, addrHexNo0x)
 	}
-	return info.(*ContractInfo), nil
+	if err != nil {
+		return nil, err
+	}
+	return &info, nil
+}
+
+func (cs *contractStore) AddABI(abiID string, deployMsg *messages.DeployContract, createdTime time.Time) (*ABIInfo, error) {
+	storedABI := &StoredABI{
+		ABIInfo: ABIInfo{
+			ID:              abiID,
+			Name:            deployMsg.ContractName,
+			Description:     deployMsg.Description,
+			Deployable:      len(deployMsg.Compiled) > 0,
+			CompilerVersion: deployMsg.CompilerVersion,
+			Path:            "/abis/" + abiID,
+			SwaggerURL:      cs.conf.BaseURL + "/abis/" + abiID + "?swagger",
+			TimeSorted: messages.TimeSorted{
+				CreatedISO8601: createdTime.UTC().Format(time.RFC3339),
+			},
+		},
+		DeployMsg: deployMsg,
+	}
+	err := cs.db.PutJSON(fmt.Sprintf("%s/%s", ldbABIIDPrefix, abiID), storedABI)
+	if err != nil {
+		return nil, err
+	}
+	return &storedABI.ABIInfo, nil
+}
+
+func (cs *contractStore) GetLocalABIInfo(abiID string) (info *ABIInfo, err error) {
+	return info, cs.db.GetJSON(fmt.Sprintf("%s/%s", ldbABIIDPrefix, abiID), &info)
 }
 
 func (cs *contractStore) GetABI(location ABILocation, refresh bool) (deployMsg *DeployContractWithAddress, err error) {
 	if !refresh {
 		if cached, ok := cs.abiCache.Get(location); ok {
 			result := cached.(*DeployContractWithAddress)
-			if result != nil && result.Contract != nil {
-				log.Infof("Loaded contract from cache: %+v", location)
-				return result, nil
-			} else {
-				log.Warnf("Contract was cached in memory but was nil: %+v", location)
-			}
+			log.Infof("Loaded contract from cache: %+v", location)
+			return result, nil
 		}
 	}
 
@@ -209,8 +242,7 @@ func (cs *contractStore) GetABI(location ABILocation, refresh bool) (deployMsg *
 	case RemoteInstance:
 		deployMsg, err = cs.rr.LoadFactoryForInstance(location.Name, refresh)
 	case LocalABI:
-		deployMsg = &DeployContractWithAddress{}
-		deployMsg.Contract, _, err = cs.getLocalABI(location.Name)
+		deployMsg, err = cs.getDeployContractByABIID(location.Name)
 	default:
 		panic("unknown ABI type") // should not happen
 	}
@@ -223,44 +255,20 @@ func (cs *contractStore) GetABI(location ABILocation, refresh bool) (deployMsg *
 	return deployMsg, nil
 }
 
-func (cs *contractStore) getLocalABI(abiID string) (*messages.DeployContract, *ABIInfo, error) {
-	info, err := cs.GetLocalABIInfo(abiID)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	msg, err := cs.loadDeployMsg(abiID)
-	if err != nil || msg == nil {
-		return nil, nil, err
-	}
-
-	return msg, info, nil
-}
-
-func (cs *contractStore) GetLocalABIInfo(abiID string) (*ABIInfo, error) {
-	ts, exists := cs.abiIndex[abiID]
-	if !exists {
+func (cs *contractStore) getDeployContractByABIID(abiID string) (*DeployContractWithAddress, error) {
+	var storedABI StoredABI
+	err := cs.db.GetJSON(fmt.Sprintf("%s/%s", ldbABIIDPrefix, abiID), &storedABI)
+	if err == kvstore.ErrorNotFound {
 		log.Infof("ABI with ID %s not found locally", abiID)
 		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABINotFound, abiID)
 	}
-	return ts.(*ABIInfo), nil
-}
-
-func (cs *contractStore) loadDeployMsg(abiID string) (*messages.DeployContract, error) {
-	deployFile := path.Join(cs.conf.StoragePath, "abi_"+abiID+".deploy.json")
-	deployBytes, err := ioutil.ReadFile(deployFile)
 	if err != nil {
-		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABILoad, abiID, err)
+		return nil, err
 	}
-	msg := &messages.DeployContract{}
-	if err = json.Unmarshal(deployBytes, msg); err != nil {
-		return nil, ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayLocalStoreABIParse, abiID, err)
-	}
-	return msg, nil
+	return &DeployContractWithAddress{Contract: storedABI.DeployMsg}, nil
 }
 
-func (cs *contractStore) buildIndex() {
-	log.Infof("Building installed smart contract index")
+func (cs *contractStore) migrateFilesToLevelDB() {
 	legacyContractMatcher, _ := regexp.Compile(`^contract_([0-9a-z]{40})\.swagger\.json$`)
 	instanceMatcher, _ := regexp.Compile(`^contract_([0-9a-z]{40})\.instance\.json$`)
 	abiMatcher, _ := regexp.Compile(`^abi_([0-9a-z-]+)\.deploy.json$`)
@@ -270,26 +278,50 @@ func (cs *contractStore) buildIndex() {
 		return
 	}
 	for _, file := range files {
-		fileName := file.Name()
-		legacyContractGroups := legacyContractMatcher.FindStringSubmatch(fileName)
-		abiGroups := abiMatcher.FindStringSubmatch(fileName)
-		instanceGroups := instanceMatcher.FindStringSubmatch(fileName)
-		if legacyContractGroups != nil {
-			cs.migrateLegacyContract(legacyContractGroups[1], path.Join(cs.conf.StoragePath, fileName), file.ModTime())
-		} else if instanceGroups != nil {
-			cs.addFileToContractIndex(instanceGroups[1], path.Join(cs.conf.StoragePath, fileName))
-		} else if abiGroups != nil {
-			cs.addFileToABIIndex(abiGroups[1], path.Join(cs.conf.StoragePath, fileName), file.ModTime())
+		if !file.IsDir() {
+			fileName := file.Name()
+			log.Infof("Checking file for LevelDB migration: %s", fileName)
+			legacyContractGroups := legacyContractMatcher.FindStringSubmatch(fileName)
+			abiGroups := abiMatcher.FindStringSubmatch(fileName)
+			instanceGroups := instanceMatcher.FindStringSubmatch(fileName)
+			cleanup := false
+			if legacyContractGroups != nil {
+				cleanup = cs.migrateLegacyContractFile(legacyContractGroups[1], path.Join(cs.conf.StoragePath, fileName), file.ModTime())
+			} else if instanceGroups != nil {
+				cleanup = cs.migrateContractFile(instanceGroups[1], path.Join(cs.conf.StoragePath, fileName), file.ModTime())
+			} else if abiGroups != nil {
+				cleanup = cs.migrateABIFile(abiGroups[1], path.Join(cs.conf.StoragePath, fileName), file.ModTime())
+			}
+			if cleanup {
+				cs.cleanupMigratedFile(fileName)
+			}
 		}
 	}
-	log.Infof("Smart contract index built. %d entries", len(cs.contractIndex))
+}
+
+func (cs *contractStore) cleanupMigratedFile(fileName string) {
+	if err := os.Remove(fileName); err != nil {
+		log.Errorf("Failed to clean-up migrated file %s: %s", fileName, err)
+	}
 }
 
 func (cs *contractStore) Init() (err error) {
-	if cs.abiCache, err = lru.New(DefaultABICacheSize); err != nil {
+	if cs.conf.StoragePath == "" {
+		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayMissingStoragePath, err)
+	}
+
+	cacheSize := DefaultABICacheSize
+	if cs.conf.ABICacheSize != nil {
+		cacheSize = *cs.conf.ABICacheSize
+	}
+	if cs.abiCache, err = lru.New(cacheSize); err != nil {
 		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayResourceErr, err)
 	}
-	cs.buildIndex()
+	dbPath := path.Join(cs.conf.StoragePath, "contractsdb")
+	if cs.db, err = kvstore.NewLDBKeyValueStore(dbPath); err != nil {
+		return err
+	}
+	cs.migrateFilesToLevelDB()
 	return cs.rr.Init()
 }
 
@@ -297,22 +329,66 @@ func (cs *contractStore) Close() {
 	cs.rr.Close()
 }
 
-func (cs *contractStore) migrateLegacyContract(address, fileName string, createdTime time.Time) {
+func (cs *contractStore) migrateABIFile(abiID, fileName string, createdTime time.Time) bool {
+	log.Infof("Migrating ABI file to LevelDB: %s", fileName)
+	abiFile, err := os.OpenFile(fileName, os.O_RDONLY, 0)
+	if err != nil {
+		log.Errorf("Failed to load ABI info file %s: %s", fileName, err)
+		return false
+	}
+	defer abiFile.Close()
+	var msg messages.DeployContract
+	err = json.NewDecoder(bufio.NewReader(abiFile)).Decode(&msg)
+	if err != nil {
+		log.Errorf("Failed to parse ABI info file %s: %s", fileName, err)
+		return false
+	}
+	if _, err := cs.AddABI(abiID, &msg, createdTime); err != nil {
+		log.Errorf("Failed to migrate ABI file into LevelDB: %s", err)
+		return false
+	}
+	return true
+}
+
+func (cs *contractStore) migrateContractFile(address, fileName string, createdTime time.Time) bool {
+	log.Infof("Migrating Contract Info file to LevelDB: %s", fileName)
+	contractFile, err := os.OpenFile(fileName, os.O_RDONLY, 0)
+	if err != nil {
+		log.Errorf("Failed to load contract info file %s: %s", fileName, err)
+		return false
+	}
+	defer contractFile.Close()
+	var info ContractInfo
+	err = json.NewDecoder(bufio.NewReader(contractFile)).Decode(&info)
+	if err != nil {
+		log.Errorf("Failed to parse contract info file %s: %s", fileName, err)
+		return false
+	}
+	if err := cs.storeContractInfo(&info); err != nil {
+		log.Errorf("Failed to migrate contract file into LevelDB: %s", err)
+		return false
+	}
+
+	return true
+}
+
+func (cs *contractStore) migrateLegacyContractFile(address, fileName string, createdTime time.Time) bool {
+	log.Infof("Migrating Legacy Swagger Contract file to LevelDB: %s", fileName)
 	swaggerFile, err := os.OpenFile(fileName, os.O_RDONLY, 0)
 	if err != nil {
 		log.Errorf("Failed to load Swagger file %s: %s", fileName, err)
-		return
+		return false
 	}
 	defer swaggerFile.Close()
 	var swagger spec.Swagger
 	err = json.NewDecoder(bufio.NewReader(swaggerFile)).Decode(&swagger)
 	if err != nil {
 		log.Errorf("Failed to parse Swagger file %s: %s", fileName, err)
-		return
+		return false
 	}
 	if swagger.Info == nil {
 		log.Errorf("Failed to migrate invalid Swagger file %s", fileName)
-		return
+		return false
 	}
 	var registeredAs string
 	if ext, exists := swagger.Info.Extensions["x-firefly-registered-name"]; exists {
@@ -321,53 +397,15 @@ func (cs *contractStore) migrateLegacyContract(address, fileName string, created
 	if ext, exists := swagger.Info.Extensions["x-firefly-deployment-id"]; exists {
 		_, err := cs.AddContract(address, ext.(string), address, registeredAs)
 		if err != nil {
-			log.Errorf("Failed to write migrated instance file: %s", err)
-			return
+			log.Errorf("Failed to write migrated instance file to LevelDB: %s", err)
+			return false
 		}
-
-		if err := os.Remove(fileName); err != nil {
-			log.Errorf("Failed to clean-up migrated file %s: %s", fileName, err)
-		}
-
 	} else {
 		log.Warnf("Swagger cannot be migrated due to missing 'x-firefly-deployment-id' extension: %s", fileName)
+		return false
 	}
 
-}
-
-func (cs *contractStore) addFileToContractIndex(address, fileName string) {
-	contractFile, err := os.OpenFile(fileName, os.O_RDONLY, 0)
-	if err != nil {
-		log.Errorf("Failed to load contract instance file %s: %s", fileName, err)
-		return
-	}
-	defer contractFile.Close()
-	var contractInfo ContractInfo
-	err = json.NewDecoder(bufio.NewReader(contractFile)).Decode(&contractInfo)
-	if err != nil {
-		log.Errorf("Failed to parse contract instance deployment file %s: %s", fileName, err)
-		return
-	}
-	err = cs.addToContractIndex(&contractInfo)
-	if err != nil {
-		log.Errorf("Failed to add to contract index %s: %s", fileName, err)
-	}
-}
-
-func (cs *contractStore) addFileToABIIndex(id, fileName string, createdTime time.Time) {
-	deployFile, err := os.OpenFile(fileName, os.O_RDONLY, 0)
-	if err != nil {
-		log.Errorf("Failed to load ABI deployment file %s: %s", fileName, err)
-		return
-	}
-	defer deployFile.Close()
-	var deployMsg messages.DeployContract
-	err = json.NewDecoder(bufio.NewReader(deployFile)).Decode(&deployMsg)
-	if err != nil {
-		log.Errorf("Failed to parse ABI deployment file %s: %s", fileName, err)
-		return
-	}
-	cs.AddABI(id, &deployMsg, createdTime)
+	return true
 }
 
 func (cs *contractStore) CheckNameAvailable(registerAs string, isRemote bool) error {
@@ -380,76 +418,67 @@ func (cs *contractStore) CheckNameAvailable(registerAs string, isRemote bool) er
 		}
 		return nil
 	}
-	if existing, exists := cs.contractRegistrations[registerAs]; exists {
-		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayFriendlyNameClash, existing.Address, registerAs)
+	var info ContractInfo
+	err := cs.db.GetJSON(fmt.Sprintf("%s/%s", ldbRegisteredNamePrefix, registerAs), &info)
+	if err == nil {
+		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayFriendlyNameClash, info.Address, registerAs)
+	}
+	if err != kvstore.ErrorNotFound {
+		return err
 	}
 	return nil
 }
 
-func (cs *contractStore) addToContractIndex(info *ContractInfo) error {
-	cs.idxLock.Lock()
-	defer cs.idxLock.Unlock()
-	if info.RegisteredAs != "" {
-		// Protect against overwrite
-		if err := cs.CheckNameAvailable(info.RegisteredAs, false); err != nil {
-			return err
-		}
-		log.Infof("Registering %s as '%s'", info.Address, info.RegisteredAs)
-		cs.contractRegistrations[info.RegisteredAs] = info
+func (cs *contractStore) addToContractNameIndex(info *ContractInfo) error {
+	if info.RegisteredAs == "" {
+		return nil
 	}
-	cs.contractIndex[info.Address] = info
-	return nil
-}
-
-func (cs *contractStore) AddABI(id string, deployMsg *messages.DeployContract, createdTime time.Time) *ABIInfo {
-	cs.idxLock.Lock()
-	info := &ABIInfo{
-		ID:              id,
-		Name:            deployMsg.ContractName,
-		Description:     deployMsg.Description,
-		Deployable:      len(deployMsg.Compiled) > 0,
-		CompilerVersion: deployMsg.CompilerVersion,
-		Path:            "/abis/" + id,
-		SwaggerURL:      cs.conf.BaseURL + "/abis/" + id + "?swagger",
-		TimeSorted: messages.TimeSorted{
-			CreatedISO8601: createdTime.UTC().Format(time.RFC3339),
-		},
+	// Protect against overwrite
+	if err := cs.CheckNameAvailable(info.RegisteredAs, false); err != nil {
+		return err
 	}
-	cs.abiIndex[id] = info
-	cs.idxLock.Unlock()
-	return info
+	log.Infof("Registering %s as '%s'", info.Address, info.RegisteredAs)
+	return cs.db.PutJSON(fmt.Sprintf("%s/%s", ldbRegisteredNamePrefix, info.RegisteredAs), info)
 }
 
 func (cs *contractStore) AddRemoteInstance(lookupStr, address string) error {
 	return cs.rr.RegisterInstance(lookupStr, address)
 }
 
-func (cs *contractStore) ListContracts() []messages.TimeSortable {
-	cs.idxLock.Lock()
-	retval := make([]messages.TimeSortable, 0, len(cs.contractIndex))
-	for _, info := range cs.contractIndex {
-		retval = append(retval, info)
+func (cs *contractStore) ListContracts() ([]messages.TimeSortable, error) {
+	retval := make([]messages.TimeSortable, 0)
+	it := cs.db.NewIteratorWithRange(&kvstore.Range{
+		Start: []byte(ldbContractAddressPrefix + "/"),
+		Limit: []byte(ldbContractAddressPrefix + "0"),
+	})
+	for it.Next() {
+		var info ContractInfo
+		if err := it.ValueJSON(&info); err != nil {
+			return nil, err
+		}
+		retval = append(retval, &info)
 	}
-	cs.idxLock.Unlock()
-
-	// Do the sort by Title then Address
 	sort.Slice(retval, func(i, j int) bool {
 		return retval[i].IsLessThan(retval[i], retval[j])
 	})
-	return retval
+	return retval, nil
 }
 
-func (cs *contractStore) ListABIs() []messages.TimeSortable {
-	cs.idxLock.Lock()
-	retval := make([]messages.TimeSortable, 0, len(cs.abiIndex))
-	for _, info := range cs.abiIndex {
-		retval = append(retval, info)
+func (cs *contractStore) ListABIs() ([]messages.TimeSortable, error) {
+	retval := make([]messages.TimeSortable, 0)
+	it := cs.db.NewIteratorWithRange(&kvstore.Range{
+		Start: []byte(ldbABIIDPrefix + "/"),
+		Limit: []byte(ldbABIIDPrefix + "0"),
+	})
+	for it.Next() {
+		var info ABIInfo // we only de-serialize the ABIInfo part of the full record
+		if err := it.ValueJSON(&info); err != nil {
+			return nil, err
+		}
+		retval = append(retval, &info)
 	}
-	cs.idxLock.Unlock()
-
-	// Do the sort by Title then Address
 	sort.Slice(retval, func(i, j int) bool {
 		return retval[i].IsLessThan(retval[i], retval[j])
 	})
-	return retval
+	return retval, nil
 }

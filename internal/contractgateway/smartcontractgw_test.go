@@ -104,6 +104,7 @@ func TestNewSmartContractGatewayWithEvents(t *testing.T) {
 			SubscriptionManagerConf: events.SubscriptionManagerConf{
 				EventLevelDBPath: path.Join(dir, "db"),
 			},
+			StoragePath: dir,
 		},
 		&tx.TxnProcessorConf{
 			OrionPrivateAPIS: true,
@@ -126,6 +127,7 @@ func TestNewSmartContractGatewayWithEventsFail(t *testing.T) {
 			SubscriptionManagerConf: events.SubscriptionManagerConf{
 				EventLevelDBPath: dbpath,
 			},
+			StoragePath: dir,
 		},
 		&tx.TxnProcessorConf{
 			OrionPrivateAPIS: true,
@@ -166,12 +168,9 @@ func TestPreDeployCompileAndPostDeploy(t *testing.T) {
 	assert.NotEmpty(msg.Compiled)
 	assert.NotEmpty(msg.DevDoc)
 
-	deployStashBytes, err := ioutil.ReadFile(path.Join(dir, "abi_message1.deploy.json"))
+	dmsg, err := scgw.(*smartContractGW).cs.GetABI(contractregistry.ABILocation{ABIType: contractregistry.LocalABI, Name: "message1"}, false)
 	assert.NoError(err)
-	var deployStash messages.DeployContract
-	err = json.Unmarshal(deployStashBytes, &deployStash)
-	assert.NoError(err)
-	assert.NotEmpty(deployStash.CompilerVersion)
+	assert.NotEmpty(dmsg.Contract.CompilerVersion)
 
 	contractAddr := ethbind.API.HexToAddress("0x0123456789AbcdeF0123456789abCdef01234567")
 	receipt := messages.TransactionReceipt{
@@ -372,10 +371,13 @@ func TestRegisterExistingContract(t *testing.T) {
 
 func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
 
 	scgw, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
-			BaseURL: "http://localhost/api/v1",
+			BaseURL:     "http://localhost/api/v1",
+			StoragePath: dir,
 		},
 		&tx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
@@ -519,10 +521,13 @@ func TestRemoteRegistrySwaggerOrABI(t *testing.T) {
 
 func TestRemoteRegistryBadABI(t *testing.T) {
 	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
 
 	scgw, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
-			BaseURL: "http://localhost/api/v1",
+			BaseURL:     "http://localhost/api/v1",
+			StoragePath: dir,
 		},
 		&tx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
@@ -664,9 +669,11 @@ func TestRegisterContractBadABI(t *testing.T) {
 
 func TestPreDeployCompileFailure(t *testing.T) {
 	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
 	s, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
-			StoragePath: "/anypath",
+			StoragePath: dir,
 		},
 		&tx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
@@ -679,28 +686,6 @@ func TestPreDeployCompileFailure(t *testing.T) {
 	}
 	err := scgw.PreDeploy(msg)
 	assert.Regexp("Solidity compilation failed", err.Error())
-}
-
-func TestPreDeployMsgWrite(t *testing.T) {
-	assert := assert.New(t)
-	dir := tempdir()
-	defer cleanup(dir)
-	s, _ := NewSmartContractGateway(
-		&SmartContractGatewayConf{
-			StoragePath: path.Join(dir, "badpath"),
-		},
-		&tx.TxnProcessorConf{
-			OrionPrivateAPIS: false,
-		},
-		nil, nil, nil, nil,
-	)
-	scgw := s.(*smartContractGW)
-	msg := &messages.DeployContract{
-		Solidity: simpleEventsSource(),
-	}
-
-	err := scgw.writeAbiInfo("request1", msg)
-	assert.Regexp("Failed to write deployment details", err.Error())
 }
 
 func TestPostDeployNoRegisteredName(t *testing.T) {
@@ -1834,12 +1819,15 @@ func TestSuspendNoSubMgr(t *testing.T) {
 
 func TestWithEventsAuthRequiresAuth(t *testing.T) {
 	assert := assert.New(t)
+	dir := tempdir()
+	defer cleanup(dir)
 
 	auth.RegisterSecurityModule(&authtest.TestSecurityModule{})
 
 	scgw, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
-			BaseURL: "http://localhost/api/v1",
+			BaseURL:     "http://localhost/api/v1",
+			StoragePath: dir,
 		},
 		&tx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
@@ -1866,6 +1854,8 @@ func TestWithEventsAuthRequiresAuth(t *testing.T) {
 func TestSendReplyBroadcast(t *testing.T) {
 	assert := assert.New(t)
 	testMessage := "hello world"
+	dir := tempdir()
+	defer cleanup(dir)
 
 	ws := &mockWebSocketServer{
 		testChan: make(chan interface{}),
@@ -1873,7 +1863,8 @@ func TestSendReplyBroadcast(t *testing.T) {
 
 	scgw, _ := NewSmartContractGateway(
 		&SmartContractGatewayConf{
-			BaseURL: "http://localhost/api/v1",
+			BaseURL:     "http://localhost/api/v1",
+			StoragePath: dir,
 		},
 		&tx.TxnProcessorConf{
 			OrionPrivateAPIS: false,
@@ -1993,15 +1984,14 @@ func TestPublishPreCompiled(t *testing.T) {
 	router.ServeHTTP(res, req)
 	assert.Equal(200, res.Code)
 
-	files, _ := ioutil.ReadDir(dir)
+	var abi contractregistry.ABIInfo
+	err := json.NewDecoder(res.Body).Decode(&abi)
+	assert.NoError(err)
 
-	deployedJson, err := ioutil.ReadFile(path.Join(dir, files[0].Name()))
+	dmsg, err := scgw.(*smartContractGW).cs.GetABI(contractregistry.ABILocation{ABIType: contractregistry.LocalABI, Name: abi.ID}, false)
 	assert.NoError(err)
-	var deployStash messages.DeployContract
-	err = json.Unmarshal(deployedJson, &deployStash)
-	assert.NoError(err)
-	assert.NotEmpty(deployStash.ABI)
-	assert.NotEmpty(deployStash.Compiled)
+	assert.NotEmpty(dmsg.Contract.ABI)
+	assert.NotEmpty(dmsg.Contract.Compiled)
 }
 
 func TestResolveAddressFail(t *testing.T) {

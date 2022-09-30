@@ -302,6 +302,7 @@ func (g *RESTGateway) Start() (err error) {
 	// Check we're initialized (caller can choose to call init explicitly)
 	if g.receipts == nil {
 		if _, err = g.Init(); err != nil {
+			log.Errorf("Failed to initialize: %s", err)
 			return err
 		}
 	}

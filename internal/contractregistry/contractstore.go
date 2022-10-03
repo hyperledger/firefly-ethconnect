@@ -39,6 +39,8 @@ import (
 const (
 	// DefaultABICacheSize is the number of entries we will hold in a LRU cache for ABIs
 	DefaultABICacheSize = 25
+	// DefaultLevelDBName is default name of the LevelDB created in the storagePath
+	DefaultLevelDBName = "abidb"
 )
 
 type StoredABI struct {
@@ -67,6 +69,7 @@ type ContractStore interface {
 
 type ContractStoreConf struct {
 	StoragePath  string `json:"storagePath"`
+	LevelDBName  string `json:"ldbName"`
 	BaseURL      string `json:"baseURL"`
 	ABICacheSize *int   `json:"abiCacheSize"`
 }
@@ -317,7 +320,11 @@ func (cs *contractStore) Init() (err error) {
 	if cs.abiCache, err = lru.New(cacheSize); err != nil {
 		return ethconnecterrors.Errorf(ethconnecterrors.RESTGatewayResourceErr, err)
 	}
-	dbPath := path.Join(cs.conf.StoragePath, "contractsdb")
+	ldbName := cs.conf.LevelDBName
+	if ldbName != "" {
+		ldbName = DefaultLevelDBName
+	}
+	dbPath := path.Join(cs.conf.StoragePath, ldbName)
 	if cs.db, err = kvstore.NewLDBKeyValueStore(dbPath); err != nil {
 		return err
 	}

@@ -225,6 +225,8 @@ func (cs *contractStore) AddABI(abiID string, deployMsg *messages.DeployContract
 	return &storedABI.ABIInfo, nil
 }
 
+// GetLocalABIInfo retrieves just the minimal ABIInfo sub-set of the JSON fields from the contract
+// store for local ABI definitions (ones uploaded on the /abis endpoint).
 func (cs *contractStore) GetLocalABIInfo(abiID string) (info *ABIInfo, err error) {
 	return info, cs.db.GetJSON(fmt.Sprintf("%s/%s", ldbABIIDPrefix, abiID), &info)
 }
@@ -455,8 +457,8 @@ func (cs *contractStore) AddRemoteInstance(lookupStr, address string) error {
 func (cs *contractStore) ListContracts() ([]messages.TimeSortable, error) {
 	retval := make([]messages.TimeSortable, 0)
 	it := cs.db.NewIteratorWithRange(&kvstore.Range{
-		Start: []byte(ldbContractAddressPrefix + "/"),
-		Limit: []byte(ldbContractAddressPrefix + "0"),
+		Start: []byte(ldbContractAddressPrefix + "/"), // the beginning of the key sets with the `prefix/`
+		Limit: []byte(ldbContractAddressPrefix + "0"), // this is after the last key with a `prefix/` ('0' is after '/')
 	})
 	for it.Next() {
 		var info ContractInfo
@@ -474,8 +476,8 @@ func (cs *contractStore) ListContracts() ([]messages.TimeSortable, error) {
 func (cs *contractStore) ListABIs() ([]messages.TimeSortable, error) {
 	retval := make([]messages.TimeSortable, 0)
 	it := cs.db.NewIteratorWithRange(&kvstore.Range{
-		Start: []byte(ldbABIIDPrefix + "/"),
-		Limit: []byte(ldbABIIDPrefix + "0"),
+		Start: []byte(ldbABIIDPrefix + "/"), // the beginning of the key sets with the `prefix/`
+		Limit: []byte(ldbABIIDPrefix + "0"), // this is after the last key with a `prefix/` ('0' is after '/')
 	})
 	for it.Next() {
 		var info ABIInfo // we only de-serialize the ABIInfo part of the full record

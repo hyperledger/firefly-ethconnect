@@ -15,6 +15,8 @@
 package kvstore
 
 import (
+	"encoding/json"
+
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
@@ -32,6 +34,15 @@ func (m *MockKV) Put(key string, val []byte) error {
 	return m.StoreErr
 }
 
+// PutJSON an object
+func (m *MockKV) PutJSON(key string, obj interface{}) error {
+	b, err := json.Marshal(obj)
+	if err != nil {
+		return err
+	}
+	return m.Put(key, b)
+}
+
 // Get a key
 func (m *MockKV) Get(key string) ([]byte, error) {
 	v, exists := m.KVS[key]
@@ -39,6 +50,15 @@ func (m *MockKV) Get(key string) ([]byte, error) {
 		return nil, leveldb.ErrNotFound
 	}
 	return v, m.LoadErr
+}
+
+// Get a key as object
+func (m *MockKV) GetJSON(key string, obj interface{}) error {
+	b, err := m.Get(key)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(b, obj)
 }
 
 // Delete a key
@@ -53,7 +73,7 @@ func (m *MockKV) NewIterator() KVIterator {
 }
 
 // NewIterator for a new iterator
-func (m *MockKV) NewIteratorWithRange(rng interface{}) KVIterator {
+func (m *MockKV) NewIteratorWithRange(rng *Range) KVIterator {
 	return nil // not implemented in mock
 }
 

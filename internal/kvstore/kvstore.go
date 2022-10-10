@@ -15,6 +15,8 @@
 package kvstore
 
 import (
+	"encoding/json"
+
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -25,10 +27,13 @@ import (
 // ErrorNotFound signal error for not found
 var ErrorNotFound = leveldb.ErrNotFound
 
+type Range = util.Range
+
 // KVIterator interface for key value iterators
 type KVIterator interface {
 	Key() string
 	Value() []byte
+	ValueJSON(obj interface{}) error
 	Next() bool
 	Prev() bool
 	Seek(string) bool
@@ -39,10 +44,12 @@ type KVIterator interface {
 // KVStore interface for key value stores
 type KVStore interface {
 	Put(key string, val []byte) error
+	PutJSON(key string, val interface{}) error
 	Get(key string) ([]byte, error)
+	GetJSON(key string, obj interface{}) error
 	Delete(key string) error
 	NewIterator() KVIterator
-	NewIteratorWithRange(keyRange interface{}) KVIterator
+	NewIteratorWithRange(keyRange *Range) KVIterator
 	Close()
 }
 
@@ -63,10 +70,31 @@ func (k *levelDBKeyValueStore) Put(key string, val []byte) error {
 	return err
 }
 
+func (k *levelDBKeyValueStore) PutJSON(key string, obj interface{}) error {
+	b, err := json.Marshal(obj)
+	if err != nil {
+		return errors.Errorf(errors.KVStoreDBMarshal, obj, err)
+	}
+	return k.Put(key, b)
+}
+
 func (k *levelDBKeyValueStore) Get(key string) ([]byte, error) {
 	b, err := k.db.Get([]byte(key), nil)
 	k.warnIfErr("Get", key, err)
 	return b, err
+}
+
+func (k *levelDBKeyValueStore) GetJSON(key string, obj interface{}) error {
+	b, err := k.db.Get([]byte(key), nil)
+	k.warnIfErr("Get", key, err)
+	if err != nil {
+		return err
+	}
+	err = json.Unmarshal(b, obj)
+	if err != nil {
+		return errors.Errorf(errors.KVStoreDBUnmarshal, obj, err)
+	}
+	return nil
 }
 
 func (k *levelDBKeyValueStore) Delete(key string) error {
@@ -81,11 +109,9 @@ func (k *levelDBKeyValueStore) NewIterator() KVIterator {
 	}
 }
 
-func (k *levelDBKeyValueStore) NewIteratorWithRange(rng interface{}) KVIterator {
-	keyRange := rng.(*util.Range)
-
+func (k *levelDBKeyValueStore) NewIteratorWithRange(rng *Range) KVIterator {
 	return &levelDBKeyIterator{
-		i: k.db.NewIterator(keyRange, nil),
+		i: k.db.NewIterator(rng, nil),
 	}
 }
 
@@ -99,6 +125,15 @@ func (k *levelDBKeyIterator) Key() string {
 
 func (k *levelDBKeyIterator) Value() []byte {
 	return k.i.Value()
+}
+
+func (k *levelDBKeyIterator) ValueJSON(obj interface{}) error {
+	b := k.i.Value()
+	err := json.Unmarshal(b, obj)
+	if err != nil {
+		return errors.Errorf(errors.KVStoreDBUnmarshal, obj, err)
+	}
+	return nil
 }
 
 func (k *levelDBKeyIterator) Last() bool {

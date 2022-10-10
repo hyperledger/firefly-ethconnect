@@ -517,6 +517,14 @@ var (
 	ReceiptErrorIdempotencyCheck = e(100220, "Failed querying the receipt store, performing duplicate message check on ackmode=receipt for id %s: %s")
 	// ResubmissionPreventedCheckTransactionHash redelivery was prevented by the processor
 	ResubmissionPreventedCheckTransactionHash = e(100221, "Resubmission of this transaction was prevented by the REST API Gateway. Check the status of the transaction by the transaction hash")
+
+	// KVStoreDBMarshal failed to unmarshal to object
+	KVStoreDBMarshal = e(100222, "Failed to serialize JSON to %T: %s")
+	// KVStoreDBUnmarshal failed to unmarshal to object
+	KVStoreDBUnmarshal = e(100223, "Failed to parse stored JSON at %T: %s")
+
+	// RESTGatewayMissingStoragePath storage path must be set
+	RESTGatewayMissingStoragePath = e(100224, "REST Gateway storagePath must be set")
 )
 
 type EthconnectError interface {

@@ -18,9 +18,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -115,6 +117,8 @@ func TestStartStatusStopNoKafkaWebhooksAccessToken(t *testing.T) {
 
 func TestStartStatusStopNoKafkaWebhooksMissingToken(t *testing.T) {
 	assert := assert.New(t)
+	dir, _ := ioutil.TempDir("", "fly")
+	defer os.RemoveAll(dir)
 
 	auth.RegisterSecurityModule(&authtest.TestSecurityModule{})
 
@@ -129,7 +133,7 @@ func TestStartStatusStopNoKafkaWebhooksMissingToken(t *testing.T) {
 	g.conf.HTTP.Port = lastPort
 	g.conf.HTTP.LocalAddr = "127.0.0.1"
 	g.conf.RPC.URL = u.String()
-	g.conf.OpenAPI.StoragePath = "/tmp/t"
+	g.conf.OpenAPI.StoragePath = dir
 	lastPort++
 	var err error
 	var wg sync.WaitGroup
@@ -141,8 +145,8 @@ func TestStartStatusStopNoKafkaWebhooksMissingToken(t *testing.T) {
 
 	url, _ := url.Parse(fmt.Sprintf("http://localhost:%d/status", g.conf.HTTP.Port))
 	var resp *http.Response
-	for i := 0; i < 5; i++ {
-		time.Sleep(200 * time.Millisecond)
+	for i := 0; i < 10; i++ {
+		time.Sleep(100 * time.Millisecond)
 		req := &http.Request{URL: url, Method: http.MethodGet, Header: http.Header{
 			"authorization": []string{"bearer"},
 		}}

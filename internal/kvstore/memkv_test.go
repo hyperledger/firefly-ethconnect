@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
 func TestExerciseMockLDB(t *testing.T) {
@@ -31,7 +32,34 @@ func TestExerciseMockLDB(t *testing.T) {
 	m.Delete("test")
 	_, err := m.Get("test")
 	assert.Regexp("leveldb: not found", err)
-	m.NewIterator()
+
+	type myType struct {
+		Value string
+	}
+	err = m.PutJSON("mykey", &myType{Value: "something"})
+	assert.NoError(err)
+	var retObj myType
+	err = m.GetJSON("mykey", &retObj)
+	assert.NoError(err)
+	assert.Equal("something", retObj.Value)
+
+	err = m.PutJSON("mykey", map[bool]bool{false: true})
+	assert.Error(err)
+
+	err = m.GetJSON("mykey", map[bool]bool{false: true})
+	assert.Error(err)
+
+	err = m.GetJSON("not found", map[bool]bool{false: true})
+	assert.Equal(ErrorNotFound, err)
+
+	assert.Nil(m.NewIterator())
+	assert.Nil(m.NewIteratorWithRange(&util.Range{}))
 	m.Close()
 
+}
+
+func TestMockKV(t *testing.T) {
+	var kv KVStore
+	kv = NewMockKV(nil)
+	assert.NotNil(t, kv)
 }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package rest
+package receipts
 
 import (
 	"fmt"
@@ -27,7 +27,7 @@ func TestMemReceiptsWrapping(t *testing.T) {
 	conf := &ReceiptStoreConf{
 		MaxDocs: 50,
 	}
-	r := newMemoryReceipts(conf)
+	r := NewMemoryReceipts(conf)
 
 	for i := 0; i < 100; i++ {
 		receipt := make(map[string]interface{})
@@ -52,7 +52,7 @@ func TestMemReceiptsNoIDFilterImpl(t *testing.T) {
 	conf := &ReceiptStoreConf{
 		MaxDocs: 50,
 	}
-	r := newMemoryReceipts(conf)
+	r := NewMemoryReceipts(conf)
 
 	_, err := r.GetReceipts(0, 0, []string{"test"}, 0, "t", "t", "")
 	assert.Regexp("Memory receipts do not support filtering", err)

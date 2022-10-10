@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"reflect"
 
-	"github.com/hyperledger/firefly-common/pkg/ffcapi"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 )
@@ -36,6 +35,8 @@ const (
 	MsgTypeTransactionSuccess = "TransactionSuccess"
 	// MsgTypeTransactionFailure - a transaction receipt where status is 0
 	MsgTypeTransactionFailure = "TransactionFailure"
+	// MsgTypeTransactionRedeliveryPrevented - idempotency check caught a redelivery of the message
+	MsgTypeTransactionRedeliveryPrevented = "TransactionRedeliveryPrevented"
 	// RecordHeaderAccessToken - record header name for passing JWT token over messaging
 	RecordHeaderAccessToken = "fly-accesstoken"
 )
@@ -77,7 +78,6 @@ type CommonHeaders struct {
 // RequestCommon is a common interface to all requests
 type RequestCommon struct {
 	Headers RequestHeaders `json:"headers"`
-	FFCAPI  *ffcapi.Header `json:"ffcapi,omitempty"`
 }
 
 // RequestHeaders are common to all replies
@@ -192,6 +192,14 @@ type TransactionReceipt struct {
 	TransactionIndexStr  string                `json:"transactionIndex"`
 	TransactionIndexHex  *ethbinding.HexUint   `json:"transactionIndexHex,omitempty"`
 	RegisterAs           string                `json:"registerAs,omitempty"`
+}
+
+// TransactionRedeliveryNotification is sent on redelivery of a message, when the ackmode=receipt
+// idempotency check is enabled. The REST API Gateway (or other consumer), should avoid overwriting
+// any received receipt when it gets this.
+type TransactionRedeliveryNotification struct {
+	ReplyCommon
+	TransactionHash string `json:"transactionHash"`
 }
 
 // TransactionInfo is the detailed transaction info returned by eth_getTransactionByXXXXX

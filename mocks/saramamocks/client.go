@@ -231,6 +231,22 @@ func (_m *Client) Leader(topic string, partitionID int32) (*sarama.Broker, error
 	return r0, r1
 }
 
+// LeastLoadedBroker provides a mock function with given fields:
+func (_m *Client) LeastLoadedBroker() *sarama.Broker {
+	ret := _m.Called()
+
+	var r0 *sarama.Broker
+	if rf, ok := ret.Get(0).(func() *sarama.Broker); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*sarama.Broker)
+		}
+	}
+
+	return r0
+}
+
 // OfflineReplicas provides a mock function with given fields: topic, partitionID
 func (_m *Client) OfflineReplicas(topic string, partitionID int32) ([]int32, error) {
 	ret := _m.Called(topic, partitionID)
@@ -348,6 +364,20 @@ func (_m *Client) RefreshMetadata(topics ...string) error {
 	return r0
 }
 
+// RefreshTransactionCoordinator provides a mock function with given fields: transactionID
+func (_m *Client) RefreshTransactionCoordinator(transactionID string) error {
+	ret := _m.Called(transactionID)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string) error); ok {
+		r0 = rf(transactionID)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // Replicas provides a mock function with given fields: topic, partitionID
 func (_m *Client) Replicas(topic string, partitionID int32) ([]int32, error) {
 	ret := _m.Called(topic, partitionID)
@@ -387,6 +417,29 @@ func (_m *Client) Topics() ([]string, error) {
 	var r1 error
 	if rf, ok := ret.Get(1).(func() error); ok {
 		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// TransactionCoordinator provides a mock function with given fields: transactionID
+func (_m *Client) TransactionCoordinator(transactionID string) (*sarama.Broker, error) {
+	ret := _m.Called(transactionID)
+
+	var r0 *sarama.Broker
+	if rf, ok := ret.Get(0).(func(string) *sarama.Broker); ok {
+		r0 = rf(transactionID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*sarama.Broker)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(string) error); ok {
+		r1 = rf(transactionID)
 	} else {
 		r1 = ret.Error(1)
 	}

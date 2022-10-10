@@ -51,6 +51,34 @@ func TestLevelDBPutGet(t *testing.T) {
 	kv.Close()
 }
 
+func TestLevelDBPutGetJSON(t *testing.T) {
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+	kv, err := NewLDBKeyValueStore(path.Join(dir, "db"))
+
+	type myType struct {
+		Value string
+	}
+	err = kv.PutJSON("mykey", &myType{Value: "something"})
+	assert.NoError(err)
+	var retObj myType
+	err = kv.GetJSON("mykey", &retObj)
+	assert.NoError(err)
+	assert.Equal("something", retObj.Value)
+
+	err = kv.PutJSON("mykey", map[bool]bool{false: true})
+	assert.Error(err)
+
+	err = kv.GetJSON("mykey", map[bool]bool{false: true})
+	assert.Error(err)
+
+	err = kv.GetJSON("not found", map[bool]bool{false: true})
+	assert.Equal(ErrorNotFound, err)
+
+	kv.Close()
+}
+
 func TestLevelDBIterate(t *testing.T) {
 	assert := assert.New(t)
 	dir := tempdir(t)
@@ -66,6 +94,41 @@ func TestLevelDBIterate(t *testing.T) {
 	for it.Next() {
 		assert.Equal(fmt.Sprintf("key_%.3d", j), it.Key())
 		assert.Equal([]byte(fmt.Sprintf("val_%.3d", j)), it.Value())
+		j++
+	}
+	it.Release()
+	kv.Close()
+}
+
+func TestLevelDBIterateJSON(t *testing.T) {
+
+	type myType struct {
+		Value string
+	}
+
+	assert := assert.New(t)
+	dir := tempdir(t)
+	defer cleanup(t, dir)
+	kv, err := NewLDBKeyValueStore(path.Join(dir, "db"))
+	assert.NoError(err)
+	for i := 0; i < 100; i++ {
+		err = kv.PutJSON(fmt.Sprintf("key_%.3d", i), &myType{fmt.Sprintf("val_%.3d", i)})
+		assert.NoError(err)
+	}
+	it := kv.NewIterator()
+	j := 0
+	for it.Next() {
+		assert.Equal(fmt.Sprintf("key_%.3d", j), it.Key())
+		var v myType
+		err := it.ValueJSON(&v)
+		assert.NoError(err)
+		assert.Equal(fmt.Sprintf("val_%.3d", j), v.Value)
+
+		if j == 0 {
+			err = it.ValueJSON(map[bool]bool{})
+			assert.Regexp("FFEC100223", err)
+		}
+
 		j++
 	}
 	it.Release()

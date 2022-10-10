@@ -308,9 +308,10 @@ func (g *smartContractGW) storeDeployableABI(msg *messages.DeployContract, compi
 	// Generate and store the swagger
 	swagger := g.swaggerForABI(openapi.NewABI2Swagger(g.baseSwaggerConf), requestID, msg.ContractName, false, runtimeABI, msg.DevDoc, "", "")
 	msg.Description = swagger.Info.Description // Swagger generation parses the devdoc
-	info := g.cs.AddABI(requestID, msg, time.Now().UTC())
-
-	g.writeAbiInfo(requestID, msg)
+	info, err := g.cs.AddABI(requestID, msg, time.Now().UTC())
+	if err != nil {
+		return nil, err
+	}
 
 	// We remove the solidity payload from the message, as we've consumed
 	// it by compiling and there is no need to serialize it again.
@@ -330,27 +331,20 @@ func (g *smartContractGW) gatewayErrReply(res http.ResponseWriter, req *http.Req
 	return
 }
 
-func (g *smartContractGW) writeAbiInfo(requestID string, msg *messages.DeployContract) error {
-	// We store all the details from our compile, or the user-supplied
-	// details, in a file under the message ID.
-	infoFile := path.Join(g.conf.StoragePath, "abi_"+requestID+".deploy.json")
-	infoBytes, _ := json.MarshalIndent(msg, "", "  ")
-	log.Infof("%s: Stashing deployment details to '%s'", requestID, infoFile)
-	if err := ioutil.WriteFile(infoFile, infoBytes, 0664); err != nil {
-		return errors.Errorf(errors.RESTGatewayLocalStoreContractSavePostDeploy, requestID, err)
-	}
-	return nil
-}
-
 // listContractsOrABIs sorts by Title then Address and returns an array
 func (g *smartContractGW) listContractsOrABIs(res http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	log.Infof("--> %s %s", req.Method, req.URL)
 
 	var retval []messages.TimeSortable
+	var err error
 	if strings.HasSuffix(req.URL.Path, "contracts") {
-		retval = g.cs.ListContracts()
+		retval, err = g.cs.ListContracts()
 	} else {
-		retval = g.cs.ListABIs()
+		retval, err = g.cs.ListABIs()
+	}
+	if err != nil {
+		g.gatewayErrReply(res, req, err, 500)
+		return
 	}
 
 	status := 200
@@ -359,7 +353,7 @@ func (g *smartContractGW) listContractsOrABIs(res http.ResponseWriter, req *http
 	res.WriteHeader(status)
 	enc := json.NewEncoder(res)
 	enc.SetIndent("", "  ")
-	enc.Encode(&retval)
+	_ = enc.Encode(&retval)
 }
 
 // createStream creates a stream
@@ -389,7 +383,7 @@ func (g *smartContractGW) createStream(res http.ResponseWriter, req *http.Reques
 	res.WriteHeader(status)
 	enc := json.NewEncoder(res)
 	enc.SetIndent("", "  ")
-	enc.Encode(&newSpec)
+	_ = enc.Encode(&newSpec)
 }
 
 // updateStream updates a stream
@@ -424,7 +418,7 @@ func (g *smartContractGW) updateStream(res http.ResponseWriter, req *http.Reques
 	res.WriteHeader(status)
 	enc := json.NewEncoder(res)
 	enc.SetIndent("", "  ")
-	enc.Encode(&newSpec)
+	_ = enc.Encode(&newSpec)
 }
 
 // listStreamsOrSubs sorts by Title then Address and returns an array
@@ -462,7 +456,7 @@ func (g *smartContractGW) listStreamsOrSubs(res http.ResponseWriter, req *http.R
 	res.WriteHeader(status)
 	enc := json.NewEncoder(res)
 	enc.SetIndent("", "  ")
-	enc.Encode(&results)
+	_ = enc.Encode(&results)
 }
 
 // getStreamOrSub returns stream over REST
@@ -492,7 +486,7 @@ func (g *smartContractGW) getStreamOrSub(res http.ResponseWriter, req *http.Requ
 	res.WriteHeader(status)
 	enc := json.NewEncoder(res)
 	enc.SetIndent("", "  ")
-	enc.Encode(retval)
+	_ = enc.Encode(retval)
 }
 
 // deleteStreamOrSub deletes stream over REST
@@ -547,7 +541,7 @@ func (g *smartContractGW) addSub(res http.ResponseWriter, req *http.Request, par
 	res.WriteHeader(status)
 	enc := json.NewEncoder(res)
 	enc.SetIndent("", "  ")
-	enc.Encode(retval)
+	_ = enc.Encode(retval)
 }
 
 // resetSub resets subscription over REST
@@ -604,7 +598,7 @@ func (g *smartContractGW) suspendOrResumeStream(res http.ResponseWriter, req *ht
 }
 
 func (g *smartContractGW) isSwaggerRequest(req *http.Request) (swaggerGen *openapi.ABI2Swagger, uiRequest, factoryOnly, abiRequest, refreshABI bool, from string) {
-	req.ParseForm()
+	_ = req.ParseForm()
 	var swaggerRequest bool
 	if vs := req.Form["swagger"]; len(vs) > 0 {
 		swaggerRequest = strings.ToLower(vs[0]) != "false"
@@ -722,14 +716,14 @@ func (g *smartContractGW) getContractOrABI(res http.ResponseWriter, req *http.Re
 		res.WriteHeader(200)
 		enc := json.NewEncoder(res)
 		enc.SetIndent("", "  ")
-		enc.Encode(deployMsg.ABI)
+		_ = enc.Encode(deployMsg.ABI)
 	} else {
 		log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
 		res.Header().Set("Content-Type", "application/json")
 		res.WriteHeader(200)
 		enc := json.NewEncoder(res)
 		enc.SetIndent("", "  ")
-		enc.Encode(info)
+		_ = enc.Encode(info)
 	}
 }
 
@@ -795,7 +789,7 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 		res.WriteHeader(200)
 		enc := json.NewEncoder(res)
 		enc.SetIndent("", "  ")
-		enc.Encode(deployMsg.ABI)
+		_ = enc.Encode(deployMsg.ABI)
 	} else {
 		ci := &remoteContractInfo{
 			ID:      deployMsg.Headers.ID,
@@ -807,7 +801,7 @@ func (g *smartContractGW) getRemoteRegistrySwaggerOrABI(res http.ResponseWriter,
 		res.WriteHeader(200)
 		enc := json.NewEncoder(res)
 		enc.SetIndent("", "  ")
-		enc.Encode(ci)
+		_ = enc.Encode(ci)
 	}
 }
 
@@ -849,7 +843,7 @@ func (g *smartContractGW) registerContract(res http.ResponseWriter, req *http.Re
 	log.Infof("<-- %s %s [%d]", req.Method, req.URL, status)
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(status)
-	json.NewEncoder(res).Encode(&contractInfo)
+	_ = json.NewEncoder(res).Encode(&contractInfo)
 }
 
 func tempdir() string {
@@ -885,7 +879,7 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 
 	if vs := req.Form["findsolidity"]; len(vs) > 0 {
 		var solFiles []string
-		filepath.Walk(
+		_ = filepath.Walk(
 			tempdir,
 			func(p string, info os.FileInfo, err error) error {
 				if strings.HasSuffix(p, ".sol") {
@@ -896,7 +890,7 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 		log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
 		res.Header().Set("Content-Type", "application/json")
 		res.WriteHeader(200)
-		json.NewEncoder(res).Encode(&solFiles)
+		_ = json.NewEncoder(res).Encode(&solFiles)
 		return
 	}
 
@@ -930,7 +924,7 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 		log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
 		res.Header().Set("Content-Type", "application/json")
 		res.WriteHeader(200)
-		json.NewEncoder(res).Encode(&contractNames)
+		_ = json.NewEncoder(res).Encode(&contractNames)
 		return
 	}
 
@@ -959,7 +953,7 @@ func (g *smartContractGW) addABI(res http.ResponseWriter, req *http.Request, par
 	log.Infof("<-- %s %s [%d]", req.Method, req.URL, 200)
 	res.Header().Set("Content-Type", "application/json")
 	res.WriteHeader(200)
-	json.NewEncoder(res).Encode(info)
+	_ = json.NewEncoder(res).Encode(info)
 }
 
 func (g *smartContractGW) parseBytecode(form url.Values) ([]byte, error) {

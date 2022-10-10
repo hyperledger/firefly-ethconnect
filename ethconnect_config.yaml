@@ -1,0 +1,28 @@
+rest:
+  rest-gateway:
+    rpc:
+      # url: http://localhost:5100
+      # url: https://rinkeby.infura.io/v3/58c5cbc3c9914486920a3af499524e2e
+      # url: https://zznk5vma71:oa46BpfMExfJdJXn8KKp2-DAYZmdjAUB4qS5LjlIxxI@zzebuedy57-zzne11vbct-rpc.dev2-ws.photic.io/
+      url: https://zzwvqdkvg2:NA9LRWV0TTH9v2A4IkuBDD6h4BHhFH9ItbEbYySvKW0@zzldved9px-zziextwnth-rpc.dev2-ws.photic.io/
+    openapi:
+      eventPollingIntervalSec: 1
+      storagePath: /tmp/ethc
+      eventsDB: /tmp/ethc/events.db
+      catchupModeBlockGap: 50
+      catchupModePageSize: 50
+      confirmations:
+        enabled: true
+        requiredConfirmations: 12
+        includeInPayload: true
+    mongodb:
+      url: "localhost:27017"
+      database: "ethconnect"
+      collection: "ethconnect-replies"
+      maxDocs: 1000
+      queryLimit: 100        
+    http:
+      address: 127.0.0.1
+      port: 8080
+    maxTXWaitTime: 60
+    maxInFlight: 10

@@ -21,6 +21,7 @@ import (
 
 	"github.com/hyperledger/firefly-ethconnect/internal/eth"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/internal/receipts"
 	"github.com/hyperledger/firefly-ethconnect/internal/tx"
 	"github.com/stretchr/testify/assert"
 )
@@ -58,6 +59,8 @@ func (p *mockProcessor) OnMessage(c tx.TxnContext) {
 	}
 }
 func (p *mockProcessor) Init(eth.RPCClient) {}
+func (p *mockProcessor) SetReceiptStoreForIdempotencyCheck(receiptStore receipts.ReceiptStorePersistence) {
+}
 
 type mockReplyProcessor struct {
 	err     error

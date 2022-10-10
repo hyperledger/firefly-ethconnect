@@ -26,6 +26,7 @@ import (
 
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/kafka"
+	"github.com/hyperledger/firefly-ethconnect/internal/receipts"
 	"github.com/hyperledger/firefly-ethconnect/internal/rest"
 	"github.com/hyperledger/firefly-ethconnect/internal/utils"
 	"github.com/icza/dyno"
@@ -56,19 +57,14 @@ func initLogging(debugLevel int) {
 	switch debugLevel {
 	case 0:
 		log.SetLevel(log.ErrorLevel)
-		break
 	case 1:
 		log.SetLevel(log.InfoLevel)
-		break
 	case 2:
 		log.SetLevel(log.DebugLevel)
-		break
 	case 3:
 		log.SetLevel(log.TraceLevel)
-		break
 	default:
 		log.SetLevel(log.DebugLevel)
-		break
 	}
 	log.Debugf("Log level set to %d", debugLevel)
 }
@@ -168,6 +164,39 @@ func startServer() (err error) {
 
 	anyRoutineFinished := make(chan bool)
 	var dontPrintYaml = false
+
+	// Merge in legacy named 'webbhooks' configs
+	if serverConfig.RESTGateways == nil {
+		serverConfig.RESTGateways = make(map[string]*rest.RESTGatewayConf)
+	}
+	for name, conf := range serverConfig.Webhooks {
+		serverConfig.RESTGateways[name] = conf
+	}
+	var idempotencyCheckReceiptStore receipts.ReceiptStorePersistence
+	restGateways := make(map[string]*rest.RESTGateway)
+	for name, conf := range serverConfig.RESTGateways {
+		restGateway := rest.NewRESTGateway(&dontPrintYaml)
+		restGateways[name] = restGateway
+		restGateway.SetConf(conf)
+		if err := restGateway.ValidateConf(); err != nil {
+			return err
+		}
+		// This is a slightly awkward cross-component call, to account for the most popular pattern of usage:
+		// - Run in server mode
+		// - Single REST API Gateway
+		// - Single Kafka bridge co-located in the same process
+		// In this scenario, we can pass the receipt store to the Kafka bridge for it to do
+		// additional idempotency checks that prevent res-submission of transactions.
+		if idempotencyCheckReceiptStore == nil {
+			idempotencyCheckReceiptStore, err = restGateway.Init()
+			if err != nil {
+				return err
+			}
+		}
+
+	}
+
+	// Start the kafka bridges, passing in the receipt store if we have one
 	for name, conf := range serverConfig.KafkaBridges {
 		kafkaBridge := kafka.NewKafkaBridge(&dontPrintYaml)
 		kafkaBridge.SetConf(conf)
@@ -176,25 +205,16 @@ func startServer() (err error) {
 		}
 		go func(name string, anyRoutineFinished chan bool) {
 			log.Infof("Starting Kafka->Ethereum bridge '%s'", name)
-			if err := kafkaBridge.Start(); err != nil {
+			if err := kafkaBridge.Start(idempotencyCheckReceiptStore); err != nil {
 				log.Errorf("Kafka->Ethereum bridge failed: %s", err)
 			}
 			anyRoutineFinished <- true
 		}(name, anyRoutineFinished)
 	}
-	// Merge in legacy named 'webbhooks' configs
-	if serverConfig.RESTGateways == nil {
-		serverConfig.RESTGateways = make(map[string]*rest.RESTGatewayConf)
-	}
-	for name, conf := range serverConfig.Webhooks {
-		serverConfig.RESTGateways[name] = conf
-	}
-	for name, conf := range serverConfig.RESTGateways {
-		restGateway := rest.NewRESTGateway(&dontPrintYaml)
-		restGateway.SetConf(conf)
-		if err := restGateway.ValidateConf(); err != nil {
-			return err
-		}
+
+	// Start the rest gateways
+	for name, rgw := range restGateways {
+		restGateway := rgw
 		go func(name string, anyRoutineFinished chan bool) {
 			log.Infof("Starting REST gateway '%s'", name)
 			if err := restGateway.Start(); err != nil {

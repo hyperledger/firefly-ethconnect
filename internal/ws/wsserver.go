@@ -217,12 +217,17 @@ func (s *webSocketServer) processReplies() {
 		s.mux.Lock()
 		wsconns := getConnListFromMap(s.replyMap)
 		s.mux.Unlock()
+		log.Debugf("Sending reply to %d WS connections", len(wsconns))
 		s.broadcastToConnections(wsconns, message)
 	}
 }
 
 func (s *webSocketServer) broadcastToConnections(connections []*webSocketConnection, message interface{}) {
 	for _, c := range connections {
-		c.broadcast <- message
+		select {
+		case c.broadcast <- message:
+		case <-c.closing:
+			log.Warnf("Connection %s closed while attempting to deliver reply", c.id)
+		}
 	}
 }

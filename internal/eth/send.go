@@ -22,7 +22,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
 
@@ -82,7 +81,7 @@ func (tx *Txn) buildCallArgs() *SendTXArgs {
 	return txArgs
 }
 
-func (tx *Txn) Estimate(ctx context.Context, rpc RPCClient, estimationFactor float64) (data hexutil.Bytes, gas ethbinding.HexUint64, reverted bool, err error) {
+func (tx *Txn) Estimate(ctx context.Context, rpc RPCClient, estimationFactor float64) (data ethbinding.HexBytes, gas ethbinding.HexUint64, reverted bool, err error) {
 	txArgs := tx.buildCallArgs()
 	reverted, err = tx.calculateGas(ctx, rpc, txArgs, &gas, estimationFactor)
 	return *txArgs.Data, gas, reverted, err

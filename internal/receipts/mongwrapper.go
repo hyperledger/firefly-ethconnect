@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package rest
+package receipts
 
 // github.com/globalsign/mgo seems to be the most popular mgo fork. It seems
 // a key feature we need is missing from the official Golang library.

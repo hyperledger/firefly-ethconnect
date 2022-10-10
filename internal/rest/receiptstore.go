@@ -26,6 +26,7 @@ import (
 	"github.com/hyperledger/firefly-ethconnect/internal/contractgateway"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
+	"github.com/hyperledger/firefly-ethconnect/internal/receipts"
 	"github.com/hyperledger/firefly-ethconnect/internal/utils"
 	"github.com/julienschmidt/httprouter"
 	log "github.com/sirupsen/logrus"
@@ -36,26 +37,20 @@ const (
 	defaultRetryTimeout      = 120 * 1000
 	defaultRetryInitialDelay = 500
 	defaultMaxDocs           = 250
+	backoffFactor            = 1.1
 )
 
 var uuidCharsVerifier, _ = regexp.Compile("^[0-9a-zA-Z-]+$")
 
-// ReceiptStorePersistence interface implemented by persistence layers
-type ReceiptStorePersistence interface {
-	GetReceipts(skip, limit int, ids []string, sinceEpochMS int64, from, to, start string) (*[]map[string]interface{}, error)
-	GetReceipt(requestID string) (*map[string]interface{}, error)
-	AddReceipt(requestID string, receipt *map[string]interface{}, overwriteAndRetry bool) error
-}
-
 type receiptStore struct {
-	conf            *ReceiptStoreConf
-	persistence     ReceiptStorePersistence
+	conf            *receipts.ReceiptStoreConf
+	persistence     receipts.ReceiptStorePersistence
 	smartContractGW contractgateway.SmartContractGateway
 	reservedIDs     map[string]bool
 	reservationMux  sync.Mutex
 }
 
-func newReceiptStore(conf *ReceiptStoreConf, persistence ReceiptStorePersistence, smartContractGW contractgateway.SmartContractGateway) *receiptStore {
+func newReceiptStore(conf *receipts.ReceiptStoreConf, persistence receipts.ReceiptStorePersistence, smartContractGW contractgateway.SmartContractGateway) *receiptStore {
 	if conf.RetryTimeoutMS <= 0 {
 		conf.RetryTimeoutMS = defaultRetryTimeout
 	}
@@ -145,9 +140,29 @@ func (r *receiptStore) processReply(msgBytes []byte) {
 	msgType := utils.GetMapString(headers, "type")
 	contractAddr := utils.GetMapString(parsedMsg, "contractAddress")
 	result := ""
-	if msgType == messages.MsgTypeError {
+	switch msgType {
+	case messages.MsgTypeError:
 		result = utils.GetMapString(parsedMsg, "errorMessage")
-	} else {
+	case messages.MsgTypeTransactionRedeliveryPrevented:
+		// If we receive this, then we need to make sure either:
+		// a) We have a good receipt in our DB already
+		// b) We swap the status into an error - as the application might have to check the transaction status themselves from the TX Hash
+		result = utils.GetMapString(parsedMsg, "transactionHash")
+		existingReceipt, err := r.persistence.GetReceipt(requestID)
+		if err == nil && existingReceipt != nil {
+			existingHeaders := r.extractHeaders(*existingReceipt)
+			msgType := utils.GetMapString(existingHeaders, "type")
+			if msgType == messages.MsgTypeTransactionFailure || msgType == messages.MsgTypeTransactionSuccess {
+				// We already have a valid receipt - do not overwrite it
+				log.Warnf("Ignoring redelivery reply message. requestId='%s' reqOffset='%s' type='%s': %s", requestID, reqOffset, msgType, result)
+				return
+			}
+		}
+		// We need to switch to an error to let them know we cannot provide the receipt
+		idempotencyErr := errors.Errorf(errors.ResubmissionPreventedCheckTransactionHash)
+		parsedMsg["errorCode"] = idempotencyErr.Code()
+		parsedMsg["errorMessage"] = idempotencyErr.ErrorNoCode()
+	default:
 		result = utils.GetMapString(parsedMsg, "transactionHash")
 	}
 	log.Infof("Received reply message. requestId='%s' reqOffset='%s' type='%s': %s", requestID, reqOffset, msgType, result)

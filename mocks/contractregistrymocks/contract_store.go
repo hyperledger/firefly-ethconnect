@@ -17,7 +17,7 @@ type ContractStore struct {
 }
 
 // AddABI provides a mock function with given fields: id, deployMsg, createdTime
-func (_m *ContractStore) AddABI(id string, deployMsg *messages.DeployContract, createdTime time.Time) *contractregistry.ABIInfo {
+func (_m *ContractStore) AddABI(id string, deployMsg *messages.DeployContract, createdTime time.Time) (*contractregistry.ABIInfo, error) {
 	ret := _m.Called(id, deployMsg, createdTime)
 
 	var r0 *contractregistry.ABIInfo
@@ -29,7 +29,14 @@ func (_m *ContractStore) AddABI(id string, deployMsg *messages.DeployContract, c
 		}
 	}
 
-	return r0
+	var r1 error
+	if rf, ok := ret.Get(1).(func(string, *messages.DeployContract, time.Time) error); ok {
+		r1 = rf(id, deployMsg, createdTime)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // AddContract provides a mock function with given fields: addrHexNo0x, abiID, pathName, registerAs
@@ -172,7 +179,7 @@ func (_m *ContractStore) Init() error {
 }
 
 // ListABIs provides a mock function with given fields:
-func (_m *ContractStore) ListABIs() []messages.TimeSortable {
+func (_m *ContractStore) ListABIs() ([]messages.TimeSortable, error) {
 	ret := _m.Called()
 
 	var r0 []messages.TimeSortable
@@ -184,11 +191,18 @@ func (_m *ContractStore) ListABIs() []messages.TimeSortable {
 		}
 	}
 
-	return r0
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // ListContracts provides a mock function with given fields:
-func (_m *ContractStore) ListContracts() []messages.TimeSortable {
+func (_m *ContractStore) ListContracts() ([]messages.TimeSortable, error) {
 	ret := _m.Called()
 
 	var r0 []messages.TimeSortable
@@ -200,7 +214,14 @@ func (_m *ContractStore) ListContracts() []messages.TimeSortable {
 		}
 	}
 
-	return r0
+	var r1 error
+	if rf, ok := ret.Get(1).(func() error); ok {
+		r1 = rf()
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // ResolveContractAddress provides a mock function with given fields: registeredName

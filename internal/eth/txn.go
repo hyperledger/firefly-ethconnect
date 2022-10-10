@@ -24,7 +24,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
@@ -360,7 +359,7 @@ func NewSendTxn(msg *messages.SendTransaction, signer TXSigner) (tx *Txn, err er
 func NewRawSendTxn(signer TXSigner, from, to string, nonce, value, gas, gasPrice json.Number, txData []byte) (tx *Txn, err error) {
 	tx = &Txn{
 		Signer: signer,
-		Method: &abi.Method{},
+		Method: &ethbinding.ABIMethod{},
 	}
 	err = tx.genEthTransaction(from, to, nonce, value, gas, gasPrice, txData)
 	return

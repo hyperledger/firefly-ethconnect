@@ -156,3 +156,8 @@ func TestSolcCompileInvalidVersion(t *testing.T) {
 	_, err := CompileContract("", "", "zero.four", "")
 	assert.Regexp("Invalid Solidity version requested for compiler. Ensure the string starts with two dot separated numbers, such as 0.5", err)
 }
+
+func TestGetSolcVersionInvalidBinary(t *testing.T) {
+	_, err := getSolcVersion("/this/is/not/a/valid/binary")
+	assert.Regexp(t, "FFEC100225", err)
+}

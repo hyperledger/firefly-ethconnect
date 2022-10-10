@@ -35,6 +35,11 @@ const (
 	defaultEVMVersion = "byzantium"
 )
 
+type SolcVersion struct {
+	Path    string
+	Version string
+}
+
 // CompiledSolidity wraps solc compilation of solidity and ABI generation
 type CompiledSolidity struct {
 	ContractName string
@@ -46,6 +51,7 @@ type CompiledSolidity struct {
 
 var solcVerChecker *regexp.Regexp
 var defaultSolc string
+var solcVerExtractor = regexp.MustCompile(`\d+\.\d+\.\d+`)
 
 func getSolcExecutable(requestedVersion string) (string, error) {
 	log.Infof("Solidity compiler requested: %s", requestedVersion)
@@ -68,14 +74,37 @@ func getSolcExecutable(requestedVersion string) (string, error) {
 	return solc, nil
 }
 
+func getSolcVersion(solcPath string) (*SolcVersion, error) {
+
+	cmdOutput := new(bytes.Buffer)
+	cmd := exec.Command(solcPath, "--version")
+	cmd.Stdout = cmdOutput
+
+	err := cmd.Run()
+	if err != nil {
+		return nil, errors.Errorf(errors.CompilerFailedVersion, solcPath, err)
+	}
+
+	ver := solcVerExtractor.FindString(cmdOutput.String())
+	if ver == "" {
+		return nil, errors.Errorf(errors.CompilerFailedVersionRegex, solcPath, cmdOutput.String())
+	}
+
+	return &SolcVersion{
+		Path:    solcPath,
+		Version: ver,
+	}, nil
+
+}
+
 // GetSolc returns the appropriate solc command based on the combination of env vars, and message-specific request
 // parameters passed in
-func GetSolc(requestedVersion string) (*ethbinding.Solidity, error) {
+func GetSolc(requestedVersion string) (*SolcVersion, error) {
 	solc, err := getSolcExecutable(requestedVersion)
 	if err != nil {
 		return nil, err
 	}
-	return ethbind.API.SolidityVersion(solc)
+	return getSolcVersion(solc)
 }
 
 // GetSolcArgs get the correct solc args

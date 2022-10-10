@@ -1,8 +1,8 @@
-FROM golang:1.16-buster AS builder
+FROM golang:1.17-buster AS builder
 WORKDIR /ethconnect
 RUN apt-get update -y \
  && apt-get install -y build-essential git \
- && curl -Lo /usr/bin/solc https://github.com/ethereum/solidity/releases/download/v0.7.6/solc-static-linux \
+ && curl -Lo /usr/bin/solc https://github.com/ethereum/solidity/releases/download/v0.8.15/solc-static-linux \
  && chmod 755 /usr/bin/solc
 ADD go.mod go.sum ./
 RUN grep -v ethbinding go.mod > go.mod.new \

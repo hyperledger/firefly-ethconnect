@@ -1,0 +1,25 @@
+rest:
+  rest-gateway:
+    rpc:
+      url: http://localhost:5100
+    openapi:
+      eventPollingIntervalSec: 1
+      storagePath: /tmp/ethc
+      eventsDB: /tmp/ethc/events.db
+      catchupModeBlockGap: 50
+      catchupModePageSize: 50
+      confirmations:
+        enabled: true
+        requiredConfirmations: 12
+        includeInPayload: true
+    mongodb:
+      url: "localhost:27017"
+      database: "ethconnect"
+      collection: "ethconnect-replies"
+      maxDocs: 1000
+      queryLimit: 100        
+    http:
+      address: 127.0.0.1
+      port: 8080
+    maxTXWaitTime: 60
+    maxInFlight: 10

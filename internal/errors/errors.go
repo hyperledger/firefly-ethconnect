@@ -525,6 +525,11 @@ var (
 
 	// RESTGatewayMissingStoragePath storage path must be set
 	RESTGatewayMissingStoragePath = e(100224, "REST Gateway storagePath must be set")
+
+	// CompilerFailedVersion failed to get version
+	CompilerFailedVersion = e(100225, "Failed to invoke solc binary '%s' to check version: %s")
+	// CompilerFailedVersionRegex failed to extract version from output
+	CompilerFailedVersionRegex = e(100226, "Failed to extract version from solc '%s' output: %s")
 )
 
 type EthconnectError interface {

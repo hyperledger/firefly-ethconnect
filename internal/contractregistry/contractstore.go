@@ -290,24 +290,26 @@ func (cs *contractStore) migrateFilesToLevelDB() {
 			abiGroups := abiMatcher.FindStringSubmatch(fileName)
 			instanceGroups := instanceMatcher.FindStringSubmatch(fileName)
 			cleanup := false
+			filePath := path.Join(cs.conf.StoragePath, fileName)
 			if legacyContractGroups != nil {
-				cleanup = cs.migrateLegacyContractFile(legacyContractGroups[1], path.Join(cs.conf.StoragePath, fileName), file.ModTime())
+				cleanup = cs.migrateLegacyContractFile(legacyContractGroups[1], filePath, file.ModTime())
 			} else if instanceGroups != nil {
-				cleanup = cs.migrateContractFile(instanceGroups[1], path.Join(cs.conf.StoragePath, fileName), file.ModTime())
+				cleanup = cs.migrateContractFile(instanceGroups[1], filePath, file.ModTime())
 			} else if abiGroups != nil {
-				cleanup = cs.migrateABIFile(abiGroups[1], path.Join(cs.conf.StoragePath, fileName), file.ModTime())
+				cleanup = cs.migrateABIFile(abiGroups[1], filePath, file.ModTime())
 			}
 			if cleanup {
-				cs.cleanupMigratedFile(fileName)
+				cs.cleanupMigratedFile(filePath)
 			}
 		}
 	}
 }
 
-func (cs *contractStore) cleanupMigratedFile(fileName string) {
-	if err := os.Remove(fileName); err != nil {
-		log.Errorf("Failed to clean-up migrated file %s: %s", fileName, err)
+func (cs *contractStore) cleanupMigratedFile(filePath string) {
+	if err := os.Remove(filePath); err != nil {
+		log.Errorf("Failed to clean-up migrated file %s: %s", filePath, err)
 	}
+	log.Infof("Cleaned up migrated file: %s", filePath)
 }
 
 func (cs *contractStore) Init() (err error) {

@@ -654,7 +654,11 @@ func (tx *Txn) generateTypedArg(requiredType *ethbinding.ABIType, param interfac
 			return nil, errors.Errorf(errors.TransactionSendInputTypeBadJSONTypeForBytes, methodName, path, requiredType, suppliedType)
 		}
 		if len(bSlice) == 0 {
-			return [0]byte{}, nil
+			if requiredType.T == ethbinding.BytesTy {
+				return []byte{}, nil
+			} else {
+				return [0]byte{}, nil
+			}
 		} else if requiredType.GetType().Kind() == reflect.Array {
 			// Create ourselves an array of the right size (ethereum won't accept a slice)
 			bArrayType := reflect.ArrayOf(len(bSlice), reflect.TypeOf(bSlice[0]))

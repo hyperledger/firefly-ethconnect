@@ -1470,6 +1470,54 @@ func TestSendTxnPackError(t *testing.T) {
 	assert.Regexp("cannot use \\[0\\]uint8 as type \\[1\\]uint8 as argument", err.Error())
 }
 
+func TestSendTxnPackEmptyBytes(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg messages.SendTransaction
+	msg.Parameters = []interface{}{"0x"}
+	msg.Method = &ethbinding.ABIElementMarshaling{
+		Name: "testFunc",
+		Inputs: []ethbinding.ABIArgumentMarshaling{
+			{
+				Name: "param1",
+				Type: "bytes",
+			},
+		},
+		Outputs: []ethbinding.ABIArgumentMarshaling{
+			{
+				Name: "ret1",
+				Type: "uint256",
+			},
+		},
+	}
+	_, err := NewSendTxn(&msg, nil)
+	assert.NoError(err)
+}
+
+func TestSendTxnPackBytes(t *testing.T) {
+	assert := assert.New(t)
+
+	var msg messages.SendTransaction
+	msg.Parameters = []interface{}{"0x1234"}
+	msg.Method = &ethbinding.ABIElementMarshaling{
+		Name: "testFunc",
+		Inputs: []ethbinding.ABIArgumentMarshaling{
+			{
+				Name: "param1",
+				Type: "bytes2",
+			},
+		},
+		Outputs: []ethbinding.ABIArgumentMarshaling{
+			{
+				Name: "ret1",
+				Type: "uint256",
+			},
+		},
+	}
+	_, err := NewSendTxn(&msg, nil)
+	assert.NoError(err)
+}
+
 func TestProcessRLPBytesValidTypes(t *testing.T) {
 	assert := assert.New(t)
 

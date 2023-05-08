@@ -149,6 +149,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-go 1.19
-
 replace github.com/kaleido-io/ethbinding => ../ethbinding
+
+go 1.19

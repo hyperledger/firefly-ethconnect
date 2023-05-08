@@ -151,8 +151,4 @@ require (
 
 go 1.19
 
-require github.com/kaleido-io/chainwall v0.0.0
-
-replace github.com/kaleido-io/chainwall => ../chainwall
-
 replace github.com/kaleido-io/ethbinding => ../ethbinding

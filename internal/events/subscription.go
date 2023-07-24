@@ -215,7 +215,6 @@ func (s *subscription) createFilter(ctx context.Context, since *big.Int) error {
 		return errors.Errorf(errors.RPCCallReturnedError, "eth_newFilter", err)
 	}
 	s.catchupBlock = nil // we are not in catchup mode now
-	s.info.Synchronized = true
 	s.filteredOnce = false
 	s.markFilterStale(ctx, false)
 	log.Infof("%s: created filter from block %s: %s - %+v", s.logName, since.String(), s.filterID, s.info.Filter)
@@ -362,6 +361,7 @@ func (s *subscription) processNewEvents(ctx context.Context) error {
 	rpcMethod := "eth_getFilterLogs"
 	if s.filteredOnce {
 		rpcMethod = "eth_getFilterChanges"
+		s.info.Synchronized = true
 	}
 	if err := s.rpc.CallContext(ctx, &logs, rpcMethod, s.filterID); err != nil {
 		if strings.Contains(err.Error(), "filter not found") {

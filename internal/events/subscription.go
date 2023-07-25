@@ -59,15 +59,16 @@ type ABIRefOrInline struct {
 // SubscriptionInfo is the persisted data for the subscription
 type SubscriptionInfo struct {
 	messages.TimeSorted
-	ID        string                           `json:"id,omitempty"`
-	Path      string                           `json:"path"`
-	Summary   string                           `json:"-"`    // System generated name for the subscription
-	Name      string                           `json:"name"` // User provided name for the subscription, set to Summary if missing
-	Stream    string                           `json:"stream"`
-	Filter    persistedFilter                  `json:"filter"`
-	Event     *ethbinding.ABIElementMarshaling `json:"event"`
-	FromBlock string                           `json:"fromBlock,omitempty"`
-	ABI       *ABIRefOrInline                  `json:"abi,omitempty"`
+	ID           string                           `json:"id,omitempty"`
+	Path         string                           `json:"path"`
+	Summary      string                           `json:"-"`    // System generated name for the subscription
+	Name         string                           `json:"name"` // User provided name for the subscription, set to Summary if missing
+	Stream       string                           `json:"stream"`
+	Filter       persistedFilter                  `json:"filter"`
+	Event        *ethbinding.ABIElementMarshaling `json:"event"`
+	FromBlock    string                           `json:"fromBlock,omitempty"`
+	ABI          *ABIRefOrInline                  `json:"abi,omitempty"`
+	Synchronized bool                             `json:"synchronized"`
 }
 
 // subscription is the runtime that manages the subscription
@@ -241,6 +242,7 @@ func (s *subscription) restartFilter(ctx context.Context, checkpoint *big.Int) e
 	log.Debugf("%s: new filter. Head=%s Position=%s Gap=%d (catchup threshold: %d)", s.logName, blockNumber.ToInt().String(), since.String(), blockGap, s.catchupModeBlockGap)
 	if s.catchupModeBlockGap > 0 && blockGap > s.catchupModeBlockGap {
 		s.catchupBlock = since // note if we were already in catchup, this does not change anything
+		s.info.Synchronized = false
 		return nil
 	}
 
@@ -359,6 +361,7 @@ func (s *subscription) processNewEvents(ctx context.Context) error {
 	rpcMethod := "eth_getFilterLogs"
 	if s.filteredOnce {
 		rpcMethod = "eth_getFilterChanges"
+		s.info.Synchronized = true
 	}
 	if err := s.rpc.CallContext(ctx, &logs, rpcMethod, s.filterID); err != nil {
 		if strings.Contains(err.Error(), "filter not found") {
@@ -402,6 +405,7 @@ func (s *subscription) markFilterStale(ctx context.Context, newFilterStale bool)
 		log.Infof("%s: Uninstalled filter. ok=%t (%s)", s.logName, retval, err)
 		// Clear any catchup mode state. We will restart from the last checkpoint
 		s.catchupBlock = nil
+		s.info.Synchronized = false
 	}
 	s.filterStale = newFilterStale
 }

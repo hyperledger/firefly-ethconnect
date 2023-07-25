@@ -140,6 +140,7 @@ func TestCreateWebhookSubWithAddr(t *testing.T) {
 	assert.Equal("0x81b7baac232325e8fb0e2446cc62852d9f68c86874699311b99ef89d8ed424dd", s.info.Filter.Topics[0][0].Hex())
 	assert.Equal("0x0123456789abcDEF0123456789abCDef01234567:devcon()", s.info.Summary)
 	assert.Equal("mySubscription", s.info.Name)
+	assert.False(s.info.Synchronized)
 }
 
 func TestCreateSubscriptionNoEvent(t *testing.T) {
@@ -195,7 +196,7 @@ func TestProcessEventsStaleFilter(t *testing.T) {
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_getFilterLogs", mock.Anything).
 		Return(fmt.Errorf("filter not found"))
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_uninstallFilter", mock.Anything).Return(nil)
-	s := &subscription{rpc: rpc}
+	s := &subscription{rpc: rpc, info: &SubscriptionInfo{}}
 	err := s.processNewEvents(context.Background())
 	assert.Regexp("filter not found", err)
 	assert.True(s.filterStale)
@@ -331,7 +332,8 @@ func TestUnsubscribe(t *testing.T) {
 	rpc.On("CallContext", mock.Anything, mock.Anything, "eth_uninstallFilter", mock.Anything).
 		Return(fmt.Errorf("pop"))
 	s := &subscription{
-		rpc: rpc,
+		rpc:  rpc,
+		info: &SubscriptionInfo{},
 	}
 	err := s.unsubscribe(context.Background(), true)
 	assert.NoError(err)

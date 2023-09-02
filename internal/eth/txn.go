@@ -352,6 +352,7 @@ func NewSendTxn(msg *messages.SendTransaction, signer TXSigner) (tx *Txn, err er
 	// retain private transaction fields
 	tx.PrivateFrom = msg.PrivateFrom
 	tx.PrivateFor = msg.PrivateFor
+	tx.PrivacyGroupID = msg.PrivacyGroupID
 	return
 }
 

@@ -95,8 +95,16 @@ func (tx *Txn) Call(ctx context.Context, rpc RPCClient, blocknumber string) (res
 	defer cancel()
 
 	var hexString string
-	if err = rpc.CallContext(ctx, &hexString, "eth_call", txArgs, blocknumber); err != nil {
-		return nil, false, errors.Errorf(errors.TransactionSendCallFailedNoRevert, err)
+	if tx.PrivacyGroupID != "" {
+		// PrivacyGroupID is mandatory for a priv_call, so user is expected to pass exactly this key.
+		// No generation of PrivacyGroupID based on PrivateFrom and PrivateFor is implemented because of this.
+		if err = rpc.CallContext(ctx, &hexString, "priv_call", tx.PrivacyGroupID, txArgs, blocknumber); err != nil {
+			return nil, false, errors.Errorf(errors.TransactionSendCallFailedNoRevert, err)
+		}
+	} else {
+		if err = rpc.CallContext(ctx, &hexString, "eth_call", txArgs, blocknumber); err != nil {
+			return nil, false, errors.Errorf(errors.TransactionSendCallFailedNoRevert, err)
+		}
 	}
 	if len(hexString) == 0 || hexString == "0x" {
 		return nil, false, nil

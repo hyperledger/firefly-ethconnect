@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/hyperledger/firefly-ethconnect/internal/ethbind"
 	"github.com/hyperledger/firefly-ethconnect/internal/messages"
 	ethbinding "github.com/kaleido-io/ethbinding/pkg"
@@ -1983,6 +1984,44 @@ func TestCallAndProcessReply(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "12345", res["arg1"])
 
+}
+
+func TestCallAndProcessReplyPrivateCall(t *testing.T) {
+	qm := &messages.QueryTransaction{
+		SendTransaction: messages.SendTransaction{
+			Method: &ethbinding.ABIElementMarshaling{
+				Name: "method1",
+				Outputs: []ethbinding.ABIArgumentMarshaling{
+					{Name: "arg1", Type: "uint256"},
+				},
+			},
+			TransactionCommon: messages.TransactionCommon{
+				PrivacyGroupID: "HvuYiHoyL31rZ5OYRzSYMGGRV+V8KS4LMuHRfmfDWzg=",
+			},
+		},
+	}
+
+	rpc := &testRPCClient{
+		resultWrangler: func(retString interface{}) {
+			retVal := "0x000000000000000000000000000000000000000000000000000000000003039"
+			reflect.ValueOf(retString).Elem().Set(reflect.ValueOf(retVal))
+		},
+	}
+
+	tx, err := NewSendTxn(&qm.SendTransaction, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "HvuYiHoyL31rZ5OYRzSYMGGRV+V8KS4LMuHRfmfDWzg=", tx.PrivacyGroupID)
+
+	res, err := tx.CallAndProcessReply(context.Background(), rpc, "latest")
+	assert.NoError(t, err)
+	assert.Equal(t, "priv_call", rpc.capturedMethod)
+	assert.Equal(t, "HvuYiHoyL31rZ5OYRzSYMGGRV+V8KS4LMuHRfmfDWzg=", rpc.capturedArgs[0])
+	assert.Equal(t, &SendTXArgs{
+		From: "0x0000000000000000000000000000000000000000",
+		Data: &hexutil.Bytes{90, 238, 148, 49},
+	}, rpc.capturedArgs[1])
+	assert.Equal(t, "latest", rpc.capturedArgs[2])
+	assert.Equal(t, "12345", res["arg1"])
 }
 
 func TestCallAndProcessReplyNilRet(t *testing.T) {

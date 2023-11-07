@@ -202,7 +202,7 @@ func (bcm *blockConfirmationManager) pollBlockFilter() ([]*ethbinding.Hash, erro
 	defer cancel()
 	var blockHashes []*ethbinding.Hash
 	if err := bcm.rpc.CallContext(ctx, &blockHashes, "eth_getFilterChanges", bcm.filterID); err != nil {
-		if strings.Contains(err.Error(), "filter not found") {
+		if strings.Contains(strings.ToLower(err.Error()), "filter not found") {
 			bcm.filterStale = true
 		}
 		return nil, err

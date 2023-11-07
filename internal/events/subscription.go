@@ -364,7 +364,7 @@ func (s *subscription) processNewEvents(ctx context.Context) error {
 		s.info.Synchronized = true
 	}
 	if err := s.rpc.CallContext(ctx, &logs, rpcMethod, s.filterID); err != nil {
-		if strings.Contains(err.Error(), "filter not found") {
+		if strings.Contains(strings.ToLower(err.Error()), "filter not found") {
 			s.markFilterStale(ctx, true)
 		}
 		return err

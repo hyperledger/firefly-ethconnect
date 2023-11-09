@@ -7,7 +7,9 @@ import (
 
 func TestValidateURL(t *testing.T) {
   w := &webhookAction{
-    es: nil,
+    es: &eventStream{
+      allowPrivateIPs: false,
+    },
     spec: &webhookActionInfo{
       URL: "badurl",
     },

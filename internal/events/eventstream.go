@@ -764,7 +764,8 @@ func (a *eventStream) performActionWithRetry(batchNumber uint64, events []*event
 func (a *eventStream) isAddressUnsafe(ip *net.IPAddr) bool {
 	ip4 := ip.IP.To4()
 	return !a.allowPrivateIPs &&
-		(ip4[0] == 0 ||
+		(len(ip4) < 1 ||
+			ip4[0] == 0 ||
 			ip4[0] >= 224 ||
 			ip4[0] == 127 ||
 			ip4[0] == 10 ||

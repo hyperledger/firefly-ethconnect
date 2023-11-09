@@ -54,14 +54,8 @@ func newWebhookAction(es *eventStream, spec *webhookActionInfo) (*webhookAction,
 func (w *webhookAction) attemptBatch(batchNumber, attempt uint64, events []*eventData) error {
 	// We perform DNS resolution before each attempt, to exclude private IP address ranges from the target
 	esID := w.es.spec.ID
-	u, _ := url.Parse(w.spec.URL)
-	addr, err := net.ResolveIPAddr("ip4", u.Hostname())
+	u, addr, err := w.validateURL()
 	if err != nil {
-		return err
-	}
-	if w.es.isAddressUnsafe(addr) {
-		err := errors.Errorf(errors.EventStreamsWebhookProhibitedAddress, u.Hostname())
-		log.Errorf(err.Error())
 		return err
 	}
 	// Set the timeout
@@ -113,4 +107,21 @@ func (w *webhookAction) attemptBatch(batchNumber, attempt uint64, events []*even
 		log.Errorf("%s: POST %s failed (attempt=%d): %s", esID, u.String(), attempt, err)
 	}
 	return err
+}
+
+func (w *webhookAction) validateURL() (*url.URL, *net.IPAddr, error) {
+	u, err := url.Parse(w.spec.URL)
+	if err != nil {
+		return nil, nil, err
+	}
+	addr, err := net.ResolveIPAddr("ip4", u.Hostname())
+	if err != nil {
+		return nil, nil, err
+	}
+	if w.es.isAddressUnsafe(addr) {
+		err := errors.Errorf(errors.EventStreamsWebhookProhibitedAddress, u.Hostname())
+		log.Errorf(err.Error())
+		return nil, nil, err
+	}
+	return u, addr, nil
 }

@@ -49,9 +49,9 @@ build-win:
 		GOOS=windows GOARCH=amd64 $(VGO) build -o $(BINARY_WIN) -v
 
 ${MOCKERY}:
-		$(VGO) install github.com/vektra/mockery/cmd/mockery@v2.39.2
+		$(VGO) install github.com/vektra/mockery/v2@v2.39.2
 sarama:
-		$(eval SARAMA_PATH := $(shell $(VGO) list -f '{{.Dir}}' github.com/Shopify/sarama))
+		$(eval SARAMA_PATH := $(shell $(VGO) list -f '{{.Dir}}' github.com/IBM/sarama))
 go-mod-tidy: .ALWAYS
 		$(VGO) mod tidy
 

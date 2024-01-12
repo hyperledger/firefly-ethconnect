@@ -37,7 +37,7 @@ import (
 	"github.com/hyperledger/firefly-ethconnect/internal/utils"
 	"github.com/hyperledger/firefly-ethconnect/internal/ws"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"github.com/julienschmidt/httprouter"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"

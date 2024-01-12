@@ -1,5 +1,7 @@
 module github.com/hyperledger/firefly-ethconnect
 
+go 1.21
+
 require (
 	github.com/Shopify/sarama v1.37.2
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
@@ -85,5 +87,3 @@ require (
 )
 
 replace github.com/kaleido-io/ethbinding => ../ethbinding
-
-go 1.19

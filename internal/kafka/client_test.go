@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"github.com/hyperledger/firefly-ethconnect/mocks/saramamocks"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"

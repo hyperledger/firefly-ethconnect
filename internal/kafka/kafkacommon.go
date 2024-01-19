@@ -24,7 +24,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/utils"
 	log "github.com/sirupsen/logrus"

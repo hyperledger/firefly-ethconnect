@@ -27,7 +27,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

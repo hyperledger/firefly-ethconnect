@@ -1,4 +1,4 @@
-FROM golang:1.19-buster AS builder
+FROM golang:1.21-buster AS builder
 WORKDIR /ethconnect
 RUN apt-get update -y \
     && apt-get install -y build-essential git \

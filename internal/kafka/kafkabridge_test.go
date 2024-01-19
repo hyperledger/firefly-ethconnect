@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"github.com/hyperledger/firefly-ethconnect/internal/auth"
 	"github.com/hyperledger/firefly-ethconnect/internal/auth/authtest"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"

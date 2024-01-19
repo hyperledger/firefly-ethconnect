@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"github.com/hyperledger/firefly-ethconnect/internal/auth"
 	"github.com/hyperledger/firefly-ethconnect/internal/errors"
 	"github.com/hyperledger/firefly-ethconnect/internal/kafka"

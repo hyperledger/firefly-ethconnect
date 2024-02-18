@@ -1,4 +1,5 @@
-FROM golang:1.21-buster AS builder
+FROM golang:1.21-alpine3.19 AS builder
+RUN apk add make
 WORKDIR /ethconnect
 RUN apt-get update -y \
     && apt-get install -y build-essential git \

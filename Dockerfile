@@ -1,5 +1,4 @@
-FROM golang:1.21-alpine3.19 AS builder
-RUN apk add make
+FROM golang:1.21-bullseye AS builder
 WORKDIR /ethconnect
 RUN apt-get update -y \
     && apt-get install -y build-essential git \
@@ -14,7 +13,7 @@ ADD . .
 RUN cp go.mod.new go.mod
 RUN make clean deps build
 
-FROM debian:buster-slim
+FROM debian:bullseye-slim
 WORKDIR /ethconnect
 COPY --from=builder /ethconnect/ethconnect .
 COPY --from=builder /ethconnect/ethbinding.so .
